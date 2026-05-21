@@ -1,0 +1,22 @@
+{
+  "name": "dynastyguild-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "discord.js": "^14.15.0",
+    "dotenv": "^16.4.3",
+    "express": "^4.18.4",
+    "express-session": "^1.19.0",
+    "firebase-admin": "^13.10.0",
+    "googleapis": "^131.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
