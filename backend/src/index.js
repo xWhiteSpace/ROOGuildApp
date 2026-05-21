@@ -1,5 +1,7 @@
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { initializeEnv } from './config/env.js';
@@ -8,12 +10,15 @@ import chatRoutes from './api/chat.routes.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot } from './discord-bot/client.js';
 
-dotenv.config();
 initializeEnv();
 initializeFirebase();
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 const app = express();
+
+// 1. Tell Express to trust ngrok's secure proxy headers
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: frontendUrl, credentials: true }));
 app.use(express.json());
 app.use(
@@ -23,7 +28,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false,
+      secure: true, // 2. Change to true so Safari accepts cross-site ngrok cookies
       sameSite: 'none',
     },
   })

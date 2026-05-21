@@ -2,7 +2,9 @@ import { Router } from 'express';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
+
+// A quick helper function to get the correct frontend URL on demand
+const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
 function buildDiscordLoginUrl(state) {
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -20,15 +22,16 @@ router.get('/login', (req, res) => {
 router.get('/callback', async (req, res) => {
   const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
   const state = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state;
+  const targetFrontend = getFrontendUrl(); // Dynamically pulls port 3000 from env!
 
   if (!code) {
     console.error('Discord OAuth callback is missing code.', req.query);
-    return res.redirect(`${frontendUrl}/login?error=discord_oauth_code_missing`);
+    return res.redirect(`${targetFrontend}/login?error=discord_oauth_code_missing`);
   }
 
   if (req.session.oauthState && state !== req.session.oauthState) {
     console.error('Discord OAuth state mismatch.', { expected: req.session.oauthState, actual: state });
-    return res.redirect(`${frontendUrl}/login?error=discord_oauth_state_mismatch`);
+    return res.redirect(`${targetFrontend}/login?error=discord_oauth_state_mismatch`);
   }
 
   try {
@@ -52,7 +55,7 @@ router.get('/callback', async (req, res) => {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error('Discord token exchange failed:', errorText);
-      return res.redirect(`${frontendUrl}/login?error=discord_token_exchange_failed`);
+      return res.redirect(`${targetFrontend}/login?error=discord_token_exchange_failed`);
     }
 
     const tokenData = await tokenResponse.json();
@@ -65,7 +68,7 @@ router.get('/callback', async (req, res) => {
     if (!userResponse.ok) {
       const errorText = await userResponse.text();
       console.error('Discord user fetch failed:', errorText);
-      return res.redirect(`${frontendUrl}/login?error=discord_user_fetch_failed`);
+      return res.redirect(`${targetFrontend}/login?error=discord_user_fetch_failed`);
     }
 
     const user = await userResponse.json();
@@ -77,11 +80,11 @@ router.get('/callback', async (req, res) => {
     };
 
     return req.session.save(() => {
-      res.redirect(`${frontendUrl}/?auth=success`);
+      res.redirect(`${targetFrontend}/?auth=success`);
     });
   } catch (error) {
     console.error('Discord OAuth callback error:', error);
-    return res.redirect(`${frontendUrl}/login?error=discord_oauth_failed`);
+    return res.redirect(`${targetFrontend}/login?error=discord_oauth_failed`);
   }
 });
 

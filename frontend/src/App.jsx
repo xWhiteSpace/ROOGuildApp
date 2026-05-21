@@ -16,13 +16,19 @@ function App() {
   useEffect(() => {
     async function loadUser() {
       setAuthLoading(true);
-      const result = await fetchCurrentUser();
-      if (result.authenticated) {
-        setAuthUser(result.user);
-      } else {
+      try {
+        const result = await fetchCurrentUser();
+        if (result.authenticated) {
+          setAuthUser(result.user);
+        } else {
+          setAuthUser(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch current user:", err);
         setAuthUser(null);
+      } finally {
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     }
 
     loadUser();
@@ -32,6 +38,15 @@ function App() {
     await logoutUser();
     setAuthUser(null);
   };
+
+  // Prevent UI flashing before the cookie check completes
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-medium">
+        Loading DynastyGuild Dashboard...
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
