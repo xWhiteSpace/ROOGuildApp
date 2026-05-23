@@ -36,18 +36,21 @@ export default function LiveBiddingTab({ user }) {
     };
   }, []);
 
-  // Fetch server Discord profiles (Immunized for Ngrok Mobile Tunnels)
+  // Fetch server Discord profiles (With Smart Dynamic Warm-up Polling Retries)
   useEffect(() => {
+    let isMounted = true;
+    let retryTimeout = null;
+
     const fetchRoster = async () => {
       const envUrl = import.meta.env.VITE_BACKEND_API_URL;
       const baseUrls = envUrl ? [envUrl] : ['http://localhost:5001', 'http://localhost:5000'];
-      const candidatePaths = ['/api/auth/discord-members', '/auth/discord-members', '/api/discord-members', '/discord-members'];
+      const candidatePaths = ['/auth/discord-members', '/api/auth/discord-members', '/api/discord-members', '/discord-members'];
 
       let syncCompleted = false;
-      let discoveredServerError = false;
+      let botWarmingUp = false;
 
       for (const baseUrl of baseUrls) {
-        if (syncCompleted || discoveredServerError) break;
+        if (syncCompleted) break;
         const cleanBase = baseUrl.replace(/\/$/, '');
 
         for (const path of candidatePaths) {
@@ -56,7 +59,6 @@ export default function LiveBiddingTab({ user }) {
             const res = await fetch(targetUrl, { 
               method: 'GET', 
               credentials: 'include',
-              // 🌟 INTERCEPT FIX: Skips the ngrok alert page for clean background JSON execution
               headers: {
                 'ngrok-skip-browser-warning': 'true',
                 'Accept': 'application/json'
@@ -65,25 +67,44 @@ export default function LiveBiddingTab({ user }) {
             
             if (res.status === 404) continue;
 
+            // 🌟 WARM-UP DETECTION: If bot is logging in, flag it so we can retry automatically
+            if (res.status === 503) {
+              botWarmingUp = true;
+              break; 
+            }
+
             const data = await res.json();
             if (res.ok && data?.success && Array.isArray(data?.members)) {
-              setDiscordMembers(data.members);
-              setSyncStatus({ state: 'success', message: 'Connected successfully!' });
+              if (isMounted) {
+                setDiscordMembers(data.members);
+                setSyncStatus({ state: 'success', message: 'Connected successfully!' });
+              }
               syncCompleted = true;
               break; 
-            } else {
-              setSyncStatus({ state: 'error', message: `Backend Error (${res.status})` });
-              discoveredServerError = true;
-              break;
             }
-          } catch (err) {}
+          } catch (err) {
+            // Drop network exceptions silently to check alternative path configurations
+          }
         }
       }
-      if (!syncCompleted && !discoveredServerError) {
-        setSyncStatus({ state: 'error', message: 'Bot Sync Error: Route path not found.' });
+
+      // 🔄 AUTOMATIC RETRY TRIGGER: If the server told us the bot is warming up, pool again in 3 seconds
+      if (!syncCompleted && isMounted) {
+        if (botWarmingUp) {
+          setSyncStatus({ state: 'loading', message: 'Bot syncing with Discord... retrying...' });
+          retryTimeout = setTimeout(fetchRoster, 3000);
+        } else {
+          setSyncStatus({ state: 'error', message: 'Bot Sync Error: Check connection profiles.' });
+        }
       }
     };
+
     fetchRoster();
+
+    return () => {
+      isMounted = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, []);
 
   const resolveFullDiscordNickname = (spreadsheetName) => {
@@ -126,8 +147,6 @@ export default function LiveBiddingTab({ user }) {
 
   return (
     <div className="flex flex-col h-auto lg:h-[calc(100vh-10rem)] space-y-4 lg:space-y-1.5 text-white bg-slate-950 p-2 lg:p-1 overflow-y-auto lg:overflow-hidden select-none justify-between">
-      
-      {/* 🚀 Infinite LED Sign Marquee Keyframe Engine */}
       <style>{`
         @keyframes ledSignMarqueeLoop {
           0% { transform: translate3d(100%, 0, 0); }
@@ -143,58 +162,32 @@ export default function LiveBiddingTab({ user }) {
       {/* --- TOP METRICS HEADER CONTAINER --- */}
       {(() => {
         const getPillStyles = (curr = 0, max = 0) => {
-          if (!max || max === 0) {
-            return 'bg-slate-950/40 border-slate-800/80 text-slate-400';
-          }
-          if (curr > max) {
-            return 'bg-rose-950/30 border-rose-500/50 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.08)] animate-pulse';
-          }
-          if (curr === max) {
-            return 'bg-emerald-950/30 border-emerald-500/50 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.08)]';
-          }
-          if (curr < max) {
-            return 'bg-amber-950/25 border-amber-500/40 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.04)]';
-          }
+          if (!max || max === 0) return 'bg-slate-950/40 border-slate-800/80 text-slate-400';
+          if (curr > max) return 'bg-rose-950/30 border-rose-500/50 text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.08)] animate-pulse';
+          if (curr === max) return 'bg-emerald-950/30 border-emerald-500/50 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.08)]';
+          if (curr < max) return 'bg-amber-950/25 border-amber-500/40 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.04)]';
           return 'bg-slate-950/40 border-slate-800/80 text-slate-300';
         };
 
         return (
           <header className="flex flex-col md:flex-row items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-3 sm:px-3 sm:py-2 shadow-lg shrink-0 w-full">
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start">
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1.5 py-1 border-r border-slate-800 mr-1 hidden md:block">
-                Loot Tally
-              </div>
-
-              {/* PUPPET CAPSULE */}
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1.5 py-1 border-r border-slate-800 mr-1 hidden md:block">Loot Tally</div>
               <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-all duration-300 ${getPillStyles(tally?.puppet?.current, tally?.puppet?.max)}`}>
                 <span className="opacity-60 uppercase text-[9px] tracking-wider">Puppet</span>
-                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">
-                  {tally?.puppet?.current || 0}/{tally?.puppet?.max || 0}
-                </span>
+                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">{tally?.puppet?.current || 0}/{tally?.puppet?.max || 0}</span>
               </div>
-
-              {/* ILLU CAPSULE */}
               <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-all duration-300 ${getPillStyles(tally?.illu?.current, tally?.illu?.max)}`}>
                 <span className="opacity-60 uppercase text-[9px] tracking-wider">Illu</span>
-                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">
-                  {tally?.illu?.current || 0}/{tally?.illu?.max || 0}
-                </span>
+                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">{tally?.illu?.current || 0}/{tally?.illu?.max || 0}</span>
               </div>
-
-              {/* LIGHT & DARK CAPSULE */}
               <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-all duration-300 ${getPillStyles(tally?.lnd?.current, tally?.lnd?.max)}`}>
                 <span className="opacity-60 uppercase text-[9px] tracking-wider">LnD</span>
-                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">
-                  {tally?.lnd?.current || 0}/{tally?.lnd?.max || 0}
-                </span>
+                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">{tally?.lnd?.current || 0}/{tally?.lnd?.max || 0}</span>
               </div>
-
-              {/* TIME & SPACE CAPSULE */}
               <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-all duration-300 ${getPillStyles(tally?.tns?.current, tally?.tns?.max)}`}>
                 <span className="opacity-60 uppercase text-[9px] tracking-wider">TnS</span>
-                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">
-                  {tally?.tns?.current || 0}/{tally?.tns?.max || 0}
-                </span>
+                <span className="font-mono text-xs bg-slate-950/60 px-1.5 py-0.5 rounded border border-slate-800/30">{tally?.tns?.current || 0}/{tally?.tns?.max || 0}</span>
               </div>
             </div>
 
@@ -204,11 +197,8 @@ export default function LiveBiddingTab({ user }) {
                 syncStatus.state === 'warning' ? 'bg-amber-500/5 border-amber-500/20 text-amber-400' :
                 'bg-rose-500/5 border-rose-500/20 text-rose-400'
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  syncStatus.state === 'success' ? 'bg-emerald-400' :
-                  syncStatus.state === 'warning' ? 'bg-amber-400' : 'bg-rose-400'
-                }`} />
-                Bot Link: {syncStatus.state === 'success' ? 'Online' : 'Sync Error'}
+                <span className={`w-1.5 h-1.5 rounded-full ${syncStatus.state === 'success' ? 'bg-emerald-400' : syncStatus.state === 'warning' ? 'bg-amber-400' : 'bg-rose-400'}`} />
+                Bot Link: {syncStatus.message}
               </div>
             </div>
           </header>
@@ -218,20 +208,15 @@ export default function LiveBiddingTab({ user }) {
       {/* --- ROW 1: QUEUE WORKSPACE GRID --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-auto lg:h-[150px] shrink-0 min-h-0 w-full">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between rounded-xl border border-amber-500/30 bg-gradient-to-br from-slate-900 to-amber-950/10 p-4 shadow-md relative h-full gap-4 overflow-hidden w-full">
-          <div className="absolute top-2 left-4 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[9px] font-bold text-amber-400 tracking-widest uppercase z-20">
-            Now Bidding
-          </div>
+          <div className="absolute top-2 left-4 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[9px] font-bold text-amber-400 tracking-widest uppercase z-20">Now Bidding</div>
           <div className="flex-1 min-w-0 mt-3 lg:mt-1 w-full overflow-hidden relative bg-slate-950/40 rounded-lg px-2 h-14 flex items-center border border-slate-800/40">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white capitalize drop-shadow-md animate-led-marquee-sign">
               {queueData?.now ? queueData.now.name : 'No Active Bidder'}
             </h1>
           </div>
-
           {queueData?.now && (
             <div className="bg-slate-950/70 border border-slate-800/80 p-2 rounded-lg w-full lg:w-[240px] max-h-[120px] lg:max-h-[110px] overflow-y-auto shadow-inner flex flex-col shrink-0 z-10">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-1 font-semibold">
-                Active Requests
-              </span>
+              <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-1 font-semibold">Active Requests</span>
               <ul className="space-y-1 text-[11px] font-mono text-cyan-400">
                 {queueData.now.items && queueData.now.items.length > 0 ? (
                   queueData.now.items.map((item, idx) => (
@@ -250,18 +235,11 @@ export default function LiveBiddingTab({ user }) {
 
         <div className="grid grid-rows-2 gap-2 h-auto lg:h-full w-full">
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 flex flex-col justify-center relative overflow-hidden min-h-[60px] lg:min-h-0">
-            <div className="absolute top-1.5 left-3 text-[9px] font-bold uppercase tracking-widest text-cyan-400">
-              Next In Line
-            </div>
-            <div className="text-lg font-bold tracking-tight text-slate-100 mt-2 truncate">
-              {queueData?.next ? queueData.next.name : 'Queue Empty'}
-            </div>
+            <div className="absolute top-1.5 left-3 text-[9px] font-bold uppercase tracking-widest text-cyan-400">Next In Line</div>
+            <div className="text-lg font-bold tracking-tight text-slate-100 mt-2 truncate">{queueData?.next ? queueData.next.name : 'Queue Empty'}</div>
           </div>
-
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 flex flex-col justify-center relative overflow-hidden min-h-[60px] lg:min-h-0">
-            <div className="absolute top-1.5 left-3 text-[9px] font-bold uppercase tracking-widest text-slate-400">
-              Standby Pool
-            </div>
+            <div className="absolute top-1.5 left-3 text-[9px] font-bold uppercase tracking-widest text-slate-400">Standby Pool</div>
             <ul className="flex flex-wrap items-center gap-x-3 text-xs font-semibold text-slate-300 mt-2 pl-0.5 truncate">
               {queueData?.standby && queueData.standby.length > 0 ? (
                 queueData.standby.slice(0, 3).map((player, idx) => (
@@ -291,7 +269,6 @@ export default function LiveBiddingTab({ user }) {
       <div className="flex-1 min-h-[340px] lg:min-h-0 w-full">
         <ChatConsole user={user} draft={draft} setDraft={setDraft} discordMembers={discordMembers} />
       </div>
-
     </div>
   );
 }

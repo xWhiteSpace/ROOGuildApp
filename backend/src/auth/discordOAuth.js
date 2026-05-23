@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { discordClient } from '../discord-bot/client.js'; // LINK TO BOT INSTANCE
+import { discordClient } from '../discord-bot/client.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
 
-// 🌟 SMART MEMORY CACHE CONFIGURATION
 let cachedMembers = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 2 * 60 * 1000; // Keep roster in RAM for 2 minutes (Perfect for active raids)
+const CACHE_DURATION = 2 * 60 * 1000;
 
-// A quick helper function to get the correct frontend URL on demand
+// 🌟 CONCURRENCY CHANNEL: Merges multi-device/tablet loading requests into a single flight
+let activeFetchPromise = null;
+
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
 function buildDiscordLoginUrl(state) {
@@ -22,48 +23,67 @@ function buildDiscordLoginUrl(state) {
 // 🛡️ ANTI-RATE-LIMIT EXPOSED ROSTER ENDPOINT
 router.get('/discord-members', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
+  const requestOrigin = req.headers.origin || 'No Origin Header';
+
   if (!guildId) {
     return res.status(500).json({ error: 'DISCORD_GUILD_ID is not configured in your backend .env file' });
   }
 
-  try {
+  const now = Date.now();
+
+  // 1. Serve immediately if the local memory cache is fresh
+  if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
+    return res.json({ success: true, members: cachedMembers });
+  }
+
+  // 2. 🛡️ CONCURRENCY LOCK: If a parallel device thread is actively requesting chunks, attach to its promise
+  if (activeFetchPromise) {
+    try {
+      const members = await activeFetchPromise;
+      return res.json({ success: true, members });
+    } catch (err) {
+      if (cachedMembers) return res.json({ success: true, members: cachedMembers });
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // 3. Define the single execution block for fetching from Discord
+  activeFetchPromise = (async () => {
     if (!discordClient || !discordClient.isReady()) {
-      return res.status(503).json({ error: 'Discord bot client is initializing. Give it a moment...' });
+      throw new Error('Discord bot client is initializing. Give it a moment...');
     }
-
-    const now = Date.now();
-
-    // ⚡ STEP 1: Check if we have a valid cache in RAM that hasn't expired yet
-    if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
-      return res.json({ success: true, members: cachedMembers });
-    }
-
-    // 🌐 STEP 2: Cache expired or empty. Safely fetch fresh roster records from Discord
     const guild = await discordClient.guilds.fetch(guildId);
     const membersCollection = await guild.members.fetch();
 
-    // Pluck data fields needed for autocomplete matching
-    cachedMembers = membersCollection.map((member) => ({
+    return membersCollection.map((member) => ({
       id: member.id,
       username: member.user.username,
       nickname: member.nickname || '',
       displayName: member.displayName || ''
     }));
-    
-    // Log timestamp of successful refresh
-    lastFetchTime = now;
+  })();
 
-    return res.json({ success: true, members: cachedMembers });
+  try {
+    console.log('🌐 [SERVER DIAGNOSTIC] Launching coordinated roster handshake with Discord API...');
+    const members = await activeFetchPromise;
+
+    cachedMembers = members;
+    lastFetchTime = Date.now();
+
+    console.log(`✅ [SERVER DIAGNOSTIC] Successfully synchronized and shared ${cachedMembers.length} user records.`);
+    return res.json({ success: true, members });
   } catch (error) {
-    console.error('Failed to fetch roster for layout matching:', error.message);
+    console.error('💥 [SERVER DIAGNOSTIC] Roster sync exception:', error.message);
     
-    // 🚑 STEP 3: Bulletproof Fallback Strategy
     if (cachedMembers) {
-      console.log('⚠️ Discord API rate limited or errored. Serving stale cache fallback to keep UI functional.');
+      console.warn('🚑 [SERVER DIAGNOSTIC] Serving stale backup cache array to prevent client layout crash.');
       return res.json({ success: true, members: cachedMembers });
     }
-    
-    return res.status(500).json({ error: 'Failed to sync Discord server roster' });
+
+    return res.status(503).json({ error: `Roster sync failed: ${error.message}` });
+  } finally {
+    // Reset execution lock state when processing completes
+    activeFetchPromise = null;
   }
 });
 
@@ -76,7 +96,7 @@ router.get('/login', (req, res) => {
 router.get('/callback', async (req, res) => {
   const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
   const state = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state;
-  const targetFrontend = getFrontendUrl(); 
+  const targetFrontend = getFrontendUrl();
 
   if (!code) {
     console.error('Discord OAuth callback is missing code.', req.query);
@@ -127,11 +147,9 @@ router.get('/callback', async (req, res) => {
 
     const user = await userResponse.json();
     
-    // Default fallback to account name profiles
     let serverNickname = user.global_name || user.username;
     const guildId = process.env.DISCORD_GUILD_ID;
 
-    // 🌟 INTERCEPT WITH BOT INSTANCE: Query the guild to retrieve the custom nickname
     if (discordClient && discordClient.isReady() && guildId) {
       try {
         const guild = await discordClient.guilds.fetch(guildId);
@@ -140,7 +158,7 @@ router.get('/callback', async (req, res) => {
           serverNickname = member.nickname || member.displayName || serverNickname;
         }
       } catch (err) {
-        console.warn('⚠️ Could not fetch custom server nickname profile via Bot Client. Falling back to default identity.');
+        console.warn('⚠️ Could not fetch guild nickname, falling back to global account tags.');
       }
     }
 
@@ -149,11 +167,10 @@ router.get('/callback', async (req, res) => {
       username: user.username,
       discriminator: user.discriminator,
       avatar: user.avatar,
-      displayName: serverNickname // 🌟 Saved true server nickname profile (e.g., "Azrielle")
+      displayName: serverNickname
     };
 
     return req.session.save(() => {
-      // 🌟 URL Parameter Delivery: Safely pass the session data to bypass cross-origin mobile blocks
       const encodedUser = encodeURIComponent(JSON.stringify(req.session.user));
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
     });
@@ -167,7 +184,6 @@ router.get('/me', (req, res) => {
   if (!req.session?.user) {
     return res.status(200).json({ authenticated: false, user: null });
   }
-
   return res.json({ authenticated: true, user: req.session.user });
 });
 
@@ -176,7 +192,6 @@ router.post('/logout', (req, res) => {
     if (err) {
       return res.status(500).json({ success: false, error: 'Failed to destroy session' });
     }
-
     return res.json({ success: true });
   });
 });

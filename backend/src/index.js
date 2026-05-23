@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// 🌟 BULLETPROOF PATH RESOLVER: Locates your .env file relative to this index.js file
+// 🌟 BULLETPROOF PATH RESOLVER
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -19,29 +19,46 @@ import { initializeEnv } from './config/env.js';
 import authRoutes from './auth/discordOAuth.js';
 import chatRoutes from './api/chat.routes.js';
 import { initializeFirebase } from './config/firebase.js';
-import { initializeDiscordBot } from './discord-bot/client.js';
+import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import syncRouter, { executeSpreadsheetSync } from './routes/syncRouter.js';
+import requestRoutes from './api/request.routes.js';
 
+// Ensure your startup sequences execute the bot login function
 initializeEnv();
 initializeFirebase();
+initializeDiscordBot(); 
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+// 🤖 ================================================================
+// HARDCORE BOT DEBUG DIAGNOSTICS ENGINE
+if (discordClient) {
+  discordClient.on('debug', (info) => {
+    if (info.includes('heartbeat') || info.includes('Gateway')) return;
+    console.log('🤖 [BOT GATEWAY TRACE]:', info);
+  });
+  discordClient.on('error', (error) => {
+    console.error('❌ [BOT CRITICAL ERROR]:', error);
+  });
+  discordClient.on('warn', (warning) => {
+    console.warn('⚠️ [BOT GATEWAY WARNING]:', warning);
+  });
+} else {
+  console.error('❌ [BOT DEBUG] discordClient object is completely undefined or missing upon import!');
+}
+// ================================================================
+
 const app = express();
 
-// 1. Tell Express to trust ngrok's secure proxy headers
 app.set('trust proxy', 1);
 
-// 🌟 CORROSION PREVENTION MATRIX: Allows multiple devices (PC and mobile profiles) to use the API simultaneously
 const allowedOrigins = [
-  frontendUrl, 
-  'http://localhost:3000', 
+  process.env.FRONTEND_URL, 
+  'http://localhost:3000',
   'http://localhost:5173'
 ];
 
 app.use(cors({ 
   origin: function (origin, callback) {
-    // Permit standard desktop browsers, mobile apps, or headless requests safely
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
       callback(null, true);
     } else {
       callback(new Error('Cross-Origin Resource Sharing (CORS) blocked this device path.'));
@@ -58,33 +75,28 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true, // 2. Kept true so Safari and modern web clients accept cross-site ngrok cookies
+      secure: true, 
       sameSite: 'none',
     },
   })
 );
 
+// 🌟 ROUTE MOUNTING (Safely initialized after 'app' has been created)
 app.use('/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/sync', syncRouter);
+app.use('/api/requests', requestRoutes);
 
-// 🌟 AUTOMATED AUTO-REFRESH BROADCAST LOOP
-// Fires the synchronization process immediately on boot, then repeats automatically every 5 seconds
 executeSpreadsheetSync(); 
 setInterval(() => {
   executeSpreadsheetSync();
 }, 5 * 1000);
 
 app.get('/', (req, res) => {
-  res.send('DynastyGuild backend is running. Use /health or /auth/login.');
+  res.send('DynastyGuild backend is running.');
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'dynastyguild-backend' });
-});
-
-const port = process.env.PORT || 5001;
-app.listen(port, () => {
-  console.log(`🚀 [BACKEND ONLINE] Server streaming data cleanly on port ${port}`);
-  console.log(`   👉 Current Allowed Web Gateway Node: ${frontendUrl}`);
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => {
+  console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
 });
