@@ -52,20 +52,32 @@ export default function RequestTab() {
     }
   };
 
-  const handleSubmitRequest = async (itemName) => {
-    const selectionQty = localSelections[itemName] || 0;
-    if (selectionQty <= 0) return;
+  const handleBatchSubmitRequests = async () => {
+    const batchPayload = {};
+    let activeItemsCount = 0;
+
+    items.forEach(item => {
+      const selectedQty = localSelections[item.name] || 0;
+      if (selectedQty > 0) {
+        batchPayload[item.name] = selectedQty;
+        activeItemsCount++;
+      }
+    });
+
+    if (activeItemsCount === 0) return;
 
     try {
       setProcessing(true);
       const res = await fetch(`${backendUrl}/api/requests/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemName, quantity: selectionQty }),
+        body: JSON.stringify({ selections: batchPayload }),
         credentials: 'include'
       });
       const data = await res.json();
-      if (data.success) await initLobbyDashboard();
+      if (data.success) {
+        await initLobbyDashboard();
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -73,7 +85,6 @@ export default function RequestTab() {
     }
   };
 
-  // 🛑 PHASE 4: EXECUTE CANCELLATION LEDGER ACTION
   const handleExecuteCancel = async (itemName, activeQty) => {
     try {
       setProcessing(true);
@@ -85,8 +96,8 @@ export default function RequestTab() {
       });
       const data = await res.json();
       if (data.success) {
-        setIsCancelModalOpen(false); // Close modal cleanly upon successful write
-        await initLobbyDashboard();   // Instantly recompute active ledger states
+        setIsCancelModalOpen(false);
+        await initLobbyDashboard();
       }
     } catch (err) {
       console.error(err);
@@ -112,11 +123,11 @@ export default function RequestTab() {
     );
   }
 
-  // 🔍 Summary Filter View: Only items where user's calculated active balance is > 0
   const activeCancelableItems = items.filter(item => (liveCounts[item.name] || 0) > 0);
+  const totalStagedInCart = Object.values(localSelections).reduce((sum, val) => sum + val, 0);
 
   return (
-    <div className="mx-auto max-w-6xl p-6 text-white relative">
+    <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative">
       
       {/* Information Header Display */}
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
@@ -127,7 +138,6 @@ export default function RequestTab() {
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
           </div>
         </div>
-        {/* 🔓 UNLOCKED: Open the popup window */}
         <button
           onClick={() => setIsCancelModalOpen(true)}
           className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white"
@@ -148,7 +158,7 @@ export default function RequestTab() {
               <div className="flex items-start justify-between">
                 <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-                  {currentActive > 0 ? 'Requested' : 'Idle'}
+                  {currentActive > 0 ? `${currentActive} Saved` : 'Idle'}
                 </span>
               </div>
 
@@ -175,37 +185,62 @@ export default function RequestTab() {
                 </button>
               </div>
 
+              {/* 📊 CLEAN STATUS BOX BLOCK */}
               <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
+                
+                {/* 1. Verified Saved Status from Google Sheet */}
                 <div className="flex justify-between">
                   <span>Application Status:</span>
                   <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
                     {currentActive > 0 ? 'Active' : 'Not Applied'}
                   </span>
                 </div>
+
+                {/* 2. Clear Screen Cart Identifier */}
+                <div className="flex justify-between">
+                  <span>Added to Basket:</span>
+                  <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                    {localInput > 0 ? `+${localInput}` : '0'}
+                  </span>
+                </div>
+
+                {/* 3. Priority Evaluation Column Tracking */}
                 <div className="flex justify-between">
                   <span>Selection Status:</span>
                   <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
-                    Pending
+                    {currentActive > 0 ? 'Pending' : '-'}
                   </span>
                 </div>
               </div>
 
-              <button 
-                onClick={() => handleSubmitRequest(item.name)}
-                disabled={localInput === 0 || processing}
-                className="mt-4 w-full rounded-xl bg-indigo-600 py-2 text-xs font-bold transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600"
-              >
-                {processing ? 'Processing...' : localInput > 0 ? `Submit +${localInput} Request` : 'Modify Quantity'}
-              </button>
             </div>
           );
         })}
       </div>
 
-      {/* 🛑 PHASE 4 VISUAL COMPONENT: STRESS-FREE SUMMARY MODAL POPUP WINDOW */}
+      {/* FIXED FLOATING AMAZON-STYLE CHECKOUT PANEL SUMMARY BAR */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
+        <div className="mx-auto max-w-6xl flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-400">Review Basket Changes</span>
+            <span className="text-sm font-bold text-slate-100">
+              {totalStagedInCart > 0 ? `🛒 ${totalStagedInCart} request choices modified` : 'No items adjusted yet'}
+            </span>
+          </div>
+          <button
+            onClick={handleBatchSubmitRequests}
+            disabled={totalStagedInCart === 0 || processing}
+            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg"
+          >
+            {processing ? 'Processing Order...' : 'Confirm & Submit All Requests'}
+          </button>
+        </div>
+      </div>
+
+      {/* Stress-Free Cancellation Modal Popup */}
       {isCancelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
             <h2 className="text-md font-bold text-slate-200">Ongoing Active Requests</h2>
             <p className="text-[11px] text-slate-400 mt-0.5 mb-4">Select an item row block position below to undo your advance request.</p>
 
@@ -231,12 +266,8 @@ export default function RequestTab() {
               </div>
             )}
 
-            {/* Modal Exit/Return Action */}
             <div className="mt-5 flex justify-end">
-              <button
-                onClick={() => setIsCancelModalOpen(false)}
-                className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold hover:bg-slate-700"
-              >
+              <button onClick={() => setIsCancelModalOpen(false)} className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold hover:bg-slate-700">
                 Return to Lobby
               </button>
             </div>

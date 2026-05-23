@@ -3,7 +3,7 @@ import { getDatabase } from 'firebase-admin/database';
 
 const router = Router();
 
-// Low-level CSV line breaker to parse Google sheet text safely
+// Low-level CSV data splitter matching your background sync engine conventions
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   const lines = csvText.split(/\r?\n/);
   let tableStarted = false;
@@ -25,8 +25,8 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
 }
 
 /**
- * 📡 GET /api/requests/init
- * (Fully functional initialized query engine)
+ * 📡 INFINITE INITIALIZATION PATHWAY
+ * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
   const user = req.session?.user;
@@ -44,7 +44,8 @@ router.get('/init', async (req, res) => {
       { name: 'Time&Space', maxQty: 5 }
     ];
 
-    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory&range=A1:Z1010`;
+    // 🚀 INFINITE TABLE: Range parameter completely released
+    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
     const response = await fetch(requestUrl);
     const csvText = await response.text();
     const spreadsheetRows = parseCSVToRawArrays(csvText, 'Member');
@@ -95,20 +96,25 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 POST /api/requests/submit
- * (Append request configuration block)
+ * 📡 BATCH CHECKOUT REQUISITION PORTER
+ * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const { itemName, quantity } = req.body;
+  const { selections } = req.body; 
+  if (!selections || Object.keys(selections).length === 0) {
+    return res.status(400).json({ success: false, error: 'No item selections detected.' });
+  }
+
   try {
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
 
-    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory&range=A1:Z1010`;
+    // 🚀 INFINITE TABLE: Range parameter completely released
+    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
     const response = await fetch(requestUrl);
     const spreadsheetRows = parseCSVToRawArrays(await response.text(), 'Member');
 
@@ -143,17 +149,23 @@ router.post('/submit', async (req, res) => {
       if (['notselected', 'passed'].includes(status)) dynamicPriority++;
     }
 
-    const newRequestRef = db.ref('auction/web_requests').push();
-    await newRequestRef.set({
-      id: newRequestRef.key,
-      date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
-      member: playerDisplayName,
-      item: itemName,
-      quantity: parseInt(quantity, 10),
-      applicationStatus: 'Requested',
-      selectionStatus: 'Pending',
-      priority: dynamicPriority
-    });
+    const chosenItemNames = Object.keys(selections);
+    for (const itemName of chosenItemNames) {
+      const targetQty = parseInt(selections[itemName], 10) || 0;
+      if (targetQty <= 0) continue; 
+
+      const newRequestRef = db.ref('auction/web_requests').push();
+      await newRequestRef.set({
+        id: newRequestRef.key,
+        date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
+        member: playerDisplayName,
+        item: itemName,
+        quantity: targetQty,
+        applicationStatus: 'Requested',
+        selectionStatus: 'Pending',
+        priority: dynamicPriority
+      });
+    }
 
     return res.json({ success: true });
   } catch (error) {
@@ -162,7 +174,7 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 PHASE 4: CANCEL ACTIVE REQUISITIONS
+ * 📡 BALANCING COUNTER-LEDGER CANCELLATION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
@@ -170,17 +182,12 @@ router.post('/cancel', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   const { itemName, cancelQty } = req.body;
-  if (!itemName || !cancelQty || cancelQty <= 0) {
-    return res.status(400).json({ success: false, error: 'Invalid cancellation criteria parameters.' });
-  }
-
   try {
     const playerDisplayName = user.displayName || user.username;
     const db = getDatabase();
     
-    // Append a distinct Canceled record transaction layer
     const newCancelRef = db.ref('auction/web_requests').push();
-    const cancelRow = {
+    await newCancelRef.set({
       id: newCancelRef.key,
       date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
       member: playerDisplayName,
@@ -188,15 +195,11 @@ router.post('/cancel', async (req, res) => {
       quantity: parseInt(cancelQty, 10),
       applicationStatus: 'Canceled',
       selectionStatus: 'Pending',
-      priority: 0 // Cancellations reset or sit outside active pity progression tracking
-    };
-
-    await newCancelRef.set(cancelRow);
-    console.log(`🛑 [PHASE 4] Logged Cancellation Ledger Row for ${playerDisplayName}: Countered ${itemName} x${cancelQty}`);
+      priority: 0
+    });
 
     return res.json({ success: true });
   } catch (error) {
-    console.error('❌ [PHASE 4 ERROR]:', error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
