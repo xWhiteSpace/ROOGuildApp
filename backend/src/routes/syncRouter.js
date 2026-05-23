@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
+import { google } from 'googleapis'; // 🌟 Added for secure, authorized Google Sheets write-back
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -188,6 +189,76 @@ export async function executeSpreadsheetSync() {
     await db.ref('auction/tally').set(computedTally);
     await db.ref('auction/queue').set(queueOutput);
 
+    // -------------------------------------------------------------
+    // 🌟 STEP 6: BACKWARD WRITE-BACK HANDSHAKE (FIREBASE -> GOOGLE SHEET)
+    // -------------------------------------------------------------
+    const requestsSnapshot = await db.ref('auction/web_requests').once('value');
+    
+    if (requestsSnapshot.exists()) {
+      const webRequestsMap = requestsSnapshot.val();
+      const webRequestsEntries = Object.entries(webRequestsMap);
+
+      // Verify Google Credentials exist before executing the append
+      if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+        try {
+          // 🧼 AUTOMATIC STRING CLEANER
+          // 1. Remove any accidental outer quote marks left behind by the environment reader
+          let cleanKey = process.env.GOOGLE_PRIVATE_KEY.trim().replace(/^["']|["']$/g, '');
+          // 2. Safely translate literal text "\n" characters into real system linebreaks
+          cleanKey = cleanKey.replace(/\\n/g, '\n');
+
+          const cleanEmail = process.env.GOOGLE_CLIENT_EMAIL.trim().replace(/^["']|["']$/g, '');
+
+          const auth = new google.auth.JWT(
+            cleanEmail,
+            null,
+            cleanKey,
+            ['https://www.googleapis.com/auth/spreadsheets']
+          );
+          const sheets = google.sheets({ version: 'v4', auth });
+          
+          const rowsToAppend = [];
+          const keysToClear = [];
+
+          webRequestsEntries.forEach(([key, req]) => {
+            // Maps arrays to match columns: Timestamp,Member,Item,Qty,ApplicationStatus,SelectionStatus,LiveStatus,Priority
+            rowsToAppend.push([
+              req.date || '',
+              req.member || '',
+              req.item || '',
+              req.quantity || 0,
+              req.applicationStatus || 'Requested',
+              req.selectionStatus || 'Pending',
+              '', 
+              req.priority || 0
+            ]);
+            keysToClear.push(key);
+          });
+
+          if (rowsToAppend.length > 0) {
+            console.log(`📤 [WRITE-BACK] Moving ${rowsToAppend.length} entries out of Firebase staging into Google Sheet...`);
+            
+            await sheets.spreadsheets.values.append({
+              spreadsheetId,
+              range: 'RequestHistory!A:H',
+              valueInputOption: 'USER_ENTERED',
+              requestBody: {
+                values: rowsToAppend
+              }
+            });
+
+            // Delete successfully moved items from Firebase buffer to complete the loop
+            for (const key of keysToClear) {
+              await db.ref(`auction/web_requests/${key}`).remove();
+            }
+            console.log(`✅ [WRITE-BACK SUCCESS] Successfully updated RequestHistory spreadsheet tab.`);
+          }
+        } catch (writeBackError) {
+          console.error('❌ [WRITE-BACK TRANSMISSION ERROR]:', writeBackError.message);
+        }
+      }
+    }
+    
   } catch (error) {
     // Only speak up if an actual server/network error goes down
     console.error('❌ [SYNC FATAL FAULT] Background loop interrupted:', error.message);
