@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
-import fs from 'fs';
+import fs from 'fs'; // 🧼 Used to securely read your ragnarokdynasty key file directly
 import path from 'path';
 dotenv.config();
 
@@ -50,13 +50,13 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   return dataRows;
 }
 
-// 🌟 AUTOMATED SYNCHRONIZATION ENGINE
+// 🌟 AUTOMATED SYNCHRONIZATION ENGINE (INFINITE TABLE SCALE)
 export async function executeSpreadsheetSync() {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   if (!spreadsheetId) return;
 
   try {
-    // 🚀 INFINITE SCALING: Range parameters completely dropped
+    // 🚀 Infinite row scanning
     const historyUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=LootHistory`;
     const historyRes = await fetch(historyUrl);
     const historyText = await historyRes.text();
@@ -95,7 +95,6 @@ export async function executeSpreadsheetSync() {
 
     const itemTabs = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     for (const tabName of itemTabs) {
-      // 🚀 INFINITE SCALING: Range parameters completely dropped
       const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
       const res = await fetch(url);
       if (!res.ok) continue;
@@ -115,7 +114,6 @@ export async function executeSpreadsheetSync() {
       });
     }
 
-    // 🚀 INFINITE SCALING: Range parameters completely dropped
     const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
     const requestRes = await fetch(requestUrl);
     const requestText = await requestRes.text();
@@ -160,7 +158,7 @@ export async function executeSpreadsheetSync() {
     await db.ref('auction/queue').set(queueOutput);
 
     // -------------------------------------------------------------
-    // STEP 6: COORDINATE-BASED WRITE-BACK (GRID PRESERVATION)
+    // 🌟 STEP 6: EXACT COORDINATE WRITE-BACK (BULLLETPROOF KEY CHECK)
     // -------------------------------------------------------------
     const requestsSnapshot = await db.ref('auction/web_requests').once('value');
     if (requestsSnapshot.exists()) {
@@ -170,7 +168,9 @@ export async function executeSpreadsheetSync() {
       try {
         let cleanEmail = '';
         let cleanKey = '';
-        const jsonPath = path.join(process.cwd(), 'ragnarokdynasty-d0254ade3c4c.json');
+        
+        // 🔍 Locate your original key file directly to completely protect against broken .env strings
+        const jsonPath = path.join(process.cwd(), 'ragnarokdynasty-4afa9f4eaa31.json');
         
         if (fs.existsSync(jsonPath)) {
           const credentials = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
@@ -185,7 +185,7 @@ export async function executeSpreadsheetSync() {
           const auth = new google.auth.JWT(cleanEmail, null, cleanKey, ['https://www.googleapis.com/auth/spreadsheets']);
           const sheets = google.sheets({ version: 'v4', auth });
           
-          // Checks existing text content to find true text boundaries
+          // Checks actual written boundaries to skip empty grids/borders
           const checkSheetRange = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: 'RequestHistory!A:B'
@@ -212,7 +212,7 @@ export async function executeSpreadsheetSync() {
           });
 
           if (rowsToAppend.length > 0) {
-            console.log(`📤 [WRITE-BACK] Targeting row index: Line ${directTargetWriteRow}. Migrating data layout...`);
+            console.log(`📤 [WRITE-BACK] Target row selected: Line ${directTargetWriteRow}. Migrating data...`);
             
             await sheets.spreadsheets.values.update({
               spreadsheetId,
@@ -226,6 +226,8 @@ export async function executeSpreadsheetSync() {
             }
             console.log(`✅ [WRITE-BACK SUCCESS] Successfully populated requests into your table grid layout.`);
           }
+        } else {
+          console.error('❌ [WRITE-BACK AUTH ERROR]: Missing authorization file or .env config.');
         }
       } catch (writeBackError) {
         console.error('❌ [WRITE-BACK TRANSMISSION ERROR]:', writeBackError.message);
