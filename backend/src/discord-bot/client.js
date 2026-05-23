@@ -2,7 +2,12 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { writeChatMessage } from '../services/chatService.js';
 
 export const discordClient = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  intents: [
+    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.GuildMessages, 
+    GatewayIntentBits.MessageContent, 
+    GatewayIntentBits.GuildMembers 
+  ],
   partials: [Partials.Channel, Partials.Message],
 });
 
@@ -13,7 +18,7 @@ export async function initializeDiscordBot() {
   }
 
   discordClient.once('clientReady', () => {
-    console.log(`Discord bot ready as ${discordClient.user?.tag}`);
+    console.log(`🚀 Discord bot successfully deployed as: ${discordClient.user?.tag}`);
   });
 
   discordClient.on('messageCreate', async (message) => {
@@ -26,9 +31,24 @@ export async function initializeDiscordBot() {
       return;
     }
 
+    // 🌟 FORCE EXPLICIT SERVER NICKNAME RESOLUTION
+    let serverDisplayName = message.author.username;
+    try {
+      // Pull member data from active guild context
+      const member = message.member || await message.guild?.members.fetch(message.author.id);
+      if (member) {
+        serverDisplayName = member.displayName || member.nickname || message.author.username;
+      }
+    } catch (err) {
+      // Clean fallback if user leaves server mid-stream
+      serverDisplayName = message.author.displayName || message.author.username;
+    }
+
+    console.log(`📥 Intercepted Discord Message: [${serverDisplayName}]: ${message.content}`);
+
     await writeChatMessage({
       id: message.id,
-      author: `${message.author.username}#${message.author.discriminator}`,
+      author: serverDisplayName, // 🌟 Now populated with game/server nickname
       content: message.content,
       timestamp: message.createdTimestamp,
       source: 'discord',

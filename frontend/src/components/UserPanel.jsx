@@ -6,7 +6,8 @@ export default function UserPanel({ user, onLogout }) {
           <div>
             <div className="text-sm text-slate-400">Signed in as</div>
             <div className="text-base font-semibold text-white">
-              {user.username}#{user.discriminator}
+              {/* Displays the server profile nickname, falling back to username if unavailable */}
+              {user.displayName || user.username}
             </div>
           </div>
           <button

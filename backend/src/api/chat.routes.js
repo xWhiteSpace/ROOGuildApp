@@ -17,8 +17,23 @@ router.post('/send', async (req, res) => {
   }
 
   try {
+    // 🛡️ BOT AUTHENTICATION SAFETY GUARD
+    // Catches the missing token bug safely before it can crash your REST manager
+    if (!discordClient || !discordClient.token) {
+      console.error("❌ [BOT TOKEN ERROR] The Discord Bot client has no token loaded.");
+      console.error("👉 Please verify that DISCORD_BOT_TOKEN is correctly defined inside your backend .env file.");
+      return res.status(503).json({ 
+        success: false, 
+        error: 'Discord Bot credentials are missing. Check your backend server configuration.' 
+      });
+    }
+
     // Get the server nickname from the guild member
     const guildId = process.env.DISCORD_GUILD_ID;
+    if (!guildId) {
+      return res.status(500).json({ success: false, error: 'DISCORD_GUILD_ID is missing from the environment.' });
+    }
+
     const guild = await discordClient.guilds.fetch(guildId);
     const member = await guild.members.fetch(user.id);
     
