@@ -3,7 +3,6 @@ import { getDatabase } from 'firebase-admin/database';
 
 const router = Router();
 
-// Low-level CSV data splitter matching your background sync engine conventions
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   const lines = csvText.split(/\r?\n/);
   let tableStarted = false;
@@ -24,12 +23,28 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   return dataRows;
 }
 
+// 🛡️ SECURITY HELPER: Merges standard session data with mobile authorization headers
+function resolveUserIdentity(req) {
+  if (req.session?.user) return req.session.user;
+  
+  // Mobile fallback: Extract user details from custom headers if mobile browsers block cookies
+  const mobileHeaderToken = req.headers['x-user-profile'];
+  if (mobileHeaderToken) {
+    try {
+      return JSON.parse(decodeURIComponent(mobileHeaderToken));
+    } catch (e) {
+      console.error("Failed to parse mobile authorization header token:", e.message);
+    }
+  }
+  return null;
+}
+
 /**
  * 📡 INFINITE INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
-  const user = req.session?.user;
+  const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
@@ -65,7 +80,7 @@ router.get('/init', async (req, res) => {
         const liveStatus = (row[6] || '').trim().toLowerCase();
 
         // 🛡️ THE LIVE SESSION GUARD LOCK
-        // An item remains counted if it is Pending OR if it was Selected but the live loop hasn't been set to 'done'
+        // An item remains counted if it is Pending OR if it was Selected but the live loop hasn't been set to 'done' (or blank/empty)
         const isAwaitingEvaluation = (selStatus === 'pending');
         const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
 
@@ -76,7 +91,6 @@ router.get('/init', async (req, res) => {
       }
     });
 
-    // Layer in temporary requests currently sitting in the Firebase write-back pipe
     firebaseRequests.forEach(req => {
       if ((req.member || '').trim().toLowerCase() === playerLower) {
         if (['pending', 'standby', 'now', 'next', ''].includes((req.selectionStatus || 'pending').toLowerCase())) {
@@ -106,7 +120,7 @@ router.get('/init', async (req, res) => {
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
-  const user = req.session?.user;
+  const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   const { selections } = req.body; 
@@ -183,7 +197,7 @@ router.post('/submit', async (req, res) => {
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
-  const user = req.session?.user;
+  const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   const { itemName, cancelQty } = req.body;
