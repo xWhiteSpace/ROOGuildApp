@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
-import fs from 'fs'; // 🧼 Used to securely read your ragnarokdynasty key file directly
+import fs from 'fs'; 
 import path from 'path';
 dotenv.config();
 
@@ -50,13 +50,12 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   return dataRows;
 }
 
-// 🌟 AUTOMATED SYNCHRONIZATION ENGINE (INFINITE TABLE SCALE)
+// 🌟 AUTOMATED SYNCHRONIZATION ENGINE (STRICT ENUMS ONLY)
 export async function executeSpreadsheetSync() {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   if (!spreadsheetId) return;
 
   try {
-    // 🚀 Infinite row scanning
     const historyUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=LootHistory`;
     const historyRes = await fetch(historyUrl);
     const historyText = await historyRes.text();
@@ -124,22 +123,43 @@ export async function executeSpreadsheetSync() {
     const standbyPlayerNames = new Set();
     const requestItemsList = [];
 
+    // Pass 1: Identify Now and Next Roles Strictly
+    requestRows.forEach(row => {
+      if (normalizeDateStr(row[0] || '') !== normalizedAnchor) return;
+      const player = row[1]?.trim();
+      if (!player || player === '???') return;
+
+      const biddingStatus = row[6]?.trim().toLowerCase(); // Column G LiveStatus
+      if (biddingStatus === 'now') nowPlayerName = player;
+      if (biddingStatus === 'next') nextPlayerName = player;
+    });
+
+    // Pass 2: Apply Option A Deduplication Guard to Standby Selections
     requestRows.forEach(row => {
       if (normalizeDateStr(row[0] || '') !== normalizedAnchor) return;
       const player = row[1]?.trim();
       if (!player || player === '???') return;
 
       const biddingStatus = row[6]?.trim().toLowerCase();
-      if (biddingStatus === 'now') nowPlayerName = player;
-      if (biddingStatus === 'next') nextPlayerName = player;
-      if (biddingStatus === 'standby') standbyPlayerNames.add(player);
+      if (biddingStatus === 'standby') {
+        // 🛡️ OPTION A DE-DUPLICATION RULE DETECTED
+        // If a player is already assigned as Now or Next, skip adding them to Standby
+        if (player !== nowPlayerName && player !== nextPlayerName) {
+          standbyPlayerNames.add(player);
+        }
+      }
     });
 
+    // Pass 3: Aggregate ALL active items for whoever is currently marked as 'Now'
     if (nowPlayerName) {
       const targetLowerName = nowPlayerName.toLowerCase();
       requestRows.forEach(row => {
         if (normalizeDateStr(row[0] || '') !== normalizedAnchor) return;
-        if (row[1]?.trim().toLowerCase() === targetLowerName && row[4]?.trim().toLowerCase() === 'active') {
+        
+        const appStatus = (row[4] || '').trim().toLowerCase(); // Column E ApplicationStatus
+        
+        // Strict Match: Must be exactly 'requested'
+        if (row[1]?.trim().toLowerCase() === targetLowerName && appStatus === 'requested') {
           const itemType = row[2];
           const itemQty = row[3];
           if (itemType && itemQty) requestItemsList.push(`[${itemType.trim()}] - ${itemQty.trim()}`);
@@ -158,7 +178,7 @@ export async function executeSpreadsheetSync() {
     await db.ref('auction/queue').set(queueOutput);
 
     // -------------------------------------------------------------
-    // 🌟 STEP 6: EXACT COORDINATE WRITE-BACK (BULLLETPROOF KEY CHECK)
+    // Firebase Web-to-Sheet Write-back Module
     // -------------------------------------------------------------
     const requestsSnapshot = await db.ref('auction/web_requests').once('value');
     if (requestsSnapshot.exists()) {
@@ -168,8 +188,6 @@ export async function executeSpreadsheetSync() {
       try {
         let cleanEmail = '';
         let cleanKey = '';
-        
-        // 🔍 Locate your original key file directly to completely protect against broken .env strings
         const jsonPath = path.join(process.cwd(), 'ragnarokdynasty-4afa9f4eaa31.json');
         
         if (fs.existsSync(jsonPath)) {
@@ -185,7 +203,6 @@ export async function executeSpreadsheetSync() {
           const auth = new google.auth.JWT(cleanEmail, null, cleanKey, ['https://www.googleapis.com/auth/spreadsheets']);
           const sheets = google.sheets({ version: 'v4', auth });
           
-          // Checks actual written boundaries to skip empty grids/borders
           const checkSheetRange = await sheets.spreadsheets.values.get({
             spreadsheetId,
             range: 'RequestHistory!A:B'
@@ -213,7 +230,6 @@ export async function executeSpreadsheetSync() {
 
           if (rowsToAppend.length > 0) {
             console.log(`📤 [WRITE-BACK] Target row selected: Line ${directTargetWriteRow}. Migrating data...`);
-            
             await sheets.spreadsheets.values.update({
               spreadsheetId,
               range: `RequestHistory!A${directTargetWriteRow}:H`,
@@ -226,8 +242,6 @@ export async function executeSpreadsheetSync() {
             }
             console.log(`✅ [WRITE-BACK SUCCESS] Successfully populated requests into your table grid layout.`);
           }
-        } else {
-          console.error('❌ [WRITE-BACK AUTH ERROR]: Missing authorization file or .env config.');
         }
       } catch (writeBackError) {
         console.error('❌ [WRITE-BACK TRANSMISSION ERROR]:', writeBackError.message);

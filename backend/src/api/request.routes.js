@@ -71,32 +71,37 @@ router.get('/init', async (req, res) => {
     const liveCounts = {};
     availableItems.forEach(item => { liveCounts[item.name] = 0; });
 
+    // 1. Process Spreadsheet Ledger Rows with Strict Enums Only
     spreadsheetRows.forEach(row => {
       if ((row[1] || '').trim().toLowerCase() === playerLower) {
         const itemType = row[2];
-        const itemQty = parseInt(row[3], 10) || 0;
         const appStatus = (row[4] || '').trim().toLowerCase();
         const selStatus = (row[5] || 'pending').trim().toLowerCase();
         const liveStatus = (row[6] || '').trim().toLowerCase();
+        const itemQty = parseInt(row[3], 10) || 0;
 
-        // 🛡️ THE LIVE SESSION GUARD LOCK
-        // An item remains counted if it is Pending OR if it was Selected but the live loop hasn't been set to 'done' (or blank/empty)
+        // 🛡️ STRICT SESSION EVALUATION RULE
         const isAwaitingEvaluation = (selStatus === 'pending');
         const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
 
         if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'active' || appStatus === 'requested') liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled' || appStatus === 'cancelled') liveCounts[itemType] -= itemQty;
+          if (appStatus === 'requested') liveCounts[itemType] += itemQty;
+          if (appStatus === 'canceled')  liveCounts[itemType] -= itemQty;
+          // Legacy check for 'active' or 'cancelled' removed entirely to eliminate drift
         }
       }
     });
 
+    // 2. Process Live Firebase Memory Elements with Strict Enums Only
     firebaseRequests.forEach(req => {
       if ((req.member || '').trim().toLowerCase() === playerLower) {
-        if (['pending', 'standby', 'now', 'next', ''].includes((req.selectionStatus || 'pending').toLowerCase())) {
-          const appStatus = (req.applicationStatus || '').toLowerCase();
+        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
+        const appStatus = (req.applicationStatus || '').toLowerCase();
+
+        // Staged elements inside Firebase always fallback to a Pending evaluation track
+        if (selStatus === 'pending') {
           if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
-          if (appStatus === 'canceled') liveCounts[req.item] -= req.quantity;
+          if (appStatus === 'canceled')  liveCounts[req.item] -= req.quantity;
         }
       }
     });
@@ -161,11 +166,15 @@ router.post('/submit', async (req, res) => {
       }
     }
 
+    // 🛡️ STRICT DYNAMIC PITY ACCUMULATOR
     let dynamicPriority = 0;
     const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
     for (let i = searchStart; i < combinedSelectionTimeline.length; i++) {
-      const status = combinedSelectionTimeline[i].replace(/\s+/g, '');
-      if (['notselected', 'passed'].includes(status)) dynamicPriority++;
+      const status = combinedSelectionTimeline[i].trim().toLowerCase();
+      // Only count official 'notselected' rows. 'passed' loose tag removed to prevent exploit leaks.
+      if (status === 'notselected') {
+        dynamicPriority++;
+      }
     }
 
     const chosenItemNames = Object.keys(selections);
@@ -180,8 +189,8 @@ router.post('/submit', async (req, res) => {
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
-        applicationStatus: 'Requested',
-        selectionStatus: 'Pending',
+        applicationStatus: 'Requested', // Strict write
+        selectionStatus: 'Pending',     // Strict write
         priority: dynamicPriority
       });
     }
@@ -212,8 +221,8 @@ router.post('/cancel', async (req, res) => {
       member: playerDisplayName,
       item: itemName,
       quantity: parseInt(cancelQty, 10),
-      applicationStatus: 'Canceled',
-      selectionStatus: 'Pending',
+      applicationStatus: 'Canceled', // Strict write
+      selectionStatus: 'Pending',    // Strict write
       priority: 0
     });
 
