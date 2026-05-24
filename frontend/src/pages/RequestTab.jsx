@@ -16,7 +16,20 @@ export default function RequestTab() {
     try {
       setLoading(true);
       setAuthError(false);
-      const res = await fetch(`${backendUrl}/api/requests/init`, { credentials: 'include' });
+
+      // 📱 MOBILE SEPARATION HARNESS: Pull user token out of localStorage to bypass third-party cookie blocks
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+
+      const res = await fetch(`${backendUrl}/api/requests/init`, { 
+        method: 'GET',
+        headers: customHeaders,
+        credentials: 'include' 
+      });
+
       if (res.status === 401) {
         setAuthError(true);
         setLoading(false);
@@ -68,9 +81,15 @@ export default function RequestTab() {
 
     try {
       setProcessing(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+
       const res = await fetch(`${backendUrl}/api/requests/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: customHeaders,
         body: JSON.stringify({ selections: batchPayload }),
         credentials: 'include'
       });
@@ -88,9 +107,15 @@ export default function RequestTab() {
   const handleExecuteCancel = async (itemName, activeQty) => {
     try {
       setProcessing(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+
       const res = await fetch(`${backendUrl}/api/requests/cancel`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: customHeaders,
         body: JSON.stringify({ itemName, cancelQty: activeQty }),
         credentials: 'include'
       });
@@ -129,7 +154,6 @@ export default function RequestTab() {
   return (
     <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative">
       
-      {/* Information Header Display */}
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-100">Advance Request Deck</h1>
@@ -146,7 +170,6 @@ export default function RequestTab() {
         </button>
       </div>
 
-      {/* Synchronized Inventory Grid Display */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {items.map(item => {
           const currentActive = liveCounts[item.name] || 0;
@@ -162,7 +185,6 @@ export default function RequestTab() {
                 </span>
               </div>
 
-              {/* Dynamic Increment Adjusters */}
               <div className="my-6 flex items-center justify-center gap-4">
                 <button
                   onClick={() => adjustCounter(item.name, 'down')}
@@ -185,10 +207,7 @@ export default function RequestTab() {
                 </button>
               </div>
 
-              {/* 📊 CLEAN STATUS BOX BLOCK */}
               <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
-                
-                {/* 1. Verified Saved Status from Google Sheet */}
                 <div className="flex justify-between">
                   <span>Application Status:</span>
                   <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
@@ -196,7 +215,6 @@ export default function RequestTab() {
                   </span>
                 </div>
 
-                {/* 2. Clear Screen Cart Identifier */}
                 <div className="flex justify-between">
                   <span>Added to Basket:</span>
                   <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
@@ -204,7 +222,6 @@ export default function RequestTab() {
                   </span>
                 </div>
 
-                {/* 3. Priority Evaluation Column Tracking */}
                 <div className="flex justify-between">
                   <span>Selection Status:</span>
                   <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
@@ -218,7 +235,6 @@ export default function RequestTab() {
         })}
       </div>
 
-      {/* FIXED FLOATING AMAZON-STYLE CHECKOUT PANEL SUMMARY BAR */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex flex-col">
@@ -237,7 +253,6 @@ export default function RequestTab() {
         </div>
       </div>
 
-      {/* Stress-Free Cancellation Modal Popup */}
       {isCancelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
