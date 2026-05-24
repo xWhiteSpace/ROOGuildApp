@@ -142,27 +142,43 @@ export async function executeSpreadsheetSync() {
 
       const biddingStatus = row[6]?.trim().toLowerCase();
       if (biddingStatus === 'standby') {
-        // 🛡️ OPTION A DE-DUPLICATION RULE DETECTED
-        // If a player is already assigned as Now or Next, skip adding them to Standby
         if (player !== nowPlayerName && player !== nextPlayerName) {
           standbyPlayerNames.add(player);
         }
       }
     });
 
-    // Pass 3: Aggregate ALL active items for whoever is currently marked as 'Now'
+    // Pass 3: CHRONOLOGICAL NET QUANTITY AGGREGATOR FOR THE 'NOW' PLAYER
     if (nowPlayerName) {
       const targetLowerName = nowPlayerName.toLowerCase();
+      const itemAggregatorMap = {};
+
       requestRows.forEach(row => {
         if (normalizeDateStr(row[0] || '') !== normalizedAnchor) return;
+        if (row[1]?.trim().toLowerCase() !== targetLowerName) return;
         
+        const itemType = (row[2] || '').trim();
+        const itemQty = parseInt(row[3], 10) || 0;
         const appStatus = (row[4] || '').trim().toLowerCase(); // Column E ApplicationStatus
         
-        // Strict Match: Must be exactly 'requested'
-        if (row[1]?.trim().toLowerCase() === targetLowerName && appStatus === 'requested') {
-          const itemType = row[2];
-          const itemQty = row[3];
-          if (itemType && itemQty) requestItemsList.push(`[${itemType.trim()}] - ${itemQty.trim()}`);
+        if (!itemType) return;
+        if (!itemAggregatorMap[itemType]) {
+          itemAggregatorMap[itemType] = 0;
+        }
+
+        // Apply strict transactional addition and subtraction logic
+        if (appStatus === 'requested') {
+          itemAggregatorMap[itemType] += itemQty;
+        } else if (appStatus === 'canceled') {
+          itemAggregatorMap[itemType] -= itemQty;
+        }
+      });
+
+      // Format only items that have a true standing net balance greater than 0
+      Object.keys(itemAggregatorMap).forEach(itemType => {
+        const netQty = itemAggregatorMap[itemType];
+        if (netQty > 0) {
+          requestItemsList.push(`[${itemType}] - ${netQty}`);
         }
       });
     }
