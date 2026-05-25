@@ -23,6 +23,9 @@ import { initializeDiscordBot, discordClient } from './discord-bot/client.js';
 import syncRouter, { executeSpreadsheetSync } from './routes/syncRouter.js';
 import requestRoutes from './api/request.routes.js';
 
+// 📣 IMPORT DISCORD SNAPSHOT SERVICE
+import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
+
 // Ensure your startup sequences execute the bot login function
 initializeEnv();
 initializeFirebase();
@@ -63,7 +66,7 @@ app.use(cors({
     } else {
       callback(new Error('Cross-Origin Resource Sharing (CORS) blocked this device path.'));
     }
-  }, 
+  },
   credentials: true 
 }));
 
@@ -87,11 +90,6 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/sync', syncRouter);
 app.use('/api/requests', requestRoutes);
 
-executeSpreadsheetSync(); 
-setInterval(() => {
-  executeSpreadsheetSync();
-}, 5 * 1000);
-
 app.get('/', (req, res) => {
   res.send('DynastyGuild backend is running.');
 });
@@ -99,4 +97,25 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
+
+  // 1. Core synchronization loop running silently in background memory
+  executeSpreadsheetSync(); 
+  setInterval(() => {
+    executeSpreadsheetSync();
+  }, 5 * 1000);
+
+  // 2. Precise JST Time tracking loop running every 60 seconds
+  setInterval(() => {
+    const jstTimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
+    const jstDate = new Date(jstTimeStr);
+    
+    const currentHour = jstDate.getHours();
+    const currentMinute = jstDate.getMinutes();
+
+    // Catch the exact minute mark targets at 07:00, 11:00, and 18:00
+    if (currentMinute === 0 && (currentHour === 7 || currentHour === 11 || currentHour === 18)) {
+      console.log(`⏰ Scheduled time target hit (${currentHour}:00 JST). Initiating broadcast checker...`);
+      processAndPostDiscordSnapshot();
+    }
+  }, 60 * 1000);
 });

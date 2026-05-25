@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
+import { getGateStatusDetails } from '../config/timeWindow.js';
 
 const router = Router();
 
@@ -37,7 +38,7 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 📡 INITIALIZATION PATHWAY
+ * 📡 INITIALIZATION PATHWAY (TIME BOUNDARY Payload Added)
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -48,6 +49,9 @@ router.get('/init', async (req, res) => {
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
+    
+    // Evaluate live JST window details
+    const timeGateStatus = getGateStatusDetails();
 
     const availableItems = [
       { name: 'Puppet', maxQty: 1 },
@@ -80,8 +84,8 @@ router.get('/init', async (req, res) => {
         const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
 
         if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'requested') liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled')  liveCounts[itemType] -= itemQty;
+          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
+          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
         }
       }
     });
@@ -92,8 +96,8 @@ router.get('/init', async (req, res) => {
         const appStatus = (req.applicationStatus || '').toLowerCase();
 
         if (selStatus === 'pending') {
-          if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
-          if (appStatus === 'canceled')  liveCounts[req.item] -= req.quantity;
+          if (appStatus === 'requested' && liveCounts[req.item] !== undefined) liveCounts[req.item] += req.quantity;
+          if (appStatus === 'canceled' && liveCounts[req.item] !== undefined)  liveCounts[req.item] -= req.quantity;
         }
       }
     });
@@ -105,7 +109,11 @@ router.get('/init', async (req, res) => {
       displayName: playerDisplayName,
       date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
       items: availableItems,
-      liveCounts
+      liveCounts,
+      // Pass gate properties down to frontend UI components
+      isGateOpen: timeGateStatus.isGateOpen,
+      currentSessionLabel: timeGateStatus.currentSessionLabel,
+      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -113,10 +121,15 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 BATCH CHECKOUT REQUISITION PORTER (ITEM-INDEPENDENT PRIORITIES)
+ * 📡 SUBMIT GATE REQUISITION PORTER (WINDOW LOCK SECURED)
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
+  const timeGateStatus = getGateStatusDetails();
+  if (!timeGateStatus.isGateOpen) {
+    return res.status(423).json({ success: false, error: `Action Denied: Bidding registration is closed for this session. ${timeGateStatus.nextStatusChangeMessage}` });
+  }
+
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
@@ -140,7 +153,6 @@ router.post('/submit', async (req, res) => {
 
     const chosenItemNames = Object.keys(selections);
     
-    // Process item requests independently
     for (const itemName of chosenItemNames) {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
@@ -148,25 +160,18 @@ router.post('/submit', async (req, res) => {
       const combinedItemTimeline = [];
       const itemLower = itemName.trim().toLowerCase();
 
-      // Step A: Extract history rows matching both Member Name AND Item Category Name
       spreadsheetRows.forEach(row => {
-        const rowMember = (row[1] || '').trim().toLowerCase();
-        const rowItem = (row[2] || '').trim().toLowerCase();
-        if (rowMember === playerLower && rowItem === itemLower) {
+        if ((row[1] || '').trim().toLowerCase() === playerLower && (row[2] || '').trim().toLowerCase() === itemLower) {
           combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
         }
       });
 
-      // Step B: Extract staged Firebase items matching both Member Name AND Item Category Name
       firebaseRequests.forEach(req => {
-        const reqMember = (req.member || '').trim().toLowerCase();
-        const reqItem = (req.item || '').trim().toLowerCase();
-        if (reqMember === playerLower && reqItem === itemLower) {
+        if ((req.member || '').trim().toLowerCase() === playerLower && (req.item || '').trim().toLowerCase() === itemLower) {
           combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
         }
       });
 
-      // Step C: Locate the item-specific anchor point
       let lastSelectedIdx = -1;
       for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
         if (combinedItemTimeline[i] === 'selected') {
@@ -175,7 +180,6 @@ router.post('/submit', async (req, res) => {
         }
       }
 
-      // Step D: Accumulate Pity score using the isolated timeline branch
       let dynamicPriority = 0;
       const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
       for (let i = searchStart; i < combinedItemTimeline.length; i++) {
@@ -204,10 +208,15 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 BALANCING COUNTER-LEDGER CANCELLATION PORTER
+ * 📡 CANCEL GATE REQUISITION PORTER (WINDOW LOCK SECURED)
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
+  const timeGateStatus = getGateStatusDetails();
+  if (!timeGateStatus.isGateOpen) {
+    return res.status(423).json({ success: false, error: `Action Denied: Adjustments are locked for this session. ${timeGateStatus.nextStatusChangeMessage}` });
+  }
+
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
