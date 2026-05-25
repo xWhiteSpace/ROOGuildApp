@@ -148,7 +148,7 @@ export async function executeSpreadsheetSync() {
       }
     });
 
-    // Pass 3: CHRONOLOGICAL NET QUANTITY AGGREGATOR FOR THE 'NOW' PLAYER
+    // Pass 3: CHRONOLOGICAL NET QUANTITY AGGREGATOR WITH SELECTION GUARD
     if (nowPlayerName) {
       const targetLowerName = nowPlayerName.toLowerCase();
       const itemAggregatorMap = {};
@@ -160,21 +160,24 @@ export async function executeSpreadsheetSync() {
         const itemType = (row[2] || '').trim();
         const itemQty = parseInt(row[3], 10) || 0;
         const appStatus = (row[4] || '').trim().toLowerCase(); // Column E ApplicationStatus
+        const selStatus = (row[5] || '').trim().toLowerCase(); // Column F SelectionStatus
         
         if (!itemType) return;
         if (!itemAggregatorMap[itemType]) {
           itemAggregatorMap[itemType] = 0;
         }
 
-        // Apply strict transactional addition and subtraction logic
-        if (appStatus === 'requested') {
-          itemAggregatorMap[itemType] += itemQty;
-        } else if (appStatus === 'canceled') {
-          itemAggregatorMap[itemType] -= itemQty;
+        // 🛡️ SELECTION GUARD ANTI-LEAK RULE
+        // An item is only added to the active live bidding list if it was explicitly marked 'Selected'
+        if (selStatus === 'selected') {
+          if (appStatus === 'requested') {
+            itemAggregatorMap[itemType] += itemQty;
+          } else if (appStatus === 'canceled') {
+            itemAggregatorMap[itemType] -= itemQty;
+          }
         }
       });
 
-      // Format only items that have a true standing net balance greater than 0
       Object.keys(itemAggregatorMap).forEach(itemType => {
         const netQty = itemAggregatorMap[itemType];
         if (netQty > 0) {
@@ -193,9 +196,7 @@ export async function executeSpreadsheetSync() {
     await db.ref('auction/tally').set(computedTally);
     await db.ref('auction/queue').set(queueOutput);
 
-    // -------------------------------------------------------------
     // Firebase Web-to-Sheet Write-back Module
-    // -------------------------------------------------------------
     const requestsSnapshot = await db.ref('auction/web_requests').once('value');
     if (requestsSnapshot.exists()) {
       const webRequestsMap = requestsSnapshot.val();

@@ -23,11 +23,8 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   return dataRows;
 }
 
-// 🛡️ SECURITY HELPER: Merges standard session data with mobile authorization headers
 function resolveUserIdentity(req) {
   if (req.session?.user) return req.session.user;
-  
-  // Mobile fallback: Extract user details from custom headers if mobile browsers block cookies
   const mobileHeaderToken = req.headers['x-user-profile'];
   if (mobileHeaderToken) {
     try {
@@ -40,7 +37,7 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 📡 INFINITE INITIALIZATION PATHWAY
+ * 📡 INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -71,7 +68,6 @@ router.get('/init', async (req, res) => {
     const liveCounts = {};
     availableItems.forEach(item => { liveCounts[item.name] = 0; });
 
-    // 1. Process Spreadsheet Ledger Rows with Strict Enums Only
     spreadsheetRows.forEach(row => {
       if ((row[1] || '').trim().toLowerCase() === playerLower) {
         const itemType = row[2];
@@ -80,25 +76,21 @@ router.get('/init', async (req, res) => {
         const liveStatus = (row[6] || '').trim().toLowerCase();
         const itemQty = parseInt(row[3], 10) || 0;
 
-        // 🛡️ STRICT SESSION EVALUATION RULE
         const isAwaitingEvaluation = (selStatus === 'pending');
         const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
 
         if (isAwaitingEvaluation || isLiveInCurrentSession) {
           if (appStatus === 'requested') liveCounts[itemType] += itemQty;
           if (appStatus === 'canceled')  liveCounts[itemType] -= itemQty;
-          // Legacy check for 'active' or 'cancelled' removed entirely to eliminate drift
         }
       }
     });
 
-    // 2. Process Live Firebase Memory Elements with Strict Enums Only
     firebaseRequests.forEach(req => {
       if ((req.member || '').trim().toLowerCase() === playerLower) {
         const selStatus = (req.selectionStatus || 'pending').toLowerCase();
         const appStatus = (req.applicationStatus || '').toLowerCase();
 
-        // Staged elements inside Firebase always fallback to a Pending evaluation track
         if (selStatus === 'pending') {
           if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
           if (appStatus === 'canceled')  liveCounts[req.item] -= req.quantity;
@@ -121,7 +113,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 BATCH CHECKOUT REQUISITION PORTER
+ * 📡 BATCH CHECKOUT REQUISITION PORTER (ITEM-INDEPENDENT PRIORITIES)
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
@@ -146,41 +138,51 @@ router.post('/submit', async (req, res) => {
     const snapshot = await db.ref('auction/web_requests').once('value');
     const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
 
-    const combinedSelectionTimeline = [];
-    spreadsheetRows.forEach(row => {
-      if ((row[1] || '').trim().toLowerCase() === playerLower) {
-        combinedSelectionTimeline.push((row[5] || 'pending').trim().toLowerCase());
-      }
-    });
-    firebaseRequests.forEach(req => {
-      if ((req.member || '').trim().toLowerCase() === playerLower) {
-        combinedSelectionTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
-      }
-    });
-
-    let lastSelectedIdx = -1;
-    for (let i = combinedSelectionTimeline.length - 1; i >= 0; i--) {
-      if (combinedSelectionTimeline[i] === 'selected') {
-        lastSelectedIdx = i;
-        break;
-      }
-    }
-
-    // 🛡️ STRICT DYNAMIC PITY ACCUMULATOR
-    let dynamicPriority = 0;
-    const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
-    for (let i = searchStart; i < combinedSelectionTimeline.length; i++) {
-      const status = combinedSelectionTimeline[i].trim().toLowerCase();
-      // Only count official 'notselected' rows. 'passed' loose tag removed to prevent exploit leaks.
-      if (status === 'notselected') {
-        dynamicPriority++;
-      }
-    }
-
     const chosenItemNames = Object.keys(selections);
+    
+    // Process item requests independently
     for (const itemName of chosenItemNames) {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
+
+      const combinedItemTimeline = [];
+      const itemLower = itemName.trim().toLowerCase();
+
+      // Step A: Extract history rows matching both Member Name AND Item Category Name
+      spreadsheetRows.forEach(row => {
+        const rowMember = (row[1] || '').trim().toLowerCase();
+        const rowItem = (row[2] || '').trim().toLowerCase();
+        if (rowMember === playerLower && rowItem === itemLower) {
+          combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
+        }
+      });
+
+      // Step B: Extract staged Firebase items matching both Member Name AND Item Category Name
+      firebaseRequests.forEach(req => {
+        const reqMember = (req.member || '').trim().toLowerCase();
+        const reqItem = (req.item || '').trim().toLowerCase();
+        if (reqMember === playerLower && reqItem === itemLower) {
+          combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
+        }
+      });
+
+      // Step C: Locate the item-specific anchor point
+      let lastSelectedIdx = -1;
+      for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
+        if (combinedItemTimeline[i] === 'selected') {
+          lastSelectedIdx = i;
+          break;
+        }
+      }
+
+      // Step D: Accumulate Pity score using the isolated timeline branch
+      let dynamicPriority = 0;
+      const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
+      for (let i = searchStart; i < combinedItemTimeline.length; i++) {
+        if (combinedItemTimeline[i] === 'notselected') {
+          dynamicPriority++;
+        }
+      }
 
       const newRequestRef = db.ref('auction/web_requests').push();
       await newRequestRef.set({
@@ -189,8 +191,8 @@ router.post('/submit', async (req, res) => {
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
-        applicationStatus: 'Requested', // Strict write
-        selectionStatus: 'Pending',     // Strict write
+        applicationStatus: 'Requested', 
+        selectionStatus: 'Pending',     
         priority: dynamicPriority
       });
     }
@@ -221,8 +223,8 @@ router.post('/cancel', async (req, res) => {
       member: playerDisplayName,
       item: itemName,
       quantity: parseInt(cancelQty, 10),
-      applicationStatus: 'Canceled', // Strict write
-      selectionStatus: 'Pending',    // Strict write
+      applicationStatus: 'Canceled', 
+      selectionStatus: 'Pending',    
       priority: 0
     });
 
