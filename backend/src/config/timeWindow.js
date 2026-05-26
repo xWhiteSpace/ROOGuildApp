@@ -111,7 +111,7 @@ export function getGateStatusDetails() {
     }
   }
 
-  // ⏳ APPROACH A: DYNAMIC TIME INTERVAL MAPPER (GMT+8)
+  // ⏳ APPROACH A: DYNAMIC TIME INTERVAL MAPPER WITH TRUE LOCK OVERLAPS (GMT+8)
   let phaseIntervals = { phase1: "", phase2: "", phase3: "" };
   let targetRaidDay = "Tuesday";
 
@@ -132,16 +132,16 @@ export function getGateStatusDetails() {
 
   if (targetRaidDay === "Tuesday") {
     phaseIntervals.phase1 = "Sun 22:15 ~ Mon 22:15 GMT+8";
-    phaseIntervals.phase2 = "Mon 22:15 ~ Tue 20:55 GMT+8";
-    phaseIntervals.phase3 = "Tue 20:55 ~ Tue 22:15 GMT+8";
+    phaseIntervals.phase2 = "Mon 22:15 ~ Tue 22:15 GMT+8";
+    phaseIntervals.phase3 = "Tue 20:55 ~ 22:15 GMT+8";
   } else if (targetRaidDay === "Thursday") {
     phaseIntervals.phase1 = "Tue 22:15 ~ Wed 22:15 GMT+8";
-    phaseIntervals.phase2 = "Wed 22:15 ~ Thu 20:55 GMT+8";
-    phaseIntervals.phase3 = "Thu 20:55 ~ Thu 22:15 GMT+8";
+    phaseIntervals.phase2 = "Wed 22:15 ~ Thu 22:15 GMT+8";
+    phaseIntervals.phase3 = "Thu 20:55 ~ 22:15 GMT+8";
   } else if (targetRaidDay === "Sunday") {
     phaseIntervals.phase1 = "Thu 22:15 ~ Sat 22:15 GMT+8";
-    phaseIntervals.phase2 = "Sat 22:15 ~ Sun 20:55 GMT+8";
-    phaseIntervals.phase3 = "Sun 20:55 ~ Sun 22:15 GMT+8";
+    phaseIntervals.phase2 = "Sat 22:15 ~ Sun 22:15 GMT+8";
+    phaseIntervals.phase3 = "Sun 20:55 ~ 22:15 GMT+8";
   }
 
   return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase, phaseIntervals };
