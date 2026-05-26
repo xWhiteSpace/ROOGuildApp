@@ -171,7 +171,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 SUBMIT GATE REQUISITION PORTER
+ * 📡 SUBMIT GATE REQUISITION PORTER (STRICTLY GUARDED)
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
@@ -258,15 +258,11 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 CANCEL GATE REQUISITION PORTER
+ * 📡 CANCEL GATE REQUISITION PORTER (HUMANE: OPEN DURING LOCK)
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
-  const timeGateStatus = getGateStatusDetails();
-  if (!timeGateStatus.isGateOpen) {
-    return res.status(423).json({ success: false, error: `Action Denied: Adjustments are locked for this session. ${timeGateStatus.nextStatusChangeMessage}` });
-  }
-
+  // Time gate bypass allowed for cancellations to align with Option B policy.
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
