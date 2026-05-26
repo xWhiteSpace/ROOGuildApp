@@ -17,6 +17,7 @@ export default function RequestTab() {
   const [statusMessage, setStatusMessage] = useState('');
   const [currentPhase, setCurrentPhase] = useState(1);
   const [rankingsByItem, setRankingsByItem] = useState({});
+  const [phaseIntervals, setPhaseIntervals] = useState({ phase1: '', phase2: '', phase3: '' });
   const [activeListTab, setActiveListTab] = useState('Puppet');
 
   const initLobbyDashboard = async () => {
@@ -51,6 +52,7 @@ export default function RequestTab() {
         if (data.nextStatusChangeMessage) setStatusMessage(data.nextStatusChangeMessage);
         if (data.currentPhase !== undefined) setCurrentPhase(data.currentPhase);
         if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
+        if (data.phaseIntervals) setPhaseIntervals(data.phaseIntervals);
 
         const blankInputs = {};
         data.items.forEach(item => { blankInputs[item.name] = 0; });
@@ -130,7 +132,7 @@ export default function RequestTab() {
       const res = await fetch(`${backendUrl}/api/requests/cancel`, {
         method: 'POST',
         headers: customHeaders,
-        body: JSON.stringify({ selections: batchPayload }), // Using proper structured sync payloads
+        body: JSON.stringify({ selections: batchPayload }), 
         credentials: 'include'
       });
       const data = await res.json();
@@ -197,42 +199,57 @@ export default function RequestTab() {
         {/* PANEL ROW TRACK: Sidebars occupy 4 out of 12 columns */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* ⏳ TIMELINE PHASE FLOW TREE CONTAINER */}
+          {/* ⏳ TIMELINE PHASE FLOW TREE CONTAINER (DYNAMIC INTERVALS INJECTED) */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-4">Bidding Cycle</h2>
             <div className="space-y-4 font-sans relative pl-2">
               <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-slate-800"></div>
               
               {/* NODE 1 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+              <div className="flex items-start gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 mt-0.5 ${
                   currentPhase === 1 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
                 }`}>
                   {currentPhase > 1 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
                   {currentPhase === 1 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
                 </div>
-                <span className={`text-xs font-bold ${currentPhase === 1 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 1: Bid Request Open</span>
+                <div className="flex flex-col">
+                  <span className={`text-xs font-bold ${currentPhase === 1 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 1: Bid Request Open</span>
+                  <span className="text-[10px] font-normal text-slate-500 mt-0.5 tracking-wide">
+                    {phaseIntervals.phase1 || 'Pending Load...'}
+                  </span>
+                </div>
               </div>
 
               {/* NODE 2 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+              <div className="flex items-start gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 mt-0.5 ${
                   currentPhase === 2 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
                 }`}>
                   {currentPhase > 2 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
                   {currentPhase === 2 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
                 </div>
-                <span className={`text-xs font-bold ${currentPhase === 2 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 2: Bid Request Locked</span>
+                <div className="flex flex-col">
+                  <span className={`text-xs font-bold ${currentPhase === 2 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 2: Bid Request Locked</span>
+                  <span className="text-[10px] font-normal text-slate-500 mt-0.5 tracking-wide">
+                    {phaseIntervals.phase2 || 'Pending Load...'}
+                  </span>
+                </div>
               </div>
 
               {/* NODE 3 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+              <div className="flex items-start gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 mt-0.5 ${
                   currentPhase === 3 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
                 }`}>
                   {currentPhase === 3 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
                 </div>
-                <span className={`text-xs font-bold ${currentPhase === 3 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 3: Event + Live Auction</span>
+                <div className="flex flex-col">
+                  <span className={`text-xs font-bold ${currentPhase === 3 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 3: Event + Live Auction</span>
+                  <span className="text-[10px] font-normal text-slate-500 mt-0.5 tracking-wide">
+                    {phaseIntervals.phase3 || 'Pending Load...'}
+                  </span>
+                </div>
               </div>
 
             </div>
