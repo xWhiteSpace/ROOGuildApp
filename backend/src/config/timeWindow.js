@@ -111,5 +111,38 @@ export function getGateStatusDetails() {
     }
   }
 
-  return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase };
+  // ⏳ APPROACH A: DYNAMIC TIME INTERVAL MAPPER (GMT+8)
+  let phaseIntervals = { phase1: "", phase2: "", phase3: "" };
+  let targetRaidDay = "Tuesday";
+
+  // Resolve active target raid window based on calendar offsets
+  if (dayOfWeek === 0) {
+    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Sunday" : "Tuesday";
+  } else if (dayOfWeek === 1) {
+    targetRaidDay = "Tuesday";
+  } else if (dayOfWeek === 2) {
+    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Tuesday" : "Thursday";
+  } else if (dayOfWeek === 3) {
+    targetRaidDay = "Thursday";
+  } else if (dayOfWeek === 4) {
+    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Thursday" : "Sunday";
+  } else {
+    targetRaidDay = "Sunday";
+  }
+
+  if (targetRaidDay === "Tuesday") {
+    phaseIntervals.phase1 = "Sun 22:15 ~ Mon 22:15 GMT+8";
+    phaseIntervals.phase2 = "Mon 22:15 ~ Tue 20:55 GMT+8";
+    phaseIntervals.phase3 = "Tue 20:55 ~ Tue 22:15 GMT+8";
+  } else if (targetRaidDay === "Thursday") {
+    phaseIntervals.phase1 = "Tue 22:15 ~ Wed 22:15 GMT+8";
+    phaseIntervals.phase2 = "Wed 22:15 ~ Thu 20:55 GMT+8";
+    phaseIntervals.phase3 = "Thu 20:55 ~ Thu 22:15 GMT+8";
+  } else if (targetRaidDay === "Sunday") {
+    phaseIntervals.phase1 = "Thu 22:15 ~ Sat 22:15 GMT+8";
+    phaseIntervals.phase2 = "Sat 22:15 ~ Sun 20:55 GMT+8";
+    phaseIntervals.phase3 = "Sun 20:55 ~ Sun 22:15 GMT+8";
+  }
+
+  return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase, phaseIntervals };
 }

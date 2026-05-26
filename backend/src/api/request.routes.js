@@ -103,7 +103,7 @@ router.get('/init', async (req, res) => {
 
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    // 📋 LIVE REQUEST LIST MATRIX COMPILER
+    // 📋 LIVE REQUEST LIST MATRIX COMPILER (EXPANDED TO 100 PLAYERS)
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     
     Object.keys(rankingsByItem).forEach(targetItem => {
@@ -147,7 +147,9 @@ router.get('/init', async (req, res) => {
 
       const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
       activeApplicants.sort((a, b) => b.priority - a.priority);
-      rankingsByItem[targetItem] = activeApplicants.map(u => u.name);
+      
+      // Enforce the extended 100-player roster slice limit safely
+      rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
     });
 
     return res.json({
@@ -160,6 +162,7 @@ router.get('/init', async (req, res) => {
       currentSessionLabel: timeGateStatus.currentSessionLabel,
       nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
       currentPhase: timeGateStatus.currentPhase,
+      phaseIntervals: timeGateStatus.phaseIntervals,
       rankingsByItem
     });
   } catch (error) {
