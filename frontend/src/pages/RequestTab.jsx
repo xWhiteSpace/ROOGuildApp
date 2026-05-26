@@ -12,11 +12,12 @@ export default function RequestTab() {
   const [processing, setProcessing] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
-  // ⏳ Time-lock & Request List Integration Hooks
+  // ⏳ Zero-Layout-Shift Overlays & Timeline State Hooks
   const [isGateOpen, setIsGateOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [currentPhase, setCurrentPhase] = useState(1);
   const [rankingsByItem, setRankingsByItem] = useState({});
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [activeListTab, setActiveListTab] = useState('Puppet');
 
   const initLobbyDashboard = async () => {
@@ -169,197 +170,124 @@ export default function RequestTab() {
   return (
     <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative">
       
-      <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
-        <div>
+      <div className="mb-8 flex flex-col justify-between gap-6 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 md:flex-row md:items-center">
+        <div className="flex-1">
           <h1 className="text-xl font-bold tracking-tight text-slate-100">Advance Request Deck</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4">
             <span>User: <strong className="text-indigo-400">{userData.name}</strong></span>
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
           </div>
+
+          {/* ⏳ INLINE COMPACT HORIZONTAL TIMELINE PROCESS STEPS (3 PHASES ONLY) */}
+          <div className="mt-4 pt-3 border-t border-slate-800/60 flex flex-wrap items-center gap-y-2 gap-x-4 text-[10px] font-bold tracking-wider uppercase text-slate-500">
+            <span className="text-slate-400 normal-case font-black border-r border-slate-800 pr-3 mr-1">Bidding Cycle:</span>
+            <div className={`flex items-center gap-1.5 ${currentPhase === 1 ? 'text-indigo-400 font-extrabold' : ''}`}>
+              <span className={`h-2 w-2 rounded-full ${currentPhase === 1 ? 'bg-indigo-400 shadow-[0_0_6px_rgba(99,102,241,0.8)] animate-pulse' : 'bg-slate-800'}`}></span>
+              Phase 1: Bid Request Open
+            </div>
+            <span className="text-slate-700 hidden sm:inline">➔</span>
+            <div className={`flex items-center gap-1.5 ${currentPhase === 2 ? 'text-indigo-400 font-extrabold' : ''}`}>
+              <span className={`h-2 w-2 rounded-full ${currentPhase === 2 ? 'bg-indigo-400 shadow-[0_0_6px_rgba(99,102,241,0.8)] animate-pulse' : 'bg-slate-800'}`}></span>
+              Phase 2: Bid Request Locked
+            </div>
+            <span className="text-slate-700 hidden sm:inline">➔</span>
+            <div className={`flex items-center gap-1.5 ${currentPhase === 3 ? 'text-indigo-400 font-extrabold' : ''}`}>
+              <span className={`h-2 w-2 rounded-full ${currentPhase === 3 ? 'bg-indigo-400 shadow-[0_0_6px_rgba(99,102,241,0.8)] animate-pulse' : 'bg-slate-800'}`}></span>
+              Phase 3: Event + Live Auction
+            </div>
+          </div>
+
           {!isGateOpen && statusMessage && (
-            <div className="text-xs font-semibold text-amber-500 mt-2">
-              🔒 {statusMessage}
+            <div className="text-xs font-semibold text-amber-500 mt-3 flex items-center gap-1">
+              <span>🔒</span> {statusMessage}
             </div>
           )}
         </div>
-        <button
-          onClick={() => setIsCancelModalOpen(true)}
-          disabled={!isGateOpen}
-          className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white disabled:opacity-20 disabled:border-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600"
-        >
-          Cancel Existing Request
-        </button>
+
+        {/* HEADER CONTROLS COLUMN ROW BUTTONS */}
+        <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-2">
+          <button
+            onClick={() => setIsListModalOpen(true)}
+            className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 px-4 py-2 text-xs font-semibold text-indigo-400 transition hover:bg-indigo-600 hover:text-white cursor-pointer"
+          >
+            📋 View Request List
+          </button>
+          <button
+            onClick={() => setIsCancelModalOpen(true)}
+            disabled={!isGateOpen}
+            className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white disabled:opacity-20 disabled:border-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600"
+          >
+            Cancel Existing Request
+          </button>
+        </div>
       </div>
 
-      {/* 🛠️ ASYMMETRIC GRID WORKSPACE (Left Sideboards + Right Core Cards) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* PANEL ROW TRACK: Sidebars occupy 4 out of 12 columns */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* ⏳ TIMELINE PHASE FLOW TREE CONTAINER */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
-            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-4">Live Session Tracker</h2>
-            <div className="space-y-4 font-sans relative pl-2">
-              <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-slate-800"></div>
-              
-              {/* NODE 1 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                  currentPhase === 1 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
-                }`}>
-                  {currentPhase > 1 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
-                  {currentPhase === 1 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
-                </div>
-                <span className={`text-xs font-bold ${currentPhase === 1 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 1: Bid Request Open</span>
+      {/* ORIGINAL RESPONSIVE CARDS GRID (100% STYLE PRESERVED) */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map(item => {
+          const currentActive = liveCounts[item.name] || 0;
+          const localInput = localSelections[item.name] || 0;
+          const combinedTotal = currentActive + localInput;
+
+          return (
+            <div key={item.name} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+              <div className="flex items-start justify-between">
+                <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+                  {currentActive > 0 ? `${currentActive} Saved` : 'Idle'}
+                </span>
               </div>
 
-              {/* NODE 2 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                  currentPhase === 2 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
-                }`}>
-                  {currentPhase > 2 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
-                  {currentPhase === 2 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
-                </div>
-                <span className={`text-xs font-bold ${currentPhase === 2 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 2: Bid Request Locked</span>
-              </div>
-
-              {/* NODE 3 */}
-              <div className="flex items-center gap-4 relative">
-                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-                  currentPhase === 3 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
-                }`}>
-                  {currentPhase === 3 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
-                </div>
-                <span className={`text-xs font-bold ${currentPhase === 3 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 3: Event + Live Auction</span>
-              </div>
-
-              {/* NODE 4 */}
-              <div className="flex items-center gap-4 relative">
-                <div className="z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 border-slate-800 bg-slate-950">
-                  <div className="h-1.5 w-1.5 rounded-full bg-transparent" />
-                </div>
-                <span className="text-xs font-bold text-slate-600">Phase 4: Bid Request Open</span>
-              </div>
-
-            </div>
-          </div>
-
-          {/* 📋 SCROLLABLE REQUEST LIST COMPONENT */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
-            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">Request List</h2>
-            
-            {/* Dynamic Category Selector Navigation Pills */}
-            <div className="flex flex-wrap gap-1 mb-4 border-b border-slate-800 pb-2.5">
-              {items.map(item => (
+              <div className="my-6 flex items-center justify-center gap-4">
                 <button
-                  key={item.name}
-                  onClick={() => setActiveListTab(item.name)}
-                  className={`rounded-lg px-2.5 py-1 text-[10px] font-black tracking-tight transition ${
-                    activeListTab === item.name 
-                      ? 'bg-indigo-600 text-white shadow' 
-                      : 'bg-slate-950 text-slate-400 hover:bg-slate-800'
-                  }`}
+                  onClick={() => adjustCounter(item.name, 'down')}
+                  disabled={localInput === 0 || processing || !isGateOpen}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
                 >
-                  {item.name}
+                  -
                 </button>
-              ))}
-            </div>
-
-            {/* Strict height wrapper scroll context list box */}
-            <div className="h-[240px] overflow-y-auto pr-1 text-xs font-mono font-medium space-y-1 scrollbar-thin">
-              {currentRosterList.length === 0 ? (
-                <div className="text-slate-600 italic py-4 pl-1">1. No request filed yet.</div>
-              ) : (
-                currentRosterList.map((playerName, index) => {
-                  const positionLabel = String(index + 1).padStart(2, '0');
-                  return (
-                    <div key={playerName} className="flex items-center justify-between border-b border-slate-800/40 py-1.5 pl-1 hover:bg-slate-950/40 rounded transition">
-                      <span className="text-slate-300">
-                        <span className="text-slate-600 mr-2">{positionLabel}.</span>
-                        {playerName}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* CARDS REGISTRATION DECK: Consume the remaining 8 out of 12 desktop grid tracks */}
-        <div className="lg:col-span-8">
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2">
-            {items.map(item => {
-              const currentActive = liveCounts[item.name] || 0;
-              const localInput = localSelections[item.name] || 0;
-              const combinedTotal = currentActive + localInput;
-
-              return (
-                <div key={item.name} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
-                  <div className="flex items-start justify-between">
-                    <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-                      {currentActive > 0 ? `${currentActive} Saved` : 'Idle'}
-                    </span>
-                  </div>
-
-                  <div className="my-6 flex items-center justify-center gap-4">
-                    <button
-                      onClick={() => adjustCounter(item.name, 'down')}
-                      disabled={localInput === 0 || processing || !isGateOpen}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
-                    >
-                      -
-                    </button>
-                    <div className="text-center">
-                      <span className="text-2xl font-black">{combinedTotal}</span>
-                      <span className="mx-1 text-slate-600">/</span>
-                      <span className="text-xs text-slate-500">{item.maxQty} Max</span>
-                    </div>
-                    <button
-                      onClick={() => adjustCounter(item.name, 'up', item.maxQty, currentActive)}
-                      disabled={combinedTotal >= item.maxQty || processing || !isGateOpen}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
-                    >
-                      +
-                    </button>
-                  </div>
-
-                  <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
-                    <div className="flex justify-between">
-                      <span>Application Status:</span>
-                      <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
-                        {currentActive > 0 ? 'Active' : 'Not Applied'}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span>Added to Basket:</span>
-                      <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-                        {localInput > 0 ? `+${localInput}` : '0'}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span>Selection Status:</span>
-                      <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
-                        {currentActive > 0 ? 'Pending' : '-'}
-                      </span>
-                    </div>
-                  </div>
-
+                <div className="text-center">
+                  <span className="text-2xl font-black">{combinedTotal}</span>
+                  <span className="mx-1 text-slate-600">/</span>
+                  <span className="text-xs text-slate-500">{item.maxQty} Max</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+                <button
+                  onClick={() => adjustCounter(item.name, 'up', item.maxQty, currentActive)}
+                  disabled={combinedTotal >= item.maxQty || processing || !isGateOpen}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
+                >
+                  +
+                </button>
+              </div>
 
+              <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
+                <div className="flex justify-between">
+                  <span>Application Status:</span>
+                  <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
+                    {currentActive > 0 ? 'Active' : 'Not Applied'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Added to Basket:</span>
+                  <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                    {localInput > 0 ? `+${localInput}` : '0'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Selection Status:</span>
+                  <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
+                    {currentActive > 0 ? 'Pending' : '-'}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          );
+        })}
       </div>
 
-      {/* FOOTER CONFIRMATION BAR BARRIER */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex flex-col">
@@ -378,7 +306,62 @@ export default function RequestTab() {
         </div>
       </div>
 
-      {/* COUNTER BALANCE CANCELLATION MODAL ENGINE */}
+      {/* 📋 DYNAMIC MODAL OVERLAY BOX FOR THE REQUEST ROSTER LOOKUPS */}
+      {isListModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <h2 className="text-md font-bold text-slate-200">Request List</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5 mb-4">View currently queued player request hierarchies sorted item by item.</p>
+
+            {/* Dynamic Navigation Filter Tabs */}
+            <div className="flex flex-wrap gap-1 mb-4 bg-slate-950 p-1 rounded-xl border border-slate-800/60">
+              {items.map(item => (
+                <button
+                  key={item.name}
+                  onClick={() => setActiveListTab(item.name)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[10px] font-black tracking-tight transition cursor-pointer ${
+                    activeListTab === item.name 
+                      ? 'bg-indigo-600 text-white shadow' 
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+
+            {/* Locked vertical scroll field height box container */}
+            <div className="max-h-[260px] overflow-y-auto text-xs font-mono font-medium space-y-1 scrollbar-thin pr-1 bg-slate-950/40 rounded-xl p-2 border border-slate-800/40">
+              {currentRosterList.length === 0 ? (
+                <p className="text-slate-600 italic py-6 text-center text-[11px]">1. No request filed yet.</p>
+              ) : (
+                currentRosterList.map((playerName, idx) => {
+                  const labelNum = String(idx + 1).padStart(2, '0');
+                  return (
+                    <div key={playerName} className="flex items-center justify-between border-b border-slate-900/60 py-2 px-2 hover:bg-slate-900/60 rounded-lg transition">
+                      <span className="text-slate-300">
+                        <span className="text-slate-600 mr-2 font-bold">{labelNum}.</span>
+                        {playerName}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button 
+                onClick={() => setIsListModalOpen(false)} 
+                className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2 text-xs font-semibold hover:bg-slate-700 transition cursor-pointer"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ORIGINAL ACTIVE CANCEL MODAL ENGINE */}
       {isCancelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">

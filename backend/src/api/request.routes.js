@@ -38,7 +38,7 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 📡 INITIALIZATION PATHWAY (LATEST COMPILATION BRANCH)
+ * 📡 INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -50,7 +50,6 @@ router.get('/init', async (req, res) => {
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
     
-    // Evaluate live JST window details
     const timeGateStatus = getGateStatusDetails();
 
     const availableItems = [
@@ -104,7 +103,7 @@ router.get('/init', async (req, res) => {
 
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    // 📋 LIVE COMPACT REQUEST LIST COMPILER MODULE
+    // 📋 LIVE REQUEST LIST MATRIX COMPILER
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     
     Object.keys(rankingsByItem).forEach(targetItem => {
@@ -169,7 +168,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 SUBMIT GATE REQUISITION PORTER (WINDOW LOCK SECURED)
+ * 📡 SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
@@ -256,7 +255,7 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 CANCEL GATE REQUISITION PORTER (WINDOW LOCK SECURED)
+ * 📡 CANCEL GATE REQUISITION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
