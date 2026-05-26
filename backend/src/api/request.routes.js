@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
+import { getGateStatusDetails } from '../config/timeWindow.js';
 
 const router = Router();
 
@@ -48,6 +49,8 @@ router.get('/init', async (req, res) => {
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
+    
+    const timeGateStatus = getGateStatusDetails();
 
     const availableItems = [
       { name: 'Puppet', maxQty: 1 },
@@ -80,8 +83,8 @@ router.get('/init', async (req, res) => {
         const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
 
         if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'requested') liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled')  liveCounts[itemType] -= itemQty;
+          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
+          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
         }
       }
     });
@@ -92,20 +95,72 @@ router.get('/init', async (req, res) => {
         const appStatus = (req.applicationStatus || '').toLowerCase();
 
         if (selStatus === 'pending') {
-          if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
-          if (appStatus === 'canceled')  liveCounts[req.item] -= req.quantity;
+          if (appStatus === 'requested' && liveCounts[req.item] !== undefined) liveCounts[req.item] += req.quantity;
+          if (appStatus === 'canceled' && liveCounts[req.item] !== undefined)  liveCounts[req.item] -= req.quantity;
         }
       }
     });
 
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
+    // 📋 LIVE REQUEST LIST MATRIX COMPILER
+    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    
+    Object.keys(rankingsByItem).forEach(targetItem => {
+      const userCalculationsMap = {};
+
+      spreadsheetRows.forEach(row => {
+        const player = (row[1] || '').trim();
+        const itemType = (row[2] || '').trim();
+        const qty = parseInt(row[3], 10) || 0;
+        const appStatus = (row[4] || '').trim().toLowerCase();
+        const selStatus = (row[5] || 'pending').trim().toLowerCase();
+        const priorityScore = parseInt(row[7], 10) || 0;
+
+        if (!player || player === '???' || itemType !== targetItem || selStatus !== 'pending') return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
+      firebaseRequests.forEach(req => {
+        const player = (req.member || '').trim();
+        const itemType = (req.item || '').trim();
+        const qty = parseInt(req.quantity, 10) || 0;
+        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
+        const priorityScore = parseInt(req.priority, 10) || 0;
+
+        if (!player || itemType !== targetItem || selStatus !== 'pending') return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
+      const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
+      activeApplicants.sort((a, b) => b.priority - a.priority);
+      rankingsByItem[targetItem] = activeApplicants.map(u => u.name);
+    });
+
     return res.json({
       success: true,
       displayName: playerDisplayName,
       date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
       items: availableItems,
-      liveCounts
+      liveCounts,
+      isGateOpen: timeGateStatus.isGateOpen,
+      currentSessionLabel: timeGateStatus.currentSessionLabel,
+      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
+      currentPhase: timeGateStatus.currentPhase,
+      rankingsByItem
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -113,10 +168,15 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 BATCH CHECKOUT REQUISITION PORTER (ITEM-INDEPENDENT PRIORITIES)
+ * 📡 SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
+  const timeGateStatus = getGateStatusDetails();
+  if (!timeGateStatus.isGateOpen) {
+    return res.status(423).json({ success: false, error: `Action Denied: Bidding registration is closed for this session. ${timeGateStatus.nextStatusChangeMessage}` });
+  }
+
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
@@ -140,7 +200,6 @@ router.post('/submit', async (req, res) => {
 
     const chosenItemNames = Object.keys(selections);
     
-    // Process item requests independently
     for (const itemName of chosenItemNames) {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
@@ -148,25 +207,18 @@ router.post('/submit', async (req, res) => {
       const combinedItemTimeline = [];
       const itemLower = itemName.trim().toLowerCase();
 
-      // Step A: Extract history rows matching both Member Name AND Item Category Name
       spreadsheetRows.forEach(row => {
-        const rowMember = (row[1] || '').trim().toLowerCase();
-        const rowItem = (row[2] || '').trim().toLowerCase();
-        if (rowMember === playerLower && rowItem === itemLower) {
+        if ((row[1] || '').trim().toLowerCase() === playerLower && (row[2] || '').trim().toLowerCase() === itemLower) {
           combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
         }
       });
 
-      // Step B: Extract staged Firebase items matching both Member Name AND Item Category Name
       firebaseRequests.forEach(req => {
-        const reqMember = (req.member || '').trim().toLowerCase();
-        const reqItem = (req.item || '').trim().toLowerCase();
-        if (reqMember === playerLower && reqItem === itemLower) {
+        if ((req.member || '').trim().toLowerCase() === playerLower && (req.item || '').trim().toLowerCase() === itemLower) {
           combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
         }
       });
 
-      // Step C: Locate the item-specific anchor point
       let lastSelectedIdx = -1;
       for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
         if (combinedItemTimeline[i] === 'selected') {
@@ -175,7 +227,6 @@ router.post('/submit', async (req, res) => {
         }
       }
 
-      // Step D: Accumulate Pity score using the isolated timeline branch
       let dynamicPriority = 0;
       const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
       for (let i = searchStart; i < combinedItemTimeline.length; i++) {
@@ -204,10 +255,15 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 BALANCING COUNTER-LEDGER CANCELLATION PORTER
+ * 📡 CANCEL GATE REQUISITION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
+  const timeGateStatus = getGateStatusDetails();
+  if (!timeGateStatus.isGateOpen) {
+    return res.status(423).json({ success: false, error: `Action Denied: Adjustments are locked for this session. ${timeGateStatus.nextStatusChangeMessage}` });
+  }
+
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
