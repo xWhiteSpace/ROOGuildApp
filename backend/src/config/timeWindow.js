@@ -1,6 +1,6 @@
 /**
  * ⏳ GUILD REGISTRATION TIME MATRIX SYSTEM (GMT+9 / JST)
- * Explicitly states current session status and next opening tracks.
+ * Explicitly states current session status, next opening tracks, and numerical phases.
  */
 export function getGateStatusDetails() {
   // Grab system clock time and normalize it to a true JST zone profile string
@@ -14,6 +14,7 @@ export function getGateStatusDetails() {
   // Convert current daily clock time to absolute minutes
   const currentMinutesOffset = hours * 60 + minutes;
   const cutoffMinutesOffset = 23 * 60 + 15; // 23:15 Threshold Marks
+  const eventMinutesOffset = 21 * 60 + 55;  // 21:55 Event Start Time
 
   let isGateOpen = false;
   let currentSessionLabel = "";
@@ -99,5 +100,17 @@ export function getGateStatusDetails() {
       break;
   }
 
-  return { isGateOpen, currentSessionLabel, nextStatusChangeMessage };
+  // 🔒 SYSTEM LOGIC PHASE DEFINITION HARNESS
+  let currentPhase = 1; // Default to Phase 1: Bid Request Open
+  if (!isGateOpen) {
+    // Check if today is a concrete live event match day (Tuesday=2, Thursday=4, Sunday=0)
+    const isRaidNight = [0, 2, 4].includes(dayOfWeek);
+    if (isRaidNight && currentMinutesOffset >= eventMinutesOffset) {
+      currentPhase = 3; // Phase 3: Event + Live Auction
+    } else {
+      currentPhase = 2; // Phase 2: Bid Request Locked
+    }
+  }
+
+  return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase };
 }
