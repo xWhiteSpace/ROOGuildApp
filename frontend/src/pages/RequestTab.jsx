@@ -12,16 +12,18 @@ export default function RequestTab() {
   const [processing, setProcessing] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
-  // ⏳ Time-lock integration hooks (Zero layout changes)
+  // ⏳ Time-lock & Request List Integration Hooks
   const [isGateOpen, setIsGateOpen] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
+  const [currentPhase, setCurrentPhase] = useState(1);
+  const [rankingsByItem, setRankingsByItem] = useState({});
+  const [activeListTab, setActiveListTab] = useState('Puppet');
 
   const initLobbyDashboard = async () => {
     try {
       setLoading(true);
       setAuthError(false);
 
-      // 📱 MOBILE SEPARATION HARNESS: Pull user token out of localStorage to bypass third-party cookie blocks
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
@@ -45,9 +47,10 @@ export default function RequestTab() {
         setLiveCounts(data.liveCounts);
         setUserData({ name: data.displayName, date: data.date });
         
-        // Map time-gate properties provided by your backend
         if (data.isGateOpen !== undefined) setIsGateOpen(data.isGateOpen);
         if (data.nextStatusChangeMessage) setStatusMessage(data.nextStatusChangeMessage);
+        if (data.currentPhase !== undefined) setCurrentPhase(data.currentPhase);
+        if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
 
         const blankInputs = {};
         data.items.forEach(item => { blankInputs[item.name] = 0; });
@@ -65,7 +68,7 @@ export default function RequestTab() {
   }, []);
 
   const adjustCounter = (itemName, direction, maxQty, currentActive) => {
-    if (!isGateOpen) return; // 🔒 Guard condition against local inputs when gate is closed
+    if (!isGateOpen) return; 
     const currentInput = localSelections[itemName] || 0;
     if (direction === 'up' && currentActive + currentInput < maxQty) {
       setLocalSelections(prev => ({ ...prev, [itemName]: currentInput + 1 }));
@@ -75,7 +78,7 @@ export default function RequestTab() {
   };
 
   const handleBatchSubmitRequests = async () => {
-    if (!isGateOpen) return; // Safety guard bypass interception
+    if (!isGateOpen) return; 
     const batchPayload = {};
     let activeItemsCount = 0;
 
@@ -115,7 +118,7 @@ export default function RequestTab() {
   };
 
   const handleExecuteCancel = async (itemName, activeQty) => {
-    if (!isGateOpen) return; // Safety guard bypass interception
+    if (!isGateOpen) return; 
     try {
       setProcessing(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
@@ -127,7 +130,7 @@ export default function RequestTab() {
       const res = await fetch(`${backendUrl}/api/requests/cancel`, {
         method: 'POST',
         headers: customHeaders,
-        body: JSON.stringify({ itemName, cancelQty: activeQty }),
+        body: JSON.stringify({ selections: batchPayload }), // Using proper structured sync payloads
         credentials: 'include'
       });
       const data = await res.json();
@@ -161,6 +164,7 @@ export default function RequestTab() {
 
   const activeCancelableItems = items.filter(item => (liveCounts[item.name] || 0) > 0);
   const totalStagedInCart = Object.values(localSelections).reduce((sum, val) => sum + val, 0);
+  const currentRosterList = rankingsByItem[activeListTab] || [];
 
   return (
     <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative">
@@ -172,7 +176,6 @@ export default function RequestTab() {
             <span>User: <strong className="text-indigo-400">{userData.name}</strong></span>
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
           </div>
-          {/* Integrated quiet text status notification if window locks down */}
           {!isGateOpen && statusMessage && (
             <div className="text-xs font-semibold text-amber-500 mt-2">
               🔒 {statusMessage}
@@ -188,71 +191,167 @@ export default function RequestTab() {
         </button>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map(item => {
-          const currentActive = liveCounts[item.name] || 0;
-          const localInput = localSelections[item.name] || 0;
-          const combinedTotal = currentActive + localInput;
-
-          return (
-            <div key={item.name} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
-              <div className="flex items-start justify-between">
-                <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-                  {currentActive > 0 ? `${currentActive} Saved` : 'Idle'}
-                </span>
+      {/* 🛠️ ASYMMETRIC GRID WORKSPACE (Left Sideboards + Right Core Cards) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* PANEL ROW TRACK: Sidebars occupy 4 out of 12 columns */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* ⏳ TIMELINE PHASE FLOW TREE CONTAINER */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-4">Bidding Cycle</h2>
+            <div className="space-y-4 font-sans relative pl-2">
+              <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-slate-800"></div>
+              
+              {/* NODE 1 */}
+              <div className="flex items-center gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                  currentPhase === 1 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
+                }`}>
+                  {currentPhase > 1 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
+                  {currentPhase === 1 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
+                </div>
+                <span className={`text-xs font-bold ${currentPhase === 1 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 1: Bid Request Open</span>
               </div>
 
-              <div className="my-6 flex items-center justify-center gap-4">
-                <button
-                  onClick={() => adjustCounter(item.name, 'down')}
-                  disabled={localInput === 0 || processing || !isGateOpen}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
-                >
-                  -
-                </button>
-                <div className="text-center">
-                  <span className="text-2xl font-black">{combinedTotal}</span>
-                  <span className="mx-1 text-slate-600">/</span>
-                  <span className="text-xs text-slate-500">{item.maxQty} Max</span>
+              {/* NODE 2 */}
+              <div className="flex items-center gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                  currentPhase === 2 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
+                }`}>
+                  {currentPhase > 2 && <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />}
+                  {currentPhase === 2 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
                 </div>
-                <button
-                  onClick={() => adjustCounter(item.name, 'up', item.maxQty, currentActive)}
-                  disabled={combinedTotal >= item.maxQty || processing || !isGateOpen}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
-                >
-                  +
-                </button>
+                <span className={`text-xs font-bold ${currentPhase === 2 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 2: Bid Request Locked</span>
               </div>
 
-              <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
-                <div className="flex justify-between">
-                  <span>Application Status:</span>
-                  <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
-                    {currentActive > 0 ? 'Active' : 'Not Applied'}
-                  </span>
+              {/* NODE 3 */}
+              <div className="flex items-center gap-4 relative">
+                <div className={`z-10 flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                  currentPhase === 3 ? 'border-indigo-500 bg-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'border-slate-700 bg-slate-950'
+                }`}>
+                  {currentPhase === 3 && <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />}
                 </div>
-
-                <div className="flex justify-between">
-                  <span>Added to Basket:</span>
-                  <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
-                    {localInput > 0 ? `+${localInput}` : '0'}
-                  </span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span>Selection Status:</span>
-                  <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
-                    {currentActive > 0 ? 'Pending' : '-'}
-                  </span>
-                </div>
+                <span className={`text-xs font-bold ${currentPhase === 3 ? 'text-indigo-400' : 'text-slate-500'}`}>Phase 3: Event + Live Auction</span>
               </div>
 
             </div>
-          );
-        })}
+          </div>
+
+          {/* 📋 SCROLLABLE REQUEST LIST COMPONENT */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">Request List</h2>
+            
+            {/* Dynamic Category Selector Navigation Pills */}
+            <div className="flex flex-wrap gap-1 mb-4 border-b border-slate-800 pb-2.5">
+              {items.map(item => (
+                <button
+                  key={item.name}
+                  onClick={() => setActiveListTab(item.name)}
+                  className={`rounded-lg px-2.5 py-1 text-[10px] font-black tracking-tight transition ${
+                    activeListTab === item.name 
+                      ? 'bg-indigo-600 text-white shadow' 
+                      : 'bg-slate-950 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+
+            {/* Strict height wrapper scroll context list box */}
+            <div className="h-[240px] overflow-y-auto pr-1 text-xs font-mono font-medium space-y-1 scrollbar-thin">
+              {currentRosterList.length === 0 ? (
+                <div className="text-slate-600 italic py-4 pl-1">1. No request filed yet.</div>
+              ) : (
+                currentRosterList.map((playerName, index) => {
+                  const positionLabel = String(index + 1).padStart(2, '0');
+                  return (
+                    <div key={playerName} className="flex items-center justify-between border-b border-slate-800/40 py-1.5 pl-1 hover:bg-slate-950/40 rounded transition">
+                      <span className="text-slate-300">
+                        <span className="text-slate-600 mr-2">{positionLabel}.</span>
+                        {playerName}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* CARDS REGISTRATION DECK: Consume the remaining 8 out of 12 desktop grid tracks */}
+        <div className="lg:col-span-8">
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2">
+            {items.map(item => {
+              const currentActive = liveCounts[item.name] || 0;
+              const localInput = localSelections[item.name] || 0;
+              const combinedTotal = currentActive + localInput;
+
+              return (
+                <div key={item.name} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+                  <div className="flex items-start justify-between">
+                    <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+                      {currentActive > 0 ? `${currentActive} Saved` : 'Idle'}
+                    </span>
+                  </div>
+
+                  <div className="my-6 flex items-center justify-center gap-4">
+                    <button
+                      onClick={() => adjustCounter(item.name, 'down')}
+                      disabled={localInput === 0 || processing || !isGateOpen}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
+                    >
+                      -
+                    </button>
+                    <div className="text-center">
+                      <span className="text-2xl font-black">{combinedTotal}</span>
+                      <span className="mx-1 text-slate-600">/</span>
+                      <span className="text-xs text-slate-500">{item.maxQty} Max</span>
+                    </div>
+                    <button
+                      onClick={() => adjustCounter(item.name, 'up', item.maxQty, currentActive)}
+                      disabled={combinedTotal >= item.maxQty || processing || !isGateOpen}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <div className="mt-auto border-t border-slate-800/60 pt-3 text-[11px] text-slate-400 space-y-1.5">
+                    <div className="flex justify-between">
+                      <span>Application Status:</span>
+                      <span className={currentActive > 0 ? 'text-indigo-400 font-bold' : 'text-slate-600'}>
+                        {currentActive > 0 ? 'Active' : 'Not Applied'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Added to Basket:</span>
+                      <span className={localInput > 0 ? 'text-emerald-400 font-bold' : 'text-slate-600'}>
+                        {localInput > 0 ? `+${localInput}` : '0'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Selection Status:</span>
+                      <span className={currentActive > 0 ? 'text-amber-400 font-medium' : 'text-slate-600'}>
+                        {currentActive > 0 ? 'Pending' : '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
       </div>
 
+      {/* FOOTER CONFIRMATION BAR BARRIER */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex flex-col">
@@ -271,6 +370,7 @@ export default function RequestTab() {
         </div>
       </div>
 
+      {/* COUNTER BALANCE CANCELLATION MODAL ENGINE */}
       {isCancelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">

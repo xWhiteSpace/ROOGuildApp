@@ -38,7 +38,7 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 📡 INITIALIZATION PATHWAY (TIME BOUNDARY Payload Added)
+ * 📡 INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -50,7 +50,6 @@ router.get('/init', async (req, res) => {
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
     
-    // Evaluate live JST window details
     const timeGateStatus = getGateStatusDetails();
 
     const availableItems = [
@@ -104,16 +103,64 @@ router.get('/init', async (req, res) => {
 
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
+    // 📋 LIVE REQUEST LIST MATRIX COMPILER
+    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    
+    Object.keys(rankingsByItem).forEach(targetItem => {
+      const userCalculationsMap = {};
+
+      spreadsheetRows.forEach(row => {
+        const player = (row[1] || '').trim();
+        const itemType = (row[2] || '').trim();
+        const qty = parseInt(row[3], 10) || 0;
+        const appStatus = (row[4] || '').trim().toLowerCase();
+        const selStatus = (row[5] || 'pending').trim().toLowerCase();
+        const priorityScore = parseInt(row[7], 10) || 0;
+
+        if (!player || player === '???' || itemType !== targetItem || selStatus !== 'pending') return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
+      firebaseRequests.forEach(req => {
+        const player = (req.member || '').trim();
+        const itemType = (req.item || '').trim();
+        const qty = parseInt(req.quantity, 10) || 0;
+        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
+        const priorityScore = parseInt(req.priority, 10) || 0;
+
+        if (!player || itemType !== targetItem || selStatus !== 'pending') return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
+      const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
+      activeApplicants.sort((a, b) => b.priority - a.priority);
+      rankingsByItem[targetItem] = activeApplicants.map(u => u.name);
+    });
+
     return res.json({
       success: true,
       displayName: playerDisplayName,
       date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
       items: availableItems,
       liveCounts,
-      // Pass gate properties down to frontend UI components
       isGateOpen: timeGateStatus.isGateOpen,
       currentSessionLabel: timeGateStatus.currentSessionLabel,
-      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage
+      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
+      currentPhase: timeGateStatus.currentPhase,
+      rankingsByItem
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -121,7 +168,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 SUBMIT GATE REQUISITION PORTER (WINDOW LOCK SECURED)
+ * 📡 SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
@@ -208,7 +255,7 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 CANCEL GATE REQUISITION PORTER (WINDOW LOCK SECURED)
+ * 📡 CANCEL GATE REQUISITION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
