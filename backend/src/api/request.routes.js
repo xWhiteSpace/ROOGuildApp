@@ -4,6 +4,19 @@ import { getGateStatusDetails } from '../config/timeWindow.js';
 
 const router = Router();
 
+/**
+ * 🕒 GMT+8 DATE GENERATOR HELPER
+ * Standardizes calendar days to Asia/Manila zone formatting (MM/DD/YYYY)
+ */
+function getGMT8DateString() {
+  const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+  const gmt8Date = new Date(gmt8String);
+  const month = gmt8Date.getMonth() + 1;
+  const day = gmt8Date.getDate();
+  const year = gmt8Date.getFullYear();
+  return `${month}/${day}/${year}`;
+}
+
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   const lines = csvText.split(/\r?\n/);
   let tableStarted = false;
@@ -51,6 +64,7 @@ router.get('/init', async (req, res) => {
     const playerLower = playerDisplayName.trim().toLowerCase();
     
     const timeGateStatus = getGateStatusDetails();
+    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
 
     const availableItems = [
       { name: 'Puppet', maxQty: 1 },
@@ -103,7 +117,7 @@ router.get('/init', async (req, res) => {
 
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    // 📋 LIVE REQUEST LIST MATRIX COMPILER (EXPANDED TO 100 PLAYERS)
+    // 📋 LIVE REQUEST LIST MATRIX COMPILER
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     
     Object.keys(rankingsByItem).forEach(targetItem => {
@@ -147,15 +161,13 @@ router.get('/init', async (req, res) => {
 
       const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
       activeApplicants.sort((a, b) => b.priority - a.priority);
-      
-      // Enforce the extended 100-player roster slice limit safely
       rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
     });
 
     return res.json({
       success: true,
       displayName: playerDisplayName,
-      date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
+      date: currentGMT8Date, // Delivers the correct localized calendar date string to header dashboard banners
       items: availableItems,
       liveCounts,
       isGateOpen: timeGateStatus.isGateOpen,
@@ -171,7 +183,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 SUBMIT GATE REQUISITION PORTER (STRICTLY GUARDED)
+ * 📡 SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
@@ -192,6 +204,7 @@ router.post('/submit', async (req, res) => {
     const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
+    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
 
     const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
     const response = await fetch(requestUrl);
@@ -241,7 +254,7 @@ router.post('/submit', async (req, res) => {
       const newRequestRef = db.ref('auction/web_requests').push();
       await newRequestRef.set({
         id: newRequestRef.key,
-        date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
+        date: currentGMT8Date, // Database logs write true GMT+8 strings
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
@@ -258,23 +271,23 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 CANCEL GATE REQUISITION PORTER (HUMANE: OPEN DURING LOCK)
+ * 📡 CANCEL GATE REQUISITION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
-  // Time gate bypass allowed for cancellations to align with Option B policy.
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   const { itemName, cancelQty } = req.body;
   try {
     const playerDisplayName = user.displayName || user.username;
+    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
     const db = getDatabase();
     
     const newCancelRef = db.ref('auction/web_requests').push();
     await newCancelRef.set({
       id: newCancelRef.key,
-      date: `${new Date().getMonth() + 1}/${new Date().getDate()}/${new Date().getFullYear()}`,
+      date: currentGMT8Date, // Database cancellations write true GMT+8 strings
       member: playerDisplayName,
       item: itemName,
       quantity: parseInt(cancelQty, 10),
