@@ -1,5 +1,7 @@
 import fetch from 'node-fetch';
+import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
+import { discordClient } from '../discord-bot/client.js';
 
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   const lines = csvText.split(/\r?\n/);
@@ -21,15 +23,20 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   return dataRows;
 }
 
-export async function processAndPostDiscordSnapshot() {
+export async function processAndPostDiscordSnapshot(isFinalizedCall = false) {
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-  if (!spreadsheetId || !webhookUrl) return;
+  const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;
+  
+  if (!spreadsheetId || !auctionChannelId || !discordClient || !discordClient.isReady()) {
+    console.log(`[SNAPSHOT ERROR]: Prerequisites failed. Check bot client ready state.`);
+    return;
+  }
 
-  // 🛡️ CRITICAL GATE OVERLAY: Confirm that the gate is OPEN before broadcasting
   const statusGate = getGateStatusDetails();
-  if (!statusGate.isGateOpen) {
-    console.log(`[SNAPSHOT SKIP]: Post omitted. The gate is currently locked.`);
+  
+  // If this is a standard hour reminder check (7am, 12pm, 7pm) but the gate has closed, skip it entirely
+  if (!isFinalizedCall && !statusGate.isGateOpen) {
+    console.log(`[SNAPSHOT SKIP]: Post omitted. Regular updates are silent during lock period.`);
     return;
   }
 
@@ -37,16 +44,19 @@ export async function processAndPostDiscordSnapshot() {
     const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
     const res = await fetch(requestUrl);
     const text = await res.text();
-    const rows = parseCSVToRawArrays(text, 'Member');
+    const spreadsheetRows = parseCSVToRawArrays(text, 'Member');
+
+    const db = getDatabase();
+    const snapshot = await db.ref('auction/web_requests').once('value');
+    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
 
     const categories = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
 
-    // Process every item category independently to prevent pity leaks
     categories.forEach(targetItem => {
       const userCalculationsMap = {};
 
-      rows.forEach(row => {
+      spreadsheetRows.forEach(row => {
         const player = (row[1] || '').trim();
         const itemType = (row[2] || '').trim();
         const qty = parseInt(row[3], 10) || 0;
@@ -64,48 +74,62 @@ export async function processAndPostDiscordSnapshot() {
         if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
       });
 
-      // Filter to only retain players with a standing net balance greater than 0
+      firebaseRequests.forEach(req => {
+        const player = (req.member || '').trim();
+        const itemType = (req.item || '').trim();
+        const qty = parseInt(req.quantity, 10) || 0;
+        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
+        const priorityScore = parseInt(req.priority, 10) || 0;
+
+        if (!player || itemType !== targetItem || selStatus !== 'pending') return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
       const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
-      
-      // Sort descending by priority math cleanly
       activeApplicants.sort((a, b) => b.priority - a.priority);
-      rankingsByItem[targetItem] = activeApplicants;
+      
+      // Mirror the 100-player roster visibility index cleanly
+      rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
     });
 
-    // 📋 ASSEMBLE CLEAN DISCORD TEXT STRING DISPLAY 
-    const jstTimeString = new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
-    const formattedTimestamp = new Date(jstTimeString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // 📋 ASSEMBLE CLEAN DISCORD TEXT STRING DISPLAY MATCHING CONCISE LAYOUT RULES
+    const gmt8TimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+    const formattedTimestamp = new Date(gmt8TimeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    let msg = `⏳ **TONIGHT'S AUCTION ROSTER PREVIEW** (Update: **${formattedTimestamp} JST**)\n`;
-    msg += `*Requests are currently open. Roster will lock tightly at 23:15 JST.*\n\n`;
+    let appendLockLabel = isFinalizedCall ? " (FINALIZED LIST - LOCKED)" : "";
+    let msg = `Current Bid Request as of ${formattedTimestamp} GMT+8${appendLockLabel}\n\n`;
 
     categories.forEach(item => {
-      let emoji = item === 'Puppet' ? '🔴' : item === 'Illu' ? '🟡' : item === 'Light&Dark' ? '🔵' : '🟢';
-      msg += `${emoji} **CATEGORY: ${item} (Max 20 Display Slots)**\n`;
+      msg += `${item}\n`;
+      const playerList = rankingsByItem[item];
 
-      const list = rankingsByItem[item];
-      if (list.length === 0) {
-        // 🎯 EMPTY ROSTER FALLBACK APPLIED
-        msg += `  *1. No request filed yet.*\n`;
+      if (playerList.length === 0) {
+        msg += `No request filed yet.\n`;
       } else {
-        // Cap displays strictly at 20 slots row-by-row hiding priority numbers
-        const totalItemsToPrint = Math.min(list.length, 20);
-        for (let i = 0; i < totalItemsToPrint; i++) {
-          const positionLabel = String(i + 1).padStart(2, '0');
-          msg += `  \`${positionLabel}\`. **${list[i].name}**\n`;
-        }
+        playerList.forEach((name, index) => {
+          const positionNum = String(index + 1).padStart(2, '0');
+          msg += `${positionNum}. ${name}\n`;
+        });
       }
       msg += `\n`;
     });
 
-    // 🚀 Post a fresh new message every time
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: msg })
-    });
+    // 🚀 Bot Client uses channel ID directly to post text packages natively 
+    const channel = await discordClient.channels.fetch(auctionChannelId);
+    if (channel && typeof channel.send === 'function') {
+      await channel.send(msg);
+      console.log(`✅ [BOT SNAPSHOT SUCCESS]: Broadcast sent through native client.`);
+    } else {
+      console.error(`❌ [BOT SNAPSHOT ERROR]: Channel target missing valid send permissions.`);
+    }
 
-    console.log(`✅ [DISCORD BROADCAST SUCCESS] Fresh live leaderboard published.`);
   } catch (err) {
     console.error(`❌ [DISCORD SNAPSHOT FAULT]:`, err.message);
   }

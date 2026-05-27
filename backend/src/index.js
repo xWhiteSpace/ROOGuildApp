@@ -104,18 +104,24 @@ app.listen(PORT, () => {
     executeSpreadsheetSync();
   }, 5 * 1000);
 
-  // 2. Precise JST Time tracking loop running every 60 seconds
+  // 2. Precise GMT+8 Time tracking loop running every 60 seconds
   setInterval(() => {
-    const jstTimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
-    const jstDate = new Date(jstTimeStr);
+    const gmt8TimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+    const gmt8Date = new Date(gmt8TimeStr);
     
-    const currentHour = jstDate.getHours();
-    const currentMinute = jstDate.getMinutes();
+    const currentHour = gmt8Date.getHours();
+    const currentMinute = gmt8Date.getMinutes();
 
-    // Catch the exact minute mark targets at 07:00, 11:00, and 18:00
-    if (currentMinute === 0 && (currentHour === 7 || currentHour === 11 || currentHour === 18)) {
-      console.log(`⏰ Scheduled time target hit (${currentHour}:00 JST). Initiating broadcast checker...`);
-      processAndPostDiscordSnapshot();
+    // Catch the exact minute mark targets at 07:00, 12:00, and 19:00 GMT+8 for regular updates
+    if (currentMinute === 0 && (currentHour === 7 || currentHour === 12 || currentHour === 19)) {
+      console.log(`⏰ Scheduled time target hit (${currentHour}:00 GMT+8). Initiating broadcast checker...`);
+      processAndPostDiscordSnapshot(false);
+    }
+
+    // Catch the exact moment registration closes at 22:15 GMT+8 for the finalized list broadcast
+    if (currentHour === 22 && currentMinute === 15) {
+      console.log(`🔒 Lock threshold reached (22:15 GMT+8). Initiating finalized broadcast tracker...`);
+      processAndPostDiscordSnapshot(true);
     }
   }, 60 * 1000);
 });
