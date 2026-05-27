@@ -120,7 +120,7 @@ export default function RequestTab() {
   };
 
   const handleExecuteCancel = async (itemName, activeQty) => {
-    if (!isGateOpen) return; 
+    // 🔓 Early lock gate guard removed to allow cancellation processing inside all phases
     try {
       setProcessing(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
@@ -132,7 +132,8 @@ export default function RequestTab() {
       const res = await fetch(`${backendUrl}/api/requests/cancel`, {
         method: 'POST',
         headers: customHeaders,
-        body: JSON.stringify({ selections: batchPayload }), 
+        // 🛠️ Repaired correct payload variables matching backend requirements
+        body: JSON.stringify({ itemName, cancelQty: activeQty }), 
         credentials: 'include'
       });
       const data = await res.json();
@@ -186,8 +187,8 @@ export default function RequestTab() {
         </div>
         <button
           onClick={() => setIsCancelModalOpen(true)}
-          disabled={!isGateOpen}
-          className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white disabled:opacity-20 disabled:border-slate-800 disabled:bg-slate-900/40 disabled:text-slate-600"
+          // 🔓 Disabled trigger removed so modal opens freely during lock phase periods
+          className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white"
         >
           Cancel Existing Request
         </button>
@@ -406,7 +407,8 @@ export default function RequestTab() {
                     </div>
                     <button
                       onClick={() => handleExecuteCancel(item.name, liveCounts[item.name])}
-                      disabled={processing || !isGateOpen}
+                      // 🔓 Gate block removed to allow execution actions inside locked windows
+                      disabled={processing} 
                       className="rounded-lg bg-rose-500/10 px-3 py-1.5 text-[10px] font-bold text-rose-400 hover:bg-rose-600 hover:text-white disabled:opacity-20 disabled:bg-slate-800 disabled:text-slate-600"
                     >
                       Cancel Request
