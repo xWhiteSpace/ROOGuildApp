@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ref, query, limitToLast, onValue } from 'firebase/database';
 import { database } from '../services/firebaseClient';
 import { sendChatMessage } from '../services/chatService';
@@ -6,6 +6,10 @@ import { sendChatMessage } from '../services/chatService';
 export default function ChatConsole({ user, draft = '', setDraft, discordMembers = [] }) {
   const [messages, setMessages] = useState([]);
   const [error, setError] = useState(null);
+  
+  // ⚡ scroll anchoring tracking anchors
+  const containerRef = useRef(null);
+  const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
     const messagesRef = query(ref(database, 'chat/messages'), limitToLast(15));
@@ -15,6 +19,29 @@ export default function ChatConsole({ user, draft = '', setDraft, discordMembers
       setMessages(loaded);
     });
   }, []);
+
+  // 🏁 SCROLL CONSOLE POSITION MANAGER
+  useEffect(() => {
+    if (!containerRef.current || messages.length === 0) return;
+
+    const container = containerRef.current;
+    // Evaluate the distance right after rendering the message node data stream
+    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    if (isInitialLoadRef.current) {
+      // 🚀 Option A: Instant initial snap jump upon opening the web app
+      container.scrollTop = container.scrollHeight;
+      isInitialLoadRef.current = false;
+    } else {
+      // 🔒 Pattern 2: Sticky threshold anchoring (Smooth auto-scroll only if already reading live chat near bottom)
+      if (distanceToBottom <= 150) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [messages]);
 
   const handleSend = async () => {
     const trimmed = draft?.trim() || '';
@@ -76,17 +103,18 @@ export default function ChatConsole({ user, draft = '', setDraft, discordMembers
       </div>
 
       {/* High-density Terminal Console Stream Viewport */}
-      <div className="flex-1 min-h-0 overflow-y-auto rounded-xl bg-slate-950/80 p-2 font-mono space-y-1.5 scrollbar-thin">
+      <div 
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-y-auto rounded-xl bg-slate-950/80 p-2 font-mono space-y-1.5 scrollbar-thin"
+      >
         {messages.length === 0 ? (
           <div className="text-slate-500 text-[15px] p-1">Waiting for Discord chat messages...</div>
         ) : (
           messages.map((message) => (
             <div 
               key={message.id || Math.random()} 
-              // 🌟 FIXED ROW HEIGHTS: Removed hardcoded h-4 and leading-none so wrapped lines sit comfortably
               className="flex items-baseline justify-between gap-4 border-b border-slate-900/5 py-1 text-[15px] hover:bg-slate-900/20 px-1.5 rounded transition-colors min-h-0"
             >
-              {/* 🌟 NATURAL WRAPPER: Removed 'truncate' so wrapped text renders safely instead of overlapping or vanishing */}
               <div className="flex items-baseline gap-1.5 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
                 <span className="font-bold text-indigo-400 shrink-0 select-none">
                   {message.author}:
