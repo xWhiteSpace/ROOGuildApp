@@ -2,30 +2,44 @@ import { useState, useEffect } from 'react';
 import { ref, onValue, set } from 'firebase/database';
 import { database } from '../services/firebaseClient';
 
+const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+
 export default function MimicBookTab({ user }) {
   const [isAdminMode, setIsAdminMode] = useState(true);
   const [activeStep, setActiveStep] = useState(1); 
-  const [discordMembers, setDiscordMembers] = useState([]);
+  const [loadingPool, setLoadingPool] = useState(false);
+
+  // --- 📋 TRUE TARGET POOL FROM THE REQUEST LIST ---
+  const [rankingsByItem, setRankingsByItem] = useState({
+    Puppet: [],
+    Illu: [],
+    'Light&Dark': [],
+    'Time&Space': []
+  });
   
-  // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY WITH LIMIT ---
+  // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
   const [qtyPerPage, setQtyPerPage] = useState(4);
   const [lootRows, setLootRows] = useState([
     { id: 1, itemType: 'Puppet', startPage: 12, startPos: 1, endPage: 12, endPos: 4, limit: 1 }
   ]);
   
-  // Stores the final verified math output breakdown
   const [lootSummary, setLootSummary] = useState({
     Puppet: { qty: 0, limit: 1, seats: 0 },
-    Illusion: { qty: 0, limit: 1, seats: 0 },
+    Illu: { qty: 0, limit: 1, seats: 0 },
     'Light&Dark': { qty: 0, limit: 1, seats: 0 },
     'Time&Space': { qty: 0, limit: 1, seats: 0 }
   });
   const [validationError, setValidationError] = useState('');
 
-  // --- PHASE 2 STATE: MATRIX SELECTION SEATS ---
-  const [selectedBidders, setSelectedBidders] = useState([]);
-  const [notSelectedBidders, setNotSelectedBidders] = useState([]);
+  // --- PHASE 2 STATE: COMPARTMENTALIZED SELECTION SEATS ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
+  // Allocation state per item type category
+  const [categoryAllocations, setCategoryAllocations] = useState({
+    Puppet: { selected: [], notSelected: [] },
+    Illu: { selected: [], notSelected: [] },
+    'Light&Dark': { selected: [], notSelected: [] },
+    'Time&Space': { selected: [], notSelected: [] }
+  });
 
   // --- PHASE 3 STATE: DISPLAY LENS CONSTRAINTS ---
   const [viewLens, setViewLens] = useState('ALL'); 
@@ -33,33 +47,38 @@ export default function MimicBookTab({ user }) {
   const [bookCurrentPage, setBookCurrentPage] = useState(1);
   const [generatedSlots, setGeneratedSlots] = useState([]);
 
-  // --- MOCK DATA FALLBACK AND ROSTER DISCOVERY ROUTINES ---
-  useEffect(() => {
-    const fetchRoster = async () => {
-      try {
-        const envUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
-        const res = await fetch(`${envUrl.replace(/\/$/, '')}/auth/discord-members`, { credentials: 'include' });
-        const data = await res.json();
-        if (data?.success && Array.isArray(data?.members)) {
-          setDiscordMembers(data.members);
-          
-          // Pre-populate a sample database pool sorted by priority values
-          const mockPool = data.members.map((m, idx) => ({
-            name: m.nickname || m.displayName || m.username,
-            itemType: idx % 4 === 0 ? 'Puppet' : idx % 4 === 1 ? 'Illusion' : idx % 4 === 2 ? 'Light&Dark' : 'Time&Space',
-            priority: Math.floor(Math.random() * 6),
-            status: 'NotSelected'
-          }));
-          
-          setNotSelectedBidders(mockPool.sort((a, b) => b.priority - a.priority));
-        }
-      } catch (err) {
-        console.warn("Backend offline or roster sync skipped. Initializing local staging data rules.");
+  // --- 📥 HOOK 1: LOAD TRUE TARGET POOL FROM THE ENDPOINT ---
+  const loadTrueRequestPool = async () => {
+    try {
+      setLoadingPool(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-    };
-    fetchRoster();
+
+      const res = await fetch(`${backendUrl}/api/requests/init`, { 
+        method: 'GET',
+        headers: customHeaders,
+        credentials: 'include' 
+      });
+
+      const data = await res.json();
+      if (data.success && data.rankingsByItem) {
+        setRankingsByItem(data.rankingsByItem);
+      }
+    } catch (err) {
+      console.error("Failed to fetch current request pool from backend:", err);
+    } finally {
+      setLoadingPool(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTrueRequestPool();
   }, []);
 
+  // Live snapshot sync from Firebase staging node if available
   useEffect(() => {
     const sessionRef = ref(database, 'auction/active_session');
     const unsub = onValue(sessionRef, (snapshot) => {
@@ -91,7 +110,7 @@ export default function MimicBookTab({ user }) {
     
     const calculatedSummary = {
       Puppet: { qty: 0, limit: 1, seats: 0 },
-      Illusion: { qty: 0, limit: 1, seats: 0 },
+      Illu: { qty: 0, limit: 1, seats: 0 },
       'Light&Dark': { qty: 0, limit: 1, seats: 0 },
       'Time&Space': { qty: 0, limit: 1, seats: 0 }
     };
@@ -104,32 +123,30 @@ export default function MimicBookTab({ user }) {
       const endLinear = (row.endPage * qtyPerPage) + row.endPos;
 
       if (endLinear < startLinear) {
-        setValidationError(`Row ${i + 1} Error: End coordinates cannot be physically placed before start coordinates.`);
+        setValidationError(`Row ${i + 1} Error: End position cannot precede start position.`);
         return;
       }
-
       if (row.limit < 1) {
-        setValidationError(`Row ${i + 1} Error: Limit must be at least 1 to prevent dividing allocations by zero.`);
+        setValidationError(`Row ${i + 1} Error: Limit must be at least 1.`);
         return;
       }
 
-      // Overlap Collision verification check
+      // Overlap checks
       if (i > 0) {
         const prevRow = sortedRows[i - 1];
         const prevEndLinear = (prevRow.endPage * qtyPerPage) + prevRow.endPos;
         if (startLinear <= prevEndLinear) {
-          setValidationError(`Collision Detected! Row ${i + 1} overlaps on pages belonging to an earlier line sequence.`);
+          setValidationError(`Collision! Row ${i + 1} overlaps coordinates belonging to a previous item line.`);
           return;
         }
       }
 
-      // Total Dropped Quantity formula evaluation
       const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
       calculatedSummary[row.itemType].qty += qty;
       calculatedSummary[row.itemType].limit = row.limit;
     }
 
-    // Process Qty / Limit = Member Seats Eligible
+    // Process Qty / Limit = Seats Available
     Object.keys(calculatedSummary).forEach(key => {
       const item = calculatedSummary[key];
       item.seats = Math.floor(item.qty / item.limit);
@@ -137,66 +154,82 @@ export default function MimicBookTab({ user }) {
 
     setLootSummary(calculatedSummary);
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
-    
-    // Automatically focus selection view filter on the first item type with available seats
+
+    // ⚡ PRE-FILL ASSIGNMENTS AUTOMATICALLY USING THE PRIORITY RANKED LIST
+    const initialAllocations = {};
+    Object.keys(calculatedSummary).forEach(category => {
+      const seatsCount = calculatedSummary[category].seats;
+      const trueApplicants = rankingsByItem[category] || []; // Pure true request names
+
+      // Top priority names populate active slots up to the available budget seats
+      const preSelected = trueApplicants.slice(0, seatsCount);
+      const preStandby = trueApplicants.slice(seatsCount);
+
+      initialAllocations[category] = {
+        selected: preSelected,
+        notSelected: preStandby
+      };
+    });
+
+    setCategoryAllocations(initialAllocations);
+
+    // Default view target focus
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].seats > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
-    
     setActiveStep(2);
   };
 
-  // --- PHASE 2 LOGIC: BUDGET-CONSTRAINED PROMOTIONS ---
-  const toggleBidderPromotion = (index, fromColumn) => {
-    if (fromColumn === 'SELECTED') {
-      const target = selectedBidders[index];
-      setSelectedBidders(selectedBidders.filter((_, i) => i !== index));
-      setNotSelectedBidders([...notSelectedBidders, { ...target, status: 'NotSelected' }].sort((a,b)=>b.priority - a.priority));
-    } else {
-      const target = notSelectedBidders[index];
-      
-      // Enforce the calculation rule: don't allow checking more boxes than your allowed seats budget
-      const activeCategoryBudget = lootSummary[activeMatrixFilter]?.seats || 0;
-      const currentFilledSeats = selectedBidders.filter(b => b.itemType === activeMatrixFilter).length;
-      
-      if (currentFilledSeats >= activeCategoryBudget) {
-        alert(`Allocation Cap Reached! You only have ${activeCategoryBudget} member seats available for ${activeMatrixFilter} based on your Qty/Limit calculation rules.`);
-        return;
-      }
+  // --- PHASE 2 LOGIC: INTERACTIVE TIMELINE OVERRIDES ---
+  const handleDropBidder = (index) => {
+    const currentData = categoryAllocations[activeMatrixFilter];
+    const targetPlayer = currentData.selected[index];
+    
+    const updatedSelected = currentData.selected.filter((_, i) => i !== index);
+    const updatedNotSelected = [targetPlayer, ...currentData.notSelected]; // Drops to standby pool
 
-      setNotSelectedBidders(notSelectedBidders.filter((_, i) => i !== index));
-      // FIFO Drop Action: Appends directly to the bottom line boundary
-      setSelectedBidders([...selectedBidders, { ...target, itemType: activeMatrixFilter, status: 'Selected' }]);
+    setCategoryAllocations({
+      ...categoryAllocations,
+      [activeMatrixFilter]: { selected: updatedSelected, notSelected: updatedNotSelected }
+    });
+  };
+
+  const handlePromoteBidder = (index) => {
+    const currentData = categoryAllocations[activeMatrixFilter];
+    const targetPlayer = currentData.notSelected[index];
+    
+    const allowedSeatsBudget = lootSummary[activeMatrixFilter]?.seats || 0;
+    if (currentData.selected.length >= allowedSeatsBudget) {
+      alert(`Allocation Cap Reached! You only have ${allowedSeatsBudget} seats calculated for ${activeMatrixFilter}.`);
+      return;
     }
+
+    const updatedNotSelected = currentData.notSelected.filter((_, i) => i !== index);
+    // ➔ FIFO Rule: Promoted standby players append cleanly to the end of the stack selection
+    const updatedSelected = [...currentData.selected, targetPlayer];
+
+    setCategoryAllocations({
+      ...categoryAllocations,
+      [activeMatrixFilter]: { selected: updatedSelected, notSelected: updatedNotSelected }
+    });
   };
 
   const handleLockAndGenerateMatrix = () => {
-    const categorySequenceOrder = ['Puppet', 'Illusion', 'Light&Dark', 'Time&Space'];
-    let consolidatedWinners = [];
-    
-    categorySequenceOrder.forEach(category => {
-      const categoryWinners = selectedBidders
-        .filter(b => b.itemType === category)
-        .sort((a, b) => b.priority - a.priority);
-      consolidatedWinners = [...consolidatedWinners, ...categoryWinners];
-    });
-
-    // Translate flat list layout sequence maps to un-shifting matrix grids
+    const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
     let currentVirtualSlot = 1;
-    
     const matrixSlots = [];
     
     categorySequenceOrder.forEach(category => {
       const itemsInfo = lootSummary[category];
       if (!itemsInfo || itemsInfo.qty === 0) return;
 
-      const categoryWinners = selectedBidders.filter(b => b.itemType === category);
+      const confirmedWinners = categoryAllocations[category]?.selected || [];
       
-      // Distribute items matching limits systematically across rows
-      categoryWinners.forEach(winner => {
+      // Map out player items consecutively based on limits
+      confirmedWinners.forEach(playerName => {
         for (let step = 0; step < itemsInfo.limit; step++) {
           matrixSlots.push({
-            name: winner.name,
+            name: playerName,
             itemType: category,
             page: currentVirtualPage,
             slot: currentVirtualSlot,
@@ -211,9 +244,9 @@ export default function MimicBookTab({ user }) {
         }
       });
 
-      // Compensate left-over extra item windows unassigned to active raiders
-      const assignedSlotsCount = categoryWinners.length * itemsInfo.limit;
-      const leftoversCount = itemsInfo.qty - assignedSlotsCount;
+      // Account for leftover items not claimed by the pool
+      const totalClaimedQty = confirmedWinners.length * itemsInfo.limit;
+      const leftoversCount = itemsInfo.qty - totalClaimedQty;
       
       for (let extra = 0; extra < leftoversCount; extra++) {
         matrixSlots.push({
@@ -239,12 +272,12 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleCommitSessionAndFlash = async () => {
-    alert("Session data successfully committed to historical spreadsheet ledger tracks!");
+    alert("Session successfully committed to static Google Sheets log columns!");
     set(ref(database, 'auction/active_session'), null);
     setActiveStep(1);
     setLootSummary({
       Puppet: { qty: 0, limit: 1, seats: 0 },
-      Illusion: { qty: 0, limit: 1, seats: 0 },
+      Illu: { qty: 0, limit: 1, seats: 0 },
       'Light&Dark': { qty: 0, limit: 1, seats: 0 },
       'Time&Space': { qty: 0, limit: 1, seats: 0 }
     });
@@ -255,7 +288,7 @@ export default function MimicBookTab({ user }) {
     switch (itemType) {
       case 'Puppet':
         return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-      case 'Illusion':
+      case 'Illu':
         return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
       case 'Light&Dark':
         return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
@@ -267,18 +300,18 @@ export default function MimicBookTab({ user }) {
   };
 
   const currentUserName = user?.displayName || user?.username || '';
-  
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     const slotIndex = i + 1;
     return generatedSlots.find(s => s.page === bookCurrentPage && s.slot === slotIndex) || null;
   });
-
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
+
+  const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [], notSelected: [] };
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans">
       
-      {/* BRAND ENTRY MONITOR */}
+      {/* BRAND MONITOR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white uppercase">Member-Item Request Allocation Preview</h1>
@@ -317,6 +350,7 @@ export default function MimicBookTab({ user }) {
               <div className="flex items-center justify-between">
                 <div className="text-sm font-bold text-slate-300">Register Dropped Quantities & Set Selection Constraints:</div>
                 <div className="flex items-center gap-3">
+                  {loadingPool && <span className="text-[10px] text-amber-400 animate-pulse mr-2">Syncing with Request List...</span>}
                   <label className="text-xs text-slate-400 font-semibold">Slots Per Game Page:</label>
                   <input 
                     type="number" 
@@ -356,7 +390,7 @@ export default function MimicBookTab({ user }) {
                             className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-sans text-slate-200 outline-none w-44 focus:border-violet-500"
                           >
                             <option value="Puppet">🟣 Puppet Scroll</option>
-                            <option value="Illusion">⚡ Illusion Scroll</option>
+                            <option value="Illu">⚡ Illusion Scroll</option>
                             <option value="Light&Dark">⚪ Light & Dark Scroll</option>
                             <option value="Time&Space">🩸 Time & Space Scroll</option>
                           </select>
@@ -377,23 +411,23 @@ export default function MimicBookTab({ user }) {
 
               <div className="flex justify-between items-center pt-2">
                 <button onClick={handleAddLootRow} className="px-4 py-1.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-900 font-bold text-xs transition">+ ADD ITEM ROW ➕</button>
-                <button onClick={handleCheckAndRegisterLoot} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg shadow-violet-600/20 transition">RUN ELIGIBILITY ENGINE ➔</button>
+                <button onClick={handleCheckAndRegisterLoot} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg transition">RUN ELIGIBILITY ENGINE ➔</button>
               </div>
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE: BUDGET-CONSTRAINED SORTING DESK */}
+          {/* STEP 2 WORKSPACE: TRUE REQUEST LIST POOL DESK */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn">
               
-              {/* MATHEMATICAL ELIGIBILITY SUMMARY MONITOR FEED */}
+              {/* MATHEMATICAL ELIGIBILITY COUNTERS */}
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const data = lootSummary[category];
-                  const filledCount = selectedBidders.filter(b => b.itemType === category).length;
+                  const filledCount = categoryAllocations[category]?.selected?.length || 0;
                   return (
                     <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => setActiveMatrixFilter(category)}>
-                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Budget</div>
+                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Seats</div>
                       <div className="text-lg font-black text-white mt-1 font-mono">{filledCount} / {data.seats}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">({data.qty} Drops @ Limit {data.limit})</div>
                     </div>
@@ -402,54 +436,54 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
-                <span>Currently Managing Roster For:</span>
-                <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Matrix</span>
+                <span>Currently Managing True Applicants For:</span>
+                <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Pool</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* SELECTED COLUMN */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Recipients for {activeMatrixFilter}</span>
+                    <span>✨ Assigned Recipients ({activeMatrixFilter})</span>
                     <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">
-                      {selectedBidders.filter(b => b.itemType === activeMatrixFilter).length} / {lootSummary[activeMatrixFilter]?.seats || 0} Slots Filled
+                      {currentActiveSelections.selected.length} / {lootSummary[activeMatrixFilter]?.seats || 0} Filled
                     </span>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {selectedBidders.filter(b => b.itemType === activeMatrixFilter).map((b, i, currentArr) => {
-                      const absoluteIndex = selectedBidders.findIndex(sb => sb === b);
-                      return (
-                        <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs font-mono">
-                          <span className="truncate text-slate-200 font-sans font-medium">{b.name}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-500">Priority: {b.priority}</span>
-                            <button onClick={() => toggleBidderPromotion(absoluteIndex, 'SELECTED')} className="text-rose-400 font-sans text-[10px] hover:underline">Remove ✖</button>
-                          </div>
+                    {currentActiveSelections.selected.map((name, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs font-mono">
+                        <span className="truncate text-slate-200 font-sans font-medium">{name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-emerald-500 uppercase font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/20">Selected</span>
+                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] hover:underline">Drop ✖</button>
                         </div>
-                      );
-                    })}
-                    {selectedBidders.filter(b => b.itemType === activeMatrixFilter).length === 0 && (
-                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No members assigned. Click Promote below to satisfy seat requirements.</div>
+                      </div>
+                    ))}
+                    {currentActiveSelections.selected.length === 0 && (
+                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No members assigned to active quota seats.</div>
                     )}
                   </div>
                 </div>
 
-                {/* ELIGIBLE STANDBY CORES */}
+                {/* ELIGIBLE STANDBY CORES POOLED DIRECTLY FROM REQUEST LIST */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
-                    <span>Standby Queue Pool (Rank Sorted)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Available: {notSelectedBidders.length}</span>
+                    <span>Standby Queue (True Request List Pool)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Standby: {currentActiveSelections.notSelected.length}</span>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {notSelectedBidders.map((b, i) => (
+                    {currentActiveSelections.notSelected.map((name, i) => (
                       <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/40 bg-slate-900/10 text-xs font-mono hover:bg-slate-900/30 transition">
-                        <span className="truncate text-slate-400 font-sans">{b.name}</span>
+                        <span className="truncate text-slate-400 font-sans">{name}</span>
                         <div className="flex items-center gap-3">
-                          <span className="text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded">Rank: {b.priority}</span>
-                          <button onClick={() => toggleBidderPromotion(i, 'NOT_SELECTED')} className="text-emerald-400 font-sans text-[10px] font-bold hover:underline">Promote 🔼</button>
+                          <span className="text-slate-600 text-[10px] uppercase font-bold font-sans">Index #{String(i + 1).padStart(2, '0')}</span>
+                          <button onClick={() => handlePromoteBidder(i)} className="text-emerald-400 font-sans text-[10px] font-bold hover:underline">Promote 🔼</button>
                         </div>
                       </div>
                     ))}
+                    {currentActiveSelections.notSelected.length === 0 && (
+                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No extra candidates remaining in the true target pool list.</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -465,11 +499,11 @@ export default function MimicBookTab({ user }) {
           {activeStep >= 3 && (
             <div className="flex items-center justify-between p-3 border border-slate-800/80 bg-slate-950/60 rounded-xl text-xs font-medium animate-fadeIn">
               <div className="flex items-center gap-4">
-                <span className="text-emerald-400 font-bold">✔ Matrix Allocation Mapped Successfully!</span>
-                <span className="text-slate-500">Total Sequence Book Lines: <strong className="text-slate-300 font-mono">{generatedSlots.length}</strong></span>
+                <span className="text-emerald-400 font-bold">✔ Allocation Matrix Generated from True Request Lists!</span>
+                <span className="text-slate-500">Total Lines: <strong className="text-slate-300 font-mono">{generatedSlots.length}</strong></span>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setActiveStep(2)} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
+                <button onClick={() => { loadTrueRequestPool(); setActiveStep(2); }} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
                 <button onClick={() => setActiveStep(4)} className={`px-4 py-1.5 rounded-lg font-bold transition ${activeStep === 4 ? 'bg-amber-600 text-white' : 'bg-slate-800 border border-slate-700 text-amber-400'}`}>Review Commit Ledger</button>
               </div>
             </div>
@@ -525,7 +559,7 @@ export default function MimicBookTab({ user }) {
                 const slotIndex = index + 1;
                 if (!slot) {
                   return (
-                    <div key={slotIndex} className="grid grid-cols-12 text-[11px] font-mono p-2 border border-slate-900 bg-slate-900/10 rounded-xl text-slate-800">
+                    <div key={slotIndex} className="grid grid-cols-12 text-[11px] font-mono p-2 border border-slate-900 bg-slate-900/10 rounded-xl text-slate-700">
                       <div className="col-span-2 font-bold text-slate-800">[{slotIndex}]</div>
                       <div className="col-span-10 italic text-[10px] text-slate-800/40">Empty In-Game Bidding Box</div>
                     </div>
@@ -580,16 +614,25 @@ export default function MimicBookTab({ user }) {
                     let rowsToDisplay = [...generatedSlots];
 
                     if (viewLens === 'ALL') {
-                      notSelectedBidders.forEach(ns => {
-                        rowsToDisplay.push({ name: ns.name, itemType: ns.itemType, page: '---', slot: '---', status: 'NotSelected' });
+                      // Supplement all non-selected standby applicants across all categories for full transparency
+                      const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
+                      categorySequenceOrder.forEach(cat => {
+                        const standbyList = categoryAllocations[cat]?.notSelected || [];
+                        standbyList.forEach(name => {
+                          rowsToDisplay.push({ name, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
+                        });
                       });
                     }
 
                     if (viewLens === 'MINE') {
                       rowsToDisplay = rowsToDisplay.filter(r => r.name.toLowerCase() === currentUserName.toLowerCase());
                       if (rowsToDisplay.length === 0) {
-                        notSelectedBidders.filter(ns => ns.name.toLowerCase() === currentUserName.toLowerCase()).forEach(ns => {
-                          rowsToDisplay.push({ name: ns.name, itemType: ns.itemType, page: '---', slot: '---', status: 'NotSelected' });
+                        const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
+                        categorySequenceOrder.forEach(cat => {
+                          const standbyList = categoryAllocations[cat]?.notSelected || [];
+                          if (standbyList.some(n => n.toLowerCase() === currentUserName.toLowerCase())) {
+                            rowsToDisplay.push({ name: currentUserName, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
+                          }
                         });
                       }
                     }
