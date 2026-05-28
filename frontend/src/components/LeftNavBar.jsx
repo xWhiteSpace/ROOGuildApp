@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 const navItems = [
   { label: 'Request', path: '/' },
   { label: 'Live Bidding', path: '/live-bidding' },
+  { label: 'Mimic Book', path: '/mimic-book' },
   { label: 'Request History', path: '/request-history' },
   { label: 'Past Auction', path: '/past-auction' },
   { label: 'Submit Evidence', path: '/submit-evidence' }
