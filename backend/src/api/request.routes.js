@@ -39,9 +39,8 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * ⚡ CHRONOLOGICAL EVENTDATE SCORE ENGINE (REQ013)
- * Queries a player's history rows via indexed member filters, translates event dates
- * to real numeric time weights, and evaluates consecutive losses backward from their last win.
+ * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE (REQ013)
+ * Uses the player name index rule to query ONLY this specific user's historical milestones.
  */
 async function calculatePriorityScore(db, playerDisplayName, itemName) {
   const playerHistorySnap = await db.ref('auction/web_requests')
@@ -51,22 +50,22 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   if (!playerHistorySnap.exists()) return 0;
 
-  const records = Object.values(playerHistorySnap.val());
+  const records = playerHistorySnap.val();
   
-  // Filter records down to the specific item type and map accurate chronological objects
-  const filteredTimeline = records
-    .filter(r => (r.item || '').trim().toLowerCase() === itemName.trim().toLowerCase())
-    .map(r => ({
-      status: (r.selectionStatus || 'pending').toLowerCase(),
-      timeWeight: Date.parse(r.eventDate || r.date || "1/1/2000") // Falls back to form date if eventDate is empty
-    }));
+  // Firebase push IDs are naturally chronological. Sorting the tracking keys matches the timeline perfectly.
+  const sortedKeys = Object.keys(records).sort();
+  const combinedItemTimeline = [];
 
-  // Sort timeline chronologically from oldest event date to newest event date
-  filteredTimeline.sort((a, b) => a.timeWeight - b.timeWeight);
+  sortedKeys.forEach(key => {
+    const record = records[key];
+    if ((record.item || '').trim() === itemName.trim()) {
+      combinedItemTimeline.push((record.selectionStatus || 'pending').toLowerCase());
+    }
+  });
 
   let lastSelectedIdx = -1;
-  for (let i = filteredTimeline.length - 1; i >= 0; i--) {
-    if (filteredTimeline[i].status === 'selected') {
+  for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
+    if (combinedItemTimeline[i] === 'selected') {
       lastSelectedIdx = i;
       break;
     }
@@ -74,8 +73,8 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   let priorityPoints = 0;
   const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
-  for (let i = searchStart; i < filteredTimeline.length; i++) {
-    if (filteredTimeline[i].status === 'notselected') {
+  for (let i = searchStart; i < combinedItemTimeline.length; i++) {
+    if (combinedItemTimeline[i] === 'notselected') {
       priorityPoints++;
     }
   }
@@ -93,7 +92,6 @@ router.get('/init', async (req, res) => {
 
   try {
     const playerDisplayName = user.displayName || user.username;
-    const playerLower = playerDisplayName.trim().toLowerCase();
     const timeGateStatus = getGateStatusDetails();
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
@@ -204,7 +202,7 @@ router.post('/submit', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
-    // 🔒 ACTION CONSTRAINTS: Read officer configuration. If missing/empty, explicitly keep it as ""
+    // 🔒 CHOSEN ACTION: Read the officer session configuration. If empty, leave it as "" (blank)
     const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
     const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
 
@@ -249,7 +247,7 @@ router.post('/cancel', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
     
-    // Read officer configuration. If missing/empty, explicitly keep it as ""
+    // Read the officer session configuration. If empty, leave it as "" (blank)
     const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
     const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
 
