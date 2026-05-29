@@ -1,11 +1,19 @@
+// backend/src/api/request.routes.js
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
-import { getGateStatusDetails } from '../config/timeWindow.js';
+import { getGateStatusDetails } from '../config/timeWindow.js'; // Preserved for phase management
 
 const router = Router();
 
+const AVAILABLE_ITEMS = [
+  { name: 'Puppet', maxQty: 1 },
+  { name: 'Illu', maxQty: 1 },
+  { name: 'Light&Dark', maxQty: 3 },
+  { name: 'Time&Space', maxQty: 5 }
+];
+
 /**
- * 🕒 GMT+8 DATE GENERATOR HELPER
+ * 🗺️ GMT+8 DATE GENERATOR HELPER
  * Standardizes calendar days to Asia/Manila zone formatting (MM/DD/YYYY)
  */
 function getGMT8DateString() {
@@ -15,26 +23,6 @@ function getGMT8DateString() {
   const day = gmt8Date.getDate();
   const year = gmt8Date.getFullYear();
   return `${month}/${day}/${year}`;
-}
-
-function parseCSVToRawArrays(csvText, headerMatchKeyword) {
-  const lines = csvText.split(/\r?\n/);
-  let tableStarted = false;
-  const dataRows = [];
-  for (let line of lines) {
-    if (!line.trim()) continue;
-    const cleanLine = line.replace(/^\ufeff/, '');
-    const cells = cleanLine.split(',').map(c => c.trim().replace(/^"|"$/g, '').trim());
-    if (!tableStarted) {
-      if (cells.map(c => c.toLowerCase()).includes(headerMatchKeyword.toLowerCase())) {
-        tableStarted = true;
-      }
-      continue;
-    }
-    if (cells.every(c => c === '')) continue;
-    dataRows.push(cells);
-  }
-  return dataRows;
 }
 
 function resolveUserIdentity(req) {
@@ -51,7 +39,70 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 📡 INITIALIZATION PATHWAY
+ * REQ013: Priority Score Computation Engine
+ * Scans backward inside a user's Firebase history archive node until a 'selected' win is caught,
+ * counting all subsequent 'notselected' appearances.
+ */
+async function calculatePriorityScore(db, playerLower, itemName) {
+  const historySnap = await db.ref(`auction/history_archive/${playerLower}/${itemName}`).once('value');
+  if (!historySnap.exists()) return 0;
+
+  const records = historySnap.val(); // Expects chronological array or sequence object
+  const sortedRecords = Array.isArray(records) ? [...records].reverse() : Object.values(records).reverse();
+
+  let priorityPoints = 0;
+  for (const record of sortedRecords) {
+    const selStatus = (record.selectionStatus || 'pending').toLowerCase();
+    if (selStatus === 'selected') {
+      break; // Found the most recent selection win milestone; exit loop sequence
+    }
+    if (selStatus === 'notselected') {
+      priorityPoints++; // Award +1 priority point for every missed sequence session
+    }
+  }
+  return priorityPoints;
+}
+
+/**
+ * REQ024 & REQ025: Centralized Leaderboard Compiler Engine
+ * Calculates sorted lists once on the backend, updating the central read-only table node.
+ */
+async function rebuildLeaderboards(db) {
+  const liveQueueSnap = await db.ref('auction/live_requests').once('value');
+  const finalizedLeaderboards = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+
+  if (liveQueueSnap.exists()) {
+    const allRequests = liveQueueSnap.val();
+    const temporaryBins = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+
+    // Group items data models consecutively by category tabs
+    Object.values(allRequests).forEach(entry => {
+      const appStatus = (entry.applicationStatus || '').toLowerCase();
+      if (appStatus === 'canceled') return;
+
+      const itemKey = entry.item;
+      if (temporaryBins[itemKey] !== undefined && entry.quantity > 0) {
+        temporaryBins[itemKey].push({
+          name: entry.member,
+          priority: parseInt(entry.priority, 10) || 0
+        });
+      }
+    });
+
+    // Sort categories strictly by priority points descending and map string arrays
+    Object.keys(temporaryBins).forEach(itemKey => {
+      finalizedLeaderboards[itemKey] = temporaryBins[itemKey]
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, 100) // REQ025: Truncate output lists strictly to top 100 raiders
+        .map(user => user.name);
+    });
+  }
+
+  await db.ref('auction/leaderboards').set(finalizedLeaderboards);
+}
+
+/**
+ * REQ092: INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -59,120 +110,47 @@ router.get('/init', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+    const db = getDatabase();
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
     
+    // REQ012: Check dynamic gate overrides directly from Firebase settings root folder node
+    const gateSnap = await db.ref('settings/registrationGate').once('value');
+    const dynamicGate = gateSnap.exists() ? gateSnap.val() : null;
+
     const timeGateStatus = getGateStatusDetails();
-    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
+    const currentGMT8Date = getGMT8DateString();
 
-    const availableItems = [
-      { name: 'Puppet', maxQty: 1 },
-      { name: 'Illu', maxQty: 1 },
-      { name: 'Light&Dark', maxQty: 3 },
-      { name: 'Time&Space', maxQty: 5 }
-    ];
+    // Fetch user basket values and pre-compiled unified leaderboards concurrently
+    const [liveRequestsSnap, leaderboardSnap] = await Promise.all([
+      db.ref('auction/live_requests').once('value'),
+      db.ref('auction/leaderboards').once('value')
+    ]);
 
-    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
-    const response = await fetch(requestUrl);
-    const csvText = await response.text();
-    const spreadsheetRows = parseCSVToRawArrays(csvText, 'Member');
-
-    const db = getDatabase();
-    const snapshot = await db.ref('auction/web_requests').once('value');
-    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
-
-    const liveCounts = {};
-    availableItems.forEach(item => { liveCounts[item.name] = 0; });
-
-    spreadsheetRows.forEach(row => {
-      if ((row[1] || '').trim().toLowerCase() === playerLower) {
-        const itemType = row[2];
-        const appStatus = (row[4] || '').trim().toLowerCase();
-        const selStatus = (row[5] || 'pending').trim().toLowerCase();
-        const liveStatus = (row[6] || '').trim().toLowerCase();
-        const itemQty = parseInt(row[3], 10) || 0;
-
-        const isAwaitingEvaluation = (selStatus === 'pending');
-        const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
-
-        if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
+    const liveCounts = { 'Puppet': 0, 'Illu': 0, 'Light&Dark': 0, 'Time&Space': 0 };
+    if (liveRequestsSnap.exists()) {
+      Object.values(liveRequestsSnap.val()).forEach(req => {
+        if ((req.member || '').trim().toLowerCase() === playerLower) {
+          const appStatus = (req.applicationStatus || '').toLowerCase();
+          if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
         }
-      }
-    });
-
-    firebaseRequests.forEach(req => {
-      if ((req.member || '').trim().toLowerCase() === playerLower) {
-        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
-        const appStatus = (req.applicationStatus || '').toLowerCase();
-
-        if (selStatus === 'pending') {
-          if (appStatus === 'requested' && liveCounts[req.item] !== undefined) liveCounts[req.item] += req.quantity;
-          if (appStatus === 'canceled' && liveCounts[req.item] !== undefined)  liveCounts[req.item] -= req.quantity;
-        }
-      }
-    });
-
-    Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
-
-    // 📋 LIVE REQUEST LIST MATRIX COMPILER
-    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-    
-    Object.keys(rankingsByItem).forEach(targetItem => {
-      const userCalculationsMap = {};
-
-      spreadsheetRows.forEach(row => {
-        const player = (row[1] || '').trim();
-        const itemType = (row[2] || '').trim();
-        const qty = parseInt(row[3], 10) || 0;
-        const appStatus = (row[4] || '').trim().toLowerCase();
-        const selStatus = (row[5] || 'pending').trim().toLowerCase();
-        const priorityScore = parseInt(row[7], 10) || 0;
-
-        if (!player || player === '???' || itemType !== targetItem || selStatus !== 'pending') return;
-
-        if (!userCalculationsMap[player]) {
-          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
-        }
-
-        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
-        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
       });
+    }
 
-      firebaseRequests.forEach(req => {
-        const player = (req.member || '').trim();
-        const itemType = (req.item || '').trim();
-        const qty = parseInt(req.quantity, 10) || 0;
-        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
-        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
-        const priorityScore = parseInt(req.priority, 10) || 0;
+    const rankingsByItem = leaderboardSnap.exists() 
+      ? leaderboardSnap.val() 
+      : { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
 
-        if (!player || itemType !== targetItem || selStatus !== 'pending') return;
-
-        if (!userCalculationsMap[player]) {
-          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
-        }
-
-        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
-        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
-      });
-
-      const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
-      activeApplicants.sort((a, b) => b.priority - a.priority);
-      rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
-    });
-
+    // Delivers perfect matching parameters directly expected by RequestTab.jsx destructuring assignments
     return res.json({
       success: true,
       displayName: playerDisplayName,
-      date: currentGMT8Date, // Delivers the correct localized calendar date string to header dashboard banners
-      items: availableItems,
+      date: currentGMT8Date,
+      items: AVAILABLE_ITEMS,
       liveCounts,
-      isGateOpen: timeGateStatus.isGateOpen,
+      isGateOpen: dynamicGate ? (dynamicGate.status === 'open') : timeGateStatus.isGateOpen,
       currentSessionLabel: timeGateStatus.currentSessionLabel,
-      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
+      nextStatusChangeMessage: dynamicGate?.message || timeGateStatus.nextStatusChangeMessage,
       currentPhase: timeGateStatus.currentPhase,
       phaseIntervals: timeGateStatus.phaseIntervals,
       rankingsByItem
@@ -183,13 +161,19 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 📡 SUBMIT GATE REQUISITION PORTER
+ * REQ093: SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
-  const timeGateStatus = getGateStatusDetails();
-  if (!timeGateStatus.isGateOpen) {
-    return res.status(423).json({ success: false, error: `Action Denied: Bidding registration is closed for this session. ${timeGateStatus.nextStatusChangeMessage}` });
+  const db = getDatabase();
+  
+  // REQ012: Enforce server-side clock evaluation against Firebase overrides to bypass client UTC drift issues
+  const gateSnap = await db.ref('settings/registrationGate').once('value');
+  const dynamicGate = gateSnap.exists() ? gateSnap.val() : null;
+  const systemGateOpen = dynamicGate ? (dynamicGate.status === 'open') : getGateStatusDetails().isGateOpen;
+
+  if (!systemGateOpen) {
+    return res.status(423).json({ success: false, error: 'Action Denied: Bidding registration is closed for this session.' });
   }
 
   const user = resolveUserIdentity(req);
@@ -201,60 +185,23 @@ router.post('/submit', async (req, res) => {
   }
 
   try {
-    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
-    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
-
-    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
-    const response = await fetch(requestUrl);
-    const spreadsheetRows = parseCSVToRawArrays(await response.text(), 'Member');
-
-    const db = getDatabase();
-    const snapshot = await db.ref('auction/web_requests').once('value');
-    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+    const currentGMT8Date = getGMT8DateString();
 
     const chosenItemNames = Object.keys(selections);
-    
     for (const itemName of chosenItemNames) {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
 
-      const combinedItemTimeline = [];
-      const itemLower = itemName.trim().toLowerCase();
+      // REQ013: Run mathematical point metrics calculation against historical node folders
+      const dynamicPriority = await calculatePriorityScore(db, playerLower, itemName);
 
-      spreadsheetRows.forEach(row => {
-        if ((row[1] || '').trim().toLowerCase() === playerLower && (row[2] || '').trim().toLowerCase() === itemLower) {
-          combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
-        }
-      });
-
-      firebaseRequests.forEach(req => {
-        if ((req.member || '').trim().toLowerCase() === playerLower && (req.item || '').trim().toLowerCase() === itemLower) {
-          combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
-        }
-      });
-
-      let lastSelectedIdx = -1;
-      for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-        if (combinedItemTimeline[i] === 'selected') {
-          lastSelectedIdx = i;
-          break;
-        }
-      }
-
-      let dynamicPriority = 0;
-      const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
-      for (let i = searchStart; i < combinedItemTimeline.length; i++) {
-        if (combinedItemTimeline[i] === 'notselected') {
-          dynamicPriority++;
-        }
-      }
-
-      const newRequestRef = db.ref('auction/web_requests').push();
-      await newRequestRef.set({
-        id: newRequestRef.key,
-        date: currentGMT8Date, // Database logs write true GMT+8 strings
+      // REQ014: Commit entry cleanly as a permanent data configuration item block row
+      const userItemTrackingKey = `${playerLower}_${itemName.replace(/[^a-zA-Z0-9]/g, '')}`;
+      await db.ref(`auction/live_requests/${userItemTrackingKey}`).set({
+        id: userItemTrackingKey,
+        date: currentGMT8Date,
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
@@ -264,6 +211,8 @@ router.post('/submit', async (req, res) => {
       });
     }
 
+    // Force re-indexing of central rank tables immediately after committing updates
+    await rebuildLeaderboards(db);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -271,31 +220,35 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 📡 CANCEL GATE REQUISITION PORTER
+ * REQ094 & REQ015: INSTANT UNLOCKED CANCELLATION OVERRIDE ROUTE
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const { itemName, cancelQty } = req.body;
+  const { itemName } = req.body;
   try {
-    const playerDisplayName = user.displayName || user.username;
-    const currentGMT8Date = getGMT8DateString(); // Aligned to GMT+8
     const db = getDatabase();
+    const playerDisplayName = user.displayName || user.username;
+    const playerLower = playerDisplayName.trim().toLowerCase();
+    const currentGMT8Date = getGMT8DateString();
     
-    const newCancelRef = db.ref('auction/web_requests').push();
-    await newCancelRef.set({
-      id: newCancelRef.key,
-      date: currentGMT8Date, // Database cancellations write true GMT+8 strings
+    const userItemTrackingKey = `${playerLower}_${itemName.replace(/[^a-zA-Z0-9]/g, '')}`;
+    
+    // REQ015: Instantly push cancellation state data structures with absolute 0 priority weights
+    await db.ref(`auction/live_requests/${userItemTrackingKey}`).set({
+      id: userItemTrackingKey,
+      date: currentGMT8Date,
       member: playerDisplayName,
       item: itemName,
-      quantity: parseInt(cancelQty, 10),
+      quantity: 0,
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
       priority: 0
     });
 
+    await rebuildLeaderboards(db);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
