@@ -1,7 +1,7 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
-import { getGateStatusDetails } from '../config/timeWindow.js'; // Preserved for phase management
+import { getGateStatusDetails } from '../config/timeWindow.js';
 
 const router = Router();
 
@@ -13,7 +13,7 @@ const AVAILABLE_ITEMS = [
 ];
 
 /**
- * 🗺️ GMT+8 DATE GENERATOR HELPER
+ * 📅 GMT+8 DATE GENERATOR HELPER
  * Standardizes calendar days to Asia/Manila zone formatting (MM/DD/YYYY)
  */
 function getGMT8DateString() {
@@ -39,70 +39,51 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * REQ013: Priority Score Computation Engine
- * Scans backward inside a user's Firebase history archive node until a 'selected' win is caught,
- * counting all subsequent 'notselected' appearances.
+ * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE (REQ013)
+ * Uses the player name index rule to query ONLY this specific user's historical milestones.
  */
-async function calculatePriorityScore(db, playerLower, itemName) {
-  const historySnap = await db.ref(`auction/history_archive/${playerLower}/${itemName}`).once('value');
-  if (!historySnap.exists()) return 0;
+async function calculatePriorityScore(db, playerDisplayName, itemName) {
+  const playerHistorySnap = await db.ref('auction/web_requests')
+    .orderByChild('member')
+    .equalTo(playerDisplayName)
+    .once('value');
 
-  const records = historySnap.val(); // Expects chronological array or sequence object
-  const sortedRecords = Array.isArray(records) ? [...records].reverse() : Object.values(records).reverse();
+  if (!playerHistorySnap.exists()) return 0;
 
-  let priorityPoints = 0;
-  for (const record of sortedRecords) {
-    const selStatus = (record.selectionStatus || 'pending').toLowerCase();
-    if (selStatus === 'selected') {
-      break; // Found the most recent selection win milestone; exit loop sequence
+  const records = playerHistorySnap.val();
+  
+  // Firebase push IDs are naturally chronological. Sorting the tracking keys matches the timeline perfectly.
+  const sortedKeys = Object.keys(records).sort();
+  const combinedItemTimeline = [];
+
+  sortedKeys.forEach(key => {
+    const record = records[key];
+    if ((record.item || '').trim() === itemName.trim()) {
+      combinedItemTimeline.push((record.selectionStatus || 'pending').toLowerCase());
     }
-    if (selStatus === 'notselected') {
-      priorityPoints++; // Award +1 priority point for every missed sequence session
+  });
+
+  let lastSelectedIdx = -1;
+  for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
+    if (combinedItemTimeline[i] === 'selected') {
+      lastSelectedIdx = i;
+      break;
     }
   }
+
+  let priorityPoints = 0;
+  const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
+  for (let i = searchStart; i < combinedItemTimeline.length; i++) {
+    if (combinedItemTimeline[i] === 'notselected') {
+      priorityPoints++;
+    }
+  }
+
   return priorityPoints;
 }
 
 /**
- * REQ024 & REQ025: Centralized Leaderboard Compiler Engine
- * Calculates sorted lists once on the backend, updating the central read-only table node.
- */
-async function rebuildLeaderboards(db) {
-  const liveQueueSnap = await db.ref('auction/live_requests').once('value');
-  const finalizedLeaderboards = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-
-  if (liveQueueSnap.exists()) {
-    const allRequests = liveQueueSnap.val();
-    const temporaryBins = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-
-    // Group items data models consecutively by category tabs
-    Object.values(allRequests).forEach(entry => {
-      const appStatus = (entry.applicationStatus || '').toLowerCase();
-      if (appStatus === 'canceled') return;
-
-      const itemKey = entry.item;
-      if (temporaryBins[itemKey] !== undefined && entry.quantity > 0) {
-        temporaryBins[itemKey].push({
-          name: entry.member,
-          priority: parseInt(entry.priority, 10) || 0
-        });
-      }
-    });
-
-    // Sort categories strictly by priority points descending and map string arrays
-    Object.keys(temporaryBins).forEach(itemKey => {
-      finalizedLeaderboards[itemKey] = temporaryBins[itemKey]
-        .sort((a, b) => b.priority - a.priority)
-        .slice(0, 100) // REQ025: Truncate output lists strictly to top 100 raiders
-        .map(user => user.name);
-    });
-  }
-
-  await db.ref('auction/leaderboards').set(finalizedLeaderboards);
-}
-
-/**
- * REQ092: INITIALIZATION PATHWAY
+ * 🚀 INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -110,47 +91,85 @@ router.get('/init', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
     const playerDisplayName = user.displayName || user.username;
-    const playerLower = playerDisplayName.trim().toLowerCase();
-    
-    // REQ012: Check dynamic gate overrides directly from Firebase settings root folder node
-    const gateSnap = await db.ref('settings/registrationGate').once('value');
-    const dynamicGate = gateSnap.exists() ? gateSnap.val() : null;
-
     const timeGateStatus = getGateStatusDetails();
     const currentGMT8Date = getGMT8DateString();
+    const db = getDatabase();
 
-    // Fetch user basket values and pre-compiled unified leaderboards concurrently
-    const [liveRequestsSnap, leaderboardSnap] = await Promise.all([
-      db.ref('auction/live_requests').once('value'),
-      db.ref('auction/leaderboards').once('value')
-    ]);
+    // REQ009 & REQ010: Query ONLY this player's data footprint to calculate live limits
+    const playerRequestsSnap = await db.ref('auction/web_requests')
+      .orderByChild('member')
+      .equalTo(playerDisplayName)
+      .once('value');
 
     const liveCounts = { 'Puppet': 0, 'Illu': 0, 'Light&Dark': 0, 'Time&Space': 0 };
-    if (liveRequestsSnap.exists()) {
-      Object.values(liveRequestsSnap.val()).forEach(req => {
-        if ((req.member || '').trim().toLowerCase() === playerLower) {
-          const appStatus = (req.applicationStatus || '').toLowerCase();
-          if (appStatus === 'requested') liveCounts[req.item] += req.quantity;
+    if (playerRequestsSnap.exists()) {
+      Object.values(playerRequestsSnap.val()).forEach(req => {
+        const itemType = req.item;
+        const appStatus = (req.applicationStatus || '').trim().toLowerCase();
+        const selStatus = (req.selectionStatus || 'pending').trim().toLowerCase();
+        const liveStatus = (req.liveStatus || '').trim().toLowerCase();
+        const itemQty = parseInt(req.quantity, 10) || 0;
+
+        const isAwaitingEvaluation = (selStatus === 'pending');
+        const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
+
+        if (isAwaitingEvaluation || isLiveInCurrentSession) {
+          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
+          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
         }
       });
     }
+    // Safety boundary clamping
+    Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    const rankingsByItem = leaderboardSnap.exists() 
-      ? leaderboardSnap.val() 
-      : { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    // 📊 OPTIMIZED LEADERBOARD COMPILER (REQ024 & REQ025)
+    // Queries ONLY rows marked 'Pending' across the entire guild, completely ignoring old history records.
+    const pendingRequestsSnap = await db.ref('auction/web_requests')
+      .orderByChild('selectionStatus')
+      .equalTo('Pending')
+      .once('value');
 
-    // Delivers perfect matching parameters directly expected by RequestTab.jsx destructuring assignments
+    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    
+    if (pendingRequestsSnap.exists()) {
+      const allPendingRows = Object.values(pendingRequestsSnap.val());
+
+      Object.keys(rankingsByItem).forEach(targetItem => {
+        const userCalculationsMap = {};
+
+        allPendingRows.forEach(req => {
+          const player = (req.member || '').trim();
+          const itemType = (req.item || '').trim();
+          const qty = parseInt(req.quantity, 10) || 0;
+          const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+          const priorityScore = parseInt(req.priority, 10) || 0;
+
+          if (!player || player === '???' || itemType !== targetItem) return;
+
+          if (!userCalculationsMap[player]) {
+            userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+          }
+
+          if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+          if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+        });
+
+        const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
+        activeApplicants.sort((a, b) => b.priority - a.priority);
+        rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
+      });
+    }
+
     return res.json({
       success: true,
       displayName: playerDisplayName,
-      date: currentGMT8Date,
+      date: currentGMT8Date, 
       items: AVAILABLE_ITEMS,
       liveCounts,
-      isGateOpen: dynamicGate ? (dynamicGate.status === 'open') : timeGateStatus.isGateOpen,
+      isGateOpen: timeGateStatus.isGateOpen,
       currentSessionLabel: timeGateStatus.currentSessionLabel,
-      nextStatusChangeMessage: dynamicGate?.message || timeGateStatus.nextStatusChangeMessage,
+      nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
       currentPhase: timeGateStatus.currentPhase,
       phaseIntervals: timeGateStatus.phaseIntervals,
       rankingsByItem
@@ -161,19 +180,13 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * REQ093: SUBMIT GATE REQUISITION PORTER
+ * 📥 SUBMIT GATE REQUISITION PORTER
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
-  const db = getDatabase();
-  
-  // REQ012: Enforce server-side clock evaluation against Firebase overrides to bypass client UTC drift issues
-  const gateSnap = await db.ref('settings/registrationGate').once('value');
-  const dynamicGate = gateSnap.exists() ? gateSnap.val() : null;
-  const systemGateOpen = dynamicGate ? (dynamicGate.status === 'open') : getGateStatusDetails().isGateOpen;
-
-  if (!systemGateOpen) {
-    return res.status(423).json({ success: false, error: 'Action Denied: Bidding registration is closed for this session.' });
+  const timeGateStatus = getGateStatusDetails();
+  if (!timeGateStatus.isGateOpen) {
+    return res.status(423).json({ success: false, error: `Bidding registration is closed. ${timeGateStatus.nextStatusChangeMessage}` });
   }
 
   const user = resolveUserIdentity(req);
@@ -186,33 +199,34 @@ router.post('/submit', async (req, res) => {
 
   try {
     const playerDisplayName = user.displayName || user.username;
-    const playerLower = playerDisplayName.trim().toLowerCase();
     const currentGMT8Date = getGMT8DateString();
+    const db = getDatabase();
+
+    // 🔒 CHOSEN ACTION: Read the officer session configuration. If empty, leave it as "" (blank)
+    const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
+    const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
 
     const chosenItemNames = Object.keys(selections);
     for (const itemName of chosenItemNames) {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
 
-      // REQ013: Run mathematical point metrics calculation against historical node folders
-      const dynamicPriority = await calculatePriorityScore(db, playerLower, itemName);
+      const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemName);
 
-      // REQ014: Commit entry cleanly as a permanent data configuration item block row
-      const userItemTrackingKey = `${playerLower}_${itemName.replace(/[^a-zA-Z0-9]/g, '')}`;
-      await db.ref(`auction/live_requests/${userItemTrackingKey}`).set({
-        id: userItemTrackingKey,
-        date: currentGMT8Date,
+      const newRequestRef = db.ref('auction/web_requests').push();
+      await newRequestRef.set({
+        id: newRequestRef.key,
+        date: currentGMT8Date,          // Form submission timestamp clock
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
         applicationStatus: 'Requested', 
         selectionStatus: 'Pending',     
-        priority: dynamicPriority
+        priority: dynamicPriority,
+        eventDate: targetedEventDate    // 🌟 RETAINED BLANK: Writes as "" if unconfigured, ready for Loot Register
       });
     }
 
-    // Force re-indexing of central rank tables immediately after committing updates
-    await rebuildLeaderboards(db);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -220,35 +234,36 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * REQ094 & REQ015: INSTANT UNLOCKED CANCELLATION OVERRIDE ROUTE
+ * 🛑 CANCEL GATE REQUISITION PORTER
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const { itemName } = req.body;
+  const { itemName, cancelQty } = req.body;
   try {
-    const db = getDatabase();
     const playerDisplayName = user.displayName || user.username;
-    const playerLower = playerDisplayName.trim().toLowerCase();
     const currentGMT8Date = getGMT8DateString();
+    const db = getDatabase();
     
-    const userItemTrackingKey = `${playerLower}_${itemName.replace(/[^a-zA-Z0-9]/g, '')}`;
-    
-    // REQ015: Instantly push cancellation state data structures with absolute 0 priority weights
-    await db.ref(`auction/live_requests/${userItemTrackingKey}`).set({
-      id: userItemTrackingKey,
-      date: currentGMT8Date,
+    // Read the officer session configuration. If empty, leave it as "" (blank)
+    const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
+    const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
+
+    const newCancelRef = db.ref('auction/web_requests').push();
+    await newCancelRef.set({
+      id: newCancelRef.key,
+      date: currentGMT8Date, 
       member: playerDisplayName,
       item: itemName,
-      quantity: 0,
+      quantity: parseInt(cancelQty, 10),
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
-      priority: 0
+      priority: 0,
+      eventDate: targetedEventDate // 🌟 RETAINED BLANK: Kept clean for future administrative sorting
     });
 
-    await rebuildLeaderboards(db);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
