@@ -1,6 +1,116 @@
-// backend/src/index.js (Partial Snippet - Refactoring Pass)
+// backend/src/index.js
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// DELETED: Continuous polling updates loop
-// setInterval(async () => { ... }, 5000); // REQ002 Completely Retired
+// 🌟 BULLETPROOF PATH RESOLVER
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-console.log("ARCHITECTURE NOTE: 5-second polling routine unmounted. System updated to Event-Driven Firebase execution.");
+import express from 'express';
+import cors from 'cors';
+import session from 'express-session';
+import { initializeEnv } from './config/env.js';
+import authRoutes from './auth/discordOAuth.js';
+import chatRoutes from './api/chat.routes.js';
+import { initializeFirebase } from './config/firebase.js';
+import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
+import requestRoutes from './api/request.routes.js';
+
+// 📣 IMPORT DISCORD SNAPSHOT SERVICE
+import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
+
+// Execute server startup configurations
+initializeEnv();
+initializeFirebase();
+initializeDiscordBot(); 
+
+// 🤖 ================================================================
+// HARDCORE BOT DEBUG DIAGNOSTICS ENGINE
+if (discordClient) {
+  discordClient.on('debug', (info) => {
+    if (info.includes('heartbeat') || info.includes('Gateway')) return;
+    console.log('🤖 [BOT GATEWAY TRACE]:', info);
+  });
+  discordClient.on('error', (error) => {
+    console.error('❌ [BOT CRITICAL ERROR]:', error);
+  });
+  discordClient.on('warn', (warning) => {
+    console.warn('⚠️ [BOT GATEWAY WARNING]:', warning);
+  });
+} else {
+  console.error('❌ [BOT DEBUG] discordClient object is completely undefined or missing upon import!');
+}
+// ================================================================
+
+const app = express();
+
+app.set('trust proxy', 1);
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL, 
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+app.use(cors({ 
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Cross-Origin Resource Sharing (CORS) blocked this device path.'));
+    }
+  },
+  credentials: true 
+}));
+
+app.use(express.json());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'dynasty_secret_pass',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: true, 
+      sameSite: 'none',
+    },
+  })
+);
+
+// 🌟 ROUTE MOUNTING
+app.use('/auth', authRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/requests', requestRoutes);
+
+app.get('/', (req, res) => {
+  res.send('DynastyGuild backend is running securely on Firebase event-driven data lines.');
+});
+
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => {
+  console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
+  console.log(`🚀 [TASK001 PASS]: 5-second spreadsheet polling interval retired cleanly.`);
+
+  // ⏰ Precise GMT+8 Time tracking loop running every 60 seconds for automated Discord snaps
+  setInterval(() => {
+    const gmt8TimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+    const gmt8Date = new Date(gmt8TimeStr);
+    
+    const currentHour = gmt8Date.getHours();
+    const currentMinute = gmt8Date.getMinutes();
+
+    // Catch the exact minute mark targets at 07:00, 12:00, and 19:00 GMT+8 for regular updates
+    if (currentMinute === 0 && (currentHour === 7 || currentHour === 12 || currentHour === 19)) {
+      console.log(`⏰ Scheduled time target hit (${currentHour}:00 GMT+8). Initiating broadcast checker...`);
+      processAndPostDiscordSnapshot(false);
+    }
+
+    // Catch the exact moment registration closes at 22:15 GMT+8 for the finalized list broadcast
+    if (currentHour === 22 && currentMinute === 15) {
+      console.log(`🔒 Lock threshold reached (22:15 GMT+8). Initiating finalized broadcast tracker...`);
+      processAndPostDiscordSnapshot(true);
+    }
+  }, 60 * 1000);
+});
