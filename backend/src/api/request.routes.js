@@ -329,7 +329,7 @@ router.post('/cancel', async (req, res) => {
       selectionStatus: 'Pending',    
       liveStatus: '',                 
       priority: 0,
-      eventDate: targetedEventDate 
+      eventDate: Skinner_Target_Date || targetedEventDate 
     });
 
     return res.json({ success: true });
@@ -340,7 +340,6 @@ router.post('/cancel', async (req, res) => {
 
 /**
  * 🚀 COMMIT SESSION LEDGER ARCHIVER
- * POST /api/requests/commit-session
  */
 router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -359,7 +358,6 @@ router.post('/commit-session', async (req, res) => {
     const categories = Object.keys(allocations);
     const timestampDate = date || getGMT8DateString();
     
-    // 1. SAVE RAW LOOT CONFIG REGISTRATION FILE (LOOT HISTORY LEDGER)
     if (summary) {
       Object.keys(summary).forEach(async (itemKey) => {
         const itemData = summary[itemKey];
@@ -378,7 +376,6 @@ router.post('/commit-session', async (req, res) => {
       });
     }
 
-    // 2. SAVE INDIVIDUAL ALLOCATIONS AND PERFORM APPLICANT STATE SWEEPS
     for (const cat of categories) {
       const { selected = [], absent = [], notSelected = [] } = allocations[cat];
       const maxLimit = ITEM_LIMIT_DEFAULTS[cat] || 1;
@@ -440,7 +437,6 @@ router.post('/commit-session', async (req, res) => {
           });
         }
 
-        // Output completed transaction to permanent past auction ledger database folder
         const newPastAuctionRef = db.ref('auction/past_auctions').push();
         await newPastAuctionRef.set({
           id: newPastAuctionRef.key,
@@ -513,6 +509,40 @@ router.get('/past-auctions', async (req, res) => {
     }));
 
     return res.json({ success: true, history: pastAuctionsArray.reverse() });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 📊 🌟 UPGRADED CHRONOLOGICAL REQUISITION AUDIT LEAD PIPELINE
+ * GET /api/requests/request-history
+ */
+router.get('/request-history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const historySnap = await db.ref('auction/web_requests').once('value');
+    if (!historySnap.exists()) return res.json({ success: true, history: [] });
+
+    const rawData = historySnap.val();
+    const sortedKeys = Object.keys(rawData).sort();
+    const historyArray = sortedKeys.map(key => ({
+      id: rawData[key].id || key,
+      date: rawData[key].date || "",
+      member: rawData[key].member || "",
+      item: rawData[key].item || "",
+      quantity: parseInt(rawData[key].quantity, 10) || 0,
+      applicationStatus: rawData[key].applicationStatus || "Requested",
+      selectionStatus: rawData[key].selectionStatus || "Pending",
+      liveStatus: rawData[key].liveStatus || "", 
+      priority: parseInt(rawData[key].priority, 10) || 0,
+      eventDate: rawData[key].eventDate || ""
+    }));
+
+    return res.json({ success: true, history: historyArray.reverse() });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

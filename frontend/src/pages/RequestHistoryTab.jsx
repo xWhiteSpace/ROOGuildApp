@@ -35,7 +35,7 @@ export default function RequestHistoryTab() {
         }
       }
 
-      const res = await fetch(`${backendUrl}/api/requests/history`, {
+      const res = await fetch(`${backendUrl}/api/requests/request-history`, {
         method: 'GET',
         headers: customHeaders,
         credentials: 'include'
@@ -101,7 +101,7 @@ export default function RequestHistoryTab() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `RequestList_Export_${viewFilter.toUpperCase()}_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `RequestHistory_Export_${viewFilter.toUpperCase()}_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -124,7 +124,6 @@ export default function RequestHistoryTab() {
     );
   }
 
-  // --- 📊 EVALUATE MULTI-LAYER FILTER STACKS ON THE FLY ---
   const filteredRecords = historyData.filter(row => {
     if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
       return false;
