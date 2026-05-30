@@ -12,10 +12,6 @@ const AVAILABLE_ITEMS = [
   { name: 'Time&Space', maxQty: 5 }
 ];
 
-/**
- * 📅 GMT+8 DATE GENERATOR HELPER
- * Standardizes calendar days to Asia/Manila zone formatting (MM/DD/YYYY)
- */
 function getGMT8DateString() {
   const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
   const gmt8Date = new Date(gmt8String);
@@ -93,24 +89,30 @@ router.get('/init', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
-    // Pull all requests to dynamically harvest unique roster names
-    const allRequestsSnap = await db.ref('auction/web_requests').once('value');
-    const uniqueMembersSet = new Set();
-    
     const liveCounts = { 'Puppet': 0, 'Illu': 0, 'Light&Dark': 0, 'Time&Space': 0 };
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    const requestsByItemDetails = { 'Puppet': {}, 'Illu': {}, 'Light&Dark': {}, 'Time&Space': {} };
 
+    // 🌟 UPGRADE: Fetch the true centralized master membership node from Firebase
+    const membersListSnap = await db.ref('auction/members').once('value');
+    const fullRosterArray = [];
+    if (membersListSnap.exists()) {
+      Object.keys(membersListSnap.val()).forEach(key => {
+        if (membersListSnap.val()[key]?.displayName) {
+          fullRosterArray.push(membersListSnap.val()[key].displayName);
+        }
+      });
+    }
+
+    // Process active player request constraints
+    const allRequestsSnap = await db.ref('auction/web_requests').once('value');
     if (allRequestsSnap.exists()) {
       const rawRequests = allRequestsSnap.val();
       const allPendingRows = [];
 
       Object.values(rawRequests).forEach(req => {
         const reqMember = (req.member || '').trim();
-        if (reqMember && reqMember !== '???') {
-          uniqueMembersSet.add(reqMember);
-        }
 
-        // Calculate personal live counts if this row belongs to the current logged-in agent
         if (reqMember.toLowerCase() === playerDisplayName.toLowerCase()) {
           const itemType = req.item;
           const appStatus = (req.applicationStatus || '').trim().toLowerCase();
@@ -127,13 +129,11 @@ router.get('/init', async (req, res) => {
           }
         }
 
-        // Collect rows marked 'Pending' for live leaderboard compilation
         if (req.selectionStatus === 'Pending') {
           allPendingRows.push(req);
         }
       });
 
-      // Build out live item queue priority lists
       Object.keys(rankingsByItem).forEach(targetItem => {
         const userCalculationsMap = {};
 
@@ -156,7 +156,12 @@ router.get('/init', async (req, res) => {
 
         const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
         activeApplicants.sort((a, b) => b.priority - a.priority);
-        rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
+        
+        rankingsByItem[targetItem] = activeApplicants.map(u => u.name);
+        
+        activeApplicants.forEach(u => {
+          requestsByItemDetails[targetItem][u.name] = { quantity: u.netQty, priority: u.priority };
+        });
       });
     }
 
@@ -174,8 +179,71 @@ router.get('/init', async (req, res) => {
       currentPhase: timeGateStatus.currentPhase,
       phaseIntervals: timeGateStatus.phaseIntervals,
       rankingsByItem,
-      fullRoster: Array.from(uniqueMembersSet).sort() // 🌟 NEW: Alphabetical master array of all guild characters
+      requestsByItemDetails,
+      fullRoster: fullRosterArray.sort() // Returns alphabetical list of verified characters
     });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 🔄 SECURE DISCORD-TO-FIREBASE ROSTER SYNC BRIDGE
+ * POST /api/requests/sync-roster
+ */
+router.post('/sync-roster', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID;
+
+  if (!botToken || !guildId) {
+    return res.status(500).json({ success: false, error: 'Missing Discord credentials inside backend configurations (.env).' });
+  }
+
+  try {
+    // Call the official Discord API to pull down active server member metrics (up to 1,000 elements)
+    const discordResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bot ${botToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!discordResponse.ok) {
+      const errorText = await discordResponse.text();
+      return res.status(discordResponse.status).json({ success: false, error: `Discord API communication rejected: ${errorText}` });
+    }
+
+    const discordMembers = await discordResponse.json();
+    const db = getDatabase();
+    const currentGMT8Date = getGMT8DateString();
+    
+    const rosterUpdates = {};
+
+    discordMembers.forEach(member => {
+      // Prioritize the server nickname; fall back to the account username if unconfigured
+      const finalRosterName = (member.nick || member.user?.global_name || member.user?.username || '').trim();
+      
+      if (finalRosterName && finalRosterName !== '???') {
+        // Sanitize string value keys to be perfectly safe for Firebase database paths
+        const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\[\]]/g, '_');
+        rosterUpdates[`auction/members/${sanitizedFirebaseKey}`] = {
+          displayName: finalRosterName,
+          syncedAt: currentGMT8Date
+        };
+      }
+    });
+
+    if (Object.keys(rosterUpdates).length === 0) {
+      return res.status(422).json({ success: false, error: 'No valid user profiles extracted out of Discord response payloads.' });
+    }
+
+    // Execute absolute atomic write transaction block updates
+    await db.ref().update(rosterUpdates);
+    return res.json({ success: true, count: Object.keys(rosterUpdates).length });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -336,70 +404,6 @@ router.get('/loot-history', async (req, res) => {
     }));
 
     return res.json({ success: true, history: lootHistoryArray });
-  } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * 🚀 PRODUCTION COMMIT TRANSACTION RUNNER
- */
-router.post('/commit-session', async (req, res) => {
-  const user = resolveUserIdentity(req);
-  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
-
-  const { event, date, allocations, summary } = req.body;
-  if (!event || !date || !allocations || !summary) {
-    return res.status(400).json({ success: false, error: 'Incomplete session configuration data payload.' });
-  }
-
-  try {
-    const db = getDatabase();
-    const updates = {};
-
-    Object.keys(summary).forEach(itemKey => {
-      const entry = summary[itemKey];
-      if (entry.qty > 0) {
-        const newHistoryRef = db.ref('auction/loot_history').push();
-        updates[`auction/loot_history/${newHistoryRef.key}`] = {
-          date: date,
-          event: event,
-          item: itemKey,
-          quantity: parseInt(entry.qty, 10),
-          max: parseInt(entry.limit, 10),
-          mem: parseInt(entry.seats, 10)
-        };
-      }
-    });
-
-    const requestsSnap = await db.ref('auction/web_requests').once('value');
-    if (requestsSnap.exists()) {
-      const allRequests = requestsSnap.val();
-      
-      Object.keys(allRequests).forEach(reqKey => {
-        const record = allRequests[reqKey];
-        const recordItem = record.item;
-        const recordMember = record.member;
-        
-        if (record.selectionStatus === 'Pending' && allocations[recordItem]) {
-          const winnersList = allocations[recordItem].selected || [];
-          const standbyList = allocations[recordItem].notSelected || [];
-
-          if (winnersList.includes(recordMember)) {
-            updates[`auction/web_requests/${reqKey}/selectionStatus`] = 'Selected';
-            updates[`auction/web_requests/${reqKey}/liveStatus`] = 'Done';
-          } else if (standbyList.includes(recordMember)) {
-            updates[`auction/web_requests/${reqKey}/selectionStatus`] = 'NotSelected';
-            updates[`auction/web_requests/${reqKey}/liveStatus`] = 'Done';
-          }
-        }
-      });
-    }
-
-    updates['auction/active_session'] = null;
-
-    await db.ref().update(updates);
-    return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
