@@ -51,7 +51,7 @@ export default function MimicBookTab({ user }) {
   const [validationError, setValidationError] = useState('');
   const [liveGapsWarning, setLiveGapsWarning] = useState('');
 
-  // --- PHASE 2 STATE: FIXED SEAT MAP ARRAY OBJECT MATRIX ---
+  // --- PHASE 2 STATE: FIXED SEAT MAP WORKSPACE ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
   const [categoryAllocations, setCategoryAllocations] = useState({
     Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
@@ -62,8 +62,9 @@ export default function MimicBookTab({ user }) {
   const [popoverContextTab, setPopoverContextTab] = useState('applicants'); 
   const [popoverRosterSearch, setPopoverRosterSearch] = useState('');
   
-  // Two-stage assignment state tracker for choosing global quantities manually
+  // 🌟 UNIFORM STEP CONTROLLER SELECTION STATES
   const [selectedGlobalRosterName, setSelectedGlobalRosterName] = useState(null);
+  const [popoverStepQty, setPopoverStepQty] = useState(1);
 
   // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
@@ -306,6 +307,7 @@ export default function MimicBookTab({ user }) {
         }
       }
 
+      // Keep placeholder elements for unmatched drops
       while (remainingDropBudget > 0) {
         assignedWinnersList.push(null);
         remainingDropBudget -= rowLimitValue; 
@@ -331,12 +333,29 @@ export default function MimicBookTab({ user }) {
     });
   };
 
-  // Safe manual selection dispatcher applying chosen quantities directly
+  // 🌟 HARD CEILING OVERFLOW PROTECTION FILTER ROUTINE
+  const getSumOfCurrentAllocatedQty = (category) => {
+    const targetSelectedList = categoryAllocations[category]?.selected || [];
+    return targetSelectedList.reduce((sum, node) => sum + (node ? node.slots : 0), 0);
+  };
+
   const handleExecuteManualAllocationValue = (playerName, chosenQty) => {
     if (activePopoverSeatIndex === null) return;
+    
     const currentData = categoryAllocations[activeMatrixFilter];
-    const updatedSelected = [...currentData.selected];
+    const totalDropLimit = lootSummary[activeMatrixFilter]?.qty || 0;
+    
+    // Sum inventory while ignoring previous values inside this explicit index
+    const previousSeatNode = currentData.selected[activePopoverSeatIndex];
+    const baseAllocationSum = getSumOfCurrentAllocatedQty(activeMatrixFilter) - (previousSeatNode ? previousSeatNode.slots : 0);
 
+    // 🛡️ CRITICAL HARD OVERFLOW CEILING BARRIER GUARD (POINT 1)
+    if (baseAllocationSum + parseInt(chosenQty, 10) > totalDropLimit) {
+      alert(`❌ CEILING BLOCKED: Cannot distribute ${chosenQty} items. Total allocation would reach ${baseAllocationSum + parseInt(chosenQty, 10)} / ${totalDropLimit}, which exceeds inventory!`);
+      return;
+    }
+
+    const updatedSelected = [...currentData.selected];
     updatedSelected[activePopoverSeatIndex] = { name: playerName, slots: parseInt(chosenQty, 10) };
 
     setCategoryAllocations({
@@ -344,7 +363,6 @@ export default function MimicBookTab({ user }) {
       [activeMatrixFilter]: { selected: updatedSelected }
     });
     
-    // Clear overlay state configurations
     setActivePopoverSeatIndex(null); 
     setSelectedGlobalRosterName(null);
     setPopoverRosterSearch(''); 
@@ -354,13 +372,13 @@ export default function MimicBookTab({ user }) {
     const rowLimitValue = lootSummary[activeMatrixFilter]?.limit || 1;
     const detailsMap = requestsByItemDetails[activeMatrixFilter] || {};
     
-    // Standard path parses portal numbers; forces prompt loop if chosen from global list
     if (popoverContextTab === 'applicants') {
       const requestedQuantity = detailsMap[playerName]?.quantity || 1;
       const preciseSlotsCount = Math.min(requestedQuantity, rowLimitValue);
       handleExecuteManualAllocationValue(playerName, preciseSlotsCount);
     } else {
       setSelectedGlobalRosterName(playerName);
+      setPopoverStepQty(1); // Reset default inline selection value counter
     }
   };
 
@@ -526,9 +544,17 @@ export default function MimicBookTab({ user }) {
     return passesSearch && !isAlreadySeated;
   });
 
-  // Calculate fractions parameters dynamically
-  const totalAvailableSeatsCount = lootSummary[activeMatrixFilter]?.seats || 0;
-  const currentAssignedRecipientsCount = currentActiveSelections.selected.filter(n => n !== null).length;
+  // Calculate dynamic item inventory numbers
+  const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
+  const currentCategoryAllocatedQuantity = getSumOfCurrentAllocatedQty(activeMatrixFilter);
+  
+  // Calculate remaining drop headroom limit context
+  const previousPopoverNode = currentActiveSelections.selected[activePopoverSeatIndex];
+  const activePopoverBaseSum = currentCategoryAllocatedQuantity - (previousPopoverNode ? previousPopoverNode.slots : 0);
+  const maxPopoverAllowedHeadroom = Math.min(
+    lootSummary[activeMatrixFilter]?.limit || 1,
+    totalCategoryDropQuantity - activePopoverBaseSum
+  );
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -570,7 +596,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- ADMINISTRATIVE OFFICER OVERRIDE CONTROLS PANEL --- */}
+      {/* --- ADMINISTRATIVE CONTROLS PANEL --- */}
       {isAdminMode && (
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4">
           
@@ -699,33 +725,33 @@ export default function MimicBookTab({ user }) {
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               
-              {/* 🌟 FRACTIONS RE-ESTABLISHED LAYOUT MATRIX BOX CONTROLLERS (POINT 1) */}
+              {/* 🌟 REALIGNED FRACTION CORES: DISPLAYED AS DYNAMIC ALLOCATED / DROP QUANTITIES */}
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
-                  const data = lootSummary[category];
-                  const filledCount = categoryAllocations[category]?.selected?.filter(n => n !== null).length || 0;
+                  const dropTotalQty = lootSummary[category]?.qty || 0;
+                  const currentAllocatedSum = getSumOfCurrentAllocatedQty(category);
                   return (
                     <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }}>
-                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Seats</div>
-                      <div className="text-lg font-black text-white mt-1 font-mono">{filledCount} / {data.seats}</div>
-                      <div className="text-[9px] text-slate-500 mt-0.5 font-sans">({data.qty} Drops @ Limit {data.limit})</div>
+                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distribution</div>
+                      <div className="text-lg font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
+                      <div className="text-[9px] text-slate-500 mt-0.5 font-sans">(Max Item Limit: {lootSummary[category]?.limit || 1})</div>
                     </div>
                   );
                 })}
               </div>
 
               <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
-                <span>Currently Managing Grid Seats For:</span>
-                <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Pool</span>
-                <span className="text-slate-500 font-mono text-[10px]">Roster Status Footprint: {currentAssignedRecipientsCount} / {totalAvailableSeatsCount} Filled</span>
+                <span>Active Target Category Pool:</span>
+                <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Matrix</span>
+                <span className="text-slate-500 font-mono text-[10px]">Current Total Load: {currentCategoryAllocatedQuantity} / {totalCategoryDropQuantity} Items Claimed</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Recipients Grid (Drag Ranks to Swap Box Seats)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Inventory Slots</span>
+                    <span>✨ Assigned Footprints (Drag to Swap Grid Box Order)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Budget Dimensions</span>
                   </div>
                   <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                     {currentActiveSelections.selected.map((seatNode, i) => {
@@ -760,8 +786,6 @@ export default function MimicBookTab({ user }) {
                           <div className="flex items-center gap-2 truncate">
                             <span className="text-slate-400">☰</span>
                             <span className="truncate text-slate-100 font-sans font-bold">{seatNode.name}</span>
-                            
-                            {/* 🌟 NOISE REMOVED: Shortened, concise string preferred tag layout format (POINT 3) */}
                             <span className="text-[10px] text-cyan-400 font-bold px-2 py-0.5 bg-cyan-950/40 border border-cyan-900/30 rounded font-mono shrink-0">
                               Qty: {seatNode.slots}
                             </span>
@@ -792,7 +816,7 @@ export default function MimicBookTab({ user }) {
                 </div>
               </div>
 
-              {/* 🌟 UPGRADED MULTI-CONTEXT POPOVER EXTENSION WITH MANUAL QUANTITY ASSIGNMENT FREEDOM (POINT 2) */}
+              {/* 🌟 UNIFIED TACTILE [- val +] STEPPING ALLOCATION POP-OVER WINDOW (POINTS 2 & 3) */}
               {activePopoverSeatIndex !== null && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -800,26 +824,44 @@ export default function MimicBookTab({ user }) {
                     <button onClick={() => { setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
                   </div>
                   
-                  {/* TWO-STAGE SELECTION LOGIC CHECK: Prompts choices bar if global roster name is targeted */}
                   {selectedGlobalRosterName ? (
-                    <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl text-center space-y-3 animate-fadeIn">
+                    <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl text-center space-y-4 animate-fadeIn">
                       <div className="text-xs text-slate-400">
                         Designate dynamic quantity parameters for character: <strong className="text-indigo-400 font-sans text-sm block mt-0.5">{selectedGlobalRosterName}</strong>
                       </div>
-                      <div className="flex justify-center gap-2 items-center">
-                        {Array.from({ length: lootSummary[activeMatrixFilter]?.limit || 1 }, (_, index) => {
-                          const allocationNumberVal = index + 1;
-                          return (
-                            <button
-                              key={allocationNumberVal}
-                              onClick={() => handleExecuteManualAllocationValue(selectedGlobalRosterName, allocationNumberVal)}
-                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/20 rounded-xl text-xs text-white font-black font-mono transition shadow"
-                            >
-                              Qty: {allocationNumberVal}
-                            </button>
-                          );
-                        })}
+                      
+                      {/* 🌟 UNIFORM COMPACT STEP-CONTROLLER MODULE HOOK (POINT 2) */}
+                      <div className="flex items-center justify-center gap-3">
+                        <button 
+                          onClick={() => setPopoverStepQty(Math.max(1, popoverStepQty - 1))}
+                          className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 hover:text-white transition shadow"
+                        >
+                          -
+                        </button>
+                        <div className="w-12 text-center font-mono font-black text-sm text-white bg-slate-900 border border-slate-800 py-1 rounded-lg">
+                          {popoverStepQty}
+                        </div>
+                        <button 
+                          onClick={() => setPopoverStepQty(Math.min(maxPopoverAllowedHeadroom, popoverStepQty + 1))}
+                          disabled={popoverStepQty >= maxPopoverAllowedHeadroom}
+                          className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 hover:text-white transition shadow disabled:opacity-20"
+                        >
+                          +
+                        </button>
                       </div>
+
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        (Inventory Ceiling Clamp Constraint: Max {maxPopoverAllowedHeadroom} Allowed)
+                      </div>
+
+                      {/* HIGH VISIBILITY ACTION TRIGGER LOCK BUTTON */}
+                      <button
+                        onClick={() => handleExecuteManualAllocationValue(selectedGlobalRosterName, popoverStepQty)}
+                        className="w-full text-center py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider transition shadow-md"
+                      >
+                        ✔ Confirm Distribution Allocation
+                      </button>
+
                       <button 
                         onClick={() => setSelectedGlobalRosterName(null)}
                         className="text-[10px] text-slate-500 uppercase hover:underline font-bold block mx-auto pt-1"
@@ -892,10 +934,10 @@ export default function MimicBookTab({ user }) {
                               key={idx}
                               onClick={() => handlePromoteBidderToTargetSeat(name)}
                               className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
-                        >
-                          <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
-                          <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
-                        </button>
+                            >
+                              <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
+                              <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
+                            </button>
                           ))
                         )}
                       </div>
@@ -959,7 +1001,7 @@ export default function MimicBookTab({ user }) {
         </div>
       )}
 
-      {/* --- PUBLIC ACCESSIBLE READ-ONLY PREVIEW DESK --- */}
+      {/* --- PUBLIC PREVIEW DESK --- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-lg">
         <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800/80 p-1 rounded-xl shrink-0 w-max">
           <button onClick={() => setViewLens('ALL')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition ${viewLens === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>🌐 See All</button>
@@ -974,7 +1016,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT: DIGITAL BOOK MIMIC */}
+        {/* LEFT COMPONENT */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -1017,7 +1059,7 @@ export default function MimicBookTab({ user }) {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT: USER LEADERBOARD ALLOCATION MATRIX */}
+        {/* RIGHT COMPONENT */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
