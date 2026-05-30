@@ -486,7 +486,6 @@ export default function MimicBookTab({ user }) {
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
 
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
-  const seatedNamesOnly = currentActiveSelections.selected.filter(n => n !== null);
   
   // 🌟 SMART LOOKUP RETENTION: Keeps name visible until total instances match requested counts
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
@@ -495,8 +494,11 @@ export default function MimicBookTab({ user }) {
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
+  // 🌟 FIXED GLOBAL RETENTION: Keeps global raider selectable until hitting item cap limits
   const popoverFilteredRosterList = masterGuildRoster.filter(name => {
-    return name.toLowerCase().includes(popoverRosterSearch.toLowerCase()) && !seatedNamesOnly.includes(name);
+    const maxRowLimit = ITEM_LIMIT_DEFAULTS[activeMatrixFilter] || 1;
+    const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
+    return name.toLowerCase().includes(popoverRosterSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
   });
 
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
@@ -692,24 +694,24 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                 
-                {/* 🌟 SHIFT-PROOF EXPLICIT DETACHED ITEM BOXES BOARD LAYOUT CHANNELLING GRID */}
+                {/* 🌟 UPGRADED: Single-Column vertical list layout optimized for mobile scrolling navigation (POINT 2) */}
                 <div className="md:col-span-2 border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Individual Dropped Items Board (Click gaps to fill, Drag to Swap)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Inventory Slots</span>
+                    <span>✨ Individual Dropped Items Playlist (Click gaps to fill, Drag to Swap)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Positionally Shift-Proof</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-80 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
                     {currentActiveSelections.selected.map((name, i) => {
                       if (name === null) {
                         return (
                           <div 
                             key={i}
                             onClick={() => { setActivePopoverSeatIndex(i); setIsPopoverOpen(true); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
-                            className="p-3 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-center cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition duration-150 flex flex-col justify-center min-h-[64px]"
+                            className="p-2 px-3 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition flex items-center justify-between min-h-[44px]"
                           >
-                            <span className="text-slate-600 font-mono text-[10px] font-black">BOX #{i + 1}</span>
-                            <span className="text-[10px] text-indigo-400 font-bold tracking-tight mt-0.5 animate-pulse">➕ ALLOCATE ITEM</span>
+                            <span className="font-sans text-[10px] font-black text-slate-500">BOX SLOT BLOCK #{i + 1}</span>
+                            <span className="text-[10px] text-indigo-400 font-bold tracking-tight animate-pulse">➕ CLICK TO ALLOCATE 1PC</span>
                           </div>
                         );
                       }
@@ -721,14 +723,15 @@ export default function MimicBookTab({ user }) {
                           onDragStart={(e) => handleRowDragStart(e, i)}
                           onDragOver={handleRowDragOver}
                           onDrop={(e) => handleRowDrop(e, i)}
-                          className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col justify-between min-h-[64px] transition hover:border-slate-700 group cursor-grab active:cursor-grabbing"
+                          className="p-2 px-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between min-h-[44px] transition hover:border-slate-700 group cursor-grab active:cursor-grabbing font-mono"
                         >
-                          <div className="flex justify-between items-start gap-2 truncate">
-                            <span className="text-slate-500 font-mono text-[10px] font-bold">#{i + 1}</span>
-                            <div className="text-slate-200 font-bold truncate text-xs w-full text-right font-sans">{name}</div>
+                          <div className="flex items-center gap-3 truncate">
+                            <span className="text-slate-500 text-[10px] font-bold w-4">#{i + 1}</span>
+                            <span className="text-slate-400">☰</span>
+                            <div className="text-slate-200 font-bold truncate text-xs font-sans">{name}</div>
                           </div>
-                          <div className="flex justify-between items-center mt-2 border-t border-slate-800/40 pt-1.5">
-                            <span className="text-[9px] text-slate-500 font-mono font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">1pc</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[9px] text-slate-500 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">1pc</span>
                             <button 
                               onClick={() => handleDropBidderBoxSlot(i)} 
                               className="text-rose-400 font-sans text-[10px] hover:text-rose-300 transition"
@@ -766,7 +769,7 @@ export default function MimicBookTab({ user }) {
               {isPopoverOpen && activePopoverSeatIndex !== null && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Assign Member into Box Drop Slot #{activePopoverSeatIndex + 1}</h4>
+                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Assign Member into Box Slot #{activePopoverSeatIndex + 1}</h4>
                     <button onClick={() => setIsPopoverOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
                   </div>
                   
@@ -847,8 +850,18 @@ export default function MimicBookTab({ user }) {
                 </div>
               )}
 
+              {/* 🌟 UPGRADED: Guard rail confirm interceptor protects distribution layout records (POINT 3) */}
               <div className="flex justify-between pt-2">
-                <button onClick={() => setActiveStep(1)} className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-900 transition">◀ Back to Loot Math</button>
+                <button 
+                  onClick={() => {
+                    if (confirm("⚠️ PROGRESS AT RISK: Changing parameters or returning to Step 1 will wipe out your current manual overrides back to system default models.\n\nAre you sure you want to discard your allocations?")) {
+                      setActiveStep(1);
+                    }
+                  }} 
+                  className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-900 transition"
+                >
+                  ◀ Back to Loot Math
+                </button>
                 <button onClick={handleOriginalMatrixAssembly} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg transition">LOCK MATRIX ROSTER ➔</button>
               </div>
             </div>
@@ -986,7 +999,7 @@ export default function MimicBookTab({ user }) {
                       const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                       categorySequenceOrder.forEach(cat => {
                         const standbyList = rankingsByItem[cat] || [];
-                        const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null).map(n => n.name);
+                        const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null);
                         
                         standbyList.forEach(name => {
                           if (!winnersInCat.includes(name)) {
@@ -1001,7 +1014,7 @@ export default function MimicBookTab({ user }) {
                       if (rowsToDisplay.length === 0) {
                         const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                         categorySequenceOrder.forEach(cat => {
-                          const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null).map(n => n.name);
+                          const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null);
                           if (!winnersInCat.includes(currentUserName) && (rankingsByItem[cat] || []).includes(currentUserName)) {
                             rowsToDisplay.push({ name: currentUserName, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
                           }
