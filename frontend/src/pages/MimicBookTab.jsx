@@ -426,14 +426,14 @@ export default function MimicBookTab({ user }) {
         const boxEntries = categoryAllocations[cat].selected || [];
         const verifiedWinnersList = boxEntries.filter(name => name !== null);
         
-        // 🌟 ABSENT TRACKING CRITERIA: Auto-winners who finish manually dropped down to 0 units
+        // ABSENT TRACKING CRITERIA: Auto-winners who finish manually dropped down to 0 units
         const initialWinnersList = initialWinnersByItem[cat] || [];
         const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
 
         const masterList = rankingsByItem[cat] || [];
         const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n) && !absentList.includes(n));
         
-        // Group instances by name into unique items to safely synthesis ghost transactions
+        // Group instances by name into unique items to safely synthesize ghost transactions
         const uniqueWinners = [...new Set(verifiedWinnersList)];
         const selectedPayload = uniqueWinners.map(name => ({
           name,
@@ -491,6 +491,16 @@ export default function MimicBookTab({ user }) {
     document.body.removeChild(link);
   };
 
+  const getItemStyleProfile = (itemType) => {
+    switch (itemType) {
+      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
+      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
+      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
+      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
+      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
+    }
+  };
+
   const currentUserName = user?.displayName || user?.username || '';
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     const slotIndex = i + 1;
@@ -501,14 +511,14 @@ export default function MimicBookTab({ user }) {
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
   const seatedNamesOnly = currentActiveSelections.selected.filter(n => n !== null);
   
-  // 🌟 SMART LOOKUP RETENTION: Keeps name visible until total instances match requested counts
+  // SMART LOOKUP RETENTION: Keeps name visible until total instances match requested counts
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
     const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
     const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
-  // 🌟 FIXED GLOBAL RETENTION: Keeps global raider selectable until hitting item cap limits
+  // FIXED GLOBAL RETENTION: Keeps global raider selectable until hitting item cap limits
   const popoverFilteredRosterList = masterGuildRoster.filter(name => {
     const maxRowLimit = ITEM_LIMIT_DEFAULTS[activeMatrixFilter] || 1;
     const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
