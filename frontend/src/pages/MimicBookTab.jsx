@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ref, onValue, set } from 'firebase/database';
 import { database } from '../services/firebaseClient';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
-// Global rule helper for item bid claim limits
 const ITEM_LIMIT_DEFAULTS = {
   'Puppet': 1,
   'Illu': 1,
@@ -17,12 +16,12 @@ export default function MimicBookTab({ user }) {
   const [activeStep, setActiveStep] = useState(1); 
   const [loadingPool, setLoadingPool] = useState(false);
 
-  // --- 📜 LOOT HISTORY MODAL STATE TRACKING ---
+  // --- 📜 LOOT HISTORY MODAL STATE ---
   const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
 
-  // --- 🔒 DATA ARCHIVER WORKSPACE COMMIT FIELDS ---
+  // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
   const [commitDate, setCommitDate] = useState(() => {
     const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
@@ -31,7 +30,7 @@ export default function MimicBookTab({ user }) {
   });
   const [committing, setCommitting] = useState(false);
 
-  // --- 📋 TRUE TARGET POOL FROM THE REQUEST LIST ---
+  // --- 📋 MASTER PRIORITY TARGET POOL ---
   const [rankingsByItem, setRankingsByItem] = useState({
     Puppet: [],
     Illu: [],
@@ -42,7 +41,7 @@ export default function MimicBookTab({ user }) {
   // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
   const [qtyPerPage, setQtyPerPage] = useState(4);
   const [lootRows, setLootRows] = useState([
-    { id: 1, itemType: 'Puppet', startPage: 12, startPos: 1, endPage: 12, endPos: 4, limit: 1 }
+    { id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }
   ]);
   
   const [lootSummary, setLootSummary] = useState({
@@ -54,14 +53,18 @@ export default function MimicBookTab({ user }) {
   const [validationError, setValidationError] = useState('');
   const [liveGapsWarning, setLiveGapsWarning] = useState('');
 
-  // --- PHASE 2 STATE: COMPARTMENTALIZED SELECTION SEATS ---
+  // --- PHASE 2 STATE: FIXED SEATS STRUCTURE ARRAY SYSTEM ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
   const [categoryAllocations, setCategoryAllocations] = useState({
-    Puppet: { selected: [], notSelected: [] },
-    Illu: { selected: [], notSelected: [] },
-    'Light&Dark': { selected: [], notSelected: [] },
-    'Time&Space': { selected: [], notSelected: [] }
+    Puppet: { selected: [] }, // Array containing exactly 'seats' entries (Strings or null)
+    Illu: { selected: [] },
+    'Light&Dark': { selected: [] },
+    'Time&Space': { selected: [] }
   });
+
+  // --- 🎹 POPULAR TARGETED ASSIGNMENT SEAT POPOVER STATES ---
+  const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
+  const popoverAnchorRef = useRef(null);
 
   // --- 🎹 DRAG AND DROP INDEX TRACKER STATE ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
@@ -72,14 +75,12 @@ export default function MimicBookTab({ user }) {
   const [bookCurrentPage, setBookCurrentPage] = useState(1);
   const [generatedSlots, setGeneratedSlots] = useState([]);
 
-  // --- 🌟 LIVE COORDINATE GAP DETECTOR ENGINE ---
+  // --- 🌟 COORDINATE GAP DETECTOR ENGINE ---
   useEffect(() => {
     if (lootRows.length <= 1) {
       setLiveGapsWarning('');
       return;
     }
-
-    // Map rows to zero-based linear indices using the current qtyPerPage context
     const linearRows = lootRows.map(r => ({
       ...r,
       startLin: (Math.max(1, r.startPage) - 1) * qtyPerPage + (Math.max(1, r.startPos) - 1),
@@ -90,7 +91,6 @@ export default function MimicBookTab({ user }) {
     for (let i = 0; i < linearRows.length - 1; i++) {
       const currentEnd = linearRows[i].endLin;
       const nextStart = linearRows[i + 1].startLin;
-      
       if (nextStart > currentEnd + 1) {
         const gapStartLin = currentEnd + 1;
         const gapPage = Math.floor(gapStartLin / qtyPerPage) + 1;
@@ -98,15 +98,10 @@ export default function MimicBookTab({ user }) {
         missingBlocks.push(`Page ${gapPage} Slot ${gapPos}`);
       }
     }
-
-    if (missingBlocks.length > 0) {
-      setLiveGapsWarning(`⚠️ GAP WARNING: Unallocated grid sequence boxes skipped at: ${missingBlocks.join(', ')}`);
-    } else {
-      setLiveGapsWarning('');
-    }
+    setLiveGapsWarning(missingBlocks.length > 0 ? `⚠️ GAP WARNING: Unallocated grid sequence boxes skipped at: ${missingBlocks.join(', ')}` : '');
   }, [lootRows, qtyPerPage]);
 
-  // --- 📥 LOAD TRUE TARGET POOL FROM THE ENDPOINT ---
+  // --- 📥 INITIALIZE REQUEST POOL ---
   const loadTrueRequestPool = async () => {
     try {
       setLoadingPool(true);
@@ -115,25 +110,18 @@ export default function MimicBookTab({ user }) {
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-
-      const res = await fetch(`${backendUrl}/api/requests/init`, { 
-        method: 'GET',
-        headers: customHeaders,
-        credentials: 'include' 
-      });
-
+      const res = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers: customHeaders, credentials: 'include' });
       const data = await res.json();
       if (data.success && data.rankingsByItem) {
         setRankingsByItem(data.rankingsByItem);
       }
     } catch (err) {
-      console.error("Failed to fetch current request pool from backend:", err);
+      console.error("Failed to fetch current request pool:", err);
     } finally {
       setLoadingPool(false);
     }
   };
 
-  // --- 📥 FETCH IMMUTABLE LOOT HISTORY LEDGER ---
   const fetchLootHistoryLog = async () => {
     try {
       setLoadingLootHistory(true);
@@ -142,17 +130,9 @@ export default function MimicBookTab({ user }) {
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-
-      const res = await fetch(`${backendUrl}/api/requests/loot-history`, {
-        method: 'GET',
-        headers: customHeaders,
-        credentials: 'include'
-      });
-
+      const res = await fetch(`${backendUrl}/api/requests/loot-history`, { method: 'GET', headers: customHeaders, credentials: 'include' });
       const data = await res.json();
-      if (data.success) {
-        setLootHistoryData(data.history || []);
-      }
+      if (data.success) setLootHistoryData(data.history || []);
     } catch (err) {
       console.error("Failed to extract loot history logs:", err);
     } finally {
@@ -176,12 +156,9 @@ export default function MimicBookTab({ user }) {
     return () => unsub();
   }, []);
 
-  // --- PHASE 1 LOGIC: AUTO-CHAIN ELIGIBILITY ENGINE ---
+  // --- PHASE 1 LOGIC: AUTO-CHAIN ENGINE ---
   const handleAddLootRow = () => {
     const nextId = lootRows.length > 0 ? Math.max(...lootRows.map(r => r.id)) + 1 : 1;
-    
-    // 🌟 AUTO-CHAIN LINKING INTERFACES:
-    // Suggesively computes the exact chronological next slot box based on the last row's boundaries
     let derivedStartPage = 1;
     let derivedStartPos = 1;
 
@@ -189,7 +166,6 @@ export default function MimicBookTab({ user }) {
       const lastRow = lootRows[lootRows.length - 1];
       let calcPos = lastRow.endPos + 1;
       let calcPage = lastRow.endPage;
-
       if (calcPos > qtyPerPage) {
         calcPos = 1;
         calcPage += 1;
@@ -220,34 +196,25 @@ export default function MimicBookTab({ user }) {
   const handleUpdateLootRow = (id, key, val) => {
     setLootRows(lootRows.map(r => {
       if (r.id !== id) return r;
-
       let updatedFields = { [key]: val };
 
-      // 🌟 POSITION BOUNDARY CLAMP ENGINE:
-      // Prevents impossible matrix configurations by constraining limits to active page capacities
       if (key === 'startPos' || key === 'endPos') {
         const parsedVal = parseInt(val, 10) || 1;
         updatedFields[key] = Math.min(Math.max(1, parsedVal), qtyPerPage);
       }
-
       if (key === 'startPage' || key === 'endPage') {
         const parsedPage = parseInt(val, 10) || 1;
         updatedFields[key] = Math.max(1, parsedPage);
       }
-
-      // 🌟 AUTOMATED GLOBAL REGISTRY LIMIT MATCHING:
-      // Maps standard caps instantly when an item dropdown choice selection shifts
       if (key === 'itemType') {
         updatedFields.limit = ITEM_LIMIT_DEFAULTS[val] || 1;
       }
-
       return { ...r, ...updatedFields };
     }));
   };
 
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
-    
     const calculatedSummary = {
       Puppet: { qty: 0, limit: 1, seats: 0 },
       Illu: { qty: 0, limit: 1, seats: 0 },
@@ -270,7 +237,6 @@ export default function MimicBookTab({ user }) {
         setValidationError(`Row ${i + 1} Error: Limit must be at least 1.`);
         return;
       }
-
       if (i > 0) {
         const prevRow = sortedRows[i - 1];
         const prevEndLinear = (prevRow.endPage * qtyPerPage) + prevRow.endPos;
@@ -293,93 +259,77 @@ export default function MimicBookTab({ user }) {
     setLootSummary(calculatedSummary);
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
 
+    // 🌟 SETUP INTUITIVE FIXED SEAT STRUCTURE WORKSPACE ARRANGEMENT:
     const initialAllocations = {};
     Object.keys(calculatedSummary).forEach(category => {
       const seatsCount = calculatedSummary[category].seats;
       const trueApplicants = rankingsByItem[category] || []; 
-
-      const preSelected = trueApplicants.slice(0, seatsCount);
-      const preStandby = trueApplicants.slice(seatsCount);
-
-      initialAllocations[category] = {
-        selected: preSelected,
-        notSelected: preStandby
-      };
+      
+      // Auto-populate up to total seats limit; fill remaining seats with null if short on applicants
+      const selectedGrid = Array.from({ length: seatsCount }, (_, i) => trueApplicants[i] || null);
+      initialAllocations[category] = { selected: selectedGrid };
     });
 
     setCategoryAllocations(initialAllocations);
-
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].seats > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
     setActiveStep(2);
   };
 
-  // --- PHASE 2 LOGIC: PRIORITY LOCKING QUEUE SWAPS ---
-  const handleDropBidder = (index) => {
+  // --- PHASE 2 LOGIC: REFIXED POSITION SLOT SWAPPING CONTROLS ---
+  const handleDropBidder = (seatIndex) => {
     const currentData = categoryAllocations[activeMatrixFilter];
-    const updatedSelected = currentData.selected.filter((_, i) => i !== index);
+    const updatedSelected = [...currentData.selected];
     
-    const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
-      name => !updatedSelected.includes(name)
-    );
+    // 🌟 THE UNLOCK FIX: Sets this element to null to preserve grid dimensions and avoid cascading shifts
+    updatedSelected[seatIndex] = null; 
 
     setCategoryAllocations({
       ...categoryAllocations,
-      [activeMatrixFilter]: { selected: updatedSelected, notSelected: updatedNotSelected }
+      [activeMatrixFilter]: { selected: updatedSelected }
     });
   };
 
-  const handlePromoteBidder = (index) => {
+  const handlePromoteBidderToTargetSeat = (playerName) => {
+    if (activePopoverSeatIndex === null) return;
     const currentData = categoryAllocations[activeMatrixFilter];
-    const targetPlayer = currentData.notSelected[index];
-    
-    const allowedSeatsBudget = lootSummary[activeMatrixFilter]?.seats || 0;
-    if (currentData.selected.length >= allowedSeatsBudget) {
-      alert(`Allocation Cap Reached! You only have ${allowedSeatsBudget} seats calculated for ${activeMatrixFilter}.`);
-      return;
-    }
+    const updatedSelected = [...currentData.selected];
 
-    const updatedSelected = [...currentData.selected, targetPlayer];
-    
-    const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
-      name => !updatedSelected.includes(name)
-    );
+    updatedSelected[activePopoverSeatIndex] = playerName;
 
     setCategoryAllocations({
       ...categoryAllocations,
-      [activeMatrixFilter]: { selected: updatedSelected, notSelected: updatedNotSelected }
+      [activeMatrixFilter]: { selected: updatedSelected }
     });
+    setActivePopoverSeatIndex(null); // Clear lookup state context
   };
 
-  // --- 🎹 DRAG AND DROP HANDLERS FOR ASSIGNED PLACEMENT ORDER ---
+  // --- DRAG AND DROP SWAPPERS FOR POSITION PLACEMENTS ---
   const handleRowDragStart = (e, index) => {
     setDraggedItemIndex(index);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleRowDragOver = (e) => {
-    e.preventDefault(); 
-  };
+  const handleRowDragOver = (e) => e.preventDefault();
 
   const handleRowDrop = (e, targetIndex) => {
     if (draggedItemIndex === null || draggedItemIndex === targetIndex) return;
-    
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
     
-    const [movedPlayer] = updatedSelected.splice(draggedItemIndex, 1);
-    updatedSelected.splice(targetIndex, 0, movedPlayer);
+    // Smoothly swap whatever content resides inside both indices (even if null)
+    const temp = updatedSelected[targetIndex];
+    updatedSelected[targetIndex] = updatedSelected[draggedItemIndex];
+    updatedSelected[draggedItemIndex] = temp;
 
     setCategoryAllocations({
       ...categoryAllocations,
-      [activeMatrixFilter]: {
-        ...currentData,
-        selected: updatedSelected
-      }
+      [activeMatrixFilter]: { selected: updatedSelected }
     });
     setDraggedItemIndex(null);
   };
 
+  // --- COMPILE GAME AUCTION BOOK PREVIEW LAYOUT ENGINE ---
   const handleLockAndGenerateMatrix = () => {
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
@@ -390,16 +340,19 @@ export default function MimicBookTab({ user }) {
       const itemsInfo = lootSummary[category];
       if (!itemsInfo || itemsInfo.qty === 0) return;
 
-      const confirmedWinners = categoryAllocations[category]?.selected || [];
+      const seatArray = categoryAllocations[category]?.selected || [];
       
-      confirmedWinners.forEach(playerName => {
+      seatArray.forEach(playerName => {
+        // If seat was explicitly left <EMPTY>, treat it as an unallocated system line item block
+        const resolvedName = playerName === null ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName;
+        
         for (let step = 0; step < itemsInfo.limit; step++) {
           matrixSlots.push({
-            name: playerName,
+            name: resolvedName,
             itemType: category,
             page: currentVirtualPage,
             slot: currentVirtualSlot,
-            status: 'Selected'
+            status: playerName === null ? 'NotSelected' : 'Selected'
           });
 
           currentVirtualSlot++;
@@ -409,25 +362,6 @@ export default function MimicBookTab({ user }) {
           }
         }
       });
-
-      const totalClaimedQty = confirmedWinners.length * itemsInfo.limit;
-      const leftoversCount = itemsInfo.qty - totalClaimedQty;
-      
-      for (let extra = 0; extra < leftoversCount; extra++) {
-        matrixSlots.push({
-          name: '[⚠️ EXTRA UNALLOCATED SLOT]',
-          itemType: category,
-          page: currentVirtualPage,
-          slot: currentVirtualSlot,
-          status: 'Selected'
-        });
-
-        currentVirtualSlot++;
-        if (currentVirtualSlot > qtyPerPage) {
-          currentVirtualSlot = 1;
-          currentVirtualPage++;
-        }
-      }
     });
 
     setGeneratedSlots(matrixSlots);
@@ -438,24 +372,29 @@ export default function MimicBookTab({ user }) {
 
   const handleCommitSessionAndFlash = async () => {
     if (!commitDate.trim()) return alert("Raid Night Event Date parameters cannot remain blank.");
-    
     try {
       setCommitting(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
+      if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+
+      // Build out standard schema structure mapping parameters for backend endpoint processing
+      const processedAllocations = {};
+      Object.keys(categoryAllocations).forEach(cat => {
+        const allAssignedWinners = categoryAllocations[cat].selected.filter(n => n !== null);
+        const masterList = rankingsByItem[cat] || [];
+        const nonWinners = masterList.filter(n => !allAssignedWinners.includes(n));
+        
+        processedAllocations[cat] = {
+          selected: allAssignedWinners,
+          notSelected: nonWinners
+        };
+      });
 
       const res = await fetch(`${backendUrl}/api/requests/commit-session`, {
         method: 'POST',
         headers: customHeaders,
-        body: JSON.stringify({
-          event: commitEvent,
-          date: commitDate,
-          allocations: categoryAllocations,
-          summary: lootSummary
-        }),
+        body: JSON.stringify({ event: commitEvent, date: commitDate, allocations: processedAllocations, summary: lootSummary }),
         credentials: 'include'
       });
 
@@ -464,14 +403,10 @@ export default function MimicBookTab({ user }) {
         alert("💥 SUCCESS: Raid records written to ledger repository! Requisition life cycles updated and server staging cleared.");
         set(ref(database, 'auction/active_session'), null);
         setActiveStep(1);
-        setLootRows([
-          { id: 1, itemType: 'Puppet', startPage: 12, startPos: 1, endPage: 12, endPos: 4, limit: 1 }
-        ]);
+        setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
         setLootSummary({
-          Puppet: { qty: 0, limit: 1, seats: 0 },
-          Illu: { qty: 0, limit: 1, seats: 0 },
-          'Light&Dark': { qty: 0, limit: 1, seats: 0 },
-          'Time&Space': { qty: 0, limit: 1, seats: 0 }
+          Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
+          'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
         });
         setGeneratedSlots([]);
         loadTrueRequestPool(); 
@@ -480,7 +415,6 @@ export default function MimicBookTab({ user }) {
       }
     } catch (err) {
       console.error("Failed to commit session logs:", err);
-      alert("❌ Communication link failure. Please check your backend connection server.");
     } finally {
       setCommitting(false);
     }
@@ -489,14 +423,7 @@ export default function MimicBookTab({ user }) {
   const handleDownloadLootHistoryCSV = () => {
     if (lootHistoryData.length === 0) return;
     const csvHeaders = ["Date", "Event", "Item", "Qty", "Max", "Mem"];
-    const csvRows = lootHistoryData.map(row => [
-      `"${row.date}"`,
-      `"${row.event}"`,
-      `"${row.item}"`,
-      row.quantity,
-      row.max,
-      row.mem
-    ]);
+    const csvRows = lootHistoryData.map(row => [`"${row.date}"`, `"${row.event}"`, `"${row.item}"`, row.quantity, row.max, row.mem]);
     const csvContent = [csvHeaders.join(","), ...csvRows.map(e => e.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -510,16 +437,11 @@ export default function MimicBookTab({ user }) {
 
   const getItemStyleProfile = (itemType) => {
     switch (itemType) {
-      case 'Puppet':
-        return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-      case 'Illu':
-        return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
-      case 'Light&Dark':
-        return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
-      case 'Time&Space':
-        return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
-      default:
-        return 'text-slate-400 border-slate-800 bg-slate-900/50';
+      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
+      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
+      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
+      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
+      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
     }
   };
 
@@ -530,7 +452,12 @@ export default function MimicBookTab({ user }) {
   });
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
 
-  const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [], notSelected: [] };
+  const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
+  
+  // Dynamic extraction: Standby Queue filters out anyone who currently holds an active seat position
+  const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(
+    name => !currentActiveSelections.selected.includes(name)
+  );
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -562,7 +489,7 @@ export default function MimicBookTab({ user }) {
 
       {/* --- ADMINISTRATIVE OFFICER MANAGEMENT CONTROLS PANEL --- */}
       {isAdminMode && (
-        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4">
+        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4" ref={popoverAnchorRef}>
           
           {/* STEP PROGRESS ROADMAP */}
           <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto text-center text-xs font-bold border-b border-slate-800/60 pb-3">
@@ -575,7 +502,7 @@ export default function MimicBookTab({ user }) {
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 4 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>4. Commit Archive</div>
           </div>
 
-          {/* STEP 1 WORKSPACE: REFINED ENTRY CONTROLS WITH REAL-TIME CO-LIMITS */}
+          {/* STEP 1 WORKSPACE: DYNAMIC ENTRY CONTROLS WITHOUT BROWSER ARROWS */}
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between">
@@ -587,22 +514,17 @@ export default function MimicBookTab({ user }) {
                     type="number" 
                     value={qtyPerPage} 
                     onChange={(e) => setQtyPerPage(Math.max(1, parseInt(e.target.value) || 4))}
-                    className="w-14 bg-slate-950 border border-slate-800 rounded px-2 py-0.5 font-mono text-center text-xs text-amber-400"
+                    className="w-14 bg-slate-950 border border-slate-800 rounded px-2 py-0.5 font-mono text-center text-xs text-amber-400 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>
 
               {validationError && (
-                <div className="bg-rose-950/30 border border-rose-500/30 text-rose-400 text-xs p-3 rounded-xl font-medium animate-shake">
-                  ⚠️ {validationError}
-                </div>
+                <div className="bg-rose-950/30 border border-rose-500/30 text-rose-400 text-xs p-3 rounded-xl font-medium animate-shake">⚠️ {validationError}</div>
               )}
 
-              {/* 🌟 AUTOMATED LIVE SEQUENCE GAP ALERTS VIEW COMPONENT */}
               {liveGapsWarning && (
-                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-xl font-mono tracking-tight shadow-md">
-                  {liveGapsWarning}
-                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-xl font-mono tracking-tight shadow-md">{liveGapsWarning}</div>
               )}
 
               <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
@@ -619,7 +541,7 @@ export default function MimicBookTab({ user }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
-                    {lootRows.map((row, index) => (
+                    {lootRows.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-900/20 transition-all">
                         <td className="p-2">
                           <select 
@@ -634,11 +556,11 @@ export default function MimicBookTab({ user }) {
                           </select>
                         </td>
                         
-                        {/* INCREMENTAL BUTTON CONTROLS FOR SEAMLESS live REQUISITIONS */}
+                        {/* 🌟 SPINNER HOOKS REMOVED: Custom styles hide native input arrows completely */}
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'startPage', Math.max(1, row.startPage - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
-                            <input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs"/>
+                            <input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
                             <button onClick={() => handleUpdateLootRow(row.id, 'startPage', row.startPage + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
                           </div>
                         </td>
@@ -646,7 +568,7 @@ export default function MimicBookTab({ user }) {
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.max(1, row.startPos - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
-                            <input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs"/>
+                            <input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
                             <button onClick={() => handleUpdateLootRow(row.id, 'startPos', row.startPos + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
                           </div>
                         </td>
@@ -654,7 +576,7 @@ export default function MimicBookTab({ user }) {
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'endPage', Math.max(1, row.endPage - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
-                            <input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs"/>
+                            <input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
                             <button onClick={() => handleUpdateLootRow(row.id, 'endPage', row.endPage + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
                           </div>
                         </td>
@@ -662,7 +584,7 @@ export default function MimicBookTab({ user }) {
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.max(1, row.endPos - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
-                            <input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs"/>
+                            <input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
                             <button onClick={() => handleUpdateLootRow(row.id, 'endPos', row.endPos + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
                           </div>
                         </td>
@@ -670,7 +592,7 @@ export default function MimicBookTab({ user }) {
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'limit', Math.max(1, row.limit - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
-                            <input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-transparent text-center text-white font-black outline-none font-mono text-xs"/>
+                            <input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-transparent text-center text-white font-black outline-none font-mono text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
                             <button onClick={() => handleUpdateLootRow(row.id, 'limit', row.limit + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
                           </div>
                         </td>
@@ -691,18 +613,18 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE: DRAG AND DROP DESK */}
+          {/* STEP 2 WORKSPACE: UPGRADED SHIFT-PROOF FIXED SEATS WORKSPACE */}
           {activeStep === 2 && (
-            <div className="space-y-4 animate-fadeIn">
+            <div className="space-y-4 animate-fadeIn relative">
               
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const data = lootSummary[category];
-                  const filledCount = categoryAllocations[category]?.selected?.length || 0;
+                  const assignedCount = categoryAllocations[category]?.selected?.filter(n => n !== null).length || 0;
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => setActiveMatrixFilter(category)}>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setActivePopoverSeatIndex(null); }}>
                       <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Seats</div>
-                      <div className="text-lg font-black text-white mt-1 font-mono">{filledCount} / {data.seats}</div>
+                      <div className="text-lg font-black text-white mt-1 font-mono">{assignedCount} / {data.seats}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">({data.qty} Drops @ Limit {data.limit})</div>
                     </div>
                   );
@@ -710,68 +632,109 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
-                <span>Currently Managing True Applicants For:</span>
+                <span>Currently Managing Grid Seats For:</span>
                 <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Pool</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
+                {/* UPGRADED ASSIGNED GRID CONTAINERS */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Recipients (Drag Ranks to Swap Seats)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">
-                      {currentActiveSelections.selected.length} / {lootSummary[activeMatrixFilter]?.seats || 0} Filled
-                    </span>
+                    <span>✨ Assigned Recipients Grid (Drag Ranks to Swap Box Seats)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Budget Dimensions</span>
                   </div>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {currentActiveSelections.selected.map((name, i) => (
-                      <div 
-                        key={i} 
-                        draggable="true"
-                        onDragStart={(e) => handleRowDragStart(e, i)}
-                        onDragOver={handleRowDragOver}
-                        onDrop={(e) => handleRowDrop(e, i)}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-800/80 bg-slate-900/50 text-xs font-mono transition-all cursor-grab active:cursor-grabbing hover:border-slate-600 ${
-                          draggedItemIndex === i ? 'opacity-30 bg-slate-950 border-dashed border-slate-700' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-slate-500 font-sans text-[10px] font-bold tracking-tight select-none w-4">#{i + 1}</span>
-                          <span className="text-slate-500 text-xs select-none">☰</span>
-                          <span className="truncate text-slate-100 font-sans font-semibold">{name}</span>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {currentActiveSelections.selected.map((name, i) => {
+                      if (name === null) {
+                        // Render clean shift-proof dotted placeholder container
+                        return (
+                          <div 
+                            key={i}
+                            onDragOver={handleRowDragOver}
+                            onDrop={(e) => handleRowDrop(e, i)}
+                            onClick={() => setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i)}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition-all ${
+                              activePopoverSeatIndex === i ? 'ring-2 ring-indigo-500 border-transparent bg-slate-900/60' : ''
+                            }`}
+                          >
+                            <span className="font-sans text-[10px] font-black">BOX AT SEAT #{i + 1}</span>
+                            <span className="text-[10px] tracking-tight text-slate-500 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 animate-pulse">➕ CLICK TO SELECT STANDBY CANDIDATE</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div 
+                          key={i} 
+                          draggable="true"
+                          onDragStart={(e) => handleRowDragStart(e, i)}
+                          onDragOver={handleRowDragOver}
+                          onDrop={(e) => handleRowDrop(e, i)}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-600 transition ${
+                            draggedItemIndex === i ? 'opacity-30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-slate-500 font-sans text-[10px] font-bold w-4">#{i + 1}</span>
+                            <span className="text-slate-400">☰</span>
+                            <span className="truncate text-slate-100 font-sans font-bold">{name}</span>
+                          </div>
+                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition shrink-0">Drop ✖</button>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition">Drop ✖</button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {currentActiveSelections.selected.length === 0 && (
-                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No members assigned to active quota seats.</div>
+                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">Run the calculation engine to build grid seat spaces.</div>
                     )}
                   </div>
                 </div>
 
+                {/* READ-ONLY PRIORITY STANDBY QUEUE TRANSLATION PANEL */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
-                    <span>💤 Standby Queue (Priority Locked Line)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Standby: {currentActiveSelections.notSelected.length}</span>
+                    <span>💤 Standby Line (Priority Locked Queue)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Unassigned Count: {activeStandbyPoolList.length}</span>
                   </div>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {currentActiveSelections.notSelected.map((name, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/40 bg-slate-900/10 text-xs font-mono hover:bg-slate-900/30 transition">
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                    {activeStandbyPoolList.map((name, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/40 bg-slate-900/10 text-xs font-mono">
                         <span className="truncate text-slate-400 font-sans">{name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-slate-600 text-[10px] uppercase font-bold font-sans">Priority Match</span>
-                          <button onClick={() => handlePromoteBidder(i)} className="text-emerald-400 font-sans text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition">Promote 🔼</button>
-                        </div>
+                        <span className="text-slate-600 text-[10px] uppercase font-bold font-sans shrink-0">Priority Match Rank #{i+1}</span>
                       </div>
                     ))}
-                    {currentActiveSelections.notSelected.length === 0 && (
-                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No extra candidates remaining in the true target pool list.</div>
+                    {activeStandbyPoolList.length === 0 && (
+                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No extra candidates remaining inside the unassigned standby queue.</div>
                     )}
                   </div>
                 </div>
               </div>
+
+              {/* 🌟 POPOVER MENU DISPLAY LAYER FOR DIRECT UNASSIGNED ASSIGNMENTS */}
+              {activePopoverSeatIndex !== null && (
+                <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <h4 className="text-xs font-black uppercase text-indigo-400 tracking-wide">Assign Member directly into Seat #{activePopoverSeatIndex + 1}</h4>
+                    <button onClick={() => setActivePopoverSeatIndex(null)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
+                  </div>
+                  
+                  <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
+                    {activeStandbyPoolList.map((name, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handlePromoteBidderToTargetSeat(name)}
+                        className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
+                      >
+                        <span className="font-bold">{name}</span>
+                        <span className="font-mono text-[10px] text-slate-500 group-hover:text-white">Rank #{idx+1}</span>
+                      </button>
+                    ))}
+                    {activeStandbyPoolList.length === 0 && (
+                      <p className="text-center text-xs text-slate-500 italic py-4">No unallocated standby members found for this item type category.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-between pt-2">
                 <button onClick={() => setActiveStep(1)} className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-900 transition">◀ Back to Loot Math</button>
@@ -799,29 +762,17 @@ export default function MimicBookTab({ user }) {
             <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-5 rounded-xl text-center space-y-4 animate-fadeIn">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wide">Finalize Spreadsheet Registration</h3>
-                <p className="text-xs text-slate-400 max-w-xl mx-auto">
-                  Verify the ledger night properties below. Committing will lock records inside your permanent database tables and unlock members for subsequent scheduled events.
-                </p>
+                <p className="text-xs text-slate-400 max-w-xl mx-auto">Verify parameters below. Committing locks records straight into permanent database tables and frees up applicants for subsequent events.</p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto p-3.5 bg-slate-950 rounded-xl border border-slate-800">
                 <div className="text-left w-full">
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Raid Event Night Date</label>
-                  <input 
-                    type="text" 
-                    value={commitDate} 
-                    onChange={(e) => setCommitDate(e.target.value)} 
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 mt-1 focus:border-indigo-500 outline-none transition"
-                    placeholder="MM/DD/YYYY"
-                  />
+                  <input type="text" value={commitDate} onChange={(e) => setCommitDate(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" placeholder="MM/DD/YYYY" />
                 </div>
                 <div className="text-left w-full">
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Category Origin</label>
-                  <select 
-                    value={commitEvent} 
-                    onChange={(e) => setCommitEvent(e.target.value)} 
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1 focus:border-indigo-500 outline-none transition"
-                  >
+                  <select value={commitEvent} onChange={(e) => setCommitEvent(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" >
                     <option value="GuildLeague">🏆 GuildLeague</option>
                     <option value="EmperiumOverrun">🔥 EmperiumOverrun</option>
                   </select>
@@ -829,18 +780,8 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-center gap-4 pt-1">
-                <button 
-                  onClick={() => setActiveStep(3)} 
-                  disabled={committing}
-                  className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition"
-                >
-                  Return to Preview
-                </button>
-                <button 
-                  onClick={handleCommitSessionAndFlash} 
-                  disabled={committing}
-                  className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500"
-                >
+                <button onClick={() => setActiveStep(3)} disabled={committing} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition">Return to Preview</button>
+                <button onClick={handleCommitSessionAndFlash} disabled={committing} className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500" >
                   {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE 🚀"}
                 </button>
               </div>
@@ -865,7 +806,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT: DIGITAL BOOK MIMIC */}
+        {/* LEFT COMPONENT: THE UNIFORM SHIFT-PROOF DIGITAL BOOK MIMIC */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -908,13 +849,11 @@ export default function MimicBookTab({ user }) {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT: USER REQUISITION DASHBOARD */}
+        {/* RIGHT COMPONENT: USER ALLOCATION LEDGER */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
-              <p className="text-[10px] text-slate-500 mt-0.5">{viewLens === 'ALL' ? 'Complete overview roster transparency sequence' : 'Isolated priority matching rows for your account.'}</p>
-            </div>
+          <div>
+            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
+            <p className="text-[10px] text-slate-500 mt-0.5">Complete overview roster transparency sequence</p>
           </div>
 
           <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
@@ -932,13 +871,16 @@ export default function MimicBookTab({ user }) {
                 <tbody className="divide-y divide-slate-900/60 font-mono text-[11px]">
                   {(() => {
                     let rowsToDisplay = [...generatedSlots];
-
                     if (viewLens === 'ALL') {
                       const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                       categorySequenceOrder.forEach(cat => {
-                        const standbyList = categoryAllocations[cat]?.notSelected || [];
+                        const standbyList = rankingsByItem[cat] || [];
+                        const assignedWinners = categoryAllocations[cat]?.selected || [];
+                        
                         standbyList.forEach(name => {
-                          rowsToDisplay.push({ name, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
+                          if (!assignedWinners.includes(name)) {
+                            rowsToDisplay.push({ name, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
+                          }
                         });
                       });
                     }
@@ -948,8 +890,8 @@ export default function MimicBookTab({ user }) {
                       if (rowsToDisplay.length === 0) {
                         const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                         categorySequenceOrder.forEach(cat => {
-                          const standbyList = categoryAllocations[cat]?.notSelected || [];
-                          if (standbyList.some(n => n.toLowerCase() === currentUserName.toLowerCase())) {
+                          const assignedWinners = categoryAllocations[cat]?.selected || [];
+                          if (!assignedWinners.includes(currentUserName) && (rankingsByItem[cat] || []).includes(currentUserName)) {
                             rowsToDisplay.push({ name: currentUserName, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
                           }
                         });
@@ -960,21 +902,13 @@ export default function MimicBookTab({ user }) {
                       const q = searchQuery.toLowerCase();
                       rowsToDisplay = rowsToDisplay.filter(r => r.name.toLowerCase().includes(q) || r.itemType.toLowerCase().includes(q));
                     }
-
-                    if (rowsToDisplay.length === 0) {
-                      return <tr><td colSpan="5" className="p-8 text-center text-slate-600 font-sans italic text-xs">No entries match your spotlight filters.</td></tr>;
-                    }
+                    if (rowsToDisplay.length === 0) return <tr><td colSpan="5" className="p-8 text-center text-slate-600 font-sans italic text-xs">No entries match your spotlight filters.</td></tr>;
 
                     return rowsToDisplay.map((row, index) => {
                       const isSelf = user && row.name.toLowerCase() === currentUserName.toLowerCase();
                       const isSelected = row.status === 'Selected';
-
                       return (
-                        <tr 
-                          key={index} 
-                          onClick={() => { if (typeof row.page === 'number') setBookCurrentPage(row.page); }}
-                          className={`group hover:bg-slate-900/40 transition-all cursor-pointer ${isSelf ? 'bg-indigo-950/10 font-bold' : ''} ${!isSelected ? 'opacity-40 text-slate-500' : ''}`}
-                        >
+                        <tr key={index} onClick={() => { if (typeof row.page === 'number') setBookCurrentPage(row.page); }} className={`group hover:bg-slate-900/40 transition-all cursor-pointer ${isSelf ? 'bg-indigo-950/10 font-bold' : ''} ${!isSelected ? 'opacity-40 text-slate-500' : ''}`} >
                           <td className="p-2.5 font-sans font-medium text-slate-200 group-hover:text-white flex items-center gap-1.5 truncate max-w-[120px]">
                             {isSelf && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />}
                             {row.name}
@@ -1005,7 +939,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL WINDOW --- */}
+      {/* --- VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL --- */}
       {isLootHistoryOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
@@ -1026,7 +960,7 @@ export default function MimicBookTab({ user }) {
                     <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
                       <th className="p-3 border-r border-slate-800/40">Date</th>
                       <th className="p-3 border-r border-slate-800/40">Event</th>
-                      <th className="p-3 border-r border-slate-800/40 {cat}">Item</th>
+                      <th className="p-3 border-r border-slate-800/40">Item</th>
                       <th className="p-3 border-r border-slate-800/40 text-center">Qty</th>
                       <th className="p-3 border-r border-slate-800/40 text-center">Max</th>
                       <th className="p-3 text-center">Mem</th>
@@ -1034,9 +968,7 @@ export default function MimicBookTab({ user }) {
                   </thead>
                   <tbody className="divide-y divide-slate-800/40 text-slate-300">
                     {lootHistoryData.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</td>
-                      </tr>
+                      <tr><td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</td></tr>
                     ) : (
                       lootHistoryData.map((row) => (
                         <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
@@ -1055,13 +987,7 @@ export default function MimicBookTab({ user }) {
             </div>
 
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
-              <button
-                onClick={handleDownloadLootHistoryCSV}
-                disabled={lootHistoryData.length === 0}
-                className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide"
-              >
-                📥 Export
-              </button>
+              <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide" >📥 Export</button>
               <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide">↩️ Return</button>
             </div>
           </div>
