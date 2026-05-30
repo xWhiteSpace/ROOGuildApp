@@ -57,11 +57,13 @@ export default function MimicBookTab({ user }) {
     Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
   });
 
-  // --- Popover UI Overrides States ---
+  // --- 🎹 ALL-ROSTER POPOVER STATE HOOKS ---
   const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
   const [popoverContextTab, setPopoverContextTab] = useState('applicants'); 
   const [popoverRosterSearch, setPopoverRosterSearch] = useState('');
-  const popoverAnchorRef = useRef(null);
+  
+  // Two-stage assignment state tracker for choosing global quantities manually
+  const [selectedGlobalRosterName, setSelectedGlobalRosterName] = useState(null);
 
   // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
@@ -120,7 +122,6 @@ export default function MimicBookTab({ user }) {
     }
   };
 
-  // --- 🔄 LIVE NETWORK DISCORD-TO-FIREBASE ROSTER RUNNER ---
   const handleSyncRosterFromDiscord = async () => {
     try {
       setSyncingRoster(true);
@@ -139,7 +140,7 @@ export default function MimicBookTab({ user }) {
       const data = await res.json();
       if (data.success) {
         alert(`🔄 SUCCESS: Realtime Roster sync complete! Updated ${data.count} active guild accounts from Discord into Firebase.`);
-        loadTrueRequestPool(); // Force refresh fullRoster mapping arrays
+        loadTrueRequestPool(); 
       } else {
         alert(`❌ Sync rejected by server: ${data.error}`);
       }
@@ -233,7 +234,6 @@ export default function MimicBookTab({ user }) {
     }));
   };
 
-  // --- DYNAMIC QUOTA GRID PACKER MODULE ---
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
     const calculatedSummary = {
@@ -278,7 +278,6 @@ export default function MimicBookTab({ user }) {
     setLootSummary(calculatedSummary);
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
 
-    // 🌟 HIGH PRECISION QUOTA-BOUND ALLOCATION PROCESS:
     const initialAllocations = {};
     Object.keys(calculatedSummary).forEach(category => {
       const totalDropInventory = calculatedSummary[category].qty;
@@ -294,8 +293,6 @@ export default function MimicBookTab({ user }) {
 
         const pName = priorityApplicants[p];
         const requestedQuantity = detailsMap[pName]?.quantity || 1;
-        
-        // Dynamic Allocation Rule: Clamps to whichever metric is lowest
         const allowedBoxSpan = Math.min(requestedQuantity, rowLimitValue);
 
         if (allowedBoxSpan <= remainingDropBudget) {
@@ -334,29 +331,37 @@ export default function MimicBookTab({ user }) {
     });
   };
 
-  const handlePromptCustomGuestAdd = (forcedName) => {
-    if (!forcedName.trim()) return;
-    handlePromoteBidderToTargetSeat(forcedName.trim());
-  };
-
-  const handlePromoteBidderToTargetSeat = (playerName) => {
+  // Safe manual selection dispatcher applying chosen quantities directly
+  const handleExecuteManualAllocationValue = (playerName, chosenQty) => {
     if (activePopoverSeatIndex === null) return;
     const currentData = categoryAllocations[activeMatrixFilter];
-    const rowLimitValue = lootSummary[activeMatrixFilter]?.limit || 1;
-    const detailsMap = requestsByItemDetails[activeMatrixFilter] || {};
-    
-    const requestedQuantity = detailsMap[playerName]?.quantity || rowLimitValue;
-    const preciseSlotsCount = Math.min(requestedQuantity, rowLimitValue);
-
     const updatedSelected = [...currentData.selected];
-    updatedSelected[activePopoverSeatIndex] = { name: playerName, slots: preciseSlotsCount };
+
+    updatedSelected[activePopoverSeatIndex] = { name: playerName, slots: parseInt(chosenQty, 10) };
 
     setCategoryAllocations({
       ...categoryAllocations,
       [activeMatrixFilter]: { selected: updatedSelected }
     });
+    
+    // Clear overlay state configurations
     setActivePopoverSeatIndex(null); 
+    setSelectedGlobalRosterName(null);
     setPopoverRosterSearch(''); 
+  };
+
+  const handlePromoteBidderToTargetSeat = (playerName) => {
+    const rowLimitValue = lootSummary[activeMatrixFilter]?.limit || 1;
+    const detailsMap = requestsByItemDetails[activeMatrixFilter] || {};
+    
+    // Standard path parses portal numbers; forces prompt loop if chosen from global list
+    if (popoverContextTab === 'applicants') {
+      const requestedQuantity = detailsMap[playerName]?.quantity || 1;
+      const preciseSlotsCount = Math.min(requestedQuantity, rowLimitValue);
+      handleExecuteManualAllocationValue(playerName, preciseSlotsCount);
+    } else {
+      setSelectedGlobalRosterName(playerName);
+    }
   };
 
   const handleRowDragStart = (e, index) => {
@@ -444,10 +449,7 @@ export default function MimicBookTab({ user }) {
         const masterList = rankingsByItem[cat] || [];
         const nonWinners = masterList.filter(n => !allAssignedWinners.includes(n));
         
-        processedAllocations[cat] = {
-          selected: seatEntries.filter(n => n !== null),
-          notSelected: nonWinners
-        };
+        processedAllocations[cat] = { selected: seatEntries.filter(n => n !== null), notSelected: nonWinners };
       });
 
       const res = await fetch(`${backendUrl}/api/requests/commit-session`, {
@@ -524,6 +526,10 @@ export default function MimicBookTab({ user }) {
     return passesSearch && !isAlreadySeated;
   });
 
+  // Calculate fractions parameters dynamically
+  const totalAvailableSeatsCount = lootSummary[activeMatrixFilter]?.seats || 0;
+  const currentAssignedRecipientsCount = currentActiveSelections.selected.filter(n => n !== null).length;
+
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
       
@@ -534,7 +540,6 @@ export default function MimicBookTab({ user }) {
           <p className="text-xs text-slate-400 mt-1">Digital Twin Pre-Raid Coordination Grid & Ledger Desk</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* 🌟 NEW CENTRALIZED DISCORD SYNC RUNNER ACTION CONTROLLER BUTTON */}
           <button
             onClick={handleSyncRosterFromDiscord}
             disabled={syncingRoster}
@@ -565,10 +570,11 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- ADMINISTRATIVE OFFICER PANEL --- */}
+      {/* --- ADMINISTRATIVE OFFICER OVERRIDE CONTROLS PANEL --- */}
       {isAdminMode && (
-        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4" ref={popoverAnchorRef}>
+        <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4">
           
+          {/* STEP PROGRESS ROADMAP */}
           <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto text-center text-xs font-bold border-b border-slate-800/60 pb-3">
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 1 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>1. Loot Registry & Math</div>
             <div className="text-slate-700">➔</div>
@@ -693,14 +699,15 @@ export default function MimicBookTab({ user }) {
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               
+              {/* 🌟 FRACTIONS RE-ESTABLISHED LAYOUT MATRIX BOX CONTROLLERS (POINT 1) */}
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const data = lootSummary[category];
-                  const assignedCount = categoryAllocations[category]?.selected?.filter(n => n !== null).length || 0;
+                  const filledCount = categoryAllocations[category]?.selected?.filter(n => n !== null).length || 0;
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setActivePopoverSeatIndex(null); }}>
-                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Allocations</div>
-                      <div className="text-lg font-black text-white mt-1 font-mono">{assignedCount} Cards Placed</div>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }}>
+                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Seats</div>
+                      <div className="text-lg font-black text-white mt-1 font-mono">{filledCount} / {data.seats}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">({data.qty} Drops @ Limit {data.limit})</div>
                     </div>
                   );
@@ -710,13 +717,14 @@ export default function MimicBookTab({ user }) {
               <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
                 <span>Currently Managing Grid Seats For:</span>
                 <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Pool</span>
+                <span className="text-slate-500 font-mono text-[10px]">Roster Status Footprint: {currentAssignedRecipientsCount} / {totalAvailableSeatsCount} Filled</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Footprints (Drag to Swap Grid Box Order)</span>
+                    <span>✨ Assigned Recipients Grid (Drag Ranks to Swap Box Seats)</span>
                     <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Inventory Slots</span>
                   </div>
                   <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
@@ -727,7 +735,7 @@ export default function MimicBookTab({ user }) {
                             key={i}
                             onDragOver={handleRowDragOver}
                             onDrop={(e) => handleRowDrop(e, i)}
-                            onClick={() => { setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
+                            onClick={() => { setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); setSelectedGlobalRosterName(null); }}
                             className={`flex items-center justify-between p-2.5 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition-all ${
                               activePopoverSeatIndex === i ? 'ring-2 ring-indigo-500 border-transparent bg-slate-900/60' : ''
                             }`}
@@ -752,8 +760,10 @@ export default function MimicBookTab({ user }) {
                           <div className="flex items-center gap-2 truncate">
                             <span className="text-slate-400">☰</span>
                             <span className="truncate text-slate-100 font-sans font-bold">{seatNode.name}</span>
-                            <span className="text-[10px] text-cyan-400 font-black px-1.5 py-0.5 bg-cyan-950/40 border border-cyan-900/30 rounded font-sans">
-                              {seatNode.slots} {seatNode.slots === 1 ? 'Box' : 'Boxes'} Occupied
+                            
+                            {/* 🌟 NOISE REMOVED: Shortened, concise string preferred tag layout format (POINT 3) */}
+                            <span className="text-[10px] text-cyan-400 font-bold px-2 py-0.5 bg-cyan-950/40 border border-cyan-900/30 rounded font-mono shrink-0">
+                              Qty: {seatNode.slots}
                             </span>
                           </div>
                           <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition shrink-0">Drop ✖</button>
@@ -782,86 +792,115 @@ export default function MimicBookTab({ user }) {
                 </div>
               </div>
 
-              {/* 🌟 UPGRADED MULTI-CONTEXT POPOVER OVERLAY GRID LOOKUP PANEL */}
+              {/* 🌟 UPGRADED MULTI-CONTEXT POPOVER EXTENSION WITH MANUAL QUANTITY ASSIGNMENT FREEDOM (POINT 2) */}
               {activePopoverSeatIndex !== null && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Fill Unallocated Loot Drop Block</h4>
-                    <button onClick={() => setActivePopoverSeatIndex(null)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
+                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Allocate Seat #{activePopoverSeatIndex + 1} Position</h4>
+                    <button onClick={() => { setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
                   </div>
                   
-                  <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
-                    <button 
-                      onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
-                    >
-                      🎯 Portal Applicants
-                    </button>
-                    <button 
-                      onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
-                    >
-                      🌐 Full Guild Roster
-                    </button>
-                  </div>
-
-                  {popoverContextTab === 'fullRoster' && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={popoverRosterSearch}
-                          onChange={(e) => setPopoverRosterSearch(e.target.value)}
-                          placeholder="🔍 Filter matching names or force create new..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
-                        />
-                        {/* 🌟 NATIVE INSTANT DISCORD RESYNC REFRESH BUTTON LOCATED DIRECTLY AT POINT OF NEED */}
-                        <button
-                          onClick={handleSyncRosterFromDiscord}
-                          disabled={syncingRoster}
-                          className="px-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
-                          title="Refresh server user mappings directly from cell tower signals"
+                  {/* TWO-STAGE SELECTION LOGIC CHECK: Prompts choices bar if global roster name is targeted */}
+                  {selectedGlobalRosterName ? (
+                    <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl text-center space-y-3 animate-fadeIn">
+                      <div className="text-xs text-slate-400">
+                        Designate dynamic quantity parameters for character: <strong className="text-indigo-400 font-sans text-sm block mt-0.5">{selectedGlobalRosterName}</strong>
+                      </div>
+                      <div className="flex justify-center gap-2 items-center">
+                        {Array.from({ length: lootSummary[activeMatrixFilter]?.limit || 1 }, (_, index) => {
+                          const allocationNumberVal = index + 1;
+                          return (
+                            <button
+                              key={allocationNumberVal}
+                              onClick={() => handleExecuteManualAllocationValue(selectedGlobalRosterName, allocationNumberVal)}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/20 rounded-xl text-xs text-white font-black font-mono transition shadow"
+                            >
+                              Qty: {allocationNumberVal}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button 
+                        onClick={() => setSelectedGlobalRosterName(null)}
+                        className="text-[10px] text-slate-500 uppercase hover:underline font-bold block mx-auto pt-1"
+                      >
+                        ↩ Back to list selection
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+                        <button 
+                          onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
                         >
-                          {syncingRoster ? "⏳ Syncing..." : "🔄 Sync Discord"}
+                          🎯 Portal Applicants
+                        </button>
+                        <button 
+                          onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
+                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                        >
+                          🌐 Full Guild Roster
                         </button>
                       </div>
-                      
-                      {popoverRosterSearch.trim() && !popoverFilteredRosterList.includes(popoverRosterSearch.trim()) && (
-                        <button
-                          onClick={() => handlePromptCustomGuestAdd(popoverRosterSearch)}
-                          className="w-full text-center p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-600 hover:text-white text-xs tracking-tight transition"
-                        >
-                          ➕ Force Add "{popoverRosterSearch.trim()}" as Guest Roster Line Item
-                        </button>
-                      )}
-                    </div>
-                  )}
 
-                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
-                    {popoverContextTab === 'applicants' ? (
-                      activeStandbyPoolList.map((name, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handlePromoteBidderToTargetSeat(name)}
-                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
-                        >
-                          <span className="font-bold text-slate-200">{name}</span>
-                          <span className="font-mono text-[10px] text-slate-500">Rank #{idx+1}</span>
-                        </button>
-                      ))
-                    ) : (
-                      popoverFilteredRosterList.map((name, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handlePromoteBidderToTargetSeat(name)}
-                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
+                      {popoverContextTab === 'fullRoster' && (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={popoverRosterSearch}
+                              onChange={(e) => setPopoverRosterSearch(e.target.value)}
+                              placeholder="🔍 Filter matching names or force create new..."
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
+                            />
+                            <button
+                              onClick={handleSyncRosterFromDiscord}
+                              disabled={syncingRoster}
+                              className="px-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
+                            >
+                              {syncingRoster ? "⏳ Syncing..." : "🔄 Sync Discord"}
+                            </button>
+                          </div>
+                          
+                          {popoverRosterSearch.trim() && !popoverFilteredRosterList.includes(popoverRosterSearch.trim()) && (
+                            <button
+                              onClick={() => handlePromoteBidderToTargetSeat(popoverRosterSearch.trim())}
+                              className="w-full text-center p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-600 hover:text-white text-xs tracking-tight transition"
+                            >
+                              ➕ Force Add "{popoverRosterSearch.trim()}" as Guest Roster Line Item
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                        {popoverContextTab === 'applicants' ? (
+                          activeStandbyPoolList.map((name, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handlePromoteBidderToTargetSeat(name)}
+                              className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
+                            >
+                              <span className="font-bold text-slate-200">{name}</span>
+                              <span className="font-mono text-[10px] text-slate-500">Rank #{idx+1}</span>
+                            </button>
+                          ))
+                        ) : (
+                          popoverFilteredRosterList.map((name, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handlePromoteBidderToTargetSeat(name)}
+                              className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
                         >
                           <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
                           <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
                         </button>
-                      ))
-                    )}
-                  </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -920,7 +959,7 @@ export default function MimicBookTab({ user }) {
         </div>
       )}
 
-      {/* --- PUBLIC ACCESSIBLE PREVIEW DESK --- */}
+      {/* --- PUBLIC ACCESSIBLE READ-ONLY PREVIEW DESK --- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-lg">
         <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800/80 p-1 rounded-xl shrink-0 w-max">
           <button onClick={() => setViewLens('ALL')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition ${viewLens === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>🌐 See All</button>
@@ -935,7 +974,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT */}
+        {/* LEFT COMPONENT: DIGITAL BOOK MIMIC */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -978,7 +1017,7 @@ export default function MimicBookTab({ user }) {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT */}
+        {/* RIGHT COMPONENT: USER LEADERBOARD ALLOCATION MATRIX */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
