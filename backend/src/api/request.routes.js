@@ -12,6 +12,13 @@ const AVAILABLE_ITEMS = [
   { name: 'Time&Space', maxQty: 5 }
 ];
 
+const ITEM_LIMIT_DEFAULTS = {
+  'Puppet': 1,
+  'Illu': 1,
+  'Light&Dark': 3,
+  'Time&Space': 5
+};
+
 function getGMT8DateString() {
   const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
   const gmt8Date = new Date(gmt8String);
@@ -58,7 +65,8 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   let lastSelectedIdx = -1;
   for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    if (combinedItemTimeline[i] === 'selected') {
+    // 🌟 ACCOUNTABILITY TRIGGER: Breaking on 'absent' forces a point drop back to 0
+    if (combinedItemTimeline[i] === 'selected' || combinedItemTimeline[i] === 'absent') {
       lastSelectedIdx = i;
       break;
     }
@@ -93,7 +101,7 @@ router.get('/init', async (req, res) => {
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     const requestsByItemDetails = { 'Puppet': {}, 'Illu': {}, 'Light&Dark': {}, 'Time&Space': {} };
 
-    // 🌟 UPGRADE: Fetch the true centralized master membership node from Firebase
+    // Fetch master membership roster node from Firebase
     const membersListSnap = await db.ref('auction/members').once('value');
     const fullRosterArray = [];
     if (membersListSnap.exists()) {
@@ -180,7 +188,7 @@ router.get('/init', async (req, res) => {
       phaseIntervals: timeGateStatus.phaseIntervals,
       rankingsByItem,
       requestsByItemDetails,
-      fullRoster: fullRosterArray.sort() // Returns alphabetical list of verified characters
+      fullRoster: fullRosterArray.sort()
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -203,7 +211,6 @@ router.post('/sync-roster', async (req, res) => {
   }
 
   try {
-    // Call the official Discord API to pull down active server member metrics (up to 1,000 elements)
     const discordResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
       method: 'GET',
       headers: {
@@ -224,11 +231,9 @@ router.post('/sync-roster', async (req, res) => {
     const rosterUpdates = {};
 
     discordMembers.forEach(member => {
-      // Prioritize the server nickname; fall back to the account username if unconfigured
       const finalRosterName = (member.nick || member.user?.global_name || member.user?.username || '').trim();
       
       if (finalRosterName && finalRosterName !== '???') {
-        // Sanitize string value keys to be perfectly safe for Firebase database paths
         const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\[\]]/g, '_');
         rosterUpdates[`auction/members/${sanitizedFirebaseKey}`] = {
           displayName: finalRosterName,
@@ -238,10 +243,9 @@ router.post('/sync-roster', async (req, res) => {
     });
 
     if (Object.keys(rosterUpdates).length === 0) {
-      return res.status(422).json({ success: false, error: 'No valid user profiles extracted out of Discord response payloads.' });
+      return res.status(422).json({ success: false, error: 'No valid user profiles extracted.' });
     }
 
-    // Execute absolute atomic write transaction block updates
     await db.ref().update(rosterUpdates);
     return res.json({ success: true, count: Object.keys(rosterUpdates).length });
   } catch (error) {
@@ -339,6 +343,105 @@ router.post('/cancel', async (req, res) => {
 });
 
 /**
+ * 🚀 COMMIT SESSION LEDGER ARCHIVER WITH ATTENDANCE TRACKING & GHOST SYNTHESIS
+ * POST /api/requests/commit-session
+ */
+router.post('/commit-session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const { event, date, allocations } = req.body;
+  if (!allocations) {
+    return res.status(400).json({ success: false, error: 'No allocation parameters detected.' });
+  }
+
+  try {
+    const db = getDatabase();
+    const snapshot = await db.ref('auction/web_requests').once('value');
+    const firebaseRequests = snapshot.exists() ? snapshot.val() : {};
+
+    const categories = Object.keys(allocations);
+    const timestampDate = date || getGMT8DateString();
+    
+    for (const cat of categories) {
+      const { selected = [], absent = [], notSelected = [] } = allocations[cat];
+      const maxLimit = ITEM_LIMIT_DEFAULTS[cat] || 1;
+
+      // Filter down key references for active pending requests in this specific item row line
+      const keysByMember = {};
+      Object.keys(firebaseRequests).forEach(key => {
+        const r = firebaseRequests[key];
+        if ((r.item || '').trim().toLowerCase() === cat.toLowerCase() && (r.selectionStatus || 'pending').toLowerCase() === 'pending') {
+          keysByMember[r.member] = key;
+        }
+      });
+
+      // A. Update Attendance Failures (Absentees forfeit point history stacks)
+      for (const name of absent) {
+        const key = keysByMember[name];
+        if (key) {
+          await db.ref(`auction/web_requests/${key}`).update({
+            selectionStatus: 'Absent'
+          });
+        }
+      }
+
+      // B. Update Skipped Entrants (NotSelected priority increments)
+      for (const name of notSelected) {
+        const key = keysByMember[name];
+        if (key) {
+          await db.ref(`auction/web_requests/${key}`).update({
+            selectionStatus: 'NotSelected'
+          });
+        }
+      }
+
+      // C. Process Winners & Synthesize Missing Roster Profiles
+      for (const winner of selected) {
+        const { name, slots } = winner;
+        const key = keysByMember[name];
+
+        if (key) {
+          await db.ref(`auction/web_requests/${key}`).update({
+            selectionStatus: 'Selected',
+            quantity: slots 
+          });
+        } else {
+          // 👻 GHOST REQUISITION SYNTHESIS: Inject profile data row for manually added guest accounts
+          const newRequestRef = db.ref('auction/web_requests').push();
+          await newRequestRef.set({
+            id: newRequestRef.key,
+            date: timestampDate,
+            member: name,
+            item: cat,
+            quantity: slots,
+            applicationStatus: 'ForcedAdd',
+            selectionStatus: 'Selected',
+            priority: 0
+          });
+        }
+
+        // Output completed entry to permanent ledger database log
+        const newHistoryRef = db.ref('auction/loot_history').push();
+        await newHistoryRef.set({
+          id: newHistoryRef.key,
+          date: timestampDate,
+          event: event || 'GuildLeague',
+          item: cat,
+          quantity: slots,
+          max: maxLimit,
+          mem: name
+        });
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * 📊 GLOBAL REQUEST HISTORY LOGS PIPELINE
  */
 router.get('/history', async (req, res) => {
@@ -400,7 +503,7 @@ router.get('/loot-history', async (req, res) => {
       item: rawData[key].item || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       max: parseInt(rawData[key].max, 10) || 1,
-      mem: parseInt(rawData[key].mem, 10) || 0
+      mem: rawData[key].mem || ""
     }));
 
     return res.json({ success: true, history: lootHistoryArray });
