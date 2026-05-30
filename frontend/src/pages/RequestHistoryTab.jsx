@@ -119,29 +119,25 @@ export default function RequestHistoryTab() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse">
-        Reading historical priority allocations from database ledger...
+        Reading historical priority allocations from spreadsheet...
       </div>
     );
   }
 
   // --- 📊 EVALUATE MULTI-LAYER FILTER STACKS ON THE FLY ---
   const filteredRecords = historyData.filter(row => {
-    // 1. Core Profile Identity Toggle
     if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
       return false;
     }
-    // 2. Spotlight Query Search Bar
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       const matchesMember = (row.member || '').toLowerCase().includes(query);
       const matchesItem = (row.item || '').toLowerCase().includes(query);
       if (!matchesMember && !matchesItem) return false;
     }
-    // 3. Action Type Dropdown Category
     if (actionFilter !== 'all' && (row.applicationStatus || '').toLowerCase() !== actionFilter.toLowerCase()) {
       return false;
     }
-    // 4. Evaluation Outcome Dropdown Category
     if (outcomeFilter !== 'all' && (row.selectionStatus || '').toLowerCase() !== outcomeFilter.toLowerCase()) {
       return false;
     }
@@ -152,24 +148,23 @@ export default function RequestHistoryTab() {
     <div className="mx-auto max-w-6xl p-4 sm:p-6 text-white pb-32 relative font-sans space-y-4">
       
       {/* HEADER CONTROLS PLACEMENT */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 lg:flex-row lg:items-center shadow-xl">
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center shadow-xl">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request Audit Ledger Trail</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request History Ledger</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4">
             <span>Roster Agent: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
-            <span>Filtered Pool Matrix: <strong className="text-slate-300">{filteredRecords.length} lines</strong></span>
+            <span>Total Logged Row Matrix: <strong className="text-slate-300">{filteredRecords.length} lines</strong></span>
           </div>
         </div>
 
-        {/* PROFILE CHRONOLOGICAL TOGGLE FILTER BAR */}
-        <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-auto shrink-0">
+        <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto shrink-0">
           <button
             onClick={() => setViewFilter('all')}
             className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition uppercase ${
               viewFilter === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
             }`}
           >
-            🌐 All Logs
+            🌐 All Records
           </button>
           <button
             onClick={() => setViewFilter('mine')}
@@ -177,7 +172,7 @@ export default function RequestHistoryTab() {
               viewFilter === 'mine' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
             }`}
           >
-            👤 My Actions
+            👤 My Filter
           </button>
         </div>
       </div>
@@ -205,7 +200,7 @@ export default function RequestHistoryTab() {
             <option value="all">📥 Show All Actions</option>
             <option value="requested">🟢 Requested</option>
             <option value="canceled">🔴 Canceled</option>
-            <option value="forcedadd">🟣 ForcedAdd (Officer Grid Overrides)</option>
+            <option value="forcedadd">🟣 ForcedAdd</option>
           </select>
         </div>
 
@@ -217,36 +212,36 @@ export default function RequestHistoryTab() {
             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition"
           >
             <option value="all">🏆 Show All Outcomes</option>
-            <option value="pending">⏳ Pending Verification</option>
-            <option value="selected">✨ Selected (Distributed Winners)</option>
-            <option value="notselected">💤 NotSelected (Skipped/Passed)</option>
-            <option value="absent">🚨 Absent (No-Show Reset Points)</option>
+            <option value="pending">⏳ Pending</option>
+            <option value="selected">✨ Selected</option>
+            <option value="notselected">💤 NotSelected</option>
+            <option value="absent">🚨 Absent</option>
           </select>
         </div>
       </div>
 
-      {/* GLOBAL REQUISITION GRID MATRIX VIEW */}
+      {/* GLOBAL VIEW-ONLY REQUISITION GRID MATRIX */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto overflow-y-auto max-h-[55vh] scrollbar-thin">
+        <div className="overflow-x-auto overflow-y-auto max-h-[60vh] scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-max text-xs font-mono">
             <thead>
               <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[10px]">
-                <th className="p-3.5 border-r border-slate-800/60">Log Timestamp</th>
-                <th className="p-3.5 border-r border-slate-800/60">Member Identity</th>
-                <th className="p-3.5 border-r border-slate-800/60">Target Item</th>
+                <th className="p-3.5 border-r border-slate-800/60">Timestamp</th>
+                <th className="p-3.5 border-r border-slate-800/60">Member</th>
+                <th className="p-3.5 border-r border-slate-800/60">Item</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-center">Qty</th>
-                <th className="p-3.5 border-r border-slate-800/60">Action Context</th>
-                <th className="p-3.5 border-r border-slate-800/60">Final Outcome</th>
-                <th className="p-3.5 border-r border-slate-800/60">Live Status</th>
+                <th className="p-3.5 border-r border-slate-800/60">ApplicationStatus</th>
+                <th className="p-3.5 border-r border-slate-800/60">SelectionStatus</th>
+                <th className="p-3.5 border-r border-slate-800/60">LiveStatus</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-center">Priority</th>
-                <th className="p-3.5">Event Date</th>
+                <th className="p-3.5">EventDate</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 bg-slate-900/40 text-slate-300">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-12 text-center text-slate-500 italic font-sans text-xs">
-                    No corresponding transaction entries logged under this specific filter context definition.
+                  <td colSpan="9" className="p-8 text-center text-slate-500 italic font-sans text-sm">
+                    No corresponding transaction entries logged under this specific filter context.
                   </td>
                 </tr>
               ) : (
@@ -284,7 +279,7 @@ export default function RequestHistoryTab() {
                         {row.selectionStatus}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-400 whitespace-nowrap font-sans font-medium uppercase text-[10px]">
+                    <td className="p-3 text-slate-400 whitespace-nowrap text-[11px] font-sans uppercase font-semibold">
                       {row.liveStatus ? `⚡ ${row.liveStatus}` : '---'}
                     </td>
                     <td className="p-3 font-bold text-center text-cyan-400">{row.priority}</td>
