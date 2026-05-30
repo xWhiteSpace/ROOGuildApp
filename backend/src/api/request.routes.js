@@ -40,7 +40,6 @@ function resolveUserIdentity(req) {
 
 /**
  * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE (REQ013)
- * Uses the player name index rule to query ONLY this specific user's historical milestones.
  */
 async function calculatePriorityScore(db, playerDisplayName, itemName) {
   const playerHistorySnap = await db.ref('auction/web_requests')
@@ -94,41 +93,47 @@ router.get('/init', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
-    const playerRequestsSnap = await db.ref('auction/web_requests')
-      .orderByChild('member')
-      .equalTo(playerDisplayName)
-      .once('value');
-
+    // Pull all requests to dynamically harvest unique roster names
+    const allRequestsSnap = await db.ref('auction/web_requests').once('value');
+    const uniqueMembersSet = new Set();
+    
     const liveCounts = { 'Puppet': 0, 'Illu': 0, 'Light&Dark': 0, 'Time&Space': 0 };
-    if (playerRequestsSnap.exists()) {
-      Object.values(playerRequestsSnap.val()).forEach(req => {
-        const itemType = req.item;
-        const appStatus = (req.applicationStatus || '').trim().toLowerCase();
-        const selStatus = (req.selectionStatus || 'pending').trim().toLowerCase();
-        const liveStatus = (req.liveStatus || '').trim().toLowerCase();
-        const itemQty = parseInt(req.quantity, 10) || 0;
+    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
 
-        const isAwaitingEvaluation = (selStatus === 'pending');
-        const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
+    if (allRequestsSnap.exists()) {
+      const rawRequests = allRequestsSnap.val();
+      const allPendingRows = [];
 
-        if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
+      Object.values(rawRequests).forEach(req => {
+        const reqMember = (req.member || '').trim();
+        if (reqMember && reqMember !== '???') {
+          uniqueMembersSet.add(reqMember);
+        }
+
+        // Calculate personal live counts if this row belongs to the current logged-in agent
+        if (reqMember.toLowerCase() === playerDisplayName.toLowerCase()) {
+          const itemType = req.item;
+          const appStatus = (req.applicationStatus || '').trim().toLowerCase();
+          const selStatus = (req.selectionStatus || 'pending').trim().toLowerCase();
+          const liveStatus = (req.liveStatus || '').trim().toLowerCase();
+          const itemQty = parseInt(req.quantity, 10) || 0;
+
+          const isAwaitingEvaluation = (selStatus === 'pending');
+          const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
+
+          if (isAwaitingEvaluation || isLiveInCurrentSession) {
+            if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
+            if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
+          }
+        }
+
+        // Collect rows marked 'Pending' for live leaderboard compilation
+        if (req.selectionStatus === 'Pending') {
+          allPendingRows.push(req);
         }
       });
-    }
-    Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-    
-    const pendingRequestsSnap = await db.ref('auction/web_requests')
-      .orderByChild('selectionStatus')
-      .equalTo('Pending')
-      .once('value');
-
-    if (pendingRequestsSnap.exists()) {
-      const allPendingRows = Object.values(pendingRequestsSnap.val());
-
+      // Build out live item queue priority lists
       Object.keys(rankingsByItem).forEach(targetItem => {
         const userCalculationsMap = {};
 
@@ -139,7 +144,7 @@ router.get('/init', async (req, res) => {
           const appStatus = (req.applicationStatus || 'requested').toLowerCase();
           const priorityScore = parseInt(req.priority, 10) || 0;
 
-          if (!player || player === '???' || itemType !== targetItem) return;
+          if (itemType !== targetItem) return;
 
           if (!userCalculationsMap[player]) {
             userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
@@ -155,6 +160,8 @@ router.get('/init', async (req, res) => {
       });
     }
 
+    Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
+
     return res.json({
       success: true,
       displayName: playerDisplayName,
@@ -166,7 +173,8 @@ router.get('/init', async (req, res) => {
       nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
       currentPhase: timeGateStatus.currentPhase,
       phaseIntervals: timeGateStatus.phaseIntervals,
-      rankingsByItem
+      rankingsByItem,
+      fullRoster: Array.from(uniqueMembersSet).sort() // 🌟 NEW: Alphabetical master array of all guild characters
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -175,7 +183,6 @@ router.get('/init', async (req, res) => {
 
 /**
  * 📥 SUBMIT GATE REQUISITION PORTER
- * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
   const timeGateStatus = getGateStatusDetails();
@@ -215,7 +222,7 @@ router.post('/submit', async (req, res) => {
         quantity: targetQty,
         applicationStatus: 'Requested', 
         selectionStatus: 'Pending',     
-        liveStatus: '',                 // 🌟 FIXED: Explicitly sets empty string for unfinalized requests
+        liveStatus: '',                 
         priority: dynamicPriority,
         eventDate: targetedEventDate    
       });
@@ -229,7 +236,6 @@ router.post('/submit', async (req, res) => {
 
 /**
  * 🛑 CANCEL GATE REQUISITION PORTER
- * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -253,7 +259,7 @@ router.post('/cancel', async (req, res) => {
       quantity: parseInt(cancelQty, 10),
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
-      liveStatus: '',                 // 🌟 FIXED: Explicitly sets empty string for cancellations
+      liveStatus: '',                 
       priority: 0,
       eventDate: targetedEventDate 
     });
@@ -266,7 +272,6 @@ router.post('/cancel', async (req, res) => {
 
 /**
  * 📊 GLOBAL REQUEST HISTORY LOGS PIPELINE
- * GET /api/requests/history
  */
 router.get('/history', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -291,7 +296,7 @@ router.get('/history', async (req, res) => {
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       applicationStatus: rawData[key].applicationStatus || "Requested",
       selectionStatus: rawData[key].selectionStatus || "Pending",
-      liveStatus: rawData[key].liveStatus || "", // 🌟 FIXED: Removed default "Done" fallback value
+      liveStatus: rawData[key].liveStatus || "", 
       priority: parseInt(rawData[key].priority, 10) || 0,
       eventDate: rawData[key].eventDate || ""
     }));
@@ -304,7 +309,6 @@ router.get('/history', async (req, res) => {
 
 /**
  * 📦 PERMANENT LOOT HISTORY ARCHIVE LEDGER ENDPOINT
- * GET /api/requests/loot-history
  */
 router.get('/loot-history', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -339,7 +343,6 @@ router.get('/loot-history', async (req, res) => {
 
 /**
  * 🚀 PRODUCTION COMMIT TRANSACTION RUNNER
- * POST /api/requests/commit-session
  */
 router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -354,7 +357,6 @@ router.post('/commit-session', async (req, res) => {
     const db = getDatabase();
     const updates = {};
 
-    // 1. Commit each active item group to the permanent ledger path ('auction/loot_history')
     Object.keys(summary).forEach(itemKey => {
       const entry = summary[itemKey];
       if (entry.qty > 0) {
@@ -370,7 +372,6 @@ router.post('/commit-session', async (req, res) => {
       }
     });
 
-    // 2. Fetch all active requests to match up allocations and close lifecycle loops
     const requestsSnap = await db.ref('auction/web_requests').once('value');
     if (requestsSnap.exists()) {
       const allRequests = requestsSnap.val();
@@ -380,7 +381,6 @@ router.post('/commit-session', async (req, res) => {
         const recordItem = record.item;
         const recordMember = record.member;
         
-        // Process only records that are currently evaluated inside this session
         if (record.selectionStatus === 'Pending' && allocations[recordItem]) {
           const winnersList = allocations[recordItem].selected || [];
           const standbyList = allocations[recordItem].notSelected || [];
@@ -396,10 +396,8 @@ router.post('/commit-session', async (req, res) => {
       });
     }
 
-    // 3. Clear temporary staging workspace paths
     updates['auction/active_session'] = null;
 
-    // Execute multi-node atomic block transaction safely
     await db.ref().update(updates);
     return res.json({ success: true });
   } catch (error) {

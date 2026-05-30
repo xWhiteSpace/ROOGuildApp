@@ -30,14 +30,10 @@ export default function MimicBookTab({ user }) {
   });
   const [committing, setCommitting] = useState(false);
 
-  // --- 📋 MASTER PRIORITY TARGET POOL ---
-  const [rankingsByItem, setRankingsByItem] = useState({
-    Puppet: [],
-    Illu: [],
-    'Light&Dark': [],
-    'Time&Space': []
-  });
-  
+  // --- 📋 MASTER TARGET INFRASTRUCTURE POOLS ---
+  const [rankingsByItem, setRankingsByItem] = useState({ Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] });
+  const [masterGuildRoster, setMasterGuildRoster] = useState([]); // 🌟 NEW: Complete array of all historical characters
+
   // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
   const [qtyPerPage, setQtyPerPage] = useState(4);
   const [lootRows, setLootRows] = useState([
@@ -45,25 +41,22 @@ export default function MimicBookTab({ user }) {
   ]);
   
   const [lootSummary, setLootSummary] = useState({
-    Puppet: { qty: 0, limit: 1, seats: 0 },
-    Illu: { qty: 0, limit: 1, seats: 0 },
-    'Light&Dark': { qty: 0, limit: 1, seats: 0 },
-    'Time&Space': { qty: 0, limit: 1, seats: 0 }
+    Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
+    'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
   });
   const [validationError, setValidationError] = useState('');
   const [liveGapsWarning, setLiveGapsWarning] = useState('');
 
-  // --- PHASE 2 STATE: FIXED SEATS STRUCTURE ARRAY SYSTEM ---
+  // --- PHASE 2 STATE: FIXED SEATS STRUCTURE SYSTEM ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
   const [categoryAllocations, setCategoryAllocations] = useState({
-    Puppet: { selected: [] }, // Array containing exactly 'seats' entries (Strings or null)
-    Illu: { selected: [] },
-    'Light&Dark': { selected: [] },
-    'Time&Space': { selected: [] }
+    Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
   });
 
-  // --- 🎹 POPULAR TARGETED ASSIGNMENT SEAT POPOVER STATES ---
+  // --- 🎹 ADVANCED ALL-ROSTER POPOVER SELECTION CRITERIA STATES ---
   const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
+  const [popoverContextTab, setPopoverContextTab] = useState('applicants'); // 'applicants' or 'fullRoster'
+  const [popoverRosterSearch, setPopoverRosterSearch] = useState('');
   const popoverAnchorRef = useRef(null);
 
   // --- 🎹 DRAG AND DROP INDEX TRACKER STATE ---
@@ -101,7 +94,7 @@ export default function MimicBookTab({ user }) {
     setLiveGapsWarning(missingBlocks.length > 0 ? `⚠️ GAP WARNING: Unallocated grid sequence boxes skipped at: ${missingBlocks.join(', ')}` : '');
   }, [lootRows, qtyPerPage]);
 
-  // --- 📥 INITIALIZE REQUEST POOL ---
+  // --- 📥 INITIALIZE REQUEST POOL & ROSTER ---
   const loadTrueRequestPool = async () => {
     try {
       setLoadingPool(true);
@@ -112,8 +105,9 @@ export default function MimicBookTab({ user }) {
       }
       const res = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers: customHeaders, credentials: 'include' });
       const data = await res.json();
-      if (data.success && data.rankingsByItem) {
-        setRankingsByItem(data.rankingsByItem);
+      if (data.success) {
+        if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
+        if (data.fullRoster) setMasterGuildRoster(data.fullRoster); // Saves unified characters list
       }
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
@@ -216,10 +210,8 @@ export default function MimicBookTab({ user }) {
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
     const calculatedSummary = {
-      Puppet: { qty: 0, limit: 1, seats: 0 },
-      Illu: { qty: 0, limit: 1, seats: 0 },
-      'Light&Dark': { qty: 0, limit: 1, seats: 0 },
-      'Time&Space': { qty: 0, limit: 1, seats: 0 }
+      Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
+      'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
     };
     
     const sortedRows = [...lootRows].sort((a, b) => a.startPage - b.startPage || a.startPos - b.startPos);
@@ -259,13 +251,11 @@ export default function MimicBookTab({ user }) {
     setLootSummary(calculatedSummary);
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
 
-    // 🌟 SETUP INTUITIVE FIXED SEAT STRUCTURE WORKSPACE ARRANGEMENT:
     const initialAllocations = {};
     Object.keys(calculatedSummary).forEach(category => {
       const seatsCount = calculatedSummary[category].seats;
       const trueApplicants = rankingsByItem[category] || []; 
       
-      // Auto-populate up to total seats limit; fill remaining seats with null if short on applicants
       const selectedGrid = Array.from({ length: seatsCount }, (_, i) => trueApplicants[i] || null);
       initialAllocations[category] = { selected: selectedGrid };
     });
@@ -276,13 +266,11 @@ export default function MimicBookTab({ user }) {
     setActiveStep(2);
   };
 
-  // --- PHASE 2 LOGIC: REFIXED POSITION SLOT SWAPPING CONTROLS ---
+  // --- PHASE 2 LOGIC: SHIFT-PROOF POSITION OVERRIDES ---
   const handleDropBidder = (seatIndex) => {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
-    
-    // 🌟 THE UNLOCK FIX: Sets this element to null to preserve grid dimensions and avoid cascading shifts
-    updatedSelected[seatIndex] = null; 
+    updatedSelected[seatIndex] = null; // Unassigns slot to maintain fixed grid indices
 
     setCategoryAllocations({
       ...categoryAllocations,
@@ -301,10 +289,11 @@ export default function MimicBookTab({ user }) {
       ...categoryAllocations,
       [activeMatrixFilter]: { selected: updatedSelected }
     });
-    setActivePopoverSeatIndex(null); // Clear lookup state context
+    setActivePopoverSeatIndex(null); 
+    setPopoverRosterSearch(''); // Reset popover buffer queries
   };
 
-  // --- DRAG AND DROP SWAPPERS FOR POSITION PLACEMENTS ---
+  // --- DRAG AND DROP SWAPPERS ---
   const handleRowDragStart = (e, index) => {
     setDraggedItemIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -317,7 +306,6 @@ export default function MimicBookTab({ user }) {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
     
-    // Smoothly swap whatever content resides inside both indices (even if null)
     const temp = updatedSelected[targetIndex];
     updatedSelected[targetIndex] = updatedSelected[draggedItemIndex];
     updatedSelected[draggedItemIndex] = temp;
@@ -329,7 +317,6 @@ export default function MimicBookTab({ user }) {
     setDraggedItemIndex(null);
   };
 
-  // --- COMPILE GAME AUCTION BOOK PREVIEW LAYOUT ENGINE ---
   const handleLockAndGenerateMatrix = () => {
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
@@ -343,7 +330,6 @@ export default function MimicBookTab({ user }) {
       const seatArray = categoryAllocations[category]?.selected || [];
       
       seatArray.forEach(playerName => {
-        // If seat was explicitly left <EMPTY>, treat it as an unallocated system line item block
         const resolvedName = playerName === null ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName;
         
         for (let step = 0; step < itemsInfo.limit; step++) {
@@ -378,17 +364,13 @@ export default function MimicBookTab({ user }) {
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      // Build out standard schema structure mapping parameters for backend endpoint processing
       const processedAllocations = {};
       Object.keys(categoryAllocations).forEach(cat => {
         const allAssignedWinners = categoryAllocations[cat].selected.filter(n => n !== null);
         const masterList = rankingsByItem[cat] || [];
         const nonWinners = masterList.filter(n => !allAssignedWinners.includes(n));
         
-        processedAllocations[cat] = {
-          selected: allAssignedWinners,
-          notSelected: nonWinners
-        };
+        processedAllocations[cat] = { selected: allAssignedWinners, notSelected: nonWinners };
       });
 
       const res = await fetch(`${backendUrl}/api/requests/commit-session`, {
@@ -454,10 +436,18 @@ export default function MimicBookTab({ user }) {
 
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
   
-  // Dynamic extraction: Standby Queue filters out anyone who currently holds an active seat position
+  // Standby Queue isolates members who made requests but do not hold an active seat
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(
     name => !currentActiveSelections.selected.includes(name)
   );
+
+  // 🌟 MASTER ROSTER LOOKUP SELECTOR FILTER LOGIC:
+  // Dynamically compile matching guild character names while ensuring active seat holders are hidden
+  const popoverFilteredRosterList = masterGuildRoster.filter(name => {
+    const passesSearch = name.toLowerCase().includes(popoverRosterSearch.toLowerCase());
+    const isAlreadySeated = currentActiveSelections.selected.includes(name);
+    return passesSearch && !isAlreadySeated;
+  });
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -487,7 +477,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- ADMINISTRATIVE OFFICER MANAGEMENT CONTROLS PANEL --- */}
+      {/* --- ADMINISTRATIVE OFFICER PANEL --- */}
       {isAdminMode && (
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4" ref={popoverAnchorRef}>
           
@@ -502,7 +492,7 @@ export default function MimicBookTab({ user }) {
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 4 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>4. Commit Archive</div>
           </div>
 
-          {/* STEP 1 WORKSPACE: DYNAMIC ENTRY CONTROLS WITHOUT BROWSER ARROWS */}
+          {/* STEP 1 WORKSPACE */}
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between">
@@ -556,7 +546,6 @@ export default function MimicBookTab({ user }) {
                           </select>
                         </td>
                         
-                        {/* 🌟 SPINNER HOOKS REMOVED: Custom styles hide native input arrows completely */}
                         <td className="p-2 text-center">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
                             <button onClick={() => handleUpdateLootRow(row.id, 'startPage', Math.max(1, row.startPage - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
@@ -613,7 +602,7 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE: UPGRADED SHIFT-PROOF FIXED SEATS WORKSPACE */}
+          {/* STEP 2 WORKSPACE */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               
@@ -638,7 +627,6 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
-                {/* UPGRADED ASSIGNED GRID CONTAINERS */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
                     <span>✨ Assigned Recipients Grid (Drag Ranks to Swap Box Seats)</span>
@@ -647,19 +635,18 @@ export default function MimicBookTab({ user }) {
                   <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                     {currentActiveSelections.selected.map((name, i) => {
                       if (name === null) {
-                        // Render clean shift-proof dotted placeholder container
                         return (
                           <div 
                             key={i}
                             onDragOver={handleRowDragOver}
                             onDrop={(e) => handleRowDrop(e, i)}
-                            onClick={() => setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i)}
+                            onClick={() => { setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
                             className={`flex items-center justify-between p-2.5 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition-all ${
                               activePopoverSeatIndex === i ? 'ring-2 ring-indigo-500 border-transparent bg-slate-900/60' : ''
                             }`}
                           >
                             <span className="font-sans text-[10px] font-black">BOX AT SEAT #{i + 1}</span>
-                            <span className="text-[10px] tracking-tight text-slate-500 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 animate-pulse">➕ CLICK TO SELECT STANDBY CANDIDATE</span>
+                            <span className="text-[10px] tracking-tight text-slate-500 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 animate-pulse">➕ CLICK TO SELECT ANY MEMBER</span>
                           </div>
                         );
                       }
@@ -684,13 +671,9 @@ export default function MimicBookTab({ user }) {
                         </div>
                       );
                     })}
-                    {currentActiveSelections.selected.length === 0 && (
-                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">Run the calculation engine to build grid seat spaces.</div>
-                    )}
                   </div>
                 </div>
 
-                {/* READ-ONLY PRIORITY STANDBY QUEUE TRANSLATION PANEL */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
                     <span>💤 Standby Line (Priority Locked Queue)</span>
@@ -703,34 +686,75 @@ export default function MimicBookTab({ user }) {
                         <span className="text-slate-600 text-[10px] uppercase font-bold font-sans shrink-0">Priority Match Rank #{i+1}</span>
                       </div>
                     ))}
-                    {activeStandbyPoolList.length === 0 && (
-                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No extra candidates remaining inside the unassigned standby queue.</div>
-                    )}
                   </div>
                 </div>
               </div>
 
-              {/* 🌟 POPOVER MENU DISPLAY LAYER FOR DIRECT UNASSIGNED ASSIGNMENTS */}
+              {/* 🌟 UPGRADED EXTRA DROPS CONTEXT POPOVER PANEL OVERLAY */}
               {activePopoverSeatIndex !== null && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-black uppercase text-indigo-400 tracking-wide">Assign Member directly into Seat #{activePopoverSeatIndex + 1}</h4>
+                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Allocate Seat #{activePopoverSeatIndex + 1} Position</h4>
                     <button onClick={() => setActivePopoverSeatIndex(null)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
                   </div>
                   
-                  <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
-                    {activeStandbyPoolList.map((name, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handlePromoteBidderToTargetSeat(name)}
-                        className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
-                      >
-                        <span className="font-bold">{name}</span>
-                        <span className="font-mono text-[10px] text-slate-500 group-hover:text-white">Rank #{idx+1}</span>
-                      </button>
-                    ))}
-                    {activeStandbyPoolList.length === 0 && (
-                      <p className="text-center text-xs text-slate-500 italic py-4">No unallocated standby members found for this item type category.</p>
+                  {/* DUAL-TAB CONTEXT TOGGLE SWITCH */}
+                  <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+                    <button 
+                      onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black tracking-tight transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                    >
+                      🎯 Portal Applicants
+                    </button>
+                    <button 
+                      onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black tracking-tight transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                    >
+                      🌐 Full Guild Roster
+                    </button>
+                  </div>
+
+                  {/* HIGH-SPEED SEARCH INPUT FIELD FOR LEFTOVER LOOT ASSIGNMENTS */}
+                  {popoverContextTab === 'fullRoster' && (
+                    <input
+                      type="text"
+                      value={popoverRosterSearch}
+                      onChange={(e) => setPopoverRosterSearch(e.target.value)}
+                      placeholder="🔍 Type character name to filter roster matrix..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
+                    />
+                  )}
+
+                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                    {popoverContextTab === 'applicants' ? (
+                      activeStandbyPoolList.map((name, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePromoteBidderToTargetSeat(name)}
+                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
+                        >
+                          <span className="font-bold text-slate-200">{name}</span>
+                          <span className="font-mono text-[10px] text-slate-500">Rank #{idx+1}</span>
+                        </button>
+                      ))
+                    ) : (
+                      popoverFilteredRosterList.map((name, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePromoteBidderToTargetSeat(name)}
+                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
+                        >
+                          <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
+                          <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">Guild Member</span>
+                        </button>
+                      ))
+                    )}
+
+                    {popoverContextTab === 'applicants' && activeStandbyPoolList.length === 0 && (
+                      <p className="text-center text-xs text-slate-500 italic py-4">No unallocated standby members found for this item type.</p>
+                    )}
+                    {popoverContextTab === 'fullRoster' && popoverFilteredRosterList.length === 0 && (
+                      <p className="text-center text-xs text-slate-500 italic py-4">No matching characters available within the roster tree.</p>
                     )}
                   </div>
                 </div>
@@ -757,7 +781,7 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 4 WORKSPACE: DATA ARCHIVER */}
+          {/* STEP 4 WORKSPACE */}
           {activeStep === 4 && (
             <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-5 rounded-xl text-center space-y-4 animate-fadeIn">
               <div className="space-y-1">
@@ -806,7 +830,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT: THE UNIFORM SHIFT-PROOF DIGITAL BOOK MIMIC */}
+        {/* LEFT COMPONENT */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -849,7 +873,7 @@ export default function MimicBookTab({ user }) {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT: USER ALLOCATION LEDGER */}
+        {/* RIGHT COMPONENT */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
@@ -939,7 +963,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL --- */}
+      {/* --- VIEW-ONLY LOOT HISTORY MODAL --- */}
       {isLootHistoryOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
