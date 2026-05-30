@@ -216,14 +216,14 @@ router.post('/submit', async (req, res) => {
       const newRequestRef = db.ref('auction/web_requests').push();
       await newRequestRef.set({
         id: newRequestRef.key,
-        date: currentGMT8Date,          // Form submission timestamp clock
+        date: currentGMT8Date,          
         member: playerDisplayName,
         item: itemName,
         quantity: targetQty,
         applicationStatus: 'Requested', 
         selectionStatus: 'Pending',     
         priority: dynamicPriority,
-        eventDate: targetedEventDate    // 🌟 RETAINED BLANK: Writes as "" if unconfigured, ready for Loot Register
+        eventDate: targetedEventDate    
       });
     }
 
@@ -261,7 +261,7 @@ router.post('/cancel', async (req, res) => {
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
       priority: 0,
-      eventDate: targetedEventDate // 🌟 RETAINED BLANK: Kept clean for future administrative sorting
+      eventDate: targetedEventDate 
     });
 
     return res.json({ success: true });
@@ -287,8 +287,6 @@ router.get('/history', async (req, res) => {
     }
 
     const rawData = historySnap.val();
-    
-    // Alphabetical sort on keys preserves chronological data injection order (honoring our prefix fix)
     const sortedKeys = Object.keys(rawData).sort();
     
     const historyArray = sortedKeys.map(key => ({
@@ -305,6 +303,41 @@ router.get('/history', async (req, res) => {
     }));
 
     return res.json({ success: true, history: historyArray });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 📦 PERMANENT LOOT HISTORY ARCHIVE LEDGER ENDPOINT
+ * GET /api/requests/loot-history
+ */
+router.get('/loot-history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const lootHistorySnap = await db.ref('auction/loot_history').once('value');
+    
+    if (!lootHistorySnap.exists()) {
+      return res.json({ success: true, history: [] });
+    }
+
+    const rawData = lootHistorySnap.val();
+    const sortedKeys = Object.keys(rawData).sort();
+    
+    const lootHistoryArray = sortedKeys.map(key => ({
+      id: key,
+      date: rawData[key].date || "",
+      event: rawData[key].event || "",
+      item: rawData[key].item || "",
+      quantity: parseInt(rawData[key].quantity, 10) || 0,
+      max: parseInt(rawData[key].max, 10) || 1,
+      mem: parseInt(rawData[key].mem, 10) || 0
+    }));
+
+    return res.json({ success: true, history: lootHistoryArray });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

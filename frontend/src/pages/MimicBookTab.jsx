@@ -9,6 +9,11 @@ export default function MimicBookTab({ user }) {
   const [activeStep, setActiveStep] = useState(1); 
   const [loadingPool, setLoadingPool] = useState(false);
 
+  // --- 📜 NEW LOOT HISTORY MODAL STATE TRACKING ---
+  const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
+  const [loadingLootHistory, setLoadingLootHistory] = useState(false);
+  const [lootHistoryData, setLootHistoryData] = useState([]);
+
   // --- 📋 TRUE TARGET POOL FROM THE REQUEST LIST ---
   const [rankingsByItem, setRankingsByItem] = useState({
     Puppet: [],
@@ -71,6 +76,33 @@ export default function MimicBookTab({ user }) {
       console.error("Failed to fetch current request pool from backend:", err);
     } finally {
       setLoadingPool(false);
+    }
+  };
+
+  // --- 📥 NEW HOOK: FETCH IMMUTABLE LOOT HISTORY LEDGER ---
+  const fetchLootHistoryLog = async () => {
+    try {
+      setLoadingLootHistory(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+
+      const res = await fetch(`${backendUrl}/api/requests/loot-history`, {
+        method: 'GET',
+        headers: customHeaders,
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setLootHistoryData(data.history || []);
+      }
+    } catch (err) {
+      console.error("Failed to extract loot history logs:", err);
+    } finally {
+      setLoadingLootHistory(false);
     }
   };
 
@@ -284,6 +316,29 @@ export default function MimicBookTab({ user }) {
     setGeneratedSlots([]);
   };
 
+  // --- 📥 BROWSER-NATIVE LOOT HISTORY CSV EXPORT MODULE ---
+  const handleDownloadLootHistoryCSV = () => {
+    if (lootHistoryData.length === 0) return;
+    const csvHeaders = ["Date", "Event", "Item", "Qty", "Max", "Mem"];
+    const csvRows = lootHistoryData.map(row => [
+      `"${row.date}"`,
+      `"${row.event}"`,
+      `"${row.item}"`,
+      row.quantity,
+      row.max,
+      row.mem
+    ]);
+    const csvContent = [csvHeaders.join(","), ...csvRows.map(e => e.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `LootHistory_Spreadsheet_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getItemStyleProfile = (itemType) => {
     switch (itemType) {
       case 'Puppet':
@@ -309,7 +364,7 @@ export default function MimicBookTab({ user }) {
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [], notSelected: [] };
 
   return (
-    <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans">
+    <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
       
       {/* BRAND MONITOR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
@@ -318,6 +373,14 @@ export default function MimicBookTab({ user }) {
           <p className="text-xs text-slate-400 mt-1">Digital Twin Pre-Raid Coordination Grid & Ledger Desk</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* 📋 LOOT HISTORY LEDGER ENTRY TRIGGER BUTTON */}
+          <button
+            onClick={() => { fetchLootHistoryLog(); setIsLootHistoryOpen(true); }}
+            className="px-4 py-1.5 rounded-xl text-xs font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:text-white transition-all shadow"
+          >
+            📋 View Loot History
+          </button>
+          
           <button 
             onClick={() => setIsAdminMode(!isAdminMode)}
             className={`px-3 py-1.5 rounded-xl text-[10px] uppercase font-black tracking-wider transition border ${
@@ -685,6 +748,95 @@ export default function MimicBookTab({ user }) {
 
         </div>
       </div>
+
+      {/* ========================================================================================= */}
+      {/* 📋 VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL WINDOW CONTAINER */}
+      {/* ========================================================================================= */}
+      {isLootHistoryOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          
+          {/* Main Modal Card Frame Structure */}
+          <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header Title Bracket */}
+            <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-slate-100 tracking-wide">📜 Recorded Loot Ledger Archive</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Historical verification records compiled directly from raid logs</p>
+              </div>
+              <button 
+                onClick={() => setIsLootHistoryOpen(false)}
+                className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Data Table Content Area Grid */}
+            <div className="p-6 overflow-x-auto overflow-y-auto flex-grow scrollbar-thin">
+              {loadingLootHistory ? (
+                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">
+                  Extracting historical index criteria parameters...
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs font-mono">
+                  <thead>
+                    <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
+                      <th className="p-3 border-r border-slate-800/40">Date</th>
+                      <th className="p-3 border-r border-slate-800/40">Event</th>
+                      <th className="p-3 border-r border-slate-800/40">Item</th>
+                      <th className="p-3 border-r border-slate-800/40 text-center">Qty</th>
+                      <th className="p-3 border-r border-slate-800/40 text-center">Max</th>
+                      <th className="p-3 text-center">Mem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40 text-slate-300">
+                    {lootHistoryData.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">
+                          No legacy loot logs tracked within the database table folders.
+                        </td>
+                      </tr>
+                    ) : (
+                      lootHistoryData.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
+                          <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
+                          <td className="p-3 font-sans font-bold text-slate-200">{row.event}</td>
+                          <td className="p-3 font-sans font-semibold text-indigo-400">{row.item}</td>
+                          <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
+                          <td className="p-3 text-center text-amber-500 font-bold">{row.max}</td>
+                          <td className="p-3 font-bold text-center text-emerald-400">{row.mem}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Sticky Interaction Action Footer Anchors */}
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
+              {/* [EXPORT] CSV DOWN-DOWNLOAD GENERATOR */}
+              <button
+                onClick={handleDownloadLootHistoryCSV}
+                disabled={lootHistoryData.length === 0}
+                className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide"
+              >
+                📥 Export
+              </button>
+
+              {/* [RETURN] MODAL STATE DISMISSER BUTTON */}
+              <button
+                onClick={() => setIsLootHistoryOpen(false)}
+                className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide"
+              >
+                ↩️ Return
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
