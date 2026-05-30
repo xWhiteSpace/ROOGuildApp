@@ -56,6 +56,9 @@ export default function MimicBookTab({ user }) {
   const [categoryAllocations, setCategoryAllocations] = useState({
     Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
   });
+  const [initialWinnersByItem, setInitialWinnersByItem] = useState({
+    Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': []
+  });
 
   // --- 🎹 POP-OVER OVERLAY UI ANCHOR STATES ---
   const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
@@ -279,6 +282,7 @@ export default function MimicBookTab({ user }) {
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
 
     const initialAllocations = {};
+    const initialWinnersTrack = { Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] };
     Object.keys(calculatedSummary).forEach(category => {
       const totalDropInventoryCount = calculatedSummary[category].qty;
       const rowLimitValue = calculatedSummary[category].limit;
@@ -296,17 +300,23 @@ export default function MimicBookTab({ user }) {
         const requestedQuantity = detailsMap[pName]?.quantity || 1;
         const allowedBoxSpan = Math.min(requestedQuantity, rowLimitValue);
 
+        let allocatedSome = false;
         for (let b = 0; b < allowedBoxSpan; b++) {
           if (globalBoxCursor < totalDropInventoryCount) {
             flatStaticBoxArray[globalBoxCursor] = pName;
             globalBoxCursor++;
+            allocatedSome = true;
           }
+        }
+        if (allocatedSome) {
+          initialWinnersTrack[category].push(pName);
         }
       }
 
       initialAllocations[category] = { selected: flatStaticBoxArray };
     });
 
+    setInitialWinnersByItem(initialWinnersTrack);
     setCategoryAllocations(initialAllocations);
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].qty > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
@@ -415,11 +425,24 @@ export default function MimicBookTab({ user }) {
       Object.keys(categoryAllocations).forEach(cat => {
         const boxEntries = categoryAllocations[cat].selected || [];
         const verifiedWinnersList = boxEntries.filter(name => name !== null);
-        const masterList = rankingsByItem[cat] || [];
-        const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n));
         
+        // 🌟 ABSENT TRACKING CRITERIA: Auto-winners who finish manually dropped down to 0 units
+        const initialWinnersList = initialWinnersByItem[cat] || [];
+        const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
+
+        const masterList = rankingsByItem[cat] || [];
+        const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n) && !absentList.includes(n));
+        
+        // Group instances by name into unique items to safely synthesis ghost transactions
+        const uniqueWinners = [...new Set(verifiedWinnersList)];
+        const selectedPayload = uniqueWinners.map(name => ({
+          name,
+          slots: verifiedWinnersList.filter(n => n === name).length
+        }));
+
         processedAllocations[cat] = {
-          selected: verifiedWinnersList.map(name => ({ name, slots: 1 })),
+          selected: selectedPayload,
+          absent: absentList,
           notSelected: nonWinners
         };
       });
@@ -468,16 +491,6 @@ export default function MimicBookTab({ user }) {
     document.body.removeChild(link);
   };
 
-  const getItemStyleProfile = (itemType) => {
-    switch (itemType) {
-      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
-      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
-      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
-      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
-    }
-  };
-
   const currentUserName = user?.displayName || user?.username || '';
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     const slotIndex = i + 1;
@@ -486,6 +499,7 @@ export default function MimicBookTab({ user }) {
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
 
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
+  const seatedNamesOnly = currentActiveSelections.selected.filter(n => n !== null);
   
   // 🌟 SMART LOOKUP RETENTION: Keeps name visible until total instances match requested counts
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
@@ -694,7 +708,7 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                 
-                {/* 🌟 UPGRADED: Single-Column vertical list layout optimized for mobile scrolling navigation (POINT 2) */}
+                {/* Single-Column vertical list layout optimized for mobile scrolling navigation */}
                 <div className="md:col-span-2 border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
                     <span>✨ Individual Dropped Items Playlist (Click gaps to fill, Drag to Swap)</span>
@@ -850,7 +864,7 @@ export default function MimicBookTab({ user }) {
                 </div>
               )}
 
-              {/* 🌟 UPGRADED: Guard rail confirm interceptor protects distribution layout records (POINT 3) */}
+              {/* Guard rail confirm interceptor protects distribution layout records */}
               <div className="flex justify-between pt-2">
                 <button 
                   onClick={() => {
