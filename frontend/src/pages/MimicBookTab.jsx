@@ -14,6 +14,15 @@ export default function MimicBookTab({ user }) {
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
 
+  // --- 🔒 FRESH DATA ARCHIVER WORKSPACE COMMIT FIELDS ---
+  const [commitEvent, setCommitEvent] = useState('GuildLeague');
+  const [commitDate, setCommitDate] = useState(() => {
+    const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+    const gmt8Date = new Date(gmt8String);
+    return `${gmt8Date.getMonth() + 1}/${gmt8Date.getDate()}/${gmt8Date.getFullYear()}`;
+  });
+  const [committing, setCommitting] = useState(false);
+
   // --- 📋 TRUE TARGET POOL FROM THE REQUEST LIST ---
   const [rankingsByItem, setRankingsByItem] = useState({
     Puppet: [],
@@ -165,7 +174,6 @@ export default function MimicBookTab({ user }) {
         return;
       }
 
-      // Overlap checks
       if (i > 0) {
         const prevRow = sortedRows[i - 1];
         const prevEndLinear = (prevRow.endPage * qtyPerPage) + prevRow.endPos;
@@ -180,7 +188,6 @@ export default function MimicBookTab({ user }) {
       calculatedSummary[row.itemType].limit = row.limit;
     }
 
-    // Process Qty / Limit = Seats Available
     Object.keys(calculatedSummary).forEach(key => {
       const item = calculatedSummary[key];
       item.seats = Math.floor(item.qty / item.limit);
@@ -189,7 +196,6 @@ export default function MimicBookTab({ user }) {
     setLootSummary(calculatedSummary);
     set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
 
-    // ⚡ PRE-FILL ASSIGNMENTS AUTOMATICALLY USING THE PRIORITY RANKED LIST
     const initialAllocations = {};
     Object.keys(calculatedSummary).forEach(category => {
       const seatsCount = calculatedSummary[category].seats;
@@ -216,8 +222,6 @@ export default function MimicBookTab({ user }) {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = currentData.selected.filter((_, i) => i !== index);
     
-    // 🔒 STANDBY QUEUE AUTO-PRIORITY RE-SORT:
-    // Filters the master priority pool array to ensure standby order stays perfectly ranked
     const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
       name => !updatedSelected.includes(name)
     );
@@ -240,8 +244,6 @@ export default function MimicBookTab({ user }) {
 
     const updatedSelected = [...currentData.selected, targetPlayer];
     
-    // 🔒 STANDBY QUEUE AUTO-PRIORITY RE-SORT:
-    // Filters the master priority pool array to ensure standby order stays perfectly ranked
     const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
       name => !updatedSelected.includes(name)
     );
@@ -259,7 +261,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleRowDragOver = (e) => {
-    e.preventDefault(); // Required to enable dropping items into this container element
+    e.preventDefault(); 
   };
 
   const handleRowDrop = (e, targetIndex) => {
@@ -268,7 +270,6 @@ export default function MimicBookTab({ user }) {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
     
-    // Splice target selection array to re-insert element at new dragged index location
     const [movedPlayer] = updatedSelected.splice(draggedItemIndex, 1);
     updatedSelected.splice(targetIndex, 0, movedPlayer);
 
@@ -338,17 +339,55 @@ export default function MimicBookTab({ user }) {
     setActiveStep(3);
   };
 
+  // --- 🚀 LIVE PRODUCTION DATA ARCHIVER ROUTE COMMIT METHOD ---
   const handleCommitSessionAndFlash = async () => {
-    alert("Session successfully committed to static Google Sheets log columns!");
-    set(ref(database, 'auction/active_session'), null);
-    setActiveStep(1);
-    setLootSummary({
-      Puppet: { qty: 0, limit: 1, seats: 0 },
-      Illu: { qty: 0, limit: 1, seats: 0 },
-      'Light&Dark': { qty: 0, limit: 1, seats: 0 },
-      'Time&Space': { qty: 0, limit: 1, seats: 0 }
-    });
-    setGeneratedSlots([]);
+    if (!commitDate.trim()) return alert("Raid Night Event Date parameters cannot remain blank.");
+    
+    try {
+      setCommitting(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+
+      const res = await fetch(`${backendUrl}/api/requests/commit-session`, {
+        method: 'POST',
+        headers: customHeaders,
+        body: JSON.stringify({
+          event: commitEvent,
+          date: commitDate,
+          allocations: categoryAllocations,
+          summary: lootSummary
+        }),
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert("💥 SUCCESS: Raid records written to ledger repository! Requisition life cycles updated and server staging cleared.");
+        set(ref(database, 'auction/active_session'), null);
+        setActiveStep(1);
+        setLootRows([
+          { id: 1, itemType: 'Puppet', startPage: 12, startPos: 1, endPage: 12, endPos: 4, limit: 1 }
+        ]);
+        setLootSummary({
+          Puppet: { qty: 0, limit: 1, seats: 0 },
+          Illu: { qty: 0, limit: 1, seats: 0 },
+          'Light&Dark': { qty: 0, limit: 1, seats: 0 },
+          'Time&Space': { qty: 0, limit: 1, seats: 0 }
+        });
+        setGeneratedSlots([]);
+        loadTrueRequestPool(); // Unlocks applicants by reloading the current active grid
+      } else {
+        alert(`❌ Commit execution rejected: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("Failed to commit session logs:", err);
+      alert("❌ Communication link failure. Please check your backend connection server.");
+    } finally {
+      setCommitting(false);
+    }
   };
 
   // --- BROWSER-NATIVE LOOT HISTORY CSV EXPORT MODULE ---
@@ -618,16 +657,56 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 4 WORKSPACE: DATA ARCHIVER */}
+          {/* 🌟 STEP 4 WORKSPACE: ACTIVE FIREBASE PRODUCTION AGENT COMMIT */}
           {activeStep === 4 && (
-            <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-4 rounded-xl text-center space-y-3 animate-fadeIn">
-              <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wide">Finalize Spreadsheet Registration</h3>
-              <p className="text-xs text-slate-400 max-w-xl mx-auto">
-                Approve calculations to lock tracking markers permanently into Google Sheets tracking grids and clear down active server staging blocks.
-              </p>
+            <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-5 rounded-xl text-center space-y-4 animate-fadeIn">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wide">Finalize Spreadsheet Registration</h3>
+                <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                  Verify the ledger night properties below. Committing will lock records inside your permanent database tables and unlock members for subsequent scheduled events.
+                </p>
+              </div>
+
+              {/* LIVE INPUT SELECTORS CORRESPONDING TO MANUAL EXCEL HEADER LAYOUTS */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto p-3.5 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-left w-full">
+                  <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Raid Event Night Date</label>
+                  <input 
+                    type="text" 
+                    value={commitDate} 
+                    onChange={(e) => setCommitDate(e.target.value)} 
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 mt-1 focus:border-indigo-500 outline-none transition"
+                    placeholder="MM/DD/YYYY"
+                  />
+                </div>
+                <div className="text-left w-full">
+                  <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Category Origin</label>
+                  <select 
+                    value={commitEvent} 
+                    onChange={(e) => setCommitEvent(e.target.value)} 
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1 focus:border-indigo-500 outline-none transition"
+                  >
+                    <option value="GuildLeague">🏆 GuildLeague</option>
+                    <option value="EmperiumOverrun">🔥 EmperiumOverrun</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="flex justify-center gap-4 pt-1">
-                <button onClick={() => setActiveStep(3)} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 transition">Return to Preview</button>
-                <button onClick={handleCommitSessionAndFlash} className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition">COMMIT SESSION & FLASH TO SHEET 🚀</button>
+                <button 
+                  onClick={() => setActiveStep(3)} 
+                  disabled={committing}
+                  className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition"
+                >
+                  Return to Preview
+                </button>
+                <button 
+                  onClick={handleCommitSessionAndFlash} 
+                  disabled={committing}
+                  className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500 animate-pulse"
+                >
+                  {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE 🚀"}
+                </button>
               </div>
             </div>
           )}

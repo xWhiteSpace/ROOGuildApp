@@ -51,8 +51,6 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
   if (!playerHistorySnap.exists()) return 0;
 
   const records = playerHistorySnap.val();
-  
-  // Firebase push IDs are naturally chronological. Sorting the tracking keys matches the timeline perfectly.
   const sortedKeys = Object.keys(records).sort();
   const combinedItemTimeline = [];
 
@@ -96,7 +94,6 @@ router.get('/init', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
-    // REQ009 & REQ010: Query ONLY this player's data footprint to calculate live limits
     const playerRequestsSnap = await db.ref('auction/web_requests')
       .orderByChild('member')
       .equalTo(playerDisplayName)
@@ -120,18 +117,15 @@ router.get('/init', async (req, res) => {
         }
       });
     }
-    // Safety boundary clamping
     Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
 
-    // 📊 OPTIMIZED LEADERBOARD COMPILER (REQ024 & REQ025)
-    // Queries ONLY rows marked 'Pending' across the entire guild, completely ignoring old history records.
+    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+    
     const pendingRequestsSnap = await db.ref('auction/web_requests')
       .orderByChild('selectionStatus')
       .equalTo('Pending')
       .once('value');
 
-    const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-    
     if (pendingRequestsSnap.exists()) {
       const allPendingRows = Object.values(pendingRequestsSnap.val());
 
@@ -202,7 +196,6 @@ router.post('/submit', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
-    // 🔒 CHOSEN ACTION: Read the officer session configuration. If empty, leave it as "" (blank)
     const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
     const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
 
@@ -222,6 +215,7 @@ router.post('/submit', async (req, res) => {
         quantity: targetQty,
         applicationStatus: 'Requested', 
         selectionStatus: 'Pending',     
+        liveStatus: '',                 // 🌟 FIXED: Explicitly sets empty string for unfinalized requests
         priority: dynamicPriority,
         eventDate: targetedEventDate    
       });
@@ -247,7 +241,6 @@ router.post('/cancel', async (req, res) => {
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
     
-    // Read the officer session configuration. If empty, leave it as "" (blank)
     const activeSessionSnap = await db.ref('settings/activeSessionDate').once('value');
     const targetedEventDate = activeSessionSnap.exists() ? activeSessionSnap.val() : "";
 
@@ -260,6 +253,7 @@ router.post('/cancel', async (req, res) => {
       quantity: parseInt(cancelQty, 10),
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
+      liveStatus: '',                 // 🌟 FIXED: Explicitly sets empty string for cancellations
       priority: 0,
       eventDate: targetedEventDate 
     });
@@ -297,7 +291,7 @@ router.get('/history', async (req, res) => {
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       applicationStatus: rawData[key].applicationStatus || "Requested",
       selectionStatus: rawData[key].selectionStatus || "Pending",
-      liveStatus: rawData[key].liveStatus || "Done",
+      liveStatus: rawData[key].liveStatus || "", // 🌟 FIXED: Removed default "Done" fallback value
       priority: parseInt(rawData[key].priority, 10) || 0,
       eventDate: rawData[key].eventDate || ""
     }));
@@ -338,6 +332,76 @@ router.get('/loot-history', async (req, res) => {
     }));
 
     return res.json({ success: true, history: lootHistoryArray });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 🚀 PRODUCTION COMMIT TRANSACTION RUNNER
+ * POST /api/requests/commit-session
+ */
+router.post('/commit-session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const { event, date, allocations, summary } = req.body;
+  if (!event || !date || !allocations || !summary) {
+    return res.status(400).json({ success: false, error: 'Incomplete session configuration data payload.' });
+  }
+
+  try {
+    const db = getDatabase();
+    const updates = {};
+
+    // 1. Commit each active item group to the permanent ledger path ('auction/loot_history')
+    Object.keys(summary).forEach(itemKey => {
+      const entry = summary[itemKey];
+      if (entry.qty > 0) {
+        const newHistoryRef = db.ref('auction/loot_history').push();
+        updates[`auction/loot_history/${newHistoryRef.key}`] = {
+          date: date,
+          event: event,
+          item: itemKey,
+          quantity: parseInt(entry.qty, 10),
+          max: parseInt(entry.limit, 10),
+          mem: parseInt(entry.seats, 10)
+        };
+      }
+    });
+
+    // 2. Fetch all active requests to match up allocations and close lifecycle loops
+    const requestsSnap = await db.ref('auction/web_requests').once('value');
+    if (requestsSnap.exists()) {
+      const allRequests = requestsSnap.val();
+      
+      Object.keys(allRequests).forEach(reqKey => {
+        const record = allRequests[reqKey];
+        const recordItem = record.item;
+        const recordMember = record.member;
+        
+        // Process only records that are currently evaluated inside this session
+        if (record.selectionStatus === 'Pending' && allocations[recordItem]) {
+          const winnersList = allocations[recordItem].selected || [];
+          const standbyList = allocations[recordItem].notSelected || [];
+
+          if (winnersList.includes(recordMember)) {
+            updates[`auction/web_requests/${reqKey}/selectionStatus`] = 'Selected';
+            updates[`auction/web_requests/${reqKey}/liveStatus`] = 'Done';
+          } else if (standbyList.includes(recordMember)) {
+            updates[`auction/web_requests/${reqKey}/selectionStatus`] = 'NotSelected';
+            updates[`auction/web_requests/${reqKey}/liveStatus`] = 'Done';
+          }
+        }
+      });
+    }
+
+    // 3. Clear temporary staging workspace paths
+    updates['auction/active_session'] = null;
+
+    // Execute multi-node atomic block transaction safely
+    await db.ref().update(updates);
+    return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
