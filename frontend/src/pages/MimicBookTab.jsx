@@ -9,7 +9,7 @@ export default function MimicBookTab({ user }) {
   const [activeStep, setActiveStep] = useState(1); 
   const [loadingPool, setLoadingPool] = useState(false);
 
-  // --- 📜 NEW LOOT HISTORY MODAL STATE TRACKING ---
+  // --- 📜 LOOT HISTORY MODAL STATE TRACKING ---
   const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
@@ -38,13 +38,15 @@ export default function MimicBookTab({ user }) {
 
   // --- PHASE 2 STATE: COMPARTMENTALIZED SELECTION SEATS ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
-  // Allocation state per item type category
   const [categoryAllocations, setCategoryAllocations] = useState({
     Puppet: { selected: [], notSelected: [] },
     Illu: { selected: [], notSelected: [] },
     'Light&Dark': { selected: [], notSelected: [] },
     'Time&Space': { selected: [], notSelected: [] }
   });
+
+  // --- 🎹 DRAG AND DROP INDEX TRACKER STATE ---
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
 
   // --- PHASE 3 STATE: DISPLAY LENS CONSTRAINTS ---
   const [viewLens, setViewLens] = useState('ALL'); 
@@ -79,7 +81,7 @@ export default function MimicBookTab({ user }) {
     }
   };
 
-  // --- 📥 NEW HOOK: FETCH IMMUTABLE LOOT HISTORY LEDGER ---
+  // --- 📥 FETCH IMMUTABLE LOOT HISTORY LEDGER ---
   const fetchLootHistoryLog = async () => {
     try {
       setLoadingLootHistory(true);
@@ -191,9 +193,8 @@ export default function MimicBookTab({ user }) {
     const initialAllocations = {};
     Object.keys(calculatedSummary).forEach(category => {
       const seatsCount = calculatedSummary[category].seats;
-      const trueApplicants = rankingsByItem[category] || []; // Pure true request names
+      const trueApplicants = rankingsByItem[category] || []; 
 
-      // Top priority names populate active slots up to the available budget seats
       const preSelected = trueApplicants.slice(0, seatsCount);
       const preStandby = trueApplicants.slice(seatsCount);
 
@@ -205,19 +206,21 @@ export default function MimicBookTab({ user }) {
 
     setCategoryAllocations(initialAllocations);
 
-    // Default view target focus
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].seats > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
     setActiveStep(2);
   };
 
-  // --- PHASE 2 LOGIC: INTERACTIVE TIMELINE OVERRIDES ---
+  // --- PHASE 2 LOGIC: PRIORITY LOCKING QUEUE SWAPS ---
   const handleDropBidder = (index) => {
     const currentData = categoryAllocations[activeMatrixFilter];
-    const targetPlayer = currentData.selected[index];
-    
     const updatedSelected = currentData.selected.filter((_, i) => i !== index);
-    const updatedNotSelected = [targetPlayer, ...currentData.notSelected]; // Drops to standby pool
+    
+    // 🔒 STANDBY QUEUE AUTO-PRIORITY RE-SORT:
+    // Filters the master priority pool array to ensure standby order stays perfectly ranked
+    const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
+      name => !updatedSelected.includes(name)
+    );
 
     setCategoryAllocations({
       ...categoryAllocations,
@@ -235,14 +238,48 @@ export default function MimicBookTab({ user }) {
       return;
     }
 
-    const updatedNotSelected = currentData.notSelected.filter((_, i) => i !== index);
-    // ➔ FIFO Rule: Promoted standby players append cleanly to the end of the stack selection
     const updatedSelected = [...currentData.selected, targetPlayer];
+    
+    // 🔒 STANDBY QUEUE AUTO-PRIORITY RE-SORT:
+    // Filters the master priority pool array to ensure standby order stays perfectly ranked
+    const updatedNotSelected = (rankingsByItem[activeMatrixFilter] || []).filter(
+      name => !updatedSelected.includes(name)
+    );
 
     setCategoryAllocations({
       ...categoryAllocations,
       [activeMatrixFilter]: { selected: updatedSelected, notSelected: updatedNotSelected }
     });
+  };
+
+  // --- 🎹 DRAG AND DROP HANDLERS FOR ASSIGNED PLACEMENT ORDER ---
+  const handleRowDragStart = (e, index) => {
+    setDraggedItemIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleRowDragOver = (e) => {
+    e.preventDefault(); // Required to enable dropping items into this container element
+  };
+
+  const handleRowDrop = (e, targetIndex) => {
+    if (draggedItemIndex === null || draggedItemIndex === targetIndex) return;
+    
+    const currentData = categoryAllocations[activeMatrixFilter];
+    const updatedSelected = [...currentData.selected];
+    
+    // Splice target selection array to re-insert element at new dragged index location
+    const [movedPlayer] = updatedSelected.splice(draggedItemIndex, 1);
+    updatedSelected.splice(targetIndex, 0, movedPlayer);
+
+    setCategoryAllocations({
+      ...categoryAllocations,
+      [activeMatrixFilter]: {
+        ...currentData,
+        selected: updatedSelected
+      }
+    });
+    setDraggedItemIndex(null);
   };
 
   const handleLockAndGenerateMatrix = () => {
@@ -257,7 +294,6 @@ export default function MimicBookTab({ user }) {
 
       const confirmedWinners = categoryAllocations[category]?.selected || [];
       
-      // Map out player items consecutively based on limits
       confirmedWinners.forEach(playerName => {
         for (let step = 0; step < itemsInfo.limit; step++) {
           matrixSlots.push({
@@ -276,7 +312,6 @@ export default function MimicBookTab({ user }) {
         }
       });
 
-      // Account for leftover items not claimed by the pool
       const totalClaimedQty = confirmedWinners.length * itemsInfo.limit;
       const leftoversCount = itemsInfo.qty - totalClaimedQty;
       
@@ -316,7 +351,7 @@ export default function MimicBookTab({ user }) {
     setGeneratedSlots([]);
   };
 
-  // --- 📥 BROWSER-NATIVE LOOT HISTORY CSV EXPORT MODULE ---
+  // --- BROWSER-NATIVE LOOT HISTORY CSV EXPORT MODULE ---
   const handleDownloadLootHistoryCSV = () => {
     if (lootHistoryData.length === 0) return;
     const csvHeaders = ["Date", "Event", "Item", "Qty", "Max", "Mem"];
@@ -373,7 +408,6 @@ export default function MimicBookTab({ user }) {
           <p className="text-xs text-slate-400 mt-1">Digital Twin Pre-Raid Coordination Grid & Ledger Desk</p>
         </div>
         <div className="flex items-center gap-3">
-          {/* 📋 LOOT HISTORY LEDGER ENTRY TRIGGER BUTTON */}
           <button
             onClick={() => { fetchLootHistoryLog(); setIsLootHistoryOpen(true); }}
             className="px-4 py-1.5 rounded-xl text-xs font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:text-white transition-all shadow"
@@ -479,11 +513,10 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE: TRUE REQUEST LIST POOL DESK */}
+          {/* STEP 2 WORKSPACE: DRAG AND DROP DESK */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn">
               
-              {/* MATHEMATICAL ELIGIBILITY COUNTERS */}
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const data = lootSummary[category];
@@ -504,21 +537,34 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* SELECTED COLUMN */}
+                
+                {/* 🎹 ASSIGNED COLUMN WITH TOUCH/TABLET FRIENDLY DRAG SORTING HOOKS */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Recipients ({activeMatrixFilter})</span>
+                    <span>✨ Assigned Recipients (Drag Ranks to Swap Seats)</span>
                     <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">
                       {currentActiveSelections.selected.length} / {lootSummary[activeMatrixFilter]?.seats || 0} Filled
                     </span>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
                     {currentActiveSelections.selected.map((name, i) => (
-                      <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs font-mono">
-                        <span className="truncate text-slate-200 font-sans font-medium">{name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-emerald-500 uppercase font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-900/20">Selected</span>
-                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] hover:underline">Drop ✖</button>
+                      <div 
+                        key={i} 
+                        draggable="true"
+                        onDragStart={(e) => handleRowDragStart(e, i)}
+                        onDragOver={handleRowDragOver}
+                        onDrop={(e) => handleRowDrop(e, i)}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-800/80 bg-slate-900/50 text-xs font-mono transition-all cursor-grab active:cursor-grabbing hover:border-slate-600 ${
+                          draggedItemIndex === i ? 'opacity-30 bg-slate-950 border-dashed border-slate-700' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-slate-500 font-sans text-[10px] font-bold tracking-tight select-none w-4">#{i + 1}</span>
+                          <span className="text-slate-500 text-xs select-none">☰</span>
+                          <span className="truncate text-slate-100 font-sans font-semibold">{name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition">Drop ✖</button>
                         </div>
                       </div>
                     ))}
@@ -528,10 +574,10 @@ export default function MimicBookTab({ user }) {
                   </div>
                 </div>
 
-                {/* ELIGIBLE STANDBY CORES POOLED DIRECTLY FROM REQUEST LIST */}
+                {/* ELIGIBLE STANDBY CORES LOCKED TO CORRECT PRIORITY ORDER */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
-                    <span>Standby Queue (True Request List Pool)</span>
+                    <span>💤 Standby Queue (Priority Locked Line)</span>
                     <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Standby: {currentActiveSelections.notSelected.length}</span>
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
@@ -539,8 +585,8 @@ export default function MimicBookTab({ user }) {
                       <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/40 bg-slate-900/10 text-xs font-mono hover:bg-slate-900/30 transition">
                         <span className="truncate text-slate-400 font-sans">{name}</span>
                         <div className="flex items-center gap-3">
-                          <span className="text-slate-600 text-[10px] uppercase font-bold font-sans">Index #{String(i + 1).padStart(2, '0')}</span>
-                          <button onClick={() => handlePromoteBidder(i)} className="text-emerald-400 font-sans text-[10px] font-bold hover:underline">Promote 🔼</button>
+                          <span className="text-slate-600 text-[10px] uppercase font-bold font-sans">Priority Match</span>
+                          <button onClick={() => handlePromoteBidder(i)} className="text-emerald-400 font-sans text-[10px] font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition">Promote 🔼</button>
                         </div>
                       </div>
                     ))}
@@ -589,10 +635,7 @@ export default function MimicBookTab({ user }) {
         </div>
       )}
 
-      {/* ========================================================================================= */}
-      {/* --- PUBLIC ACCESSIBLE READ-ONLY PREVIEW DESK (PHASE 3) --- */}
-      {/* ========================================================================================= */}
-      
+      {/* --- PUBLIC ACCESSIBLE READ-ONLY PREVIEW DESK --- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-lg">
         <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800/80 p-1 rounded-xl shrink-0 w-max">
           <button onClick={() => setViewLens('ALL')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition ${viewLens === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>🌐 See All</button>
@@ -634,7 +677,6 @@ export default function MimicBookTab({ user }) {
 
                 return (
                   <div key={slotIndex} className={`grid grid-cols-12 items-center text-[11px] font-mono px-3 py-2 border rounded-xl transition-all ${getItemStyleProfile(slot.itemType)} ${spotlightActive ? 'ring-2 ring-amber-500 bg-slate-900/80 scale-[1.01]' : (viewLens === 'MINE' ? 'opacity-20' : '')}`}>
-                    {/* Fixed column percentage containers blocking layout shift anomalies */}
                     <div className="col-span-2 font-bold text-slate-500 flex items-center gap-1">[{slotIndex}]{isTargetOwner && <span className="text-amber-400 text-[10px]">🎯</span>}</div>
                     <div className="col-span-5 font-black uppercase text-[10px] tracking-wide truncate pr-2">{slot.itemType}</div>
                     <div className="col-span-5 text-right font-sans font-semibold text-slate-300 truncate">{slot.name}</div>
@@ -677,7 +719,6 @@ export default function MimicBookTab({ user }) {
                     let rowsToDisplay = [...generatedSlots];
 
                     if (viewLens === 'ALL') {
-                      // Supplement all non-selected standby applicants across all categories for full transparency
                       const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                       categorySequenceOrder.forEach(cat => {
                         const standbyList = categoryAllocations[cat]?.notSelected || [];
@@ -749,35 +790,21 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* ========================================================================================= */}
-      {/* 📋 VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL WINDOW CONTAINER */}
-      {/* ========================================================================================= */}
+      {/* --- VIEW-ONLY LOOT HISTORY LEDGER ARCHIVE OVERLAY MODAL WINDOW --- */}
       {isLootHistoryOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          
-          {/* Main Modal Card Frame Structure */}
           <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
-            
-            {/* Modal Header Title Bracket */}
             <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
               <div>
                 <h2 className="text-base font-bold text-slate-100 tracking-wide">📜 Recorded Loot Ledger Archive</h2>
                 <p className="text-[10px] text-slate-500 mt-0.5">Historical verification records compiled directly from raid logs</p>
               </div>
-              <button 
-                onClick={() => setIsLootHistoryOpen(false)}
-                className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1"
-              >
-                ✕
-              </button>
+              <button onClick={() => setIsLootHistoryOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1">✕</button>
             </div>
 
-            {/* Scrollable Data Table Content Area Grid */}
             <div className="p-6 overflow-x-auto overflow-y-auto flex-grow scrollbar-thin">
               {loadingLootHistory ? (
-                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">
-                  Extracting historical index criteria parameters...
-                </div>
+                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting historical index criteria parameters...</div>
               ) : (
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
@@ -793,9 +820,7 @@ export default function MimicBookTab({ user }) {
                   <tbody className="divide-y divide-slate-800/40 text-slate-300">
                     {lootHistoryData.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">
-                          No legacy loot logs tracked within the database table folders.
-                        </td>
+                        <td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</td>
                       </tr>
                     ) : (
                       lootHistoryData.map((row) => (
@@ -814,9 +839,7 @@ export default function MimicBookTab({ user }) {
               )}
             </div>
 
-            {/* Sticky Interaction Action Footer Anchors */}
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
-              {/* [EXPORT] CSV DOWN-DOWNLOAD GENERATOR */}
               <button
                 onClick={handleDownloadLootHistoryCSV}
                 disabled={lootHistoryData.length === 0}
@@ -824,16 +847,8 @@ export default function MimicBookTab({ user }) {
               >
                 📥 Export
               </button>
-
-              {/* [RETURN] MODAL STATE DISMISSER BUTTON */}
-              <button
-                onClick={() => setIsLootHistoryOpen(false)}
-                className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide"
-              >
-                ↩️ Return
-              </button>
+              <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide">↩️ Return</button>
             </div>
-
           </div>
         </div>
       )}
