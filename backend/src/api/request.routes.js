@@ -270,4 +270,44 @@ router.post('/cancel', async (req, res) => {
   }
 });
 
+/**
+ * 📊 GLOBAL REQUEST HISTORY LOGS PIPELINE
+ * GET /api/requests/history
+ */
+router.get('/history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const historySnap = await db.ref('auction/web_requests').once('value');
+    
+    if (!historySnap.exists()) {
+      return res.json({ success: true, history: [] });
+    }
+
+    const rawData = historySnap.val();
+    
+    // Alphabetical sort on keys preserves chronological data injection order (honoring our prefix fix)
+    const sortedKeys = Object.keys(rawData).sort();
+    
+    const historyArray = sortedKeys.map(key => ({
+      id: rawData[key].id || key,
+      date: rawData[key].date || "",
+      member: rawData[key].member || "",
+      item: rawData[key].item || "",
+      quantity: parseInt(rawData[key].quantity, 10) || 0,
+      applicationStatus: rawData[key].applicationStatus || "Requested",
+      selectionStatus: rawData[key].selectionStatus || "Pending",
+      liveStatus: rawData[key].liveStatus || "Done",
+      priority: parseInt(rawData[key].priority, 10) || 0,
+      eventDate: rawData[key].eventDate || ""
+    }));
+
+    return res.json({ success: true, history: historyArray });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
