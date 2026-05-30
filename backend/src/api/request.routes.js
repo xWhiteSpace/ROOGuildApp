@@ -42,7 +42,7 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE (REQ013)
+ * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE
  */
 async function calculatePriorityScore(db, playerDisplayName, itemName) {
   const playerHistorySnap = await db.ref('auction/web_requests')
@@ -65,7 +65,7 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   let lastSelectedIdx = -1;
   for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    // 🌟 ACCOUNTABILITY TRIGGER: Breaking on 'absent' forces a point drop back to 0
+    // 🌟 REQ CHECKPOINT: Both explicit 'selected' wins and 'absent' flags drop points back to 0
     if (combinedItemTimeline[i] === 'selected' || combinedItemTimeline[i] === 'absent') {
       lastSelectedIdx = i;
       break;
@@ -101,7 +101,6 @@ router.get('/init', async (req, res) => {
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     const requestsByItemDetails = { 'Puppet': {}, 'Illu': {}, 'Light&Dark': {}, 'Time&Space': {} };
 
-    // Fetch master membership roster node from Firebase
     const membersListSnap = await db.ref('auction/members').once('value');
     const fullRosterArray = [];
     if (membersListSnap.exists()) {
@@ -112,7 +111,6 @@ router.get('/init', async (req, res) => {
       });
     }
 
-    // Process active player request constraints
     const allRequestsSnap = await db.ref('auction/web_requests').once('value');
     if (allRequestsSnap.exists()) {
       const rawRequests = allRequestsSnap.val();
@@ -197,7 +195,6 @@ router.get('/init', async (req, res) => {
 
 /**
  * 🔄 SECURE DISCORD-TO-FIREBASE ROSTER SYNC BRIDGE
- * POST /api/requests/sync-roster
  */
 router.post('/sync-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -343,7 +340,7 @@ router.post('/cancel', async (req, res) => {
 });
 
 /**
- * 🚀 COMMIT SESSION LEDGER ARCHIVER WITH ATTENDANCE TRACKING & GHOST SYNTHESIS
+ * 🚀 COMMIT SESSION LEDGER ARCHIVER
  * POST /api/requests/commit-session
  */
 router.post('/commit-session', async (req, res) => {
@@ -367,19 +364,22 @@ router.post('/commit-session', async (req, res) => {
       const { selected = [], absent = [], notSelected = [] } = allocations[cat];
       const maxLimit = ITEM_LIMIT_DEFAULTS[cat] || 1;
 
-      // Filter down key references for active pending requests in this specific item row line
+      // 🌟 UPGRADED: Store dynamic array buckets per member to clean intermediate canceled lines
       const keysByMember = {};
       Object.keys(firebaseRequests).forEach(key => {
         const r = firebaseRequests[key];
         if ((r.item || '').trim().toLowerCase() === cat.toLowerCase() && (r.selectionStatus || 'pending').toLowerCase() === 'pending') {
-          keysByMember[r.member] = key;
+          if (!keysByMember[r.member]) {
+            keysByMember[r.member] = [];
+          }
+          keysByMember[r.member].push(key);
         }
       });
 
-      // A. Update Attendance Failures (Absentees forfeit point history stacks)
+      // A. Update Attendance Failures (Absentees forfeit score timeline)
       for (const name of absent) {
-        const key = keysByMember[name];
-        if (key) {
+        const keyList = keysByMember[name] || [];
+        for (const key of keyList) {
           await db.ref(`auction/web_requests/${key}`).update({
             selectionStatus: 'Absent'
           });
@@ -388,26 +388,38 @@ router.post('/commit-session', async (req, res) => {
 
       // B. Update Skipped Entrants (NotSelected priority increments)
       for (const name of notSelected) {
-        const key = keysByMember[name];
-        if (key) {
+        const keyList = keysByMember[name] || [];
+        for (const key of keyList) {
           await db.ref(`auction/web_requests/${key}`).update({
             selectionStatus: 'NotSelected'
           });
         }
       }
 
-      // C. Process Winners & Synthesize Missing Roster Profiles
+      // C. Process Winners & Clean Redundant Sub-Action Pending Lines
       for (const winner of selected) {
         const { name, slots } = winner;
-        const key = keysByMember[name];
+        const keyList = keysByMember[name] || [];
 
-        if (key) {
-          await db.ref(`auction/web_requests/${key}`).update({
+        if (keyList.length > 0) {
+          // Sort list to find the absolute latest active request line to stamp as the core winner anchor
+          const primaryWinnerKey = keyList[keyList.length - 1];
+          await db.ref(`auction/web_requests/${primaryWinnerKey}`).update({
             selectionStatus: 'Selected',
             quantity: slots 
           });
+
+          // 🌟 SWEEPER: Clean intermediate requested/canceled lines to closed statuses so they don't leak into subsequent raids
+          const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
+          for (const duplicateKey of intermediateRedundantLines) {
+            const currentLine = firebaseRequests[duplicateKey];
+            const fallbackStatus = (currentLine?.applicationStatus === 'Canceled') ? 'Canceled' : 'NotSelected';
+            await db.ref(`auction/web_requests/${duplicateKey}`).update({
+              selectionStatus: fallbackStatus
+            });
+          }
         } else {
-          // 👻 GHOST REQUISITION SYNTHESIS: Inject profile data row for manually added guest accounts
+          // 👻 GHOST SYNTHESIS: Inject profile for manually chosen full roster characters with unified liveStatus
           const newRequestRef = db.ref('auction/web_requests').push();
           await newRequestRef.set({
             id: newRequestRef.key,
@@ -417,11 +429,12 @@ router.post('/commit-session', async (req, res) => {
             quantity: slots,
             applicationStatus: 'ForcedAdd',
             selectionStatus: 'Selected',
+            liveStatus: 'Done',
             priority: 0
           });
         }
 
-        // Output completed entry to permanent ledger database log
+        // Output completed transaction to permanent loot ledger database folders
         const newHistoryRef = db.ref('auction/loot_history').push();
         await newHistoryRef.set({
           id: newHistoryRef.key,

@@ -20,6 +20,7 @@ export default function MimicBookTab({ user }) {
   const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
+  const [activeHistoryDateGroup, setActiveHistoryDateGroup] = useState(null);
 
   // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
@@ -236,7 +237,6 @@ export default function MimicBookTab({ user }) {
     }));
   };
 
-  // --- INITIALIZE THE FIXED 1-TO-1 ITEM DROP SLOTS ENGINE ---
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
     const calculatedSummary = {
@@ -289,7 +289,6 @@ export default function MimicBookTab({ user }) {
       const priorityApplicants = rankingsByItem[category] || [];
       const detailsMap = requestsByItemDetails[category] || {};
 
-      // Build a strictly sized 1-to-1 independent item block array
       const flatStaticBoxArray = Array(totalDropInventoryCount).fill(null);
       let globalBoxCursor = 0;
 
@@ -325,7 +324,6 @@ export default function MimicBookTab({ user }) {
     setActiveStep(2);
   };
 
-  // 🌟 POSITIONALLY STABLE DROP ACTION: Blanks a card value cleanly to null without sliding lines
   const handleDropBidderBoxSlot = (slotIndex) => {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
@@ -337,7 +335,6 @@ export default function MimicBookTab({ user }) {
     });
   };
 
-  // 🌟 TARGET POSITION OVERRIDE INJECTION HOOK LINK
   const handlePromoteBidderToTargetSlotIndex = (playerName) => {
     if (activePopoverSeatIndex === null) return;
     const currentData = categoryAllocations[activeMatrixFilter];
@@ -426,14 +423,12 @@ export default function MimicBookTab({ user }) {
         const boxEntries = categoryAllocations[cat].selected || [];
         const verifiedWinnersList = boxEntries.filter(name => name !== null);
         
-        // ABSENT TRACKING CRITERIA: Auto-winners who finish manually dropped down to 0 units
         const initialWinnersList = initialWinnersByItem[cat] || [];
         const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
 
         const masterList = rankingsByItem[cat] || [];
         const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n) && !absentList.includes(n));
         
-        // Group instances by name into unique items to safely synthesize ghost transactions
         const uniqueWinners = [...new Set(verifiedWinnersList)];
         const selectedPayload = uniqueWinners.map(name => ({
           name,
@@ -509,16 +504,13 @@ export default function MimicBookTab({ user }) {
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
 
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
-  const seatedNamesOnly = currentActiveSelections.selected.filter(n => n !== null);
   
-  // SMART LOOKUP RETENTION: Keeps name visible until total instances match requested counts
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
     const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
     const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
-  // FIXED GLOBAL RETENTION: Keeps global raider selectable until hitting item cap limits
   const popoverFilteredRosterList = masterGuildRoster.filter(name => {
     const maxRowLimit = ITEM_LIMIT_DEFAULTS[activeMatrixFilter] || 1;
     const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
@@ -527,6 +519,9 @@ export default function MimicBookTab({ user }) {
 
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
   const currentCategoryAllocatedQuantity = currentActiveSelections.selected.filter(n => n !== null).length;
+
+  // 🌟 PRE-COMPUTE UNIQUE DATE-EVENT KEY PAIRS FOR THE ACCORDION TIMELINE LOOP
+  const uniqueHistoryGroups = Array.from(new Set(lootHistoryData.map(row => `${row.date} - ${row.event}`)));
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -551,7 +546,7 @@ export default function MimicBookTab({ user }) {
           </button>
 
           <button
-            onClick={() => { fetchLootHistoryLog(); setIsLootHistoryOpen(true); }}
+            onClick={() => { fetchLootHistoryLog(); setIsLootHistoryOpen(true); setActiveHistoryDateGroup(null); }}
             className="px-4 py-1.5 rounded-xl text-xs font-bold border border-slate-700 bg-slate-900 text-slate-300 hover:text-white transition-all shadow"
           >
             📋 View Loot History
@@ -1087,55 +1082,78 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- VIEW-ONLY LOOT HISTORY MODAL --- */}
+      {/* --- VIEW-ONLY ACCORDION LOOT HISTORY MODAL --- */}
       {isLootHistoryOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+          <div className="bg-[#111216] border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
             <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
               <div>
                 <h2 className="text-base font-bold text-slate-100 tracking-wide">📜 Recorded Loot Ledger Archive</h2>
-                <p className="text-[10px] text-slate-500 mt-0.5">Historical verification records compiled directly from raid logs</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Historical verification records grouped cleanly by target raid events</p>
               </div>
               <button onClick={() => setIsLootHistoryOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1">✕</button>
             </div>
 
-            <div className="p-6 overflow-x-auto overflow-y-auto flex-grow scrollbar-thin">
+            <div className="p-6 overflow-y-auto flex-grow scrollbar-thin space-y-2 text-xs">
               {loadingLootHistory ? (
-                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting historical index criteria parameters...</div>
+                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting chronological ledger parameters...</div>
+              ) : uniqueHistoryGroups.length === 0 ? (
+                <div className="text-center py-12 text-slate-600 italic font-sans">No legacy loot logs tracked within the database table folders.</div>
               ) : (
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
-                      <th className="p-3 border-r border-slate-800/40">Date</th>
-                      <th className="p-3 border-r border-slate-800/40">Event</th>
-                      <th className="p-3 border-r border-slate-800/40">Item</th>
-                      <th className="p-3 border-r border-slate-800/40 text-center">Qty</th>
-                      <th className="p-3 border-r border-slate-800/40 text-center">Max</th>
-                      <th className="p-3 text-center">Mem</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40 text-slate-300">
-                    {lootHistoryData.length === 0 ? (
-                      <tr><td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</td></tr>
-                    ) : (
-                      lootHistoryData.map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
-                          <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
-                          <td className="p-3 font-sans font-bold text-slate-200">{row.event}</td>
-                          <td className="p-3 font-sans font-semibold text-indigo-400">{row.item}</td>
-                          <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
-                          <td className="p-3 text-center text-amber-500 font-bold">{row.max}</td>
-                          <td className="p-3 font-bold text-center text-emerald-400">{row.mem}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                <div className="space-y-1.5">
+                  {uniqueHistoryGroups.map((groupKey) => {
+                    const isGroupExpanded = activeHistoryDateGroup === groupKey;
+                    const nestedGroupItems = lootHistoryData.filter(row => `${row.date} - ${row.event}` === groupKey);
+
+                    return (
+                      <div key={groupKey} className="border border-slate-800 bg-slate-950/30 rounded-xl overflow-hidden transition-all">
+                        {/* ACCORDION TRIGGER BAR */}
+                        <div 
+                          onClick={() => setActiveHistoryDateGroup(isGroupExpanded ? null : groupKey)}
+                          className="p-3 px-4 bg-slate-900/60 hover:bg-slate-900 text-slate-200 font-mono font-bold flex items-center justify-between cursor-pointer transition select-none"
+                        >
+                          <span className="tracking-wide">📅 {groupKey}</span>
+                          <span className="text-[11px] text-indigo-400 bg-indigo-950/50 px-2.5 py-0.5 border border-indigo-500/20 rounded-md font-sans">
+                            {isGroupExpanded ? "▲ Hide Distributions" : `▼ View ${nestedGroupItems.length} Allocations`}
+                          </span>
+                        </div>
+
+                        {/* EXPANDED 3-COLUMN TABLE DETAILS SECTION */}
+                        {isGroupExpanded && (
+                          <div className="border-t border-slate-800 bg-[#14151a] animate-fadeIn overflow-x-auto">
+                            <table className="w-full text-left border-collapse font-sans text-xs">
+                              <thead>
+                                <tr className="bg-slate-950/60 text-slate-500 uppercase text-[9px] tracking-wider font-black border-b border-slate-800">
+                                  <th className="p-2.5 px-4">Member Account</th>
+                                  <th className="p-2.5">Distributed Item</th>
+                                  <th className="p-2.5 px-4 text-right">Quantity</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800/40 text-slate-300 font-medium">
+                                {nestedGroupItems.map((itemRow) => (
+                                  <tr key={itemRow.id} className="hover:bg-slate-900/20 transition-colors">
+                                    <td className="p-2.5 px-4 text-slate-200 font-bold font-sans">{itemRow.mem}</td>
+                                    <td className="p-2.5 font-sans">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] border font-sans ${getItemStyleProfile(itemRow.item)}`}>
+                                        {itemRow.item}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 px-4 text-right font-mono font-black text-emerald-400">{itemRow.quantity} pc</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
-              <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide" >📥 Export</button>
+              <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide" >📥 Export CSV</button>
               <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide">↩️ Return</button>
             </div>
           </div>
