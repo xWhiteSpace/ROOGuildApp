@@ -1,3 +1,4 @@
+// frontend/src/pages/RequestHistoryTab.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,7 +10,12 @@ export default function RequestHistoryTab() {
   const [historyData, setHistoryData] = useState([]);
   const [currentUserName, setCurrentUserName] = useState('');
   const [authError, setAuthError] = useState(false);
+  
+  // --- 🔍 ADVANCED FILTER AND SEARCH STATES ---
   const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'mine'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actionFilter, setActionFilter] = useState('all'); 
+  const [outcomeFilter, setOutcomeFilter] = useState('all');
 
   const fetchGlobalHistoryLog = async () => {
     try {
@@ -56,10 +62,18 @@ export default function RequestHistoryTab() {
     fetchGlobalHistoryLog();
   }, []);
 
+  const getItemStyleProfile = (itemType) => {
+    switch (itemType) {
+      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
+      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
+      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
+      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
+      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
+    }
+  };
+
   /**
    * 📥 BROWSER-NATIVE CSV EXPORT MODULE
-   * Dynamically compiles data properties using explicit structural layout headers
-   * avoiding any column name shifts or dependencies.
    */
   const handleDownloadCSVExport = () => {
     if (filteredRecords.length === 0) return;
@@ -105,79 +119,134 @@ export default function RequestHistoryTab() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse">
-        Reading historical priority allocations from spreadsheet...
+        Reading historical priority allocations from database ledger...
       </div>
     );
   }
 
-  // Filter records based on active [All] vs [Mine] navigation toggle configurations
+  // --- 📊 EVALUATE MULTI-LAYER FILTER STACKS ON THE FLY ---
   const filteredRecords = historyData.filter(row => {
-    if (viewFilter === 'mine') {
-      return (row.member || '').trim().toLowerCase() === currentUserName.trim().toLowerCase();
+    // 1. Core Profile Identity Toggle
+    if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
+      return false;
+    }
+    // 2. Spotlight Query Search Bar
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const matchesMember = (row.member || '').toLowerCase().includes(query);
+      const matchesItem = (row.item || '').toLowerCase().includes(query);
+      if (!matchesMember && !matchesItem) return false;
+    }
+    // 3. Action Type Dropdown Category
+    if (actionFilter !== 'all' && (row.applicationStatus || '').toLowerCase() !== actionFilter.toLowerCase()) {
+      return false;
+    }
+    // 4. Evaluation Outcome Dropdown Category
+    if (outcomeFilter !== 'all' && (row.selectionStatus || '').toLowerCase() !== outcomeFilter.toLowerCase()) {
+      return false;
     }
     return true;
   });
 
   return (
-    <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative font-sans">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6 text-white pb-32 relative font-sans space-y-4">
       
       {/* HEADER CONTROLS PLACEMENT */}
-      <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 lg:flex-row lg:items-center shadow-xl">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-100">Request History Ledger</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request Audit Ledger Trail</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4">
             <span>Roster Agent: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
-            <span>Total Logged Row Matrix: <strong className="text-slate-300">{filteredRecords.length} lines</strong></span>
+            <span>Filtered Pool Matrix: <strong className="text-slate-300">{filteredRecords.length} lines</strong></span>
           </div>
         </div>
 
-        {/* 🌟 HIGHLIGHTED [ALL] / [MINE] CHRONOLOGICAL TOGGLE FILTER BAR */}
-        <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+        {/* PROFILE CHRONOLOGICAL TOGGLE FILTER BAR */}
+        <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-auto shrink-0">
           <button
             onClick={() => setViewFilter('all')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition ${
-              viewFilter === 'all' 
-                ? 'bg-indigo-600 text-white shadow' 
-                : 'text-slate-400 hover:bg-slate-800/60'
+            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition uppercase ${
+              viewFilter === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
             }`}
           >
-            [All] Records
+            🌐 All Logs
           </button>
           <button
             onClick={() => setViewFilter('mine')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition ${
-              viewFilter === 'mine' 
-                ? 'bg-indigo-600 text-white shadow' 
-                : 'text-slate-400 hover:bg-slate-800/60'
+            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition uppercase ${
+              viewFilter === 'mine' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
             }`}
           >
-            [Mine] Filter
+            👤 My Actions
           </button>
         </div>
       </div>
 
-      {/* 📊 GLOBAL VIEW-ONLY REQUISITION GRID MATRIX */}
+      {/* --- 🔍 ADVANCED LIVE MULTI-FILTER CONTROL CONSOLE PANEL --- */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Spotlight Query Search</label>
+          <input 
+            type="text"
+            placeholder="🔍 Search member name or item..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-slate-700 transition"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Filter By Action Context</label>
+          <select
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition"
+          >
+            <option value="all">📥 Show All Actions</option>
+            <option value="requested">🟢 Requested</option>
+            <option value="canceled">🔴 Canceled</option>
+            <option value="forcedadd">🟣 ForcedAdd (Officer Grid Overrides)</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Filter By Final Outcome</label>
+          <select
+            value={outcomeFilter}
+            onChange={(e) => setOutcomeFilter(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition"
+          >
+            <option value="all">🏆 Show All Outcomes</option>
+            <option value="pending">⏳ Pending Verification</option>
+            <option value="selected">✨ Selected (Distributed Winners)</option>
+            <option value="notselected">💤 NotSelected (Skipped/Passed)</option>
+            <option value="absent">🚨 Absent (No-Show Reset Points)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* GLOBAL REQUISITION GRID MATRIX VIEW */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto overflow-y-auto max-h-[60vh] scrollbar-thin">
+        <div className="overflow-x-auto overflow-y-auto max-h-[55vh] scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-max text-xs font-mono">
             <thead>
-              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
-                <th className="p-3.5 border-r border-slate-800/60">Timestamp</th>
-                <th className="p-3.5 border-r border-slate-800/60">Member</th>
-                <th className="p-3.5 border-r border-slate-800/60">Item</th>
+              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[10px]">
+                <th className="p-3.5 border-r border-slate-800/60">Log Timestamp</th>
+                <th className="p-3.5 border-r border-slate-800/60">Member Identity</th>
+                <th className="p-3.5 border-r border-slate-800/60">Target Item</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-center">Qty</th>
-                <th className="p-3.5 border-r border-slate-800/60">ApplicationStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60">SelectionStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60">LiveStatus</th>
+                <th className="p-3.5 border-r border-slate-800/60">Action Context</th>
+                <th className="p-3.5 border-r border-slate-800/60">Final Outcome</th>
+                <th className="p-3.5 border-r border-slate-800/60">Live Status</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-center">Priority</th>
-                <th className="p-3.5">EventDate</th>
+                <th className="p-3.5">Event Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 bg-slate-900/40 text-slate-300">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-8 text-center text-slate-500 italic font-sans text-sm">
-                    No corresponding transaction entries logged under this specific filter context.
+                  <td colSpan="9" className="p-12 text-center text-slate-500 italic font-sans text-xs">
+                    No corresponding transaction entries logged under this specific filter context definition.
                   </td>
                 </tr>
               ) : (
@@ -185,29 +254,39 @@ export default function RequestHistoryTab() {
                   <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
                     <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
                     <td className="p-3 font-sans font-bold text-slate-100 whitespace-nowrap">{row.member}</td>
-                    <td className="p-3 font-sans font-medium text-indigo-400 whitespace-nowrap">{row.item}</td>
+                    <td className="p-3 font-sans whitespace-nowrap">
+                      <span className={`px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold ${getItemStyleProfile(row.item)}`}>
+                        {row.item}
+                      </span>
+                    </td>
                     <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight ${
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight border ${
                         (row.applicationStatus || '').toLowerCase() === 'requested'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : (row.applicationStatus || '').toLowerCase() === 'forcedadd'
+                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                       }`}>
                         {row.applicationStatus}
                       </span>
                     </td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium tracking-tight ${
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-tight border ${
                         (row.selectionStatus || '').toLowerCase() === 'pending'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                           : (row.selectionStatus || '').toLowerCase() === 'selected'
-                          ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
-                          : 'bg-slate-800 text-slate-500'
+                          ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                          : (row.selectionStatus || '').toLowerCase() === 'absent'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                          : 'bg-slate-800 text-slate-500 border-slate-700'
                       }`}>
                         {row.selectionStatus}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-400 whitespace-nowrap">{row.liveStatus}</td>
+                    <td className="p-3 text-slate-400 whitespace-nowrap font-sans font-medium uppercase text-[10px]">
+                      {row.liveStatus ? `⚡ ${row.liveStatus}` : '---'}
+                    </td>
                     <td className="p-3 font-bold text-center text-cyan-400">{row.priority}</td>
                     <td className="p-3 text-slate-400 font-bold whitespace-nowrap">
                       {row.eventDate === "" ? '""' : row.eventDate}
@@ -220,25 +299,23 @@ export default function RequestHistoryTab() {
         </div>
       </div>
 
-      {/* 🛑 STICKY BOTTOM INTERACTION FOOTER ANCHOR */}
+      {/* STICKY BOTTOM INTERACTION FOOTER ANCHOR */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           
-          {/* [EXPORT] EXCEL SUB-UTILITY BUTTON */}
           <button
             onClick={handleDownloadCSVExport}
             disabled={filteredRecords.length === 0}
             className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg tracking-wide"
           >
-            📥 Export
+            📥 Export CSV Spreadsheet
           </button>
           
-          {/* [RETURN] NAVIGATION UTILITY BUTTON */}
           <button
             onClick={() => navigate('/')}
             className="rounded-xl border border-slate-700 bg-slate-900 px-6 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white shadow-lg tracking-wide"
           >
-            ↩️ Return
+            ↩️ Return to Lobby
           </button>
           
         </div>
