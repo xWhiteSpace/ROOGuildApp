@@ -51,21 +51,17 @@ export default function MimicBookTab({ user }) {
   const [validationError, setValidationError] = useState('');
   const [liveGapsWarning, setLiveGapsWarning] = useState('');
 
-  // --- PHASE 2 STATE: FIXED SEAT MAP WORKSPACE ---
+  // --- PHASE 2 STATE: DYNAMIC ALLOCATION ROSTER PLAYLIST ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
   const [categoryAllocations, setCategoryAllocations] = useState({
     Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
   });
 
-  // --- 🎹 ALL-ROSTER POPOVER STATE HOOKS ---
-  const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
+  // --- 🎹 POP-OVER UI ANCHOR STATES ---
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [popoverContextTab, setPopoverContextTab] = useState('applicants'); 
   const [popoverRosterSearch, setPopoverRosterSearch] = useState('');
   
-  // 🌟 UNIFORM STEP CONTROLLER SELECTION STATES
-  const [selectedGlobalRosterName, setSelectedGlobalRosterName] = useState(null);
-  const [popoverStepQty, setPopoverStepQty] = useState(1);
-
   // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
 
@@ -235,6 +231,7 @@ export default function MimicBookTab({ user }) {
     }));
   };
 
+  // --- 🌟 REWRITTEN HIGH-SPEED GREEDY INVENTORY SYSTEM ALLOCATION ENGINE ---
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
     const calculatedSummary = {
@@ -289,43 +286,35 @@ export default function MimicBookTab({ user }) {
       let remainingDropBudget = totalDropInventory;
       const assignedWinnersList = [];
 
+      // Loop dynamically assigns elements up to the available quantity budget
       for (let p = 0; p < priorityApplicants.length; p++) {
         if (remainingDropBudget <= 0) break;
 
         const pName = priorityApplicants[p];
         const requestedQuantity = detailsMap[pName]?.quantity || 1;
-        const allowedBoxSpan = Math.min(requestedQuantity, rowLimitValue);
+        
+        // 🔒 CLAMPS TO PERSONAL REQUEST SIZE REGISTRY INSTEAD OF RIGID GLOBAL SEATS SELECTION
+        const allowedBoxSpan = Math.min(requestedQuantity, rowLimitValue, remainingDropBudget);
 
-        if (allowedBoxSpan <= remainingDropBudget) {
+        if (allowedBoxSpan > 0) {
           assignedWinnersList.push({ name: pName, slots: allowedBoxSpan });
           remainingDropBudget -= allowedBoxSpan;
-        } else {
-          if (remainingDropBudget > 0) {
-            assignedWinnersList.push({ name: pName, slots: remainingDropBudget });
-            remainingDropBudget = 0;
-          }
         }
-      }
-
-      // Keep placeholder elements for unmatched drops
-      while (remainingDropBudget > 0) {
-        assignedWinnersList.push(null);
-        remainingDropBudget -= rowLimitValue; 
       }
 
       initialAllocations[category] = { selected: assignedWinnersList };
     });
 
     setCategoryAllocations(initialAllocations);
-    const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].seats > 0) || 'Puppet';
+    const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].qty > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
+    setIsPopoverOpen(false);
     setActiveStep(2);
   };
 
-  const handleDropBidder = (seatIndex) => {
+  const handleDropBidder = (index) => {
     const currentData = categoryAllocations[activeMatrixFilter];
-    const updatedSelected = [...currentData.selected];
-    updatedSelected[seatIndex] = null; 
+    const updatedSelected = currentData.selected.filter((_, i) => i !== index);
 
     setCategoryAllocations({
       ...categoryAllocations,
@@ -333,55 +322,69 @@ export default function MimicBookTab({ user }) {
     });
   };
 
-  // 🌟 HARD CEILING OVERFLOW PROTECTION FILTER ROUTINE
   const getSumOfCurrentAllocatedQty = (category) => {
     const targetSelectedList = categoryAllocations[category]?.selected || [];
-    return targetSelectedList.reduce((sum, node) => sum + (node ? node.slots : 0), 0);
+    return targetSelectedList.reduce((sum, node) => sum + node.slots, 0);
   };
 
-  const handleExecuteManualAllocationValue = (playerName, chosenQty) => {
-    if (activePopoverSeatIndex === null) return;
-    
+  // 🌟 INLINE CARD STEP COUNTER CONTROLLER HANDLERS
+  const handleUpdateInlineQtyIncrement = (index, delta) => {
     const currentData = categoryAllocations[activeMatrixFilter];
     const totalDropLimit = lootSummary[activeMatrixFilter]?.qty || 0;
-    
-    // Sum inventory while ignoring previous values inside this explicit index
-    const previousSeatNode = currentData.selected[activePopoverSeatIndex];
-    const baseAllocationSum = getSumOfCurrentAllocatedQty(activeMatrixFilter) - (previousSeatNode ? previousSeatNode.slots : 0);
+    const itemMaxRowLimit = lootSummary[activeMatrixFilter]?.limit || 1;
 
-    // 🛡️ CRITICAL HARD OVERFLOW CEILING BARRIER GUARD (POINT 1)
-    if (baseAllocationSum + parseInt(chosenQty, 10) > totalDropLimit) {
-      alert(`❌ CEILING BLOCKED: Cannot distribute ${chosenQty} items. Total allocation would reach ${baseAllocationSum + parseInt(chosenQty, 10)} / ${totalDropLimit}, which exceeds inventory!`);
+    const updatedSelected = [...currentData.selected];
+    const targetNode = updatedSelected[index];
+    
+    const currentTotalAllocated = getSumOfCurrentAllocatedQty(activeMatrixFilter);
+    const targetNewQty = targetNode.slots + delta;
+
+    if (targetNewQty < 1) return; // Force removal via drop action button context
+
+    // 🛡️ HARD CEILING CONSTRAINT GUARD LEVEL 1: Check room cap
+    if (delta > 0 && currentTotalAllocated + delta > totalDropLimit) {
+      alert("❌ ALLOCATION CEILING BLOCKED: Cannot increment quantity. Drop limit capacity has been reached!");
       return;
     }
 
-    const updatedSelected = [...currentData.selected];
-    updatedSelected[activePopoverSeatIndex] = { name: playerName, slots: parseInt(chosenQty, 10) };
+    // 🛡️ HARD CEILING CONSTRAINT GUARD LEVEL 2: Row constraint rule mapping
+    if (targetNewQty > itemMaxRowLimit) {
+      alert(`❌ ITEM LIMIT CEILING BLOCKED: This item drop row has a rigid claim cap of Max ${itemMaxRowLimit} per character!`);
+      return;
+    }
+
+    updatedSelected[index] = { ...targetNode, slots: targetNewQty };
+    setCategoryAllocations({
+      ...categoryAllocations,
+      [activeMatrixFilter]: { selected: updatedSelected }
+    });
+  };
+
+  const handlePromoteBidderToRosterList = (playerName) => {
+    const currentData = categoryAllocations[activeMatrixFilter];
+    const totalDropLimit = lootSummary[activeMatrixFilter]?.qty || 0;
+    const currentTotalAllocated = getSumOfCurrentAllocatedQty(activeMatrixFilter);
+
+    // 🛡️ CEILING CHECK PRIOR TO LIST INJECTION
+    if (currentTotalAllocated + 1 > totalDropLimit) {
+      alert("❌ ALLOCATION CEILING BLOCKED: No remaining unallocated inventory slots found!");
+      return;
+    }
+
+    // Default initializing to a safe, low baseline of 1 entry block
+    const newEntryNode = { name: playerName, slots: 1 };
+    const updatedSelected = [...currentData.selected, newEntryNode];
 
     setCategoryAllocations({
       ...categoryAllocations,
       [activeMatrixFilter]: { selected: updatedSelected }
     });
     
-    setActivePopoverSeatIndex(null); 
-    setSelectedGlobalRosterName(null);
-    setPopoverRosterSearch(''); 
+    setIsPopoverOpen(false);
+    setPopoverRosterSearch('');
   };
 
-  const handlePromoteBidderToTargetSeat = (playerName) => {
-    const rowLimitValue = lootSummary[activeMatrixFilter]?.limit || 1;
-    const detailsMap = requestsByItemDetails[activeMatrixFilter] || {};
-    
-    if (popoverContextTab === 'applicants') {
-      const requestedQuantity = detailsMap[playerName]?.quantity || 1;
-      const preciseSlotsCount = Math.min(requestedQuantity, rowLimitValue);
-      handleExecuteManualAllocationValue(playerName, preciseSlotsCount);
-    } else {
-      setSelectedGlobalRosterName(playerName);
-      setPopoverStepQty(1); // Reset default inline selection value counter
-    }
-  };
-
+  // --- DRAG AND DROP PLAYLIST RE-SORT HOOKS ---
   const handleRowDragStart = (e, index) => {
     setDraggedItemIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -394,9 +397,8 @@ export default function MimicBookTab({ user }) {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
     
-    const temp = updatedSelected[targetIndex];
-    updatedSelected[targetIndex] = updatedSelected[draggedItemIndex];
-    updatedSelected[draggedItemIndex] = temp;
+    const [movedNode] = updatedSelected.splice(draggedItemIndex, 1);
+    updatedSelected.splice(targetIndex, 0, movedNode);
 
     setCategoryAllocations({
       ...categoryAllocations,
@@ -405,6 +407,7 @@ export default function MimicBookTab({ user }) {
     setDraggedItemIndex(null);
   };
 
+  // --- UNIFORM EXTRAS BOOK COMPILER ASSEMBLY ---
   const handleOriginalMatrixAssembly = () => {
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
@@ -415,35 +418,37 @@ export default function MimicBookTab({ user }) {
       const itemsInfo = lootSummary[category];
       if (!itemsInfo || itemsInfo.qty === 0) return;
 
-      const seatArray = categoryAllocations[category]?.selected || [];
+      const currentAssignedPlaylist = categoryAllocations[category]?.selected || [];
       
-      seatArray.forEach(seatNode => {
-        if (seatNode === null) {
-          for (let step = 0; step < itemsInfo.limit; step++) {
-            matrixSlots.push({
-              name: '[⚠️ EXTRA UNALLOCATED SLOT]',
-              itemType: category,
-              page: currentVirtualPage,
-              slot: currentVirtualSlot,
-              status: 'NotSelected'
-            });
-            currentVirtualSlot++;
-            if (currentVirtualSlot > qtyPerPage) { currentVirtualSlot = 1; currentVirtualPage++; }
-          }
-        } else {
-          for (let step = 0; step < seatNode.slots; step++) {
-            matrixSlots.push({
-              name: seatNode.name,
-              itemType: category,
-              page: currentVirtualPage,
-              slot: currentVirtualSlot,
-              status: 'Selected'
-            });
-            currentVirtualSlot++;
-            if (currentVirtualSlot > qtyPerPage) { currentVirtualSlot = 1; currentVirtualPage++; }
-          }
+      currentAssignedPlaylist.forEach(node => {
+        for (let step = 0; step < node.slots; step++) {
+          matrixSlots.push({
+            name: node.name,
+            itemType: category,
+            page: currentVirtualPage,
+            slot: currentVirtualSlot,
+            status: 'Selected'
+          });
+          currentVirtualSlot++;
+          if (currentVirtualSlot > qtyPerPage) { currentVirtualSlot = 1; currentVirtualPage++; }
         }
       });
+
+      // 🌟 DYNAMIC UNALLOCATED BACKFILL: Computes leftovers cleanly to lock alignment coords
+      const totalClaimedQty = currentAssignedPlaylist.reduce((sum, n) => sum + n.slots, 0);
+      const leftoversCount = itemsInfo.qty - totalClaimedQty;
+      
+      for (let extra = 0; extra < leftoversCount; extra++) {
+        matrixSlots.push({
+          name: '[⚠️ EXTRA UNALLOCATED SLOT]',
+          itemType: category,
+          page: currentVirtualPage,
+          slot: currentVirtualSlot,
+          status: 'NotSelected'
+        });
+        currentVirtualSlot++;
+        if (currentVirtualSlot > qtyPerPage) { currentVirtualSlot = 1; currentVirtualPage++; }
+      }
     });
 
     setGeneratedSlots(matrixSlots);
@@ -463,11 +468,11 @@ export default function MimicBookTab({ user }) {
       const processedAllocations = {};
       Object.keys(categoryAllocations).forEach(cat => {
         const seatEntries = categoryAllocations[cat].selected || [];
-        const allAssignedWinners = seatEntries.filter(n => n !== null).map(n => n.name);
+        const allAssignedWinners = seatEntries.map(n => n.name);
         const masterList = rankingsByItem[cat] || [];
         const nonWinners = masterList.filter(n => !allAssignedWinners.includes(n));
         
-        processedAllocations[cat] = { selected: seatEntries.filter(n => n !== null), notSelected: nonWinners };
+        processedAllocations[cat] = { selected: seatEntries, notSelected: nonWinners };
       });
 
       const res = await fetch(`${backendUrl}/api/requests/commit-session`, {
@@ -532,7 +537,7 @@ export default function MimicBookTab({ user }) {
   const totalPagesCount = generatedSlots.length > 0 ? Math.ceil(generatedSlots.length / qtyPerPage) : 1;
 
   const currentActiveSelections = categoryAllocations[activeMatrixFilter] || { selected: [] };
-  const seatedNamesOnly = currentActiveSelections.selected.filter(n => n !== null).map(n => n.name);
+  const seatedNamesOnly = currentActiveSelections.selected.map(n => n.name);
   
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(
     name => !seatedNamesOnly.includes(name)
@@ -544,17 +549,9 @@ export default function MimicBookTab({ user }) {
     return passesSearch && !isAlreadySeated;
   });
 
-  // Calculate dynamic item inventory numbers
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
   const currentCategoryAllocatedQuantity = getSumOfCurrentAllocatedQty(activeMatrixFilter);
-  
-  // Calculate remaining drop headroom limit context
-  const previousPopoverNode = currentActiveSelections.selected[activePopoverSeatIndex];
-  const activePopoverBaseSum = currentCategoryAllocatedQuantity - (previousPopoverNode ? previousPopoverNode.slots : 0);
-  const maxPopoverAllowedHeadroom = Math.min(
-    lootSummary[activeMatrixFilter]?.limit || 1,
-    totalCategoryDropQuantity - activePopoverBaseSum
-  );
+  const maxPopoverAllowedHeadroom = lootSummary[activeMatrixFilter]?.limit || 1;
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -596,7 +593,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- ADMINISTRATIVE CONTROLS PANEL --- */}
+      {/* --- ADMINISTRATIVE OFFICER CORES CONTROLS PANEL OVERRIDES --- */}
       {isAdminMode && (
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4">
           
@@ -721,18 +718,18 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE */}
+          {/* STEP 2 WORKSPACE: DYNAMIC PLAYLIST WORKSPACE */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               
-              {/* 🌟 REALIGNED FRACTION CORES: DISPLAYED AS DYNAMIC ALLOCATED / DROP QUANTITIES */}
-              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+              {/* 🌟 FRACTIONS TRACKED ACCURATELY AS INVENTORY BALANCES (POINT 1) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
                   const currentAllocatedSum = getSumOfCurrentAllocatedQty(category);
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }}>
-                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distribution</div>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setIsPopoverOpen(false); }}>
+                      <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distributed</div>
                       <div className="text-lg font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">(Max Item Limit: {lootSummary[category]?.limit || 1})</div>
                     </div>
@@ -743,58 +740,76 @@ export default function MimicBookTab({ user }) {
               <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
                 <span>Active Target Category Pool:</span>
                 <span className={`px-2 py-0.5 rounded border text-[11px] font-black uppercase ${getItemStyleProfile(activeMatrixFilter)}`}>{activeMatrixFilter} Matrix</span>
-                <span className="text-slate-500 font-mono text-[10px]">Current Total Load: {currentCategoryAllocatedQuantity} / {totalCategoryDropQuantity} Items Claimed</span>
+                <span className="text-slate-500 font-mono text-[10px]"> Roster Status: {currentCategoryAllocatedQuantity} / {totalCategoryDropQuantity} Items Allocated</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
-                <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
+                {/* DYNAMIC ROW ASSIGNED LIST */}
+                <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Assigned Footprints (Drag to Swap Grid Box Order)</span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Fixed Budget Dimensions</span>
+                    <span>✨ Assigned Recipients Playlist (Drag to Swap Grid Box Order)</span>
+                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Flexible Layout Chain</span>
                   </div>
+                  
                   <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                    {currentActiveSelections.selected.map((seatNode, i) => {
-                      if (seatNode === null) {
-                        return (
-                          <div 
-                            key={i}
-                            onDragOver={handleRowDragOver}
-                            onDrop={(e) => handleRowDrop(e, i)}
-                            onClick={() => { setActivePopoverSeatIndex(activePopoverSeatIndex === i ? null : i); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); setSelectedGlobalRosterName(null); }}
-                            className={`flex items-center justify-between p-2.5 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition-all ${
-                              activePopoverSeatIndex === i ? 'ring-2 ring-indigo-500 border-transparent bg-slate-900/60' : ''
-                            }`}
-                          >
-                            <span className="font-sans text-[10px] font-black">UNALLOCATED BLOCK POSITION</span>
-                            <span className="text-[10px] tracking-tight text-slate-500 font-bold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800 animate-pulse">➕ FILL LEFTOVER DROP</span>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div 
-                          key={i} 
-                          draggable="true"
-                          onDragStart={(e) => handleRowDragStart(e, i)}
-                          onDragOver={handleRowDragOver}
-                          onDrop={(e) => handleRowDrop(e, i)}
-                          className={`flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-600 transition ${
-                            draggedItemIndex === i ? 'opacity-30' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-slate-400">☰</span>
-                            <span className="truncate text-slate-100 font-sans font-bold">{seatNode.name}</span>
-                            <span className="text-[10px] text-cyan-400 font-bold px-2 py-0.5 bg-cyan-950/40 border border-cyan-900/30 rounded font-mono shrink-0">
-                              Qty: {seatNode.slots}
-                            </span>
-                          </div>
-                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition shrink-0">Drop ✖</button>
+                    {currentActiveSelections.selected.map((node, i) => (
+                      <div 
+                        key={i} 
+                        draggable="true"
+                        onDragStart={(e) => handleRowDragStart(e, i)}
+                        onDragOver={handleRowDragOver}
+                        onDrop={(e) => handleRowDrop(e, i)}
+                        className={`flex items-center justify-between p-2 rounded-xl border border-slate-800 bg-slate-900/60 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-600 transition ${
+                          draggedItemIndex === i ? 'opacity-30' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-slate-500 font-sans text-[10px] font-bold">#{i + 1}</span>
+                          <span className="text-slate-400">☰</span>
+                          <span className="truncate text-slate-100 font-sans font-bold">{node.name}</span>
                         </div>
-                      );
-                    })}
+
+                        {/* 🌟 UNIFORM CARD COMPACT INLINE STEP CONTROLLER WITH TOUGH CEILING SECURITY GUARDS (POINTS 2 & 3) */}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded-lg">
+                            <button 
+                              onClick={() => handleUpdateInlineQtyIncrement(i, -1)}
+                              className="px-2 py-0.5 text-slate-500 hover:text-white font-sans font-black bg-slate-900 rounded"
+                            >
+                              -
+                            </button>
+                            <span className="w-8 text-center text-white text-[11px] font-black font-mono">
+                              Qty: {node.slots}
+                            </span>
+                            <button 
+                              onClick={() => handleUpdateInlineQtyIncrement(i, 1)}
+                              disabled={currentCategoryAllocatedQuantity >= totalCategoryDropQuantity || node.slots >= maxPopoverAllowedHeadroom}
+                              className="px-2 py-0.5 text-slate-500 hover:text-white font-sans font-black bg-slate-900 rounded disabled:opacity-10"
+                            >
+                              +
+                            </button>
+                          </div>
+                          
+                          <button onClick={() => handleDropBidder(i)} className="text-rose-400 font-sans text-[10px] bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 hover:bg-rose-500 hover:text-white transition">Drop ✖</button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {currentActiveSelections.selected.length === 0 && (
+                      <div className="text-center text-slate-600 text-xs py-8 italic font-sans">No members assigned to active inventory lines.</div>
+                    )}
                   </div>
+
+                  {/* 🌟 DYNAMIC RECIPICIENT INJECTION ROW BUTTON ANCHOR */}
+                  {currentCategoryAllocatedQuantity < totalCategoryDropQuantity && (
+                    <button
+                      onClick={() => { setIsPopoverOpen(!isPopoverOpen); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
+                      className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-black uppercase text-indigo-400 tracking-wide hover:bg-slate-900/40 hover:border-slate-700 transition"
+                    >
+                      ➕ Assign Remaining Balances ({totalCategoryDropQuantity - currentCategoryAllocatedQuantity} Items Unallocated)
+                    </button>
+                  )}
                 </div>
 
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
@@ -816,133 +831,84 @@ export default function MimicBookTab({ user }) {
                 </div>
               </div>
 
-              {/* 🌟 UNIFIED TACTILE [- val +] STEPPING ALLOCATION POP-OVER WINDOW (POINTS 2 & 3) */}
-              {activePopoverSeatIndex !== null && (
+              {/* OVERLAY POP-OVER MODAL SELECTOR MATRIX OVERRIDE COMPONENT */}
+              {isPopoverOpen && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Allocate Seat #{activePopoverSeatIndex + 1} Position</h4>
-                    <button onClick={() => { setActivePopoverSeatIndex(null); setSelectedGlobalRosterName(null); }} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
+                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Select Character to Inject into Playlist</h4>
+                    <button onClick={() => setIsPopoverOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
                   </div>
                   
-                  {selectedGlobalRosterName ? (
-                    <div className="bg-slate-950 p-4 border border-slate-800 rounded-xl text-center space-y-4 animate-fadeIn">
-                      <div className="text-xs text-slate-400">
-                        Designate dynamic quantity parameters for character: <strong className="text-indigo-400 font-sans text-sm block mt-0.5">{selectedGlobalRosterName}</strong>
+                  <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+                    <button 
+                      onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                    >
+                      🎯 Portal Applicants
+                    </button>
+                    <button 
+                      onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                    >
+                      🌐 Full Guild Roster
+                    </button>
+                  </div>
+
+                  {popoverContextTab === 'fullRoster' && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={popoverRosterSearch}
+                          onChange={(e) => setPopoverRosterSearch(e.target.value)}
+                          placeholder="🔍 Filter matching names or force create new..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
+                        />
+                        <button
+                          onClick={handleSyncRosterFromDiscord}
+                          disabled={syncingRoster}
+                          className="px-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
+                        >
+                          {syncingRoster ? "⏳ Syncing..." : "🔄 Sync Discord"}
+                        </button>
                       </div>
                       
-                      {/* 🌟 UNIFORM COMPACT STEP-CONTROLLER MODULE HOOK (POINT 2) */}
-                      <div className="flex items-center justify-center gap-3">
-                        <button 
-                          onClick={() => setPopoverStepQty(Math.max(1, popoverStepQty - 1))}
-                          className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 hover:text-white transition shadow"
+                      {popoverRosterSearch.trim() && !popoverFilteredRosterList.includes(popoverRosterSearch.trim()) && (
+                        <button
+                          onClick={() => handlePromoteBidderToRosterList(popoverRosterSearch.trim())}
+                          className="w-full text-center p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-600 hover:text-white text-xs tracking-tight transition"
                         >
-                          -
+                          ➕ Force Add "{popoverRosterSearch.trim()}" as Guest Roster Line Item
                         </button>
-                        <div className="w-12 text-center font-mono font-black text-sm text-white bg-slate-900 border border-slate-800 py-1 rounded-lg">
-                          {popoverStepQty}
-                        </div>
-                        <button 
-                          onClick={() => setPopoverStepQty(Math.min(maxPopoverAllowedHeadroom, popoverStepQty + 1))}
-                          disabled={popoverStepQty >= maxPopoverAllowedHeadroom}
-                          className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-slate-400 hover:text-white transition shadow disabled:opacity-20"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        (Inventory Ceiling Clamp Constraint: Max {maxPopoverAllowedHeadroom} Allowed)
-                      </div>
-
-                      {/* HIGH VISIBILITY ACTION TRIGGER LOCK BUTTON */}
-                      <button
-                        onClick={() => handleExecuteManualAllocationValue(selectedGlobalRosterName, popoverStepQty)}
-                        className="w-full text-center py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider transition shadow-md"
-                      >
-                        ✔ Confirm Distribution Allocation
-                      </button>
-
-                      <button 
-                        onClick={() => setSelectedGlobalRosterName(null)}
-                        className="text-[10px] text-slate-500 uppercase hover:underline font-bold block mx-auto pt-1"
-                      >
-                        ↩ Back to list selection
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
-                        <button 
-                          onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
-                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
-                        >
-                          🎯 Portal Applicants
-                        </button>
-                        <button 
-                          onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
-                          className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
-                        >
-                          🌐 Full Guild Roster
-                        </button>
-                      </div>
-
-                      {popoverContextTab === 'fullRoster' && (
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={popoverRosterSearch}
-                              onChange={(e) => setPopoverRosterSearch(e.target.value)}
-                              placeholder="🔍 Filter matching names or force create new..."
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
-                            />
-                            <button
-                              onClick={handleSyncRosterFromDiscord}
-                              disabled={syncingRoster}
-                              className="px-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
-                            >
-                              {syncingRoster ? "⏳ Syncing..." : "🔄 Sync Discord"}
-                            </button>
-                          </div>
-                          
-                          {popoverRosterSearch.trim() && !popoverFilteredRosterList.includes(popoverRosterSearch.trim()) && (
-                            <button
-                              onClick={() => handlePromoteBidderToTargetSeat(popoverRosterSearch.trim())}
-                              className="w-full text-center p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-600 hover:text-white text-xs tracking-tight transition"
-                            >
-                              ➕ Force Add "{popoverRosterSearch.trim()}" as Guest Roster Line Item
-                            </button>
-                          )}
-                        </div>
                       )}
-
-                      <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
-                        {popoverContextTab === 'applicants' ? (
-                          activeStandbyPoolList.map((name, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handlePromoteBidderToTargetSeat(name)}
-                              className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
-                            >
-                              <span className="font-bold text-slate-200">{name}</span>
-                              <span className="font-mono text-[10px] text-slate-500">Rank #{idx+1}</span>
-                            </button>
-                          ))
-                        ) : (
-                          popoverFilteredRosterList.map((name, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handlePromoteBidderToTargetSeat(name)}
-                              className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
-                            >
-                              <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
-                              <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </>
+                    </div>
                   )}
+
+                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
+                    {popoverContextTab === 'applicants' ? (
+                      activeStandbyPoolList.map((name, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePromoteBidderToRosterList(name)}
+                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
+                        >
+                          <span className="font-bold text-slate-200">{name}</span>
+                          <span className="font-mono text-[10px] text-slate-500">Rank #{idx+1}</span>
+                        </button>
+                      ))
+                    ) : (
+                      popoverFilteredRosterList.map((name, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePromoteBidderToRosterList(name)}
+                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
+                        >
+                          <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
+                          <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
