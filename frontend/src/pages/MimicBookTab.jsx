@@ -231,7 +231,6 @@ export default function MimicBookTab({ user }) {
     }));
   };
 
-  // --- 🌟 REWRITTEN HIGH-SPEED GREEDY INVENTORY SYSTEM ALLOCATION ENGINE ---
   const handleCheckAndRegisterLoot = () => {
     setValidationError('');
     const calculatedSummary = {
@@ -286,14 +285,11 @@ export default function MimicBookTab({ user }) {
       let remainingDropBudget = totalDropInventory;
       const assignedWinnersList = [];
 
-      // Loop dynamically assigns elements up to the available quantity budget
       for (let p = 0; p < priorityApplicants.length; p++) {
         if (remainingDropBudget <= 0) break;
 
         const pName = priorityApplicants[p];
         const requestedQuantity = detailsMap[pName]?.quantity || 1;
-        
-        // 🔒 CLAMPS TO PERSONAL REQUEST SIZE REGISTRY INSTEAD OF RIGID GLOBAL SEATS SELECTION
         const allowedBoxSpan = Math.min(requestedQuantity, rowLimitValue, remainingDropBudget);
 
         if (allowedBoxSpan > 0) {
@@ -327,7 +323,6 @@ export default function MimicBookTab({ user }) {
     return targetSelectedList.reduce((sum, node) => sum + node.slots, 0);
   };
 
-  // 🌟 INLINE CARD STEP COUNTER CONTROLLER HANDLERS
   const handleUpdateInlineQtyIncrement = (index, delta) => {
     const currentData = categoryAllocations[activeMatrixFilter];
     const totalDropLimit = lootSummary[activeMatrixFilter]?.qty || 0;
@@ -339,15 +334,13 @@ export default function MimicBookTab({ user }) {
     const currentTotalAllocated = getSumOfCurrentAllocatedQty(activeMatrixFilter);
     const targetNewQty = targetNode.slots + delta;
 
-    if (targetNewQty < 1) return; // Force removal via drop action button context
+    if (targetNewQty < 1) return; 
 
-    // 🛡️ HARD CEILING CONSTRAINT GUARD LEVEL 1: Check room cap
     if (delta > 0 && currentTotalAllocated + delta > totalDropLimit) {
       alert("❌ ALLOCATION CEILING BLOCKED: Cannot increment quantity. Drop limit capacity has been reached!");
       return;
     }
 
-    // 🛡️ HARD CEILING CONSTRAINT GUARD LEVEL 2: Row constraint rule mapping
     if (targetNewQty > itemMaxRowLimit) {
       alert(`❌ ITEM LIMIT CEILING BLOCKED: This item drop row has a rigid claim cap of Max ${itemMaxRowLimit} per character!`);
       return;
@@ -365,13 +358,11 @@ export default function MimicBookTab({ user }) {
     const totalDropLimit = lootSummary[activeMatrixFilter]?.qty || 0;
     const currentTotalAllocated = getSumOfCurrentAllocatedQty(activeMatrixFilter);
 
-    // 🛡️ CEILING CHECK PRIOR TO LIST INJECTION
     if (currentTotalAllocated + 1 > totalDropLimit) {
       alert("❌ ALLOCATION CEILING BLOCKED: No remaining unallocated inventory slots found!");
       return;
     }
 
-    // Default initializing to a safe, low baseline of 1 entry block
     const newEntryNode = { name: playerName, slots: 1 };
     const updatedSelected = [...currentData.selected, newEntryNode];
 
@@ -384,7 +375,6 @@ export default function MimicBookTab({ user }) {
     setPopoverRosterSearch('');
   };
 
-  // --- DRAG AND DROP PLAYLIST RE-SORT HOOKS ---
   const handleRowDragStart = (e, index) => {
     setDraggedItemIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -407,7 +397,6 @@ export default function MimicBookTab({ user }) {
     setDraggedItemIndex(null);
   };
 
-  // --- UNIFORM EXTRAS BOOK COMPILER ASSEMBLY ---
   const handleOriginalMatrixAssembly = () => {
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
@@ -434,7 +423,6 @@ export default function MimicBookTab({ user }) {
         }
       });
 
-      // 🌟 DYNAMIC UNALLOCATED BACKFILL: Computes leftovers cleanly to lock alignment coords
       const totalClaimedQty = currentAssignedPlaylist.reduce((sum, n) => sum + n.slots, 0);
       const leftoversCount = itemsInfo.qty - totalClaimedQty;
       
@@ -593,11 +581,10 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- ADMINISTRATIVE OFFICER CORES CONTROLS PANEL OVERRIDES --- */}
+      {/* --- ADMINISTRATIVE OFFICER PANELS --- */}
       {isAdminMode && (
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4">
           
-          {/* STEP PROGRESS ROADMAP */}
           <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto text-center text-xs font-bold border-b border-slate-800/60 pb-3">
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 1 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>1. Loot Registry & Math</div>
             <div className="text-slate-700">➔</div>
@@ -718,12 +705,11 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* STEP 2 WORKSPACE: DYNAMIC PLAYLIST WORKSPACE */}
+          {/* STEP 2 WORKSPACE */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               
-              {/* 🌟 FRACTIONS TRACKED ACCURATELY AS INVENTORY BALANCES (POINT 1) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+              <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
                   const currentAllocatedSum = getSumOfCurrentAllocatedQty(category);
@@ -745,7 +731,6 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 
-                {/* DYNAMIC ROW ASSIGNED LIST */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
                     <span>✨ Assigned Recipients Playlist (Drag to Swap Grid Box Order)</span>
@@ -770,7 +755,6 @@ export default function MimicBookTab({ user }) {
                           <span className="truncate text-slate-100 font-sans font-bold">{node.name}</span>
                         </div>
 
-                        {/* 🌟 UNIFORM CARD COMPACT INLINE STEP CONTROLLER WITH TOUGH CEILING SECURITY GUARDS (POINTS 2 & 3) */}
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded-lg">
                             <button 
@@ -801,7 +785,6 @@ export default function MimicBookTab({ user }) {
                     )}
                   </div>
 
-                  {/* 🌟 DYNAMIC RECIPICIENT INJECTION ROW BUTTON ANCHOR */}
                   {currentCategoryAllocatedQuantity < totalCategoryDropQuantity && (
                     <button
                       onClick={() => { setIsPopoverOpen(!isPopoverOpen); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
@@ -831,7 +814,6 @@ export default function MimicBookTab({ user }) {
                 </div>
               </div>
 
-              {/* OVERLAY POP-OVER MODAL SELECTOR MATRIX OVERRIDE COMPONENT */}
               {isPopoverOpen && (
                 <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -967,7 +949,7 @@ export default function MimicBookTab({ user }) {
         </div>
       )}
 
-      {/* --- PUBLIC PREVIEW DESK --- */}
+      {/* --- PUBLIC ACCESSIBLE READ-ONLY PREVIEW DESK --- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 p-3 rounded-2xl shadow-lg">
         <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800/80 p-1 rounded-xl shrink-0 w-max">
           <button onClick={() => setViewLens('ALL')} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase transition ${viewLens === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>🌐 See All</button>
@@ -982,7 +964,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT */}
+        {/* LEFT COMPONENT: DIGITAL BOOK MIMIC */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -1025,7 +1007,7 @@ export default function MimicBookTab({ user }) {
           </div>
         </div>
 
-        {/* RIGHT COMPONENT */}
+        {/* RIGHT COMPONENT: UNINTERRUPTED MASTER OVERVIEW TRANSPARENCY LEDGER */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
@@ -1051,8 +1033,12 @@ export default function MimicBookTab({ user }) {
                       const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                       categorySequenceOrder.forEach(cat => {
                         const standbyList = rankingsByItem[cat] || [];
+                        
+                        // 🌟 FIXED LOGIC LAYER: Scans category node mapping data to isolate real unselected entries
+                        const winnersInCat = (categoryAllocations[cat]?.selected || []).map(n => n.name);
+                        
                         standbyList.forEach(name => {
-                          if (!seatedNamesOnly.includes(name)) {
+                          if (!winnersInCat.includes(name)) {
                             rowsToDisplay.push({ name, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
                           }
                         });
@@ -1064,7 +1050,8 @@ export default function MimicBookTab({ user }) {
                       if (rowsToDisplay.length === 0) {
                         const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                         categorySequenceOrder.forEach(cat => {
-                          if (!seatedNamesOnly.includes(currentUserName) && (rankingsByItem[cat] || []).includes(currentUserName)) {
+                          const winnersInCat = (categoryAllocations[cat]?.selected || []).map(n => n.name);
+                          if (!winnersInCat.includes(currentUserName) && (rankingsByItem[cat] || []).includes(currentUserName)) {
                             rowsToDisplay.push({ name: currentUserName, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
                           }
                         });
