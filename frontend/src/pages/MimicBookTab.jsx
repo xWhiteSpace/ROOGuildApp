@@ -4,6 +4,14 @@ import { database } from '../services/firebaseClient';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
+// Global rule helper for item bid claim limits
+const ITEM_LIMIT_DEFAULTS = {
+  'Puppet': 1,
+  'Illu': 1,
+  'Light&Dark': 3,
+  'Time&Space': 5
+};
+
 export default function MimicBookTab({ user }) {
   const [isAdminMode, setIsAdminMode] = useState(true);
   const [activeStep, setActiveStep] = useState(1); 
@@ -14,7 +22,7 @@ export default function MimicBookTab({ user }) {
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
 
-  // --- 🔒 FRESH DATA ARCHIVER WORKSPACE COMMIT FIELDS ---
+  // --- 🔒 DATA ARCHIVER WORKSPACE COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
   const [commitDate, setCommitDate] = useState(() => {
     const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
@@ -44,6 +52,7 @@ export default function MimicBookTab({ user }) {
     'Time&Space': { qty: 0, limit: 1, seats: 0 }
   });
   const [validationError, setValidationError] = useState('');
+  const [liveGapsWarning, setLiveGapsWarning] = useState('');
 
   // --- PHASE 2 STATE: COMPARTMENTALIZED SELECTION SEATS ---
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('Puppet');
@@ -63,7 +72,41 @@ export default function MimicBookTab({ user }) {
   const [bookCurrentPage, setBookCurrentPage] = useState(1);
   const [generatedSlots, setGeneratedSlots] = useState([]);
 
-  // --- 📥 HOOK 1: LOAD TRUE TARGET POOL FROM THE ENDPOINT ---
+  // --- 🌟 LIVE COORDINATE GAP DETECTOR ENGINE ---
+  useEffect(() => {
+    if (lootRows.length <= 1) {
+      setLiveGapsWarning('');
+      return;
+    }
+
+    // Map rows to zero-based linear indices using the current qtyPerPage context
+    const linearRows = lootRows.map(r => ({
+      ...r,
+      startLin: (Math.max(1, r.startPage) - 1) * qtyPerPage + (Math.max(1, r.startPos) - 1),
+      endLin: (Math.max(1, r.endPage) - 1) * qtyPerPage + (Math.max(1, r.endPos) - 1)
+    })).sort((a, b) => a.startLin - b.startLin);
+
+    const missingBlocks = [];
+    for (let i = 0; i < linearRows.length - 1; i++) {
+      const currentEnd = linearRows[i].endLin;
+      const nextStart = linearRows[i + 1].startLin;
+      
+      if (nextStart > currentEnd + 1) {
+        const gapStartLin = currentEnd + 1;
+        const gapPage = Math.floor(gapStartLin / qtyPerPage) + 1;
+        const gapPos = (gapStartLin % qtyPerPage) + 1;
+        missingBlocks.push(`Page ${gapPage} Slot ${gapPos}`);
+      }
+    }
+
+    if (missingBlocks.length > 0) {
+      setLiveGapsWarning(`⚠️ GAP WARNING: Unallocated grid sequence boxes skipped at: ${missingBlocks.join(', ')}`);
+    } else {
+      setLiveGapsWarning('');
+    }
+  }, [lootRows, qtyPerPage]);
+
+  // --- 📥 LOAD TRUE TARGET POOL FROM THE ENDPOINT ---
   const loadTrueRequestPool = async () => {
     try {
       setLoadingPool(true);
@@ -121,7 +164,6 @@ export default function MimicBookTab({ user }) {
     loadTrueRequestPool();
   }, []);
 
-  // Live snapshot sync from Firebase staging node if available
   useEffect(() => {
     const sessionRef = ref(database, 'auction/active_session');
     const unsub = onValue(sessionRef, (snapshot) => {
@@ -134,10 +176,41 @@ export default function MimicBookTab({ user }) {
     return () => unsub();
   }, []);
 
-  // --- PHASE 1 LOGIC: ELIGIBILITY ENGINE ---
+  // --- PHASE 1 LOGIC: AUTO-CHAIN ELIGIBILITY ENGINE ---
   const handleAddLootRow = () => {
     const nextId = lootRows.length > 0 ? Math.max(...lootRows.map(r => r.id)) + 1 : 1;
-    setLootRows([...lootRows, { id: nextId, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
+    
+    // 🌟 AUTO-CHAIN LINKING INTERFACES:
+    // Suggesively computes the exact chronological next slot box based on the last row's boundaries
+    let derivedStartPage = 1;
+    let derivedStartPos = 1;
+
+    if (lootRows.length > 0) {
+      const lastRow = lootRows[lootRows.length - 1];
+      let calcPos = lastRow.endPos + 1;
+      let calcPage = lastRow.endPage;
+
+      if (calcPos > qtyPerPage) {
+        calcPos = 1;
+        calcPage += 1;
+      }
+      derivedStartPage = calcPage;
+      derivedStartPos = calcPos;
+    }
+
+    const defaultType = 'Puppet';
+    setLootRows([
+      ...lootRows, 
+      { 
+        id: nextId, 
+        itemType: defaultType, 
+        startPage: derivedStartPage, 
+        startPos: derivedStartPos, 
+        endPage: derivedStartPage, 
+        endPos: derivedStartPos, 
+        limit: ITEM_LIMIT_DEFAULTS[defaultType] 
+      }
+    ]);
   };
 
   const handleRemoveLootRow = (id) => {
@@ -145,7 +218,31 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleUpdateLootRow = (id, key, val) => {
-    setLootRows(lootRows.map(r => r.id === id ? { ...r, [key]: val } : r));
+    setLootRows(lootRows.map(r => {
+      if (r.id !== id) return r;
+
+      let updatedFields = { [key]: val };
+
+      // 🌟 POSITION BOUNDARY CLAMP ENGINE:
+      // Prevents impossible matrix configurations by constraining limits to active page capacities
+      if (key === 'startPos' || key === 'endPos') {
+        const parsedVal = parseInt(val, 10) || 1;
+        updatedFields[key] = Math.min(Math.max(1, parsedVal), qtyPerPage);
+      }
+
+      if (key === 'startPage' || key === 'endPage') {
+        const parsedPage = parseInt(val, 10) || 1;
+        updatedFields[key] = Math.max(1, parsedPage);
+      }
+
+      // 🌟 AUTOMATED GLOBAL REGISTRY LIMIT MATCHING:
+      // Maps standard caps instantly when an item dropdown choice selection shifts
+      if (key === 'itemType') {
+        updatedFields.limit = ITEM_LIMIT_DEFAULTS[val] || 1;
+      }
+
+      return { ...r, ...updatedFields };
+    }));
   };
 
   const handleCheckAndRegisterLoot = () => {
@@ -339,7 +436,6 @@ export default function MimicBookTab({ user }) {
     setActiveStep(3);
   };
 
-  // --- 🚀 LIVE PRODUCTION DATA ARCHIVER ROUTE COMMIT METHOD ---
   const handleCommitSessionAndFlash = async () => {
     if (!commitDate.trim()) return alert("Raid Night Event Date parameters cannot remain blank.");
     
@@ -378,7 +474,7 @@ export default function MimicBookTab({ user }) {
           'Time&Space': { qty: 0, limit: 1, seats: 0 }
         });
         setGeneratedSlots([]);
-        loadTrueRequestPool(); // Unlocks applicants by reloading the current active grid
+        loadTrueRequestPool(); 
       } else {
         alert(`❌ Commit execution rejected: ${data.error}`);
       }
@@ -390,7 +486,6 @@ export default function MimicBookTab({ user }) {
     }
   };
 
-  // --- BROWSER-NATIVE LOOT HISTORY CSV EXPORT MODULE ---
   const handleDownloadLootHistoryCSV = () => {
     if (lootHistoryData.length === 0) return;
     const csvHeaders = ["Date", "Event", "Item", "Qty", "Max", "Mem"];
@@ -480,7 +575,7 @@ export default function MimicBookTab({ user }) {
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 4 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>4. Commit Archive</div>
           </div>
 
-          {/* STEP 1 WORKSPACE: DYNAMIC MATRIX ENTRY */}
+          {/* STEP 1 WORKSPACE: REFINED ENTRY CONTROLS WITH REAL-TIME CO-LIMITS */}
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between">
@@ -503,21 +598,28 @@ export default function MimicBookTab({ user }) {
                 </div>
               )}
 
+              {/* 🌟 AUTOMATED LIVE SEQUENCE GAP ALERTS VIEW COMPONENT */}
+              {liveGapsWarning && (
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-xl font-mono tracking-tight shadow-md">
+                  {liveGapsWarning}
+                </div>
+              )}
+
               <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 uppercase font-black tracking-wider text-[10px]">
                       <th className="p-3">Dropped Item Category</th>
-                      <th className="p-3">Start Page</th>
-                      <th className="p-3">Start Pos</th>
-                      <th className="p-3">End Page</th>
-                      <th className="p-3">End Pos</th>
-                      <th className="p-3">Bid/Claim Limit</th>
-                      <th className="p-3">Action</th>
+                      <th className="p-3 text-center">Start Page</th>
+                      <th className="p-3 text-center">Start Pos</th>
+                      <th className="p-3 text-center">End Page</th>
+                      <th className="p-3 text-center">End Pos</th>
+                      <th className="p-3 text-center">Bid/Claim Limit</th>
+                      <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
-                    {lootRows.map((row) => (
+                    {lootRows.map((row, index) => (
                       <tr key={row.id} className="hover:bg-slate-900/20 transition-all">
                         <td className="p-2">
                           <select 
@@ -531,13 +633,50 @@ export default function MimicBookTab({ user }) {
                             <option value="Time&Space">🩸 Time & Space Scroll</option>
                           </select>
                         </td>
-                        <td className="p-2"><input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', parseInt(e.target.value) || 0)} className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-slate-300"/></td>
-                        <td className="p-2"><input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', parseInt(e.target.value) || 0)} className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-slate-300"/></td>
-                        <td className="p-2"><input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', parseInt(e.target.value) || 0)} className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-slate-300"/></td>
-                        <td className="p-2"><input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', parseInt(e.target.value) || 0)} className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-slate-300"/></td>
-                        <td className="p-2"><input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', Math.max(1, parseInt(e.target.value) || 1))} className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-amber-400 font-bold"/></td>
-                        <td className="p-2">
-                          <button onClick={() => handleRemoveLootRow(row.id)} className="text-slate-500 hover:text-rose-400 p-1 font-sans transition">🗑️</button>
+                        
+                        {/* INCREMENTAL BUTTON CONTROLS FOR SEAMLESS live REQUISITIONS */}
+                        <td className="p-2 text-center">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
+                            <button onClick={() => handleUpdateLootRow(row.id, 'startPage', Math.max(1, row.startPage - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
+                            <input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs"/>
+                            <button onClick={() => handleUpdateLootRow(row.id, 'startPage', row.startPage + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
+                            <button onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.max(1, row.startPos - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
+                            <input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs"/>
+                            <button onClick={() => handleUpdateLootRow(row.id, 'startPos', row.startPos + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
+                            <button onClick={() => handleUpdateLootRow(row.id, 'endPage', Math.max(1, row.endPage - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
+                            <input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-300 outline-none font-mono text-xs"/>
+                            <button onClick={() => handleUpdateLootRow(row.id, 'endPage', row.endPage + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
+                            <button onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.max(1, row.endPos - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
+                            <input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold outline-none font-mono text-xs"/>
+                            <button onClick={() => handleUpdateLootRow(row.id, 'endPos', row.endPos + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="inline-flex items-center gap-1 bg-slate-950 p-0.5 border border-slate-800 rounded">
+                            <button onClick={() => handleUpdateLootRow(row.id, 'limit', Math.max(1, row.limit - 1))} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">-</button>
+                            <input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-transparent text-center text-white font-black outline-none font-mono text-xs"/>
+                            <button onClick={() => handleUpdateLootRow(row.id, 'limit', row.limit + 1)} className="px-1.5 py-0.5 text-slate-500 hover:text-white font-sans text-[10px] bg-slate-900 rounded font-bold">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <button onClick={() => handleRemoveLootRow(row.id)} className="text-slate-600 hover:text-rose-400 p-1 font-sans transition">🗑️</button>
                         </td>
                       </tr>
                     ))}
@@ -546,7 +685,7 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-between items-center pt-2">
-                <button onClick={handleAddLootRow} className="px-4 py-1.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-900 font-bold text-xs transition">+ ADD ITEM ROW ➕</button>
+                <button onClick={handleAddLootRow} className="px-4 py-1.5 rounded-xl border border-slate-700 hover:border-slate-500 bg-slate-900 font-bold text-xs transition">+ AUTO-CHAIN NEXT BOX ➕</button>
                 <button onClick={handleCheckAndRegisterLoot} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg transition">RUN ELIGIBILITY ENGINE ➔</button>
               </div>
             </div>
@@ -577,7 +716,6 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
-                {/* 🎹 ASSIGNED COLUMN WITH TOUCH/TABLET FRIENDLY DRAG SORTING HOOKS */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
                     <span>✨ Assigned Recipients (Drag Ranks to Swap Seats)</span>
@@ -613,7 +751,6 @@ export default function MimicBookTab({ user }) {
                   </div>
                 </div>
 
-                {/* ELIGIBLE STANDBY CORES LOCKED TO CORRECT PRIORITY ORDER */}
                 <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
                   <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
                     <span>💤 Standby Queue (Priority Locked Line)</span>
@@ -657,7 +794,7 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
-          {/* 🌟 STEP 4 WORKSPACE: ACTIVE FIREBASE PRODUCTION AGENT COMMIT */}
+          {/* STEP 4 WORKSPACE: DATA ARCHIVER */}
           {activeStep === 4 && (
             <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-5 rounded-xl text-center space-y-4 animate-fadeIn">
               <div className="space-y-1">
@@ -667,7 +804,6 @@ export default function MimicBookTab({ user }) {
                 </p>
               </div>
 
-              {/* LIVE INPUT SELECTORS CORRESPONDING TO MANUAL EXCEL HEADER LAYOUTS */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto p-3.5 bg-slate-950 rounded-xl border border-slate-800">
                 <div className="text-left w-full">
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Raid Event Night Date</label>
@@ -703,7 +839,7 @@ export default function MimicBookTab({ user }) {
                 <button 
                   onClick={handleCommitSessionAndFlash} 
                   disabled={committing}
-                  className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500 animate-pulse"
+                  className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500"
                 >
                   {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE 🚀"}
                 </button>
@@ -729,7 +865,7 @@ export default function MimicBookTab({ user }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         
-        {/* LEFT COMPONENT: THE UNIFORM SHIFT-PROOF DIGITAL BOOK MIMIC */}
+        {/* LEFT COMPONENT: DIGITAL BOOK MIMIC */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
@@ -890,7 +1026,7 @@ export default function MimicBookTab({ user }) {
                     <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
                       <th className="p-3 border-r border-slate-800/40">Date</th>
                       <th className="p-3 border-r border-slate-800/40">Event</th>
-                      <th className="p-3 border-r border-slate-800/40">Item</th>
+                      <th className="p-3 border-r border-slate-800/40 {cat}">Item</th>
                       <th className="p-3 border-r border-slate-800/40 text-center">Qty</th>
                       <th className="p-3 border-r border-slate-800/40 text-center">Max</th>
                       <th className="p-3 text-center">Mem</th>
