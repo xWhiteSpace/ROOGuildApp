@@ -65,7 +65,6 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   let lastSelectedIdx = -1;
   for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    // 🌟 REQ CHECKPOINT: Both explicit 'selected' wins and 'absent' flags drop points back to 0
     if (combinedItemTimeline[i] === 'selected' || combinedItemTimeline[i] === 'absent') {
       lastSelectedIdx = i;
       break;
@@ -347,7 +346,7 @@ router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const { event, date, allocations } = req.body;
+  const { event, date, allocations, summary } = req.body;
   if (!allocations) {
     return res.status(400).json({ success: false, error: 'No allocation parameters detected.' });
   }
@@ -360,11 +359,30 @@ router.post('/commit-session', async (req, res) => {
     const categories = Object.keys(allocations);
     const timestampDate = date || getGMT8DateString();
     
+    // 1. SAVE RAW LOOT CONFIG REGISTRATION FILE (LOOT HISTORY LEDGER)
+    if (summary) {
+      Object.keys(summary).forEach(async (itemKey) => {
+        const itemData = summary[itemKey];
+        if (itemData && itemData.qty > 0) {
+          const newLootHistoryRef = db.ref('auction/loot_history').push();
+          await newLootHistoryRef.set({
+            id: newLootHistoryRef.key,
+            date: timestampDate,
+            event: event || 'GuildLeague',
+            item: itemKey,
+            quantity: parseInt(itemData.qty, 10),
+            max: parseInt(itemData.limit, 10),
+            mem: parseInt(itemData.seats, 10)
+          });
+        }
+      });
+    }
+
+    // 2. SAVE INDIVIDUAL ALLOCATIONS AND PERFORM APPLICANT STATE SWEEPS
     for (const cat of categories) {
       const { selected = [], absent = [], notSelected = [] } = allocations[cat];
       const maxLimit = ITEM_LIMIT_DEFAULTS[cat] || 1;
 
-      // 🌟 UPGRADED: Store dynamic array buckets per member to clean intermediate canceled lines
       const keysByMember = {};
       Object.keys(firebaseRequests).forEach(key => {
         const r = firebaseRequests[key];
@@ -376,50 +394,38 @@ router.post('/commit-session', async (req, res) => {
         }
       });
 
-      // A. Update Attendance Failures (Absentees forfeit score timeline)
       for (const name of absent) {
         const keyList = keysByMember[name] || [];
         for (const key of keyList) {
-          await db.ref(`auction/web_requests/${key}`).update({
-            selectionStatus: 'Absent'
-          });
+          await db.ref(`auction/web_requests/${key}`).update({ selectionStatus: 'Absent' });
         }
       }
 
-      // B. Update Skipped Entrants (NotSelected priority increments)
       for (const name of notSelected) {
         const keyList = keysByMember[name] || [];
         for (const key of keyList) {
-          await db.ref(`auction/web_requests/${key}`).update({
-            selectionStatus: 'NotSelected'
-          });
+          await db.ref(`auction/web_requests/${key}`).update({ selectionStatus: 'NotSelected' });
         }
       }
 
-      // C. Process Winners & Clean Redundant Sub-Action Pending Lines
       for (const winner of selected) {
         const { name, slots } = winner;
         const keyList = keysByMember[name] || [];
 
         if (keyList.length > 0) {
-          // Sort list to find the absolute latest active request line to stamp as the core winner anchor
           const primaryWinnerKey = keyList[keyList.length - 1];
           await db.ref(`auction/web_requests/${primaryWinnerKey}`).update({
             selectionStatus: 'Selected',
             quantity: slots 
           });
 
-          // 🌟 SWEEPER: Clean intermediate requested/canceled lines to closed statuses so they don't leak into subsequent raids
           const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
           for (const duplicateKey of intermediateRedundantLines) {
             const currentLine = firebaseRequests[duplicateKey];
             const fallbackStatus = (currentLine?.applicationStatus === 'Canceled') ? 'Canceled' : 'NotSelected';
-            await db.ref(`auction/web_requests/${duplicateKey}`).update({
-              selectionStatus: fallbackStatus
-            });
+            await db.ref(`auction/web_requests/${duplicateKey}`).update({ selectionStatus: fallbackStatus });
           }
         } else {
-          // 👻 GHOST SYNTHESIS: Inject profile for manually chosen full roster characters with unified liveStatus
           const newRequestRef = db.ref('auction/web_requests').push();
           await newRequestRef.set({
             id: newRequestRef.key,
@@ -434,58 +440,20 @@ router.post('/commit-session', async (req, res) => {
           });
         }
 
-        // Output completed transaction to permanent loot ledger database folders
-        const newHistoryRef = db.ref('auction/loot_history').push();
-        await newHistoryRef.set({
-          id: newHistoryRef.key,
+        // Output completed transaction to permanent past auction ledger database folder
+        const newPastAuctionRef = db.ref('auction/past_auctions').push();
+        await newPastAuctionRef.set({
+          id: newPastAuctionRef.key,
           date: timestampDate,
           event: event || 'GuildLeague',
           item: cat,
           quantity: slots,
-          max: maxLimit,
           mem: name
         });
       }
     }
 
     return res.json({ success: true });
-  } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-/**
- * 📊 GLOBAL REQUEST HISTORY LOGS PIPELINE
- */
-router.get('/history', async (req, res) => {
-  const user = resolveUserIdentity(req);
-  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
-
-  try {
-    const db = getDatabase();
-    const historySnap = await db.ref('auction/web_requests').once('value');
-    
-    if (!historySnap.exists()) {
-      return res.json({ success: true, history: [] });
-    }
-
-    const rawData = historySnap.val();
-    const sortedKeys = Object.keys(rawData).sort();
-    
-    const historyArray = sortedKeys.map(key => ({
-      id: rawData[key].id || key,
-      date: rawData[key].date || "",
-      member: rawData[key].member || "",
-      item: rawData[key].item || "",
-      quantity: parseInt(rawData[key].quantity, 10) || 0,
-      applicationStatus: rawData[key].applicationStatus || "Requested",
-      selectionStatus: rawData[key].selectionStatus || "Pending",
-      liveStatus: rawData[key].liveStatus || "", 
-      priority: parseInt(rawData[key].priority, 10) || 0,
-      eventDate: rawData[key].eventDate || ""
-    }));
-
-    return res.json({ success: true, history: historyArray });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -501,14 +469,10 @@ router.get('/loot-history', async (req, res) => {
   try {
     const db = getDatabase();
     const lootHistorySnap = await db.ref('auction/loot_history').once('value');
-    
-    if (!lootHistorySnap.exists()) {
-      return res.json({ success: true, history: [] });
-    }
+    if (!lootHistorySnap.exists()) return res.json({ success: true, history: [] });
 
     const rawData = lootHistorySnap.val();
     const sortedKeys = Object.keys(rawData).sort();
-    
     const lootHistoryArray = sortedKeys.map(key => ({
       id: key,
       date: rawData[key].date || "",
@@ -516,10 +480,39 @@ router.get('/loot-history', async (req, res) => {
       item: rawData[key].item || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       max: parseInt(rawData[key].max, 10) || 1,
+      mem: parseInt(rawData[key].mem, 10) || 0
+    }));
+
+    return res.json({ success: true, history: lootHistoryArray.reverse() });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 🏆 COMPACT PAST AUCTION LEDGER DATA STREAM ENDPOINT
+ */
+router.get('/past-auctions', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const pastAuctionsSnap = await db.ref('auction/past_auctions').once('value');
+    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [] });
+
+    const rawData = pastAuctionsSnap.val();
+    const sortedKeys = Object.keys(rawData).sort();
+    const pastAuctionsArray = sortedKeys.map(key => ({
+      id: key,
+      date: rawData[key].date || "",
+      event: rawData[key].event || "",
+      item: rawData[key].item || "",
+      quantity: parseInt(rawData[key].quantity, 10) || 0,
       mem: rawData[key].mem || ""
     }));
 
-    return res.json({ success: true, history: lootHistoryArray });
+    return res.json({ success: true, history: pastAuctionsArray.reverse() });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
