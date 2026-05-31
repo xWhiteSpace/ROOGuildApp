@@ -808,7 +808,7 @@ export default function MimicBookTab({ user }) {
             <div className="space-y-4 animate-fadeIn relative">
               
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-                {Object.keys(lootSummary).map((category) => {
+                {Object.keys(ITEM_LIMIT_DEFAULTS).map((category) => {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
                   const currentAllocatedSum = (categoryAllocations[category]?.selected || []).filter(n => n !== "").length;
                   return (
