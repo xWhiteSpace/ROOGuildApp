@@ -21,6 +21,7 @@ export default function MimicBookTab({ user }) {
   const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
+  const [expandedGroups, setExpandedGroups] = useState({}); // Tracks open accordion keys
 
   // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
@@ -36,7 +37,7 @@ export default function MimicBookTab({ user }) {
 
   // --- 📋 MASTER TARGET POOLS ---
   const [rankingsByItem, setRankingsByItem] = useState({ Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] });
-  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': {}, 'Time&Space': {} });
+  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': [], 'Time&Space': {} });
   const [masterGuildRoster, setMasterGuildRoster] = useState([]); 
 
   // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
@@ -156,6 +157,7 @@ export default function MimicBookTab({ user }) {
   const fetchLootHistoryLog = async () => {
     try {
       setLoadingLootHistory(true);
+      setExpandedGroups({}); // Reset accordions to closed state on open
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
@@ -476,6 +478,36 @@ export default function MimicBookTab({ user }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const toggleAccordionGroup = (groupKey) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }));
+  };
+
+  // --- 🛠️ CHRONOLOGICAL ACCORDION GROUPING ENGINE ---
+  const getGroupedHistoryTimeline = () => {
+    const map = {};
+    lootHistoryData.forEach(row => {
+      const key = `${row.date}_${row.event}`;
+      if (!map[key]) {
+        map[key] = {
+          date: row.date,
+          event: row.event,
+          records: []
+        };
+      }
+      map[key].records.push(row);
+    });
+
+    const groupedArray = Object.values(map);
+    
+    // Sort Newest Date First
+    return groupedArray.sort((a, b) => {
+      return new Date(b.date) - new Date(a.date);
+    });
   };
 
   const getItemStyleProfile = (itemType) => {
@@ -1083,7 +1115,7 @@ export default function MimicBookTab({ user }) {
         </div>
       </div>
 
-      {/* --- 🌟 UPGRADED: VIEW-ONLY FLAT LOOT HISTORICAL MATRIX MODAL --- */}
+      {/* --- 🌟 GROUPED TIMELINE ACCORDION LOOT HISTORICAL MATRIX MODAL --- */}
       {isLootHistoryOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
@@ -1095,38 +1127,65 @@ export default function MimicBookTab({ user }) {
               <button onClick={() => setIsLootHistoryOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1">✕</button>
             </div>
 
-            <div className="p-6 overflow-x-auto overflow-y-auto flex-grow scrollbar-thin">
+            <div className="p-6 overflow-y-auto flex-grow space-y-2 scrollbar-thin">
               {loadingLootHistory ? (
                 <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting historical index criteria parameters...</div>
+              ) : getGroupedHistoryTimeline().length === 0 ? (
+                <div className="text-center py-12 text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</div>
               ) : (
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead>
-                    <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10">
-                      <th className="p-3 border-r border-slate-800/40">Date</th>
-                      <th className="p-3 border-r border-slate-800/40">Event</th>
-                      <th className="p-3 border-r border-slate-800/40">Item</th>
-                      <th className="p-3 border-r border-slate-800/40 text-center">Qty</th>
-                      <th className="p-3 border-r border-slate-800/40 text-center">Max</th>
-                      <th className="p-3 text-center">Seats</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40 text-slate-300">
-                    {lootHistoryData.length === 0 ? (
-                      <tr><td colSpan="6" className="p-12 text-center text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</td></tr>
-                    ) : (
-                      lootHistoryData.map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
-                          <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
-                          <td className="p-3 font-sans font-bold text-slate-200">{row.event}</td>
-                          <td className="p-3 font-sans font-semibold text-indigo-400">{row.item}</td>
-                          <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
-                          <td className="p-3 text-center text-amber-500 font-bold">{row.max}</td>
-                          <td className="p-3 font-bold text-center text-emerald-400">{row.mem}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                getGroupedHistoryTimeline().map((group) => {
+                  const groupKey = `${group.date}_${group.event}`;
+                  const isExpanded = !!expandedGroups[groupKey];
+
+                  return (
+                    <div key={groupKey} className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-900/20">
+                      
+                      {/* ACCORDION HEADER ANCHOR ROW */}
+                      <div 
+                        onClick={() => toggleAccordionGroup(groupKey)}
+                        className="p-3 px-4 bg-slate-950/60 hover:bg-slate-950 transition-all flex items-center justify-between cursor-pointer text-xs font-mono select-none"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-sans text-sm w-4 text-center">{isExpanded ? '▼' : '▶'}</span>
+                          <span className="text-slate-200 font-bold">{group.date}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 font-sans font-bold text-slate-300">
+                            {group.event === 'GuildLeague' ? '🏆 GuildLeague' : '🔥 ' + group.event}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-sans text-indigo-400 font-medium tracking-tight bg-indigo-950/20 border border-indigo-900/30 px-2.5 py-0.5 rounded-lg">
+                          {isExpanded ? 'Click to Close' : 'Click to View'}
+                        </span>
+                      </div>
+
+                      {/* NESTED CONTENT SUB-TABLE */}
+                      {isExpanded && (
+                        <div className="p-4 bg-slate-950/30 border-t border-slate-900 animate-fadeIn overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs font-mono">
+                            <thead>
+                              <tr className="bg-slate-950/80 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800/80 text-[10px]">
+                                <th className="p-2.5">Item Category</th>
+                                <th className="p-2.5 text-center">Total Drops</th>
+                                <th className="p-2.5 text-center">Claim Limit</th>
+                                <th className="p-2.5 text-center">Active Seats</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900 text-slate-300">
+                              {group.records.map((row) => (
+                                <tr key={row.id} className="hover:bg-slate-950/20 transition-all">
+                                  <td className="p-2.5 font-sans font-semibold text-slate-200">{row.item}</td>
+                                  <td className="p-2.5 text-center text-slate-300 font-bold">{row.quantity} pcs</td>
+                                  <td className="p-2.5 text-center text-amber-500 font-bold">Max {row.max}/p</td>
+                                  <td className="p-2.5 text-center text-emerald-400 font-bold">{row.mem} Members</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                    </div>
+                  );
+                })
               )}
             </div>
 
