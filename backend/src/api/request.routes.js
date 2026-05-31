@@ -208,17 +208,11 @@ router.get('/init', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
     
     const timeGateStatus = getGateStatusDetails();
     const currentGMT8Date = getGMT8DateString(); 
-
-    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
-    const response = await fetch(requestUrl);
-    const csvText = await response.text();
-    const spreadsheetRows = parseCSVToRawArrays(csvText, 'Member');
 
     const db = getDatabase();
     const snapshot = await db.ref('auction/web_requests').once('value');
@@ -226,24 +220,6 @@ router.get('/init', async (req, res) => {
 
     const liveCounts = {};
     AVAILABLE_ITEMS.forEach(item => { liveCounts[item.name] = 0; });
-
-    spreadsheetRows.forEach(row => {
-      if ((row[1] || '').trim().toLowerCase() === playerLower) {
-        const itemType = row[2];
-        const appStatus = (row[4] || '').trim().toLowerCase();
-        const selStatus = (row[5] || 'pending').trim().toLowerCase();
-        const liveStatus = (row[6] || '').trim().toLowerCase();
-        const itemQty = parseInt(row[3], 10) || 0;
-
-        const isAwaitingEvaluation = (selStatus === 'pending');
-        const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
-
-        if (isAwaitingEvaluation || isLiveInCurrentSession) {
-          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
-          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
-        }
-      }
-    });
 
     firebaseRequests.forEach(req => {
       if ((req.member || '').trim().toLowerCase() === playerLower) {
@@ -285,24 +261,6 @@ router.get('/init', async (req, res) => {
 
       Object.keys(rankingsByItem).forEach(targetItem => {
         const userCalculationsMap = {};
-
-        spreadsheetRows.forEach(row => {
-          const player = (row[1] || '').trim();
-          const itemType = (row[2] || '').trim();
-          const qty = parseInt(row[3], 10) || 0;
-          const appStatus = (row[4] || '').trim().toLowerCase();
-          const selStatus = (row[5] || 'pending').trim().toLowerCase();
-          const priorityScore = parseInt(row[7], 10) || 0;
-
-          if (!player || player === '???' || itemType !== targetItem || selStatus !== 'pending') return;
-
-          if (!userCalculationsMap[player]) {
-            userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
-          }
-
-          if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
-          if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
-        });
 
         allPendingRows.forEach(req => {
           const player = (req.member || '').trim();
@@ -428,9 +386,7 @@ router.post('/submit', async (req, res) => {
   }
 
   try {
-    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
-    const playerLower = playerDisplayName.trim().toLowerCase();
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
@@ -442,36 +398,8 @@ router.post('/submit', async (req, res) => {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
 
-      const combinedItemTimeline = [];
-      const itemLower = itemName.trim().toLowerCase();
-
-      spreadsheetRows.forEach(row => {
-        if ((row[1] || '').trim().toLowerCase() === playerLower && (row[2] || '').trim().toLowerCase() === itemLower) {
-          combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
-        }
-      });
-
-      firebaseRequests.forEach(req => {
-        if ((req.member || '').trim().toLowerCase() === playerLower && (req.item || '').trim().toLowerCase() === itemLower) {
-          combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
-        }
-      });
-
-      let lastSelectedIdx = -1;
-      for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-        if (combinedItemTimeline[i] === 'selected') {
-          lastSelectedIdx = i;
-          break;
-        }
-      }
-
-      let dynamicPriority = 0;
-      const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
-      for (let i = searchStart; i < combinedItemTimeline.length; i++) {
-        if (combinedItemTimeline[i] === 'notselected') {
-          dynamicPriority++;
-        }
-      }
+      // ✅ Uses your existing centralized Firebase helper to calculate real-time priority scores
+      const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemName);
 
       const newRequestRef = db.ref('auction/web_requests').push();
       await newRequestRef.set({
