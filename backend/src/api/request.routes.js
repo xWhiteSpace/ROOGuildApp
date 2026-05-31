@@ -229,7 +229,7 @@ router.get('/init', async (req, res) => {
         if (membersListSnap.val()[key]?.displayName) {
           fullRosterArray.push(membersListSnap.val()[key].displayName);
         }
-      });Full
+      });
     }
 
     const allRequestsSnap = await db.ref('auction/web_requests').once('value');
