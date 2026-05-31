@@ -953,7 +953,12 @@ export default function MimicBookTab({ user }) {
                             <div 
                               key={i} 
                               draggable="true"
-                              onDragStart={(e) => handleRowDragStart(e, i)}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", name);
+                                e.dataTransfer.setData("sourceType", "rosterCard");
+                                e.dataTransfer.effectAllowed = "copy";
+                                isUserDraggingRef.current = true;
+                              }}
                               onDragEnd={() => { isUserDraggingRef.current = false; }}
                               className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                             >
@@ -974,7 +979,12 @@ export default function MimicBookTab({ user }) {
                           <div 
                             key={i} 
                             draggable="true"
-                            onDragStart={(e) => handleRowDragStart(e, i)}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", name);
+                              e.dataTransfer.setData("sourceType", "rosterCard");
+                              e.dataTransfer.effectAllowed = "copy";
+                              isUserDraggingRef.current = true;
+                            }}
                             onDragEnd={() => { isUserDraggingRef.current = false; }}
                             className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                           >
