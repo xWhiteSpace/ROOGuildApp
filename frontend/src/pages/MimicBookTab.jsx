@@ -21,7 +21,7 @@ export default function MimicBookTab({ user }) {
   const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
-  const [expandedGroups, setExpandedGroups] = useState({}); // Tracks open accordion keys
+  const [expandedGroups, setExpandedGroups] = useState({}); 
 
   // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
@@ -63,7 +63,7 @@ export default function MimicBookTab({ user }) {
   });
 
   // --- 🔍 SIDEBAR TAB NAVIGATION CONTROLS ---
-  const [sidebarTab, setSidebarTab] = useState('standby'); // 'standby' or 'roster'
+  const [sidebarTab, setSidebarTab] = useState('standby'); 
   const [sidebarSearch, setSidebarSearch] = useState('');
   const popoverAnchorRef = useRef(null);
 
@@ -157,7 +157,7 @@ export default function MimicBookTab({ user }) {
   const fetchLootHistoryLog = async () => {
     try {
       setLoadingLootHistory(true);
-      setExpandedGroups({}); // Reset accordions to closed state on open
+      setExpandedGroups({}); 
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
@@ -177,19 +177,42 @@ export default function MimicBookTab({ user }) {
     loadTrueRequestPool();
   }, []);
 
+  // --- 🌐 GLOBAL TWO-WAY FIREBASE SANDBOX WORKSPACE PERSISTENCE ENGINE ---
   useEffect(() => {
     const sessionRef = ref(database, 'auction/active_session');
     const unsub = onValue(sessionRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
+        if (data.activeStep !== undefined) setActiveStep(data.activeStep);
+        if (data.lootRows) setLootRows(data.lootRows);
         if (data.lootSummary) setLootSummary(data.lootSummary);
+        if (data.categoryAllocations) setCategoryAllocations(data.categoryAllocations);
+        if (data.initialWinnersByItem) setInitialWinnersByItem(data.initialWinnersByItem);
         if (data.generatedSlots) setGeneratedSlots(data.generatedSlots);
+        if (data.activeMatrixFilter) setActiveMatrixFilter(data.activeMatrixFilter);
+        if (data.sidebarTab) setSidebarTab(data.sidebarTab);
+      } else {
+        // Safe structural fallback resets if backend folder is cleared
+        setActiveStep(1);
+        setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
+        setLootSummary({
+          Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
+          'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
+        });
+        setCategoryAllocations({
+          Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
+        });
+        setInitialWinnersByItem({
+          Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': []
+        });
+        setGeneratedSlots([]);
       }
     });
     return () => unsub();
   }, []);
 
   const handleAddLootRow = () => {
+    if (!isAdminMode) return;
     const nextId = lootRows.length > 0 ? Math.max(...lootRows.map(r => r.id)) + 1 : 1;
     let derivedStartPage = 1;
     let derivedStartPos = 1;
@@ -207,18 +230,22 @@ export default function MimicBookTab({ user }) {
     }
 
     const defaultType = 'Puppet';
-    setLootRows([
+    const updatedRows = [
       ...lootRows, 
       { id: nextId, itemType: defaultType, startPage: derivedStartPage, startPos: derivedStartPos, endPage: derivedStartPage, endPos: derivedStartPos, limit: ITEM_LIMIT_DEFAULTS[defaultType] }
-    ]);
+    ];
+    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
   };
 
   const handleRemoveLootRow = (id) => {
-    setLootRows(lootRows.filter(r => r.id !== id));
+    if (!isAdminMode) return;
+    const updatedRows = lootRows.filter(r => r.id !== id);
+    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
   };
 
   const handleUpdateLootRow = (id, key, val) => {
-    setLootRows(lootRows.map(r => {
+    if (!isAdminMode) return;
+    const updatedRows = lootRows.map(r => {
       if (r.id !== id) return r;
       let updatedFields = { [key]: val };
 
@@ -234,10 +261,12 @@ export default function MimicBookTab({ user }) {
         updatedFields.limit = ITEM_LIMIT_DEFAULTS[val] || 1;
       }
       return { ...r, ...updatedFields };
-    }));
+    });
+    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
   };
 
   const handleCheckAndRegisterLoot = () => {
+    if (!isAdminMode) return;
     setValidationError('');
     const calculatedSummary = {
       Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
@@ -278,9 +307,6 @@ export default function MimicBookTab({ user }) {
       item.seats = Math.floor(item.qty / item.limit); 
     });
 
-    setLootSummary(calculatedSummary);
-    set(ref(database, 'auction/active_session/lootSummary'), calculatedSummary);
-
     const initialAllocations = {};
     const initialWinnersTrack = { Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] };
     Object.keys(calculatedSummary).forEach(category => {
@@ -289,7 +315,8 @@ export default function MimicBookTab({ user }) {
       const priorityApplicants = rankingsByItem[category] || [];
       const detailsMap = requestsByItemDetails[category] || {};
 
-      const flatStaticBoxArray = Array(totalDropInventoryCount).fill(null);
+      // ⚡ Explicit empty placeholder strings used instead of null arrays for complete Firebase protection
+      const flatStaticBoxArray = Array(totalDropInventoryCount).fill("");
       let globalBoxCursor = 0;
 
       for (let p = 0; p < priorityApplicants.length; p++) {
@@ -315,35 +342,37 @@ export default function MimicBookTab({ user }) {
       initialAllocations[category] = { selected: flatStaticBoxArray };
     });
 
-    setInitialWinnersByItem(initialWinnersTrack);
-    setCategoryAllocations(initialAllocations);
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].qty > 0) || 'Puppet';
-    setActiveMatrixFilter(firstActiveCategory);
+
+    // Atomic transaction state push to Firebase Sandbox
+    set(ref(database, 'auction/active_session'), {
+      activeStep: 2,
+      lootRows,
+      lootSummary: calculatedSummary,
+      categoryAllocations: initialAllocations,
+      initialWinnersByItem: initialWinnersTrack,
+      activeMatrixFilter: firstActiveCategory,
+      sidebarTab: 'standby'
+    });
     setSidebarSearch('');
-    setSidebarTab('standby');
-    setActiveStep(2);
   };
 
   const handleDropBidderBoxSlot = (slotIndex) => {
-    const currentData = categoryAllocations[activeMatrixFilter];
+    if (!isAdminMode) return;
+    const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
-    updatedSelected[slotIndex] = null; 
+    updatedSelected[slotIndex] = ""; 
 
-    setCategoryAllocations({
-      ...categoryAllocations,
-      [activeMatrixFilter]: { selected: updatedSelected }
-    });
+    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
   };
 
   const handlePromoteBidderToTargetSlotIndex = (playerName, slotIndex) => {
-    const currentData = categoryAllocations[activeMatrixFilter];
+    if (!isAdminMode) return;
+    const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     updatedSelected[slotIndex] = playerName;
 
-    setCategoryAllocations({
-      ...categoryAllocations,
-      [activeMatrixFilter]: { selected: updatedSelected }
-    });
+    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
   };
 
   const handleRowDragStart = (e, index) => {
@@ -354,22 +383,20 @@ export default function MimicBookTab({ user }) {
   const handleRowDragOver = (e) => e.preventDefault();
 
   const handleRowDrop = (e, targetIndex) => {
-    if (draggedItemIndex === null || draggedItemIndex === targetIndex) return;
-    const currentData = categoryAllocations[activeMatrixFilter];
+    if (!isAdminMode || draggedItemIndex === null || draggedItemIndex === targetIndex) return;
+    const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     
     const temp = updatedSelected[targetIndex];
     updatedSelected[targetIndex] = updatedSelected[draggedItemIndex];
     updatedSelected[draggedItemIndex] = temp;
 
-    setCategoryAllocations({
-      ...categoryAllocations,
-      [activeMatrixFilter]: { selected: updatedSelected }
-    });
+    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
     setDraggedItemIndex(null);
   };
 
   const handleOriginalMatrixAssembly = () => {
+    if (!isAdminMode) return;
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
     let currentVirtualSlot = 1;
@@ -383,11 +410,11 @@ export default function MimicBookTab({ user }) {
       
       flatBoxArray.forEach(playerName => {
         matrixSlots.push({
-          name: playerName === null ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName,
+          name: playerName === "" ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName,
           itemType: category,
           page: currentVirtualPage,
           slot: currentVirtualSlot,
-          status: playerName === null ? 'NotSelected' : 'Selected'
+          status: playerName === "" ? 'NotSelected' : 'Selected'
         });
         
         currentVirtualSlot++;
@@ -398,10 +425,9 @@ export default function MimicBookTab({ user }) {
       });
     });
 
-    setGeneratedSlots(matrixSlots);
-    set(ref(database, 'auction/active_session/generatedSlots'), matrixSlots);
     setBookCurrentPage(1);
-    setActiveStep(3);
+    set(ref(database, 'auction/active_session/generatedSlots'), matrixSlots);
+    set(ref(database, 'auction/active_session/activeStep'), 3);
   };
 
   const handleCommitSessionAndFlash = async () => {
@@ -415,7 +441,7 @@ export default function MimicBookTab({ user }) {
       const processedAllocations = {};
       Object.keys(categoryAllocations).forEach(cat => {
         const boxEntries = categoryAllocations[cat].selected || [];
-        const verifiedWinnersList = boxEntries.filter(name => name !== null);
+        const verifiedWinnersList = boxEntries.filter(name => name !== "");
         
         const initialWinnersList = initialWinnersByItem[cat] || [];
         const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
@@ -446,14 +472,16 @@ export default function MimicBookTab({ user }) {
       const data = await res.json();
       if (data.success) {
         alert("💥 SUCCESS: Raid records written to ledger repository! Requisition life cycles updated and server staging cleared.");
+        
+        // Wipe the temporary sandbox completely to drop space usage back down to 0
         set(ref(database, 'auction/active_session'), null);
-        setActiveStep(1);
+        
+        setBookCurrentPage(1);
         setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
         setLootSummary({
           Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
           'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
         });
-        setGeneratedSlots([]);
         loadTrueRequestPool(); 
       } else {
         alert(`❌ Commit execution rejected: ${data.error}`);
@@ -487,7 +515,6 @@ export default function MimicBookTab({ user }) {
     }));
   };
 
-  // --- 🛠️ CHRONOLOGICAL ACCORDION GROUPING ENGINE ---
   const getGroupedHistoryTimeline = () => {
     const map = {};
     lootHistoryData.forEach(row => {
@@ -503,11 +530,7 @@ export default function MimicBookTab({ user }) {
     });
 
     const groupedArray = Object.values(map);
-    
-    // Sort Newest Date First
-    return groupedArray.sort((a, b) => {
-      return new Date(b.date) - new Date(a.date);
-    });
+    return groupedArray.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   const getItemStyleProfile = (itemType) => {
@@ -542,7 +565,7 @@ export default function MimicBookTab({ user }) {
   });
 
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
-  const currentCategoryAllocatedQuantity = currentActiveSelections.selected.filter(n => n !== null).length;
+  const currentCategoryAllocatedQuantity = currentActiveSelections.selected.filter(n => n !== "").length;
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -715,9 +738,9 @@ export default function MimicBookTab({ user }) {
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 {Object.keys(lootSummary).map((category) => {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
-                  const currentAllocatedSum = (categoryAllocations[category]?.selected || []).filter(n => n !== null).length;
+                  const currentAllocatedSum = (categoryAllocations[category]?.selected || []).filter(n => n !== "").length;
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); }}>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { set(ref(database, 'auction/active_session/activeMatrixFilter'), category); }}>
                       <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distributed</div>
                       <div className="text-lg font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">(Max Item Limit: {lootSummary[category]?.limit || 1})</div>
@@ -742,8 +765,8 @@ export default function MimicBookTab({ user }) {
                   </div>
 
                   <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
-                    {currentActiveSelections.selected.map((name, i) => {
-                      if (name === null) {
+                    {(currentActiveSelections.selected || []).map((name, i) => {
+                      if (name === "") {
                         return (
                           <div 
                             key={i}
@@ -810,13 +833,13 @@ export default function MimicBookTab({ user }) {
                   {/* SIDE PANEL TABS */}
                   <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl shrink-0">
                     <button 
-                      onClick={() => setSidebarTab('standby')}
+                      onClick={() => set(ref(database, 'auction/active_session/sidebarTab'), 'standby')}
                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'standby' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
                       💤 Standby Queue ({activeStandbyPoolList.length})
                     </button>
                     <button 
-                      onClick={() => setSidebarTab('roster')}
+                      onClick={() => set(ref(database, 'auction/active_session/sidebarTab'), 'roster')}
                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'roster' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
                       🌐 Full Guild Roster
@@ -907,7 +930,7 @@ export default function MimicBookTab({ user }) {
                 <button 
                   onClick={() => {
                     if (confirm("⚠️ PROGRESS AT RISK: Return to Step 1 will wipe out your manual changes.\n\nAre you sure you want to discard your allocations?")) {
-                      setActiveStep(1);
+                      set(ref(database, 'auction/active_session/activeStep'), 1);
                     }
                   }} 
                   className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-900 transition"
@@ -927,8 +950,8 @@ export default function MimicBookTab({ user }) {
                 <span className="text-slate-500">Total Lines: <strong className="text-slate-300 font-mono">{generatedSlots.length}</strong></span>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { loadTrueRequestPool(); setActiveStep(2); }} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
-                <button onClick={() => setActiveStep(4)} className={`px-4 py-1.5 rounded-lg font-bold transition ${activeStep === 4 ? 'bg-amber-600 text-white' : 'bg-slate-800 border border-slate-700 text-amber-400'}`}>Review Commit Ledger</button>
+                <button onClick={() => { loadTrueRequestPool(); set(ref(database, 'auction/active_session/activeStep'), 2); }} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
+                <button onClick={() => set(ref(database, 'auction/active_session/activeStep'), 4)} className={`px-4 py-1.5 rounded-lg font-bold transition ${activeStep === 4 ? 'bg-amber-600 text-white' : 'bg-slate-800 border border-slate-700 text-amber-400'}`}>Review Commit Ledger</button>
               </div>
             </div>
           )}
@@ -956,7 +979,7 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-center gap-4 pt-1">
-                <button onClick={() => setActiveStep(3)} disabled={committing} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition">Return to Preview</button>
+                <button onClick={() => set(ref(database, 'auction/active_session/activeStep'), 3)} disabled={committing} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition">Return to Preview</button>
                 <button onClick={handleCommitSessionAndFlash} disabled={committing} className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500" >
                   {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE 🚀"}
                 </button>
@@ -1051,7 +1074,7 @@ export default function MimicBookTab({ user }) {
                       const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                       categorySequenceOrder.forEach(cat => {
                         const standbyList = rankingsByItem[cat] || [];
-                        const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null);
+                        const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== "");
                         
                         standbyList.forEach(name => {
                           if (!winnersInCat.includes(name)) {
@@ -1066,7 +1089,7 @@ export default function MimicBookTab({ user }) {
                       if (rowsToDisplay.length === 0) {
                         const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
                         categorySequenceOrder.forEach(cat => {
-                          const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== null);
+                          const winnersInCat = (categoryAllocations[cat]?.selected || []).filter(n => n !== "");
                           if (!winnersInCat.includes(currentUserName) && (rankingsByItem[cat] || []).includes(currentUserName)) {
                             rowsToDisplay.push({ name: currentUserName, itemType: cat, page: '---', slot: '---', status: 'NotSelected' });
                           }
