@@ -11,11 +11,14 @@ export default function RequestHistoryTab() {
   const [currentUserName, setCurrentUserName] = useState('');
   const [authError, setAuthError] = useState(false);
   
-  // --- 🔍 ADVANCED FILTER AND SEARCH STATES ---
+  // --- 🔍 ADVANCED FILTER, SEARCH, AND SORT STATES ---
   const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'mine'
   const [searchQuery, setSearchQuery] = useState('');
-  const [actionFilter, setActionFilter] = useState('all'); 
   const [outcomeFilter, setOutcomeFilter] = useState('all');
+  
+  // Sorting controls
+  const [sortKey, setSortKey] = useState('date'); // 'date', 'member', 'item', or 'priority'
+  const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
 
   const fetchGlobalHistoryLog = async () => {
     try {
@@ -62,6 +65,22 @@ export default function RequestHistoryTab() {
     fetchGlobalHistoryLog();
   }, []);
 
+  const handleSortToggle = (targetKey) => {
+    if (sortKey === targetKey) {
+      // Toggle direction if clicking the same header row
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      // Set new key and default to ascending order
+      setSortKey(targetKey);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIconIndicator = (targetKey) => {
+    if (sortKey !== targetKey) return '↕';
+    return sortDirection === 'asc' ? '▲' : '▼';
+  };
+
   const getItemStyleProfile = (itemType) => {
     switch (itemType) {
       case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
@@ -72,15 +91,63 @@ export default function RequestHistoryTab() {
     }
   };
 
+  // 📋 Apply Filtering Matrix Logic
+  const filteredRecords = historyData.filter(row => {
+    if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
+      return false;
+    }
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const matchesMember = (row.member || '').toLowerCase().includes(query);
+      const matchesItem = (row.item || '').toLowerCase().includes(query);
+      if (!matchesMember && !matchesItem) return false;
+    }
+    if (outcomeFilter !== 'all' && (row.selectionStatus || '').toLowerCase() !== outcomeFilter.toLowerCase()) {
+      return false;
+    }
+    return true;
+  });
+
+  // 📊 Apply Interactive Multi-Column Sorting Engine (Propagates straight into CSV exports too!)
+  const sortedRecords = [...filteredRecords].sort((a, b) => {
+    let comparison = 0;
+
+    switch (sortKey) {
+      case 'date': {
+        // Safe string chronological timestamp grouping
+        const dateA = new Date(a.date || 0);
+        const dateB = new Date(b.date || 0);
+        comparison = dateA - dateB;
+        break;
+      }
+      case 'member': {
+        comparison = (a.member || '').localeCompare(b.member || '');
+        break;
+      }
+      case 'item': {
+        comparison = (a.item || '').localeCompare(b.item || '');
+        break;
+      }
+      case 'priority': {
+        comparison = (parseInt(a.priority, 10) || 0) - (parseInt(b.priority, 10) || 0);
+        break;
+      }
+      default:
+        break;
+    }
+
+    return sortDirection === 'asc' ? comparison : comparison * -1;
+  });
+
   /**
    * 📥 BROWSER-NATIVE CSV EXPORT MODULE
    */
   const handleDownloadCSVExport = () => {
-    if (filteredRecords.length === 0) return;
+    if (sortedRecords.length === 0) return;
 
     const csvHeaders = ["Timestamp", "Member", "Item", "Qty", "ApplicationStatus", "SelectionStatus", "LiveStatus", "Priority", "EventDate"];
     
-    const csvRows = filteredRecords.map(row => [
+    const csvRows = sortedRecords.map(row => [
       `"${row.date}"`,
       `"${row.member}"`,
       `"${row.item}"`,
@@ -101,7 +168,7 @@ export default function RequestHistoryTab() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `RequestHistory_Export_${viewFilter.toUpperCase()}_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `RequestHistory_Export_${viewFilter.toUpperCase()}_Sorted_${sortKey.toUpperCase()}_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -124,25 +191,6 @@ export default function RequestHistoryTab() {
     );
   }
 
-  const filteredRecords = historyData.filter(row => {
-    if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      const matchesMember = (row.member || '').toLowerCase().includes(query);
-      const matchesItem = (row.item || '').toLowerCase().includes(query);
-      if (!matchesMember && !matchesItem) return false;
-    }
-    if (actionFilter !== 'all' && (row.applicationStatus || '').toLowerCase() !== actionFilter.toLowerCase()) {
-      return false;
-    }
-    if (outcomeFilter !== 'all' && (row.selectionStatus || '').toLowerCase() !== outcomeFilter.toLowerCase()) {
-      return false;
-    }
-    return true;
-  });
-
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-6 text-white pb-32 relative font-sans space-y-4">
       
@@ -152,7 +200,7 @@ export default function RequestHistoryTab() {
           <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request History Ledger</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4">
             <span>Roster Agent: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
-            <span>Total Logged Row Matrix: <strong className="text-slate-300">{filteredRecords.length} lines</strong></span>
+            <span>Total Logged Row Matrix: <strong className="text-slate-300">{sortedRecords.length} lines</strong></span>
           </div>
         </div>
 
@@ -176,31 +224,17 @@ export default function RequestHistoryTab() {
         </div>
       </div>
 
-      {/* --- 🔍 ADVANCED LIVE MULTI-FILTER CONTROL CONSOLE PANEL --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
+      {/* --- 🔍 STREAMLINED LIVE FILTER CONTROL CONSOLE PANEL --- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
         <div className="space-y-1">
           <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Spotlight Query Search</label>
           <input 
             type="text"
-            placeholder="🔍 Search member name or item..."
+            placeholder="🔍 Search member name or item category..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-slate-700 transition"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-slate-700 transition font-sans"
           />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Filter By Action Context</label>
-          <select
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition"
-          >
-            <option value="all">📥 Show All Actions</option>
-            <option value="requested">🟢 Requested</option>
-            <option value="canceled">🔴 Canceled</option>
-            <option value="forcedadd">🟣 ForcedAdd</option>
-          </select>
         </div>
 
         <div className="space-y-1">
@@ -208,13 +242,13 @@ export default function RequestHistoryTab() {
           <select
             value={outcomeFilter}
             onChange={(e) => setOutcomeFilter(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition font-sans font-medium"
           >
             <option value="all">🏆 Show All Outcomes</option>
-            <option value="pending">⏳ Pending</option>
-            <option value="selected">✨ Selected</option>
-            <option value="notselected">💤 NotSelected</option>
-            <option value="absent">🚨 Absent</option>
+            <option value="pending">⏳ Pending Status</option>
+            <option value="selected">✨ Selected Allocation</option>
+            <option value="notselected">💤 NotSelected Bypass</option>
+            <option value="absent">🚨 Absent Log</option>
           </select>
         </div>
       </div>
@@ -224,27 +258,54 @@ export default function RequestHistoryTab() {
         <div className="overflow-x-auto overflow-y-auto max-h-[60vh] scrollbar-thin">
           <table className="w-full text-left border-collapse min-w-max text-xs font-mono">
             <thead>
-              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[10px]">
-                <th className="p-3.5 border-r border-slate-800/60">Timestamp</th>
-                <th className="p-3.5 border-r border-slate-800/60">Member</th>
-                <th className="p-3.5 border-r border-slate-800/60">Item</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-center">Qty</th>
-                <th className="p-3.5 border-r border-slate-800/60">ApplicationStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60">SelectionStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60">LiveStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-center">Priority</th>
-                <th className="p-3.5">EventDate</th>
+              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[10px] select-none">
+                
+                {/* INTERACTIVE COLUMN HEADERS */}
+                <th 
+                  onClick={() => handleSortToggle('date')}
+                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                >
+                  Timestamp <span className={`ml-1 text-[9px] font-sans ${sortKey === 'date' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('date')}</span>
+                </th>
+                
+                <th 
+                  onClick={() => handleSortToggle('member')}
+                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                >
+                  Member <span className={`ml-1 text-[9px] font-sans ${sortKey === 'member' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('member')}</span>
+                </th>
+                
+                <th 
+                  onClick={() => handleSortToggle('item')}
+                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                >
+                  Item <span className={`ml-1 text-[9px] font-sans ${sortKey === 'item' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('item')}</span>
+                </th>
+                
+                <th className="p-3.5 border-r border-slate-800/60 text-center text-slate-500 font-medium">Qty</th>
+                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">ActionContext</th>
+                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">SelectionStatus</th>
+                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">LiveStatus</th>
+                
+                <th 
+                  onClick={() => handleSortToggle('priority')}
+                  className="p-3.5 border-r border-slate-800/60 text-center cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                >
+                  Priority <span className={`ml-1 text-[9px] font-sans ${sortKey === 'priority' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('priority')}</span>
+                </th>
+                
+                <th className="p-3.5 text-slate-500 font-medium">EventDate</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 bg-slate-900/40 text-slate-300">
-              {filteredRecords.length === 0 ? (
+              {sortedRecords.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="p-8 text-center text-slate-500 italic font-sans text-sm">
-                    No corresponding transaction entries logged under this specific filter context.
+                    No corresponding transaction entries logged under this specific filter or query layout context.
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((row) => (
+                sortedRecords.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
                     <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
                     <td className="p-3 font-sans font-bold text-slate-100 whitespace-nowrap">{row.member}</td>
@@ -299,7 +360,7 @@ export default function RequestHistoryTab() {
           
           <button
             onClick={handleDownloadCSVExport}
-            disabled={filteredRecords.length === 0}
+            disabled={sortedRecords.length === 0}
             className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg tracking-wide"
           >
             📥 Export CSV Spreadsheet
