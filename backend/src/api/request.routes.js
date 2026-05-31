@@ -77,7 +77,6 @@ async function verifyDiscordOfficerRole(user) {
     const AUTHORIZED_ROLES = [
       'GUILD LEADER',
       'Vice Guild Leader',
-      'Commander',
       'Discord Management',
       'Guild Management'
     ];
