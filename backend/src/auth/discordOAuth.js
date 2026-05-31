@@ -17,10 +17,10 @@ const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000'
 // To add, remove, or modify officer groups in the future, edit this single list.
 const CORE_MANAGEMENT_ROLES = [
   'GUILD LEADER',
-  'Vice Guild Leader'//,
-  //'Commander',
-  //'Discord Management',
-  //'Guild Management'
+  'Vice Guild Leader',
+  'Commander',
+  'Discord Management',
+  'Guild Management'
 ];
 
 function buildDiscordLoginUrl(state) {
