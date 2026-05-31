@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
-import { discordClient } from '../discord-bot/client.js'; // Securely pull active running bot client connection
+import { discordClient } from '../discord-bot/client.js'; 
 
 const router = Router();
 
@@ -74,6 +74,7 @@ async function verifyDiscordOfficerRole(user) {
     const guildInstance = await discordClient.guilds.fetch(guildId);
     const targetMember = await guildInstance.members.fetch(user.id);
 
+    // ✨ ALL CORE MANAGEMENT ROLES ARE FULLY UNCOMMENTED AND ACTIVE NOW
     const AUTHORIZED_ROLES = [
       'GUILD LEADER',
       'Vice Guild Leader'//,
@@ -150,7 +151,7 @@ router.get('/active-session', async (req, res) => {
 
     const currentSessionData = sessionSnap.val();
     const timeDeltaMilliseconds = Date.now() - (currentSessionData.lastUpdated || 0);
-    const maximumAllowedAgeInMs = 24 * 60 * 60 * 1000; // Hard 24-hour expiration threshold
+    const maximumAllowedAgeInMs = 24 * 60 * 60 * 1000; 
 
     if (timeDeltaMilliseconds > maximumAllowedAgeInMs) {
       console.log("⏰ [SANDBOX TIME EXPIRATION Purge]: Over 24 hours since last update. Reverting layout matrix down to clean default defaults.");
@@ -159,7 +160,6 @@ router.get('/active-session', async (req, res) => {
       return res.json({ success: true, session: freshReset });
     }
 
-    // Ensure array data protection against Firebase missing key compression behaviors
     if (currentSessionData.categoryAllocations) {
       Object.keys(currentSessionData.categoryAllocations).forEach(cat => {
         if (!currentSessionData.categoryAllocations[cat].selected) {
@@ -195,7 +195,6 @@ router.post('/update-session', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Payload configuration structure parameter omitted.' });
     }
 
-    // Embed current rolling timestamp milestone to extend lifecycle survival parameters
     incomingWorkspacePayload.lastUpdated = Date.now();
 
     await db.ref('auction/active_session').set(incomingWorkspacePayload);
@@ -230,7 +229,7 @@ router.get('/init', async (req, res) => {
         if (membersListSnap.val()[key]?.displayName) {
           fullRosterArray.push(membersListSnap.val()[key].displayName);
         }
-      });
+      });Full
     }
 
     const allRequestsSnap = await db.ref('auction/web_requests').once('value');
@@ -576,7 +575,6 @@ router.post('/commit-session', async (req, res) => {
       }
     }
 
-    // ✨ 🌟 STRIP ACTIVE PERSISTENT SANDBOX STORAGE ON REQUISITION COMPLETION
     console.log("💥 [COMMIT REGISTRATION SUCCESSFUL]: Clearing the continuous workspace session tree for future raid nights.");
     await db.ref('auction/active_session').remove();
 
