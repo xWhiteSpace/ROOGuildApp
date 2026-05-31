@@ -1,7 +1,5 @@
 // frontend/src/pages/MimicBookTab.jsx
 import { useState, useEffect, useRef } from 'react';
-import { ref, onValue, set } from 'firebase/database';
-import { database } from '../services/firebaseClient';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -37,7 +35,7 @@ export default function MimicBookTab({ user }) {
 
   // --- 📋 MASTER TARGET POOLS ---
   const [rankingsByItem, setRankingsByItem] = useState({ Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] });
-  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': [], 'Time&Space': {} });
+  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': {}, 'Time&Space': {} });
   const [masterGuildRoster, setMasterGuildRoster] = useState([]); 
 
   // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
@@ -69,6 +67,7 @@ export default function MimicBookTab({ user }) {
 
   // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const isUserDraggingRef = useRef(false); // Safety guard: pauses background downloads during movement
 
   // --- PHASE 3 STATE: DISPLAY LENS CONSTRAINTS ---
   const [viewLens, setViewLens] = useState('ALL'); 
@@ -173,42 +172,88 @@ export default function MimicBookTab({ user }) {
     }
   };
 
+  // --- 🛰️ AUTOMATED BACKEND REALTIME SYNC PERSISTENCE LOOP ---
+  const fetchActiveSessionFromBackend = async (isInitialMount = false) => {
+    if (isUserDraggingRef.current) return; // Prevent network micro-stutters during drag sequences
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+      const res = await fetch(`${backendUrl}/api/requests/active-session`, { method: 'GET', headers: customHeaders, credentials: 'include' });
+      const data = await res.json();
+      if (data.success && data.session) {
+        const s = data.session;
+        if (s.activeStep !== undefined) setActiveStep(s.activeStep);
+        if (s.lootRows) setLootRows(s.lootRows);
+        if (s.lootSummary) setLootSummary(s.lootSummary);
+        if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
+        if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
+        if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
+        if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
+        if (s.sidebarTab) setSidebarTab(s.sidebarTab);
+      }
+    } catch (err) {
+      if (isInitialMount) console.error("Could not complete initial sandbox setup sync:", err);
+    }
+  };
+
+  const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+      await fetch(`${backendUrl}/api/requests/update-session`, {
+        method: 'POST',
+        headers: customHeaders,
+        body: JSON.stringify({ session: updatedWorkspaceSnapshot }),
+        credentials: 'include'
+      });
+    } catch (err) {
+      console.error("Backend packet transmission timeout:", err);
+    }
+  };
+
+  // Single centralized framework trigger for immediate UI feedback + silent background sync
+  const saveWorkspaceState = (updatedStateFields) => {
+    const fullSnapshot = {
+      activeStep,
+      lootRows,
+      lootSummary,
+      categoryAllocations,
+      initialWinnersByItem,
+      generatedSlots,
+      activeMatrixFilter,
+      sidebarTab,
+      ...updatedStateFields
+    };
+    
+    // Optimistic frontend rendering assignment
+    if (updatedStateFields.activeStep !== undefined) setActiveStep(updatedStateFields.activeStep);
+    if (updatedStateFields.lootRows) setLootRows(updatedStateFields.lootRows);
+    if (updatedStateFields.lootSummary) setLootSummary(updatedStateFields.lootSummary);
+    if (updatedStateFields.categoryAllocations) setCategoryAllocations(updatedStateFields.categoryAllocations);
+    if (updatedStateFields.initialWinnersByItem) setInitialWinnersByItem(updatedStateFields.initialWinnersByItem);
+    if (updatedStateFields.generatedSlots) setGeneratedSlots(updatedStateFields.generatedSlots);
+    if (updatedStateFields.activeMatrixFilter) setActiveMatrixFilter(updatedStateFields.activeMatrixFilter);
+    if (updatedStateFields.sidebarTab) setSidebarTab(updatedStateFields.sidebarTab);
+
+    pushActiveSessionToBackend(fullSnapshot);
+  };
+
   useEffect(() => {
     loadTrueRequestPool();
-  }, []);
+    fetchActiveSessionFromBackend(true);
 
-  // --- 🌐 GLOBAL TWO-WAY FIREBASE SANDBOX WORKSPACE PERSISTENCE ENGINE ---
-  useEffect(() => {
-    const sessionRef = ref(database, 'auction/active_session');
-    const unsub = onValue(sessionRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        if (data.activeStep !== undefined) setActiveStep(data.activeStep);
-        if (data.lootRows) setLootRows(data.lootRows);
-        if (data.lootSummary) setLootSummary(data.lootSummary);
-        if (data.categoryAllocations) setCategoryAllocations(data.categoryAllocations);
-        if (data.initialWinnersByItem) setInitialWinnersByItem(data.initialWinnersByItem);
-        if (data.generatedSlots) setGeneratedSlots(data.generatedSlots);
-        if (data.activeMatrixFilter) setActiveMatrixFilter(data.activeMatrixFilter);
-        if (data.sidebarTab) setSidebarTab(data.sidebarTab);
-      } else {
-        // Safe structural fallback resets if backend folder is cleared
-        setActiveStep(1);
-        setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
-        setLootSummary({
-          Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
-          'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
-        });
-        setCategoryAllocations({
-          Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
-        });
-        setInitialWinnersByItem({
-          Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': []
-        });
-        setGeneratedSlots([]);
-      }
-    });
-    return () => unsub();
+    // Continuous shared multi-officer cooperative synchronization check loop (3.5s)
+    const pollerInterval = setInterval(() => {
+      fetchActiveSessionFromBackend(false);
+    }, 3500);
+
+    return () => clearInterval(pollerInterval);
   }, []);
 
   const handleAddLootRow = () => {
@@ -234,13 +279,13 @@ export default function MimicBookTab({ user }) {
       ...lootRows, 
       { id: nextId, itemType: defaultType, startPage: derivedStartPage, startPos: derivedStartPos, endPage: derivedStartPage, endPos: derivedStartPos, limit: ITEM_LIMIT_DEFAULTS[defaultType] }
     ];
-    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
+    saveWorkspaceState({ lootRows: updatedRows });
   };
 
   const handleRemoveLootRow = (id) => {
     if (!isAdminMode) return;
     const updatedRows = lootRows.filter(r => r.id !== id);
-    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
+    saveWorkspaceState({ lootRows: updatedRows });
   };
 
   const handleUpdateLootRow = (id, key, val) => {
@@ -262,7 +307,7 @@ export default function MimicBookTab({ user }) {
       }
       return { ...r, ...updatedFields };
     });
-    set(ref(database, 'auction/active_session/lootRows'), updatedRows);
+    saveWorkspaceState({ lootRows: updatedRows });
   };
 
   const handleCheckAndRegisterLoot = () => {
@@ -315,7 +360,7 @@ export default function MimicBookTab({ user }) {
       const priorityApplicants = rankingsByItem[category] || [];
       const detailsMap = requestsByItemDetails[category] || {};
 
-      // ⚡ Explicit empty placeholder strings used instead of null arrays for complete Firebase protection
+      // Safeguard against missing array context compressions
       const flatStaticBoxArray = Array(totalDropInventoryCount).fill("");
       let globalBoxCursor = 0;
 
@@ -344,10 +389,8 @@ export default function MimicBookTab({ user }) {
 
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].qty > 0) || 'Puppet';
 
-    // Atomic transaction state push to Firebase Sandbox
-    set(ref(database, 'auction/active_session'), {
+    saveWorkspaceState({
       activeStep: 2,
-      lootRows,
       lootSummary: calculatedSummary,
       categoryAllocations: initialAllocations,
       initialWinnersByItem: initialWinnersTrack,
@@ -363,7 +406,12 @@ export default function MimicBookTab({ user }) {
     const updatedSelected = [...currentData.selected];
     updatedSelected[slotIndex] = ""; 
 
-    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
+    saveWorkspaceState({
+      categoryAllocations: {
+        ...categoryAllocations,
+        [activeMatrixFilter]: { selected: updatedSelected }
+      }
+    });
   };
 
   const handlePromoteBidderToTargetSlotIndex = (playerName, slotIndex) => {
@@ -372,17 +420,24 @@ export default function MimicBookTab({ user }) {
     const updatedSelected = [...currentData.selected];
     updatedSelected[slotIndex] = playerName;
 
-    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
+    saveWorkspaceState({
+      categoryAllocations: {
+        ...categoryAllocations,
+        [activeMatrixFilter]: { selected: updatedSelected }
+      }
+    });
   };
 
   const handleRowDragStart = (e, index) => {
     setDraggedItemIndex(index);
+    isUserDraggingRef.current = true; // Turn sync interceptor active
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleRowDragOver = (e) => e.preventDefault();
 
   const handleRowDrop = (e, targetIndex) => {
+    isUserDraggingRef.current = false;
     if (!isAdminMode || draggedItemIndex === null || draggedItemIndex === targetIndex) return;
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
@@ -391,7 +446,12 @@ export default function MimicBookTab({ user }) {
     updatedSelected[targetIndex] = updatedSelected[draggedItemIndex];
     updatedSelected[draggedItemIndex] = temp;
 
-    set(ref(database, `auction/active_session/categoryAllocations/${activeMatrixFilter}/selected`), updatedSelected);
+    saveWorkspaceState({
+      categoryAllocations: {
+        ...categoryAllocations,
+        [activeMatrixFilter]: { selected: updatedSelected }
+      }
+    });
     setDraggedItemIndex(null);
   };
 
@@ -426,12 +486,14 @@ export default function MimicBookTab({ user }) {
     });
 
     setBookCurrentPage(1);
-    set(ref(database, 'auction/active_session/generatedSlots'), matrixSlots);
-    set(ref(database, 'auction/active_session/activeStep'), 3);
+    saveWorkspaceState({
+      generatedSlots: matrixSlots,
+      activeStep: 3
+    });
   };
 
   const handleCommitSessionAndFlash = async () => {
-    if (!commitDate.trim()) return alert("Raid Night Event Date parameters cannot remain blank.");
+    if (!commitDate.trim()) return alert("Raid Event Night Date parameters cannot remain blank.");
     try {
       setCommittingSetting(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
@@ -469,25 +531,31 @@ export default function MimicBookTab({ user }) {
         credentials: 'include'
       });
 
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Server validation lockout executed.");
+      }
+
       const data = await res.json();
       if (data.success) {
-        alert("💥 SUCCESS: Raid records written to ledger repository! Requisition life cycles updated and server staging cleared.");
+        alert("💥 SUCCESS: Raid records written to ledger repository! Server staging sandbox cleared.");
         
-        // Wipe the temporary sandbox completely to drop space usage back down to 0
-        set(ref(database, 'auction/active_session'), null);
-        
+        // Return screen elements straight back to clean initialized base states
+        setActiveStep(1);
         setBookCurrentPage(1);
         setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
         setLootSummary({
           Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
           'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
         });
+        setCategoryAllocations({
+          Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
+        });
+        setGeneratedSlots([]);
         loadTrueRequestPool(); 
-      } else {
-        alert(`❌ Commit execution rejected: ${data.error}`);
       }
     } catch (err) {
-      console.error("Failed to commit session logs:", err);
+      alert(`❌ Commit execution blocked: ${err.message}`);
     } finally {
       setCommittingSetting(false);
     }
@@ -509,10 +577,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const toggleAccordionGroup = (groupKey) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [groupKey]: !prev[groupKey]
-    }));
+    setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
   const getGroupedHistoryTimeline = () => {
@@ -520,17 +585,11 @@ export default function MimicBookTab({ user }) {
     lootHistoryData.forEach(row => {
       const key = `${row.date}_${row.event}`;
       if (!map[key]) {
-        map[key] = {
-          date: row.date,
-          event: row.event,
-          records: []
-        };
+        map[key] = { date: row.date, event: row.event, records: [] };
       }
       map[key].records.push(row);
     });
-
-    const groupedArray = Object.values(map);
-    return groupedArray.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return Object.values(map).sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   const getItemStyleProfile = (itemType) => {
@@ -554,18 +613,18 @@ export default function MimicBookTab({ user }) {
   
   const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
     const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-    const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
+    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === name).length;
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
   const sidebarFilteredRosterList = masterGuildRoster.filter(name => {
     const maxRowLimit = ITEM_LIMIT_DEFAULTS[activeMatrixFilter] || 1;
-    const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
+    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === name).length;
     return name.toLowerCase().includes(sidebarSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
   });
 
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
-  const currentCategoryAllocatedQuantity = currentActiveSelections.selected.filter(n => n !== "").length;
+  const currentCategoryAllocatedQuantity = (currentActiveSelections.selected || []).filter(n => n !== "").length;
 
   return (
     <div className="space-y-4 text-slate-100 bg-slate-950 min-h-screen p-4 sm:p-6 select-none font-sans relative">
@@ -740,7 +799,7 @@ export default function MimicBookTab({ user }) {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
                   const currentAllocatedSum = (categoryAllocations[category]?.selected || []).filter(n => n !== "").length;
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { set(ref(database, 'auction/active_session/activeMatrixFilter'), category); }}>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { saveWorkspaceState({ activeMatrixFilter: category }); }}>
                       <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distributed</div>
                       <div className="text-lg font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">(Max Item Limit: {lootSummary[category]?.limit || 1})</div>
@@ -833,13 +892,13 @@ export default function MimicBookTab({ user }) {
                   {/* SIDE PANEL TABS */}
                   <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl shrink-0">
                     <button 
-                      onClick={() => set(ref(database, 'auction/active_session/sidebarTab'), 'standby')}
+                      onClick={() => saveWorkspaceState({ sidebarTab: 'standby' })}
                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'standby' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
                       💤 Standby Queue ({activeStandbyPoolList.length})
                     </button>
                     <button 
-                      onClick={() => set(ref(database, 'auction/active_session/sidebarTab'), 'roster')}
+                      onClick={() => saveWorkspaceState({ sidebarTab: 'roster' })}
                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'roster' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
                       🌐 Full Guild Roster
@@ -876,7 +935,7 @@ export default function MimicBookTab({ user }) {
                       ) : (
                         activeStandbyPoolList.map((name, i) => {
                           const reqQty = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-                          const runningAllocated = currentActiveSelections.selected.filter(n => n === name).length;
+                          const runningAllocated = (currentActiveSelections.selected || []).filter(n => n === name).length;
                           return (
                             <div 
                               key={i} 
@@ -885,7 +944,9 @@ export default function MimicBookTab({ user }) {
                                 e.dataTransfer.setData("text/plain", name);
                                 e.dataTransfer.setData("sourceType", "rosterCard");
                                 e.dataTransfer.effectAllowed = "copy";
+                                isUserDraggingRef.current = true;
                               }}
+                              onDragEnd={() => { isUserDraggingRef.current = false; }}
                               className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                             >
                               <div className="flex items-center gap-2 truncate">
@@ -909,7 +970,9 @@ export default function MimicBookTab({ user }) {
                               e.dataTransfer.setData("text/plain", name);
                               e.dataTransfer.setData("sourceType", "rosterCard");
                               e.dataTransfer.effectAllowed = "copy";
+                              isUserDraggingRef.current = true;
                             }}
+                            onDragEnd={() => { isUserDraggingRef.current = false; }}
                             className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                           >
                             <div className="flex items-center gap-2 truncate">
@@ -930,7 +993,7 @@ export default function MimicBookTab({ user }) {
                 <button 
                   onClick={() => {
                     if (confirm("⚠️ PROGRESS AT RISK: Return to Step 1 will wipe out your manual changes.\n\nAre you sure you want to discard your allocations?")) {
-                      set(ref(database, 'auction/active_session/activeStep'), 1);
+                      saveWorkspaceState({ activeStep: 1 });
                     }
                   }} 
                   className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-900 transition"
@@ -950,8 +1013,8 @@ export default function MimicBookTab({ user }) {
                 <span className="text-slate-500">Total Lines: <strong className="text-slate-300 font-mono">{generatedSlots.length}</strong></span>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => { loadTrueRequestPool(); set(ref(database, 'auction/active_session/activeStep'), 2); }} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
-                <button onClick={() => set(ref(database, 'auction/active_session/activeStep'), 4)} className={`px-4 py-1.5 rounded-lg font-bold transition ${activeStep === 4 ? 'bg-amber-600 text-white' : 'bg-slate-800 border border-slate-700 text-amber-400'}`}>Review Commit Ledger</button>
+                <button onClick={() => { loadTrueRequestPool(); saveWorkspaceState({ activeStep: 2 }); }} className="px-3 py-1 rounded-lg border border-slate-800 text-slate-400 hover:bg-slate-900 transition">Adjust Selection</button>
+                <button onClick={() => saveWorkspaceState({ activeStep: 4 })} className={`px-4 py-1.5 rounded-lg font-bold transition ${activeStep === 4 ? 'bg-amber-600 text-white' : 'bg-slate-800 border border-slate-700 text-amber-400'}`}>Review Commit Ledger</button>
               </div>
             </div>
           )}
@@ -979,7 +1042,7 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-center gap-4 pt-1">
-                <button onClick={() => set(ref(database, 'auction/active_session/activeStep'), 3)} disabled={committing} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition">Return to Preview</button>
+                <button onClick={() => saveWorkspaceState({ activeStep: 3 })} disabled={committing} className="px-4 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-slate-400 hover:bg-slate-900 disabled:opacity-30 transition">Return to Preview</button>
                 <button onClick={handleCommitSessionAndFlash} disabled={committing} className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs tracking-wider uppercase shadow-xl transition disabled:bg-slate-800 disabled:text-slate-500" >
                   {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE 🚀"}
                 </button>
@@ -1193,7 +1256,7 @@ export default function MimicBookTab({ user }) {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-900 text-slate-300">
-                              {group.records.map((row) => (
+                              {(group.records || []).map((row) => (
                                 <tr key={row.id} className="hover:bg-slate-950/20 transition-all">
                                   <td className="p-2.5 font-sans font-semibold text-slate-200">{row.item}</td>
                                   <td className="p-2.5 text-center text-slate-300 font-bold">{row.quantity} pcs</td>

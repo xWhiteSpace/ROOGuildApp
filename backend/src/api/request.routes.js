@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
+import { discordClient } from '../discord-bot/client.js'; // Securely pull active running bot client connection
 
 const router = Router();
 
@@ -17,6 +18,26 @@ const ITEM_LIMIT_DEFAULTS = {
   'Illu': 1,
   'Light&Dark': 3,
   'Time&Space': 5
+};
+
+const DEFAULT_SESSION_STRUCTURE = {
+  activeStep: 1,
+  lootRows: [
+    { id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }
+  ],
+  lootSummary: {
+    Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
+    'Light&Dark': { qty: 0, limit: 1, seats: 0 }, 'Time&Space': { qty: 0, limit: 1, seats: 0 }
+  },
+  categoryAllocations: {
+    Puppet: { selected: [] }, Illu: { selected: [] }, 'Light&Dark': { selected: [] }, 'Time&Space': { selected: [] }
+  },
+  initialWinnersByItem: {
+    Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': []
+  },
+  generatedSlots: [],
+  activeMatrixFilter: 'Puppet',
+  sidebarTab: 'standby'
 };
 
 function getGMT8DateString() {
@@ -39,6 +60,33 @@ function resolveUserIdentity(req) {
     }
   }
   return null;
+}
+
+/**
+ * 🛡️ LIVE DISCORD ACCOUNT SERVER OFFICER AUTHENTICATION ENGINE
+ */
+async function verifyDiscordOfficerRole(user) {
+  if (!user || !user.id) return false;
+  try {
+    const guildId = process.env.DISCORD_GUILD_ID;
+    if (!guildId || !discordClient) return false;
+
+    const guildInstance = await discordClient.guilds.fetch(guildId);
+    const targetMember = await guildInstance.members.fetch(user.id);
+
+    const AUTHORIZED_ROLES = [
+      'GUILD LEADER',
+      'Vice Guild Leader',
+      'Commander',
+      'Discord Management',
+      'Guild Management'
+    ];
+
+    return targetMember.roles.cache.some(role => AUTHORIZED_ROLES.includes(role.name));
+  } catch (error) {
+    console.error(`❌ [OFFICER GATEKEEPER DENIED]: Role lookup failed for account snowflake ID ${user.id}:`, error.message);
+    return false;
+  }
 }
 
 /**
@@ -81,6 +129,81 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 
   return priorityPoints;
 }
+
+/**
+ * 🛰️ BACKEND-ROUTED LIVE SANDBOX ENGINE
+ * GET /api/requests/active-session
+ */
+router.get('/active-session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const sessionSnap = await db.ref('auction/active_session').once('value');
+
+    if (!sessionSnap.exists()) {
+      const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
+      await db.ref('auction/active_session').set(freshReset);
+      return res.json({ success: true, session: freshReset });
+    }
+
+    const currentSessionData = sessionSnap.val();
+    const timeDeltaMilliseconds = Date.now() - (currentSessionData.lastUpdated || 0);
+    const maximumAllowedAgeInMs = 24 * 60 * 60 * 1000; // Hard 24-hour expiration threshold
+
+    if (timeDeltaMilliseconds > maximumAllowedAgeInMs) {
+      console.log("⏰ [SANDBOX TIME EXPIRATION Purge]: Over 24 hours since last update. Reverting layout matrix down to clean default defaults.");
+      const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
+      await db.ref('auction/active_session').set(freshReset);
+      return res.json({ success: true, session: freshReset });
+    }
+
+    // Ensure array data protection against Firebase missing key compression behaviors
+    if (currentSessionData.categoryAllocations) {
+      Object.keys(currentSessionData.categoryAllocations).forEach(cat => {
+        if (!currentSessionData.categoryAllocations[cat].selected) {
+          currentSessionData.categoryAllocations[cat].selected = [];
+        }
+      });
+    }
+
+    return res.json({ success: true, session: currentSessionData });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 🔄 SECURE REALTIME WORKSPACE SNAPSHOT WRITER
+ * POST /api/requests/update-session
+ */
+router.post('/update-session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const isVerifiedOfficer = await verifyDiscordOfficerRole(user);
+  if (!isVerifiedOfficer) {
+    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+  }
+
+  try {
+    const db = getDatabase();
+    const incomingWorkspacePayload = req.body.session;
+
+    if (!incomingWorkspacePayload) {
+      return res.status(400).json({ success: false, error: 'Payload configuration structure parameter omitted.' });
+    }
+
+    // Embed current rolling timestamp milestone to extend lifecycle survival parameters
+    incomingWorkspacePayload.lastUpdated = Date.now();
+
+    await db.ref('auction/active_session').set(incomingWorkspacePayload);
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 /**
  * 🚀 INITIALIZATION PATHWAY
@@ -329,7 +452,7 @@ router.post('/cancel', async (req, res) => {
       selectionStatus: 'Pending',    
       liveStatus: '',                 
       priority: 0,
-      eventDate: Skinner_Target_Date || targetedEventDate 
+      eventDate: targetedEventDate 
     });
 
     return res.json({ success: true });
@@ -345,6 +468,11 @@ router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
+  const isVerifiedOfficer = await verifyDiscordOfficerRole(user);
+  if (!isVerifiedOfficer) {
+    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+  }
+
   const { event, date, allocations, summary } = req.body;
   if (!allocations) {
     return res.status(400).json({ success: false, error: 'No allocation parameters detected.' });
@@ -359,7 +487,7 @@ router.post('/commit-session', async (req, res) => {
     const timestampDate = date || getGMT8DateString();
     
     if (summary) {
-      Object.keys(summary).forEach(async (itemKey) => {
+      for (const itemKey of Object.keys(summary)) {
         const itemData = summary[itemKey];
         if (itemData && itemData.qty > 0) {
           const newLootHistoryRef = db.ref('auction/loot_history').push();
@@ -373,12 +501,11 @@ router.post('/commit-session', async (req, res) => {
             mem: parseInt(itemData.seats, 10)
           });
         }
-      });
+      }
     }
 
     for (const cat of categories) {
       const { selected = [], absent = [], notSelected = [] } = allocations[cat];
-      const maxLimit = ITEM_LIMIT_DEFAULTS[cat] || 1;
 
       const keysByMember = {};
       Object.keys(firebaseRequests).forEach(key => {
@@ -449,6 +576,10 @@ router.post('/commit-session', async (req, res) => {
       }
     }
 
+    // ✨ 🌟 STRIP ACTIVE PERSISTENT SANDBOX STORAGE ON REQUISITION COMPLETION
+    console.log("💥 [COMMIT REGISTRATION SUCCESSFUL]: Clearing the continuous workspace session tree for future raid nights.");
+    await db.ref('auction/active_session').remove();
+
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -486,7 +617,7 @@ router.get('/loot-history', async (req, res) => {
 });
 
 /**
- * 🏆 COMPACT PAST AUCTION LEDGER DATA STREAM ENDPOINT
+ * 💡 COMPACT PAST AUCTION LEDGER DATA STREAM ENDPOINT
  */
 router.get('/past-auctions', async (req, res) => {
   const user = resolveUserIdentity(req);
