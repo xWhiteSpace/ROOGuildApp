@@ -76,12 +76,10 @@ async function verifyDiscordOfficerRole(user) {
 
     const AUTHORIZED_ROLES = [
       'GUILD LEADER',
-      'Vice Guild Leader'/*,
-      
-      'Commander',
-      'Discord Management',
-      'Guild Management'
-       */
+      'Vice Guild Leader'//,
+      //'Commander',
+      //'Discord Management',
+      //'Guild Management'
     ];
 
     return targetMember.roles.cache.some(role => AUTHORIZED_ROLES.includes(role.name));

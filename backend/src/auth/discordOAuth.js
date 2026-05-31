@@ -1,3 +1,4 @@
+// backend/src/auth/discordOAuth.js
 import { Router } from 'express';
 import { discordClient } from '../discord-bot/client.js';
 
@@ -12,6 +13,14 @@ const CACHE_DURATION = 2 * 60 * 1000;
 let activeFetchPromise = null;
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
+
+const CORE_MANAGEMENT_ROLES = [
+  'GUILD LEADER',
+  'Vice Guild Leader'//,
+  //'Commander',
+  //'Discord Management',
+  //'Guild Management'
+];
 
 function buildDiscordLoginUrl(state) {
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -31,123 +40,98 @@ router.get('/discord-members', async (req, res) => {
 
   const now = Date.now();
 
-  // 1. Serve immediately if the local memory cache is fresh
   if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
-    return res.json({ success: true, members: cachedMembers });
+    return res.json(cachedMembers);
   }
 
-  // 2. 🛡️ CONCURRENCY LOCK: If a parallel device thread is actively requesting chunks, attach to its promise
   if (activeFetchPromise) {
     try {
-      const members = await activeFetchPromise;
-      return res.json({ success: true, members });
+      const existingData = await activeFetchPromise;
+      return res.json(existingData);
     } catch (err) {
-      if (cachedMembers) return res.json({ success: true, members: cachedMembers });
-      return res.status(500).json({ error: err.message });
+      // Fall through to retry if the shared flight crashed
     }
   }
 
-  // 3. Define the single execution block for fetching from Discord
   activeFetchPromise = (async () => {
     if (!discordClient || !discordClient.isReady()) {
-      throw new Error('Discord bot client is initializing. Give it a moment...');
+      throw new Error('Discord bot client is offline or initializing gateway protocols.');
     }
-    const guild = await discordClient.guilds.fetch(guildId);
-    const membersCollection = await guild.members.fetch();
 
-    return membersCollection.map((member) => ({
-      id: member.id,
-      username: member.user.username,
-      nickname: member.nickname || '',
-      displayName: member.displayName || ''
-    }));
+    const guild = await discordClient.guilds.fetch(guildId);
+    const membersMap = await guild.members.fetch({ limit: 1000 });
+    
+    const transformedList = membersMap.map(m => ({
+      id: m.user.id,
+      username: m.user.username,
+      globalName: m.user.globalName || m.user.username,
+      nickname: m.nickname || m.displayName || m.user.username,
+      avatarURL: m.user.displayAvatarURL({ dynamic: true, size: 128 }),
+      joinedAt: m.joinedAt
+    })).sort((a, b) => a.nickname.localeCompare(b.nickname));
+
+    cachedMembers = transformedList;
+    lastFetchTime = Date.now();
+    return transformedList;
   })();
 
   try {
-    console.log('🌐 [SERVER DIAGNOSTIC] Launching coordinated roster handshake with Discord API...');
-    const members = await activeFetchPromise;
-
-    cachedMembers = members;
-    lastFetchTime = Date.now();
-
-    console.log(`✅ [SERVER DIAGNOSTIC] Successfully synchronized and shared ${cachedMembers.length} user records.`);
-    return res.json({ success: true, members });
+    const freshMembers = await activeFetchPromise;
+    return res.json(freshMembers);
   } catch (error) {
-    console.error('💥 [SERVER DIAGNOSTIC] Roster sync exception:', error.message);
-    
-    if (cachedMembers) {
-      console.warn('🚑 [SERVER DIAGNOSTIC] Serving stale backup cache array to prevent client layout crash.');
-      return res.json({ success: true, members: cachedMembers });
-    }
-
-    return res.status(503).json({ error: `Roster sync failed: ${error.message}` });
+    console.error('❌ [ROSTER SYNC CRITICAL EXCEPTION]:', error.message);
+    return res.status(500).json({ error: 'Failed to extract active member matrix array from Discord Server gateway.' });
   } finally {
-    // Reset execution lock state when processing completes
     activeFetchPromise = null;
   }
 });
 
 router.get('/login', (req, res) => {
-  const state = Math.random().toString(36).substring(2);
-  req.session.oauthState = state;
-  res.redirect(buildDiscordLoginUrl(state));
+  const state = req.query.state || 'no_state';
+  const loginUrl = buildDiscordLoginUrl(state);
+  res.redirect(loginUrl);
 });
 
 router.get('/callback', async (req, res) => {
-  const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
-  const state = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state;
+  const { code } = req.query;
   const targetFrontend = getFrontendUrl();
 
   if (!code) {
-    console.error('Discord OAuth callback is missing code.', req.query);
-    return res.redirect(`${targetFrontend}/login?error=discord_oauth_code_missing`);
-  }
-
-  if (req.session.oauthState && state !== req.session.oauthState) {
-    console.error('Discord OAuth state mismatch.', { expected: req.session.oauthState, actual: state });
-    return res.redirect(`${targetFrontend}/login?error=discord_oauth_state_mismatch`);
+    return res.redirect(`${targetFrontend}/login?error=missing_code`);
   }
 
   try {
-    const body = new URLSearchParams({
-      client_id: process.env.DISCORD_CLIENT_ID,
-      client_secret: process.env.DISCORD_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      code: String(code),
-      redirect_uri: process.env.OAUTH_REDIRECT_URI,
-      scope: 'identify',
-    });
-
     const tokenResponse = await fetch(`${discordApi}/oauth2/token`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
+      body: new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.OAUTH_REDIRECT_URI,
+      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('Discord token exchange failed:', errorText);
-      return res.redirect(`${targetFrontend}/login?error=discord_token_exchange_failed`);
+      throw new Error(`Token exchange failed with status ${tokenResponse.status}`);
     }
 
     const tokenData = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+
     const userResponse = await fetch(`${discordApi}/users/@me`, {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!userResponse.ok) {
-      const errorText = await userResponse.text();
-      console.error('Discord user fetch failed:', errorText);
-      return res.redirect(`${targetFrontend}/login?error=discord_user_fetch_failed`);
+      throw new Error(`Failed to fetch user profiles with status ${userResponse.status}`);
     }
 
     const user = await userResponse.json();
-    
     let serverNickname = user.global_name || user.username;
+    let assignedCoreRoles = []; // Stores matching core roles
+    
     const guildId = process.env.DISCORD_GUILD_ID;
 
     if (discordClient && discordClient.isReady() && guildId) {
@@ -156,9 +140,14 @@ router.get('/callback', async (req, res) => {
         const member = await guild.members.fetch(user.id);
         if (member) {
           serverNickname = member.nickname || member.displayName || serverNickname;
+          
+          // Dynamically parse live roles matching core parameters
+          assignedCoreRoles = member.roles.cache
+            .map(role => role.name)
+            .filter(roleName => CORE_MANAGEMENT_ROLES.includes(roleName));
         }
       } catch (err) {
-        console.warn('⚠️ Could not fetch guild nickname, falling back to global account tags.');
+        console.warn('⚠️ Could not fetch guild credentials or core roles, falling back to basic metadata profiles.');
       }
     }
 
@@ -167,7 +156,8 @@ router.get('/callback', async (req, res) => {
       username: user.username,
       discriminator: user.discriminator,
       avatar: user.avatar,
-      displayName: serverNickname
+      displayName: serverNickname,
+      roles: assignedCoreRoles // Included in session data
     };
 
     return req.session.save(() => {
@@ -190,8 +180,10 @@ router.get('/me', (req, res) => {
 router.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) {
-      return res.status(500).json({ success: false, error: 'Failed to destroy session' });
+      console.error('Logout error session destruction failure:', err);
+      return res.status(500).json({ success: false, error: 'Could not destroy running cookie session context.' });
     }
+    res.clearCookie('connect.sid'); 
     return res.json({ success: true });
   });
 });
