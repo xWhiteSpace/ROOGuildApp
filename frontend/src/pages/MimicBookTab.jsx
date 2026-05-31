@@ -1,3 +1,4 @@
+// frontend/src/pages/MimicBookTab.jsx
 import { useState, useEffect, useRef } from 'react';
 import { ref, onValue, set } from 'firebase/database';
 import { database } from '../services/firebaseClient';
@@ -60,11 +61,9 @@ export default function MimicBookTab({ user }) {
     Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': []
   });
 
-  // --- 🎹 POP-OVER OVERLAY UI ANCHOR STATES ---
-  const [activePopoverSeatIndex, setActivePopoverSeatIndex] = useState(null);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [popoverContextTab, setPopoverContextTab] = useState('applicants'); 
-  const [popoverRosterSearch, setPopoverRosterSearch] = useState('');
+  // --- 🔍 SIDEBAR TAB NAVIGATION CONTROLS ---
+  const [sidebarTab, setSidebarTab] = useState('standby'); // 'standby' or 'roster'
+  const [sidebarSearch, setSidebarSearch] = useState('');
   const popoverAnchorRef = useRef(null);
 
   // --- Drag and Drop State Holders ---
@@ -318,8 +317,8 @@ export default function MimicBookTab({ user }) {
     setCategoryAllocations(initialAllocations);
     const firstActiveCategory = Object.keys(calculatedSummary).find(k => calculatedSummary[k].qty > 0) || 'Puppet';
     setActiveMatrixFilter(firstActiveCategory);
-    setActivePopoverSeatIndex(null);
-    setIsPopoverOpen(false);
+    setSidebarSearch('');
+    setSidebarTab('standby');
     setActiveStep(2);
   };
 
@@ -334,21 +333,15 @@ export default function MimicBookTab({ user }) {
     });
   };
 
-  const handlePromoteBidderToTargetSlotIndex = (playerName) => {
-    if (activePopoverSeatIndex === null) return;
+  const handlePromoteBidderToTargetSlotIndex = (playerName, slotIndex) => {
     const currentData = categoryAllocations[activeMatrixFilter];
     const updatedSelected = [...currentData.selected];
-
-    updatedSelected[activePopoverSeatIndex] = playerName;
+    updatedSelected[slotIndex] = playerName;
 
     setCategoryAllocations({
       ...categoryAllocations,
       [activeMatrixFilter]: { selected: updatedSelected }
     });
-    
-    setActivePopoverSeatIndex(null); 
-    setIsPopoverOpen(false);
-    setPopoverRosterSearch(''); 
   };
 
   const handleRowDragStart = (e, index) => {
@@ -510,10 +503,10 @@ export default function MimicBookTab({ user }) {
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
-  const popoverFilteredRosterList = masterGuildRoster.filter(name => {
+  const sidebarFilteredRosterList = masterGuildRoster.filter(name => {
     const maxRowLimit = ITEM_LIMIT_DEFAULTS[activeMatrixFilter] || 1;
     const currentAllocatedVolumeAcrossGrid = currentActiveSelections.selected.filter(n => n === name).length;
-    return name.toLowerCase().includes(popoverRosterSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
+    return name.toLowerCase().includes(sidebarSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
   });
 
   const totalCategoryDropQuantity = lootSummary[activeMatrixFilter]?.qty || 0;
@@ -692,7 +685,7 @@ export default function MimicBookTab({ user }) {
                   const dropTotalQty = lootSummary[category]?.qty || 0;
                   const currentAllocatedSum = (categoryAllocations[category]?.selected || []).filter(n => n !== null).length;
                   return (
-                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); setIsPopoverOpen(false); }}>
+                    <div key={category} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer transition ${activeMatrixFilter === category ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { setActiveMatrixFilter(category); }}>
                       <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">{category} Distributed</div>
                       <div className="text-lg font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5 font-sans">(Max Item Limit: {lootSummary[category]?.limit || 1})</div>
@@ -709,9 +702,10 @@ export default function MimicBookTab({ user }) {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                 
+                {/* LEFT ALLOCATION SLOT DROP ZONES */}
                 <div className="md:col-span-2 border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="text-xs font-black uppercase text-emerald-400 mb-2 flex items-center justify-between">
-                    <span>✨ Individual Dropped Items Playlist (Click gaps to fill, Drag to Swap)</span>
+                    <span>✨ Allocation Box Matrix (Drag roster card here to overwrite/fill)</span>
                     <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-400">Positionally Shift-Proof</span>
                   </div>
 
@@ -721,11 +715,21 @@ export default function MimicBookTab({ user }) {
                         return (
                           <div 
                             key={i}
-                            onClick={() => { setActivePopoverSeatIndex(i); setIsPopoverOpen(true); setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
-                            className="p-2 px-3 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 cursor-pointer hover:bg-slate-900/40 hover:border-slate-700 transition flex items-center justify-between min-h-[44px]"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const sourceType = e.dataTransfer.getData("sourceType");
+                              if (sourceType === "rosterCard") {
+                                const droppedPlayerName = e.dataTransfer.getData("text/plain");
+                                if (droppedPlayerName) handlePromoteBidderToTargetSlotIndex(droppedPlayerName, i);
+                              }
+                            }}
+                            className="p-2 px-3 rounded-xl border-2 border-dashed border-slate-800 bg-slate-950/20 text-xs font-mono text-slate-600 hover:bg-slate-900/40 hover:border-indigo-500/30 transition flex items-center justify-between min-h-[44px]"
                           >
-                            <span className="font-sans text-[10px] font-black text-slate-500">BOX SLOT BLOCK #{i + 1}</span>
-                            <span className="text-[10px] text-indigo-400 font-bold tracking-tight animate-pulse">➕ CLICK TO ALLOCATE 1PC</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-500 text-[10px] font-bold w-4">#{i + 1}</span>
+                              <span className="font-sans text-[10px] font-medium text-slate-500">[ 📥 Drop Roster Card Here to Assign Member ]</span>
+                            </div>
                           </div>
                         );
                       }
@@ -736,7 +740,16 @@ export default function MimicBookTab({ user }) {
                           draggable="true"
                           onDragStart={(e) => handleRowDragStart(e, i)}
                           onDragOver={handleRowDragOver}
-                          onDrop={(e) => handleRowDrop(e, i)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const sourceType = e.dataTransfer.getData("sourceType");
+                            if (sourceType === "rosterCard") {
+                              const droppedPlayerName = e.dataTransfer.getData("text/plain");
+                              if (droppedPlayerName) handlePromoteBidderToTargetSlotIndex(droppedPlayerName, i);
+                            } else {
+                              handleRowDrop(e, i);
+                            }
+                          }}
                           className="p-2 px-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between min-h-[44px] transition hover:border-slate-700 group cursor-grab active:cursor-grabbing font-mono"
                         >
                           <div className="flex items-center gap-3 truncate">
@@ -759,110 +772,104 @@ export default function MimicBookTab({ user }) {
                   </div>
                 </div>
 
-                <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40">
-                  <div className="text-xs font-black uppercase text-slate-400 mb-2 flex items-center justify-between">
-                    <span><span>💤 Standby Queue (Priority Balanced Line)</span></span>
-                    <span className="font-mono text-[10px] bg-slate-900 px-2 py-0.5 rounded text-slate-500">Standby: {activeStandbyPoolList.length}</span>
-                  </div>
-                  <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
-                    {activeStandbyPoolList.map((name, i) => {
-                      const reqQty = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-                      const runningAllocated = currentActiveSelections.selected.filter(n => n === name).length;
-                      return (
-                        <div key={i} className="flex items-center justify-between p-2 rounded-xl border border-slate-800/40 bg-slate-900/10 text-xs font-mono">
-                          <span className="truncate text-slate-400 font-sans">{name}</span>
-                          <span className="text-slate-500 text-[10px] font-sans font-bold shrink-0">Rank #{i+1} ({runningAllocated}/{reqQty})</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* OVERLAY POP-OVER SELECTION CONTEXT LOOKUP CHANNEL */}
-              {isPopoverOpen && activePopoverSeatIndex !== null && (
-                <div className="absolute top-24 left-4 right-4 md:left-1/4 md:w-1/2 bg-slate-900 border-2 border-indigo-600 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn space-y-3">
-                  <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                    <h4 className="text-xs font-black uppercase text-slate-100 tracking-wide">Assign Member into Box Slot #{activePopoverSeatIndex + 1}</h4>
-                    <button onClick={() => setIsPopoverOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-xs">✕ Close</button>
-                  </div>
+                {/* RIGHT ROSTER SIDEBAR CONTROL MATRIX */}
+                <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/40 flex flex-col space-y-3">
                   
-                  <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+                  {/* SIDE PANEL TABS */}
+                  <div className="flex gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl shrink-0">
                     <button 
-                      onClick={() => { setPopoverContextTab('applicants'); setPopoverRosterSearch(''); }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'applicants' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                      onClick={() => setSidebarTab('standby')}
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'standby' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
-                      🎯 Portal Applicants
+                      💤 Standby Queue ({activeStandbyPoolList.length})
                     </button>
                     <button 
-                      onClick={() => { setPopoverContextTab('fullRoster'); setPopoverRosterSearch(''); }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition uppercase ${popoverContextTab === 'fullRoster' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-900'}`}
+                      onClick={() => setSidebarTab('roster')}
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-black transition uppercase ${sidebarTab === 'roster' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-900'}`}
                     >
                       🌐 Full Guild Roster
                     </button>
                   </div>
 
-                  {popoverContextTab === 'fullRoster' && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
+                  {/* SPOTLIGHT FILTER INPUT FOR MASTER ROSTER */}
+                  {sidebarTab === 'roster' && (
+                    <div className="space-y-2 shrink-0">
+                      <div className="flex gap-1.5">
                         <input
                           type="text"
-                          value={popoverRosterSearch}
-                          onChange={(e) => setPopoverRosterSearch(e.target.value)}
-                          placeholder="🔍 Search character names to allocate..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-800 font-sans"
+                          value={sidebarSearch}
+                          onChange={(e) => setSidebarSearch(e.target.value)}
+                          placeholder="🔍 Filter character profile..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-700 font-sans"
                         />
                         <button
                           onClick={handleSyncRosterFromDiscord}
                           disabled={syncingRoster}
-                          className="px-3 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
+                          className="px-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap transition disabled:opacity-20 font-sans font-bold"
                         >
-                          {syncingRoster ? "⏳ Syncing..." : "🔄 Sync Discord"}
+                          {syncingRoster ? "⏳ Sync..." : "🔄 Sync"}
                         </button>
                       </div>
-                      
-                      {popoverRosterSearch.trim() && !popoverFilteredRosterList.includes(popoverRosterSearch.trim()) && (
-                        <button
-                          onClick={() => handlePromoteBidderToTargetSlotIndex(popoverRosterSearch.trim())}
-                          className="w-full text-center p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-600 hover:text-white text-xs tracking-tight transition"
-                        >
-                          ➕ Force Add "{popoverRosterSearch.trim()}" directly into this Box Slot
-                        </button>
-                      )}
                     </div>
                   )}
 
-                  <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin">
-                    {popoverContextTab === 'applicants' ? (
-                      activeStandbyPoolList.map((name, idx) => {
-                        const masterReq = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-                        const runningAllocated = currentActiveSelections.selected.filter(n => n === name).length;
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => handlePromoteBidderToTargetSlotIndex(name)}
-                            className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between"
-                          >
-                            <span className="font-bold text-slate-200">{name}</span>
-                            <span className="font-mono text-[10px] text-slate-400">Filled: {runningAllocated} / {masterReq}</span>
-                          </button>
-                        );
-                      })
+                  {/* CHRONOLOGICAL SCROLLABLE DRAG-SOURCE LIST */}
+                  <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
+                    {sidebarTab === 'standby' ? (
+                      activeStandbyPoolList.length === 0 ? (
+                        <div className="text-[11px] text-slate-600 italic text-center py-6 font-sans">No remaining standby applicants in item filter.</div>
+                      ) : (
+                        activeStandbyPoolList.map((name, i) => {
+                          const reqQty = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
+                          const runningAllocated = currentActiveSelections.selected.filter(n => n === name).length;
+                          return (
+                            <div 
+                              key={i} 
+                              draggable="true"
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", name);
+                                e.dataTransfer.setData("sourceType", "rosterCard");
+                                e.dataTransfer.effectAllowed = "copy";
+                              }}
+                              className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="text-slate-600 text-[10px]">⋮⋮</span>
+                                <span className="truncate text-slate-300 font-sans font-semibold text-xs">{name}</span>
+                              </div>
+                              <span className="text-slate-500 text-[9px] font-sans font-black shrink-0 bg-slate-950 border border-slate-800 rounded px-1">Rank #{i+1} ({runningAllocated}/{reqQty})</span>
+                            </div>
+                          );
+                        })
+                      )
                     ) : (
-                      popoverFilteredRosterList.map((name, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handlePromoteBidderToTargetSlotIndex(name)}
-                          className="w-full text-left p-2 rounded-xl bg-slate-950 border border-slate-800/80 text-xs font-sans hover:bg-indigo-600 hover:border-transparent hover:text-white transition flex items-center justify-between group"
-                        >
-                          <span className="font-bold text-slate-300 group-hover:text-white">{name}</span>
-                          <span className="text-[10px] uppercase font-black text-slate-600 group-hover:text-indigo-200 font-sans">System Profile Cache</span>
-                        </button>
-                      ))
+                      sidebarFilteredRosterList.length === 0 ? (
+                        <div className="text-[11px] text-slate-600 italic text-center py-6 font-sans">No roster members correspond to query.</div>
+                      ) : (
+                        sidebarFilteredRosterList.map((name, i) => (
+                          <div 
+                            key={i} 
+                            draggable="true"
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", name);
+                              e.dataTransfer.setData("sourceType", "rosterCard");
+                              e.dataTransfer.effectAllowed = "copy";
+                            }}
+                            className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-slate-600 text-[10px]">⋮⋮</span>
+                              <span className="truncate text-slate-300 font-sans font-semibold text-xs">{name}</span>
+                            </div>
+                            <span className="text-[9px] uppercase font-black text-slate-600 font-sans tracking-wide">Cache</span>
+                          </div>
+                        ))
+                      )
                     )}
                   </div>
+
                 </div>
-              )}
+              </div>
 
               <div className="flex justify-between pt-2">
                 <button 
