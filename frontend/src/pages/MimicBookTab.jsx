@@ -10,8 +10,19 @@ const ITEM_LIMIT_DEFAULTS = {
   'Time&Space': 5
 };
 
+const CORE_MANAGEMENT_ROLES = [
+  'GUILD LEADER',
+  'Vice Guild Leader'//,
+  //'Commander',
+  //'Discord Management',
+  //'Guild Management'
+];
+
 export default function MimicBookTab({ user }) {
-  const [isAdminMode, setIsAdminMode] = useState(true);
+  // Check if current session user is part of the management array list
+  const isOfficer = user?.roles?.some(role => CORE_MANAGEMENT_ROLES.includes(role)) || false;
+
+  const [isAdminMode, setIsAdminMode] = useState(isOfficer); 
   const [activeStep, setActiveStep] = useState(1); 
   const [loadingPool, setLoadingPool] = useState(false);
 
@@ -67,13 +78,18 @@ export default function MimicBookTab({ user }) {
 
   // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
-  const isUserDraggingRef = useRef(false); // Safety guard: pauses background downloads during movement
+  const isUserDraggingRef = useRef(false); 
 
   // --- PHASE 3 STATE: DISPLAY LENS CONSTRAINTS ---
   const [viewLens, setViewLens] = useState('ALL'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [bookCurrentPage, setBookCurrentPage] = useState(1);
   const [generatedSlots, setGeneratedSlots] = useState([]);
+
+  // Forces state re-check when the authenticated user profile changes
+  useEffect(() => {
+    setIsAdminMode(isOfficer);
+  }, [user, isOfficer]);
 
   // --- COORDINATE SEQUENCE GAP ENGINE ---
   useEffect(() => {
@@ -172,9 +188,8 @@ export default function MimicBookTab({ user }) {
     }
   };
 
-  // --- 🛰️ AUTOMATED BACKEND REALTIME SYNC PERSISTENCE LOOP ---
   const fetchActiveSessionFromBackend = async (isInitialMount = false) => {
-    if (isUserDraggingRef.current) return; // Prevent network micro-stutters during drag sequences
+    if (isUserDraggingRef.current) return; 
     try {
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
@@ -200,25 +215,29 @@ export default function MimicBookTab({ user }) {
   };
 
   const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {
+    if (!isOfficer) return;
     try {
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-      await fetch(`${backendUrl}/api/requests/update-session`, {
+      const res = await fetch(`${backendUrl}/api/requests/update-session`, {
         method: 'POST',
         headers: customHeaders,
         body: JSON.stringify({ session: updatedWorkspaceSnapshot }),
         credentials: 'include'
       });
+      if (!res.ok) {
+        fetchActiveSessionFromBackend(false); 
+      }
     } catch (err) {
       console.error("Backend packet transmission timeout:", err);
     }
   };
 
-  // Single centralized framework trigger for immediate UI feedback + silent background sync
   const saveWorkspaceState = (updatedStateFields) => {
+    if (!isOfficer) return;
     const fullSnapshot = {
       activeStep,
       lootRows,
@@ -231,7 +250,6 @@ export default function MimicBookTab({ user }) {
       ...updatedStateFields
     };
     
-    // Optimistic frontend rendering assignment
     if (updatedStateFields.activeStep !== undefined) setActiveStep(updatedStateFields.activeStep);
     if (updatedStateFields.lootRows) setLootRows(updatedStateFields.lootRows);
     if (updatedStateFields.lootSummary) setLootSummary(updatedStateFields.lootSummary);
@@ -248,16 +266,15 @@ export default function MimicBookTab({ user }) {
     loadTrueRequestPool();
     fetchActiveSessionFromBackend(true);
 
-    // Continuous shared multi-officer cooperative synchronization check loop (3.5s)
     const pollerInterval = setInterval(() => {
       fetchActiveSessionFromBackend(false);
     }, 3500);
 
     return () => clearInterval(pollerInterval);
-  }, []);
+  }, [user]);
 
   const handleAddLootRow = () => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const nextId = lootRows.length > 0 ? Math.max(...lootRows.map(r => r.id)) + 1 : 1;
     let derivedStartPage = 1;
     let derivedStartPos = 1;
@@ -283,13 +300,13 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleRemoveLootRow = (id) => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const updatedRows = lootRows.filter(r => r.id !== id);
     saveWorkspaceState({ lootRows: updatedRows });
   };
 
   const handleUpdateLootRow = (id, key, val) => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const updatedRows = lootRows.map(r => {
       if (r.id !== id) return r;
       let updatedFields = { [key]: val };
@@ -311,7 +328,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleCheckAndRegisterLoot = () => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     setValidationError('');
     const calculatedSummary = {
       Puppet: { qty: 0, limit: 1, seats: 0 }, Illu: { qty: 0, limit: 1, seats: 0 },
@@ -360,7 +377,6 @@ export default function MimicBookTab({ user }) {
       const priorityApplicants = rankingsByItem[category] || [];
       const detailsMap = requestsByItemDetails[category] || {};
 
-      // Safeguard against missing array context compressions
       const flatStaticBoxArray = Array(totalDropInventoryCount).fill("");
       let globalBoxCursor = 0;
 
@@ -401,7 +417,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleDropBidderBoxSlot = (slotIndex) => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     updatedSelected[slotIndex] = ""; 
@@ -415,7 +431,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handlePromoteBidderToTargetSlotIndex = (playerName, slotIndex) => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     updatedSelected[slotIndex] = playerName;
@@ -429,8 +445,9 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleRowDragStart = (e, index) => {
+    if (!isOfficer) return e.preventDefault();
     setDraggedItemIndex(index);
-    isUserDraggingRef.current = true; // Turn sync interceptor active
+    isUserDraggingRef.current = true; 
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -438,7 +455,7 @@ export default function MimicBookTab({ user }) {
 
   const handleRowDrop = (e, targetIndex) => {
     isUserDraggingRef.current = false;
-    if (!isAdminMode || draggedItemIndex === null || draggedItemIndex === targetIndex) return;
+    if (!isAdminMode || !isOfficer || draggedItemIndex === null || draggedItemIndex === targetIndex) return;
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     
@@ -456,7 +473,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleOriginalMatrixAssembly = () => {
-    if (!isAdminMode) return;
+    if (!isAdminMode || !isOfficer) return;
     const categorySequenceOrder = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
     let currentVirtualPage = 1;
     let currentVirtualSlot = 1;
@@ -493,7 +510,7 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleCommitSessionAndFlash = async () => {
-    if (!commitDate.trim()) return alert("Raid Event Night Date parameters cannot remain blank.");
+    if (!commitDate.trim() || !isOfficer) return alert("Operation locked or criteria missing.");
     try {
       setCommittingSetting(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
@@ -540,7 +557,6 @@ export default function MimicBookTab({ user }) {
       if (data.success) {
         alert("💥 SUCCESS: Raid records written to ledger repository! Server staging sandbox cleared.");
         
-        // Return screen elements straight back to clean initialized base states
         setActiveStep(1);
         setBookCurrentPage(1);
         setLootRows([{ id: 1, itemType: 'Puppet', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
@@ -636,17 +652,19 @@ export default function MimicBookTab({ user }) {
           <p className="text-xs text-slate-400 mt-1">Digital Twin Pre-Raid Coordination Grid & Ledger Desk</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleSyncRosterFromDiscord}
-            disabled={syncingRoster}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold border transition-all shadow ${
-              syncingRoster 
-                ? 'bg-slate-900 border-slate-800 text-slate-500 animate-pulse' 
-                : 'border-indigo-500/40 bg-indigo-950/20 text-indigo-400 hover:bg-indigo-600 hover:text-white'
-            }`}
-          >
-            {syncingRoster ? "⏳ Syncing Discord Members..." : "🔄 Sync Discord Roster"}
-          </button>
+          {isOfficer && (
+            <button
+              onClick={handleSyncRosterFromDiscord}
+              disabled={syncingRoster}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold border transition-all shadow ${
+                syncingRoster 
+                  ? 'bg-slate-900 border-slate-800 text-slate-500 animate-pulse' 
+                  : 'border-indigo-500/40 bg-indigo-950/20 text-indigo-400 hover:bg-indigo-600 hover:text-white'
+              }`}
+            >
+              {syncingRoster ? "⏳ Syncing Discord Members..." : "🔄 Sync Discord Roster"}
+            </button>
+          )}
 
           <button
             onClick={() => { fetchLootHistoryLog(); setIsLootHistoryOpen(true); }}
@@ -655,19 +673,21 @@ export default function MimicBookTab({ user }) {
             📋 View Loot History
           </button>
           
-          <button 
-            onClick={() => setIsAdminMode(!isAdminMode)}
-            className={`px-3 py-1.5 rounded-xl text-[10px] uppercase font-black tracking-wider transition border ${
-              isAdminMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-slate-900 border-slate-800 text-slate-500'
-            }`}
-          >
-            🛡️ Officer Desk Override: {isAdminMode ? 'ENABLED' : 'DISABLED'}
-          </button>
+          {isOfficer && (
+            <button 
+              onClick={() => setIsAdminMode(!isAdminMode)}
+              className={`px-3 py-1.5 rounded-xl text-[10px] uppercase font-black tracking-wider transition border ${
+                isAdminMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-slate-900 border-slate-800 text-slate-500'
+              }`}
+            >
+              🛡️ Officer Desk Override: {isAdminMode ? 'ENABLED' : 'DISABLED'}
+            </button>
+          )}
         </div>
       </div>
 
       {/* --- ADMINISTRATIVE OFFICER PANEL OVERRIDES --- */}
-      {isAdminMode && (
+      {isAdminMode && isOfficer && (
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4" ref={popoverAnchorRef}>
           
           <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto text-center text-xs font-bold border-b border-slate-800/60 pb-3">
@@ -940,12 +960,7 @@ export default function MimicBookTab({ user }) {
                             <div 
                               key={i} 
                               draggable="true"
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData("text/plain", name);
-                                e.dataTransfer.setData("sourceType", "rosterCard");
-                                e.dataTransfer.effectAllowed = "copy";
-                                isUserDraggingRef.current = true;
-                              }}
+                              onDragStart={(e) => handleRowDragStart(e, i)}
                               onDragEnd={() => { isUserDraggingRef.current = false; }}
                               className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                             >
@@ -966,12 +981,7 @@ export default function MimicBookTab({ user }) {
                           <div 
                             key={i} 
                             draggable="true"
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("text/plain", name);
-                              e.dataTransfer.setData("sourceType", "rosterCard");
-                              e.dataTransfer.effectAllowed = "copy";
-                              isUserDraggingRef.current = true;
-                            }}
+                            onDragStart={(e) => handleRowDragStart(e, i)}
                             onDragEnd={() => { isUserDraggingRef.current = false; }}
                             className="flex items-center justify-between p-2 px-3 rounded-xl border border-slate-800/60 bg-slate-900/30 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/50 transition shadow-inner select-none"
                           >

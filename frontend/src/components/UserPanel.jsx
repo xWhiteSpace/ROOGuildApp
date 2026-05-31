@@ -12,7 +12,7 @@ export default function UserPanel({ user, onLogout }) {
               {user.displayName || user.username}
             </div>
             
-            {/* 🛡️ DYNAMIC LIVE CORE ROLES MATRIX PANEL DISPLAY */}
+            {/* 🛡️ DYNAMIC LIVE CORE ROLES MONITOR CAPSULES */}
             {user.roles && user.roles.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5 select-none">
                 {user.roles.map((role, idx) => (

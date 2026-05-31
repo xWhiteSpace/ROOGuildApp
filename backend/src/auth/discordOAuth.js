@@ -9,11 +9,11 @@ let cachedMembers = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 2 * 60 * 1000;
 
-// 🌟 CONCURRENCY CHANNEL: Merges multi-device/tablet loading requests into a single flight
 let activeFetchPromise = null;
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// 🧪 USER PROFILE CONFIGURATION ROLES MATRIX (Match this when toggling comments for testing)
 const CORE_MANAGEMENT_ROLES = [
   'GUILD LEADER',
   'Vice Guild Leader'//,
@@ -29,17 +29,13 @@ function buildDiscordLoginUrl(state) {
   return `${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(state)}`;
 }
 
-// 🛡️ ANTI-RATE-LIMIT EXPOSED ROSTER ENDPOINT
 router.get('/discord-members', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
-  const requestOrigin = req.headers.origin || 'No Origin Header';
-
   if (!guildId) {
     return res.status(500).json({ error: 'DISCORD_GUILD_ID is not configured in your backend .env file' });
   }
 
   const now = Date.now();
-
   if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
     return res.json(cachedMembers);
   }
@@ -48,20 +44,17 @@ router.get('/discord-members', async (req, res) => {
     try {
       const existingData = await activeFetchPromise;
       return res.json(existingData);
-    } catch (err) {
-      // Fall through to retry if the shared flight crashed
-    }
+    } catch (err) {}
   }
 
   activeFetchPromise = (async () => {
     if (!discordClient || !discordClient.isReady()) {
       throw new Error('Discord bot client is offline or initializing gateway protocols.');
     }
-
     const guild = await discordClient.guilds.fetch(guildId);
     const membersMap = await guild.members.fetch({ limit: 1000 });
     
-    const transformedList = membersMap.map(m => ({
+    return membersMap.map(m => ({
       id: m.user.id,
       username: m.user.username,
       globalName: m.user.globalName || m.user.username,
@@ -69,18 +62,15 @@ router.get('/discord-members', async (req, res) => {
       avatarURL: m.user.displayAvatarURL({ dynamic: true, size: 128 }),
       joinedAt: m.joinedAt
     })).sort((a, b) => a.nickname.localeCompare(b.nickname));
-
-    cachedMembers = transformedList;
-    lastFetchTime = Date.now();
-    return transformedList;
   })();
 
   try {
     const freshMembers = await activeFetchPromise;
+    cachedMembers = freshMembers;
+    lastFetchTime = Date.now();
     return res.json(freshMembers);
   } catch (error) {
-    console.error('❌ [ROSTER SYNC CRITICAL EXCEPTION]:', error.message);
-    return res.status(500).json({ error: 'Failed to extract active member matrix array from Discord Server gateway.' });
+    return res.status(500).json({ error: 'Failed to extract active member matrix from Discord gateway.' });
   } finally {
     activeFetchPromise = null;
   }
@@ -88,8 +78,7 @@ router.get('/discord-members', async (req, res) => {
 
 router.get('/login', (req, res) => {
   const state = req.query.state || 'no_state';
-  const loginUrl = buildDiscordLoginUrl(state);
-  res.redirect(loginUrl);
+  res.redirect(buildDiscordLoginUrl(state));
 });
 
 router.get('/callback', async (req, res) => {
@@ -113,25 +102,18 @@ router.get('/callback', async (req, res) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
-    if (!tokenResponse.ok) {
-      throw new Error(`Token exchange failed with status ${tokenResponse.status}`);
-    }
+    if (!tokenResponse.ok) throw new Error('Token exchange failed');
 
     const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
     const userResponse = await fetch(`${discordApi}/users/@me`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
-    if (!userResponse.ok) {
-      throw new Error(`Failed to fetch user profiles with status ${userResponse.status}`);
-    }
+    if (!userResponse.ok) throw new Error('Failed to fetch user profiles');
 
     const user = await userResponse.json();
     let serverNickname = user.global_name || user.username;
-    let assignedCoreRoles = []; // Stores matching core roles
-    
+    let assignedCoreRoles = [];
     const guildId = process.env.DISCORD_GUILD_ID;
 
     if (discordClient && discordClient.isReady() && guildId) {
@@ -140,14 +122,12 @@ router.get('/callback', async (req, res) => {
         const member = await guild.members.fetch(user.id);
         if (member) {
           serverNickname = member.nickname || member.displayName || serverNickname;
-          
-          // Dynamically parse live roles matching core parameters
           assignedCoreRoles = member.roles.cache
             .map(role => role.name)
             .filter(roleName => CORE_MANAGEMENT_ROLES.includes(roleName));
         }
       } catch (err) {
-        console.warn('⚠️ Could not fetch guild credentials or core roles, falling back to basic metadata profiles.');
+        console.warn('⚠️ Could not fetch guild profile details.');
       }
     }
 
@@ -157,7 +137,7 @@ router.get('/callback', async (req, res) => {
       discriminator: user.discriminator,
       avatar: user.avatar,
       displayName: serverNickname,
-      roles: assignedCoreRoles // Included in session data
+      roles: assignedCoreRoles
     };
 
     return req.session.save(() => {
@@ -165,7 +145,6 @@ router.get('/callback', async (req, res) => {
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
     });
   } catch (error) {
-    console.error('Discord OAuth callback error:', error);
     return res.redirect(`${targetFrontend}/login?error=discord_oauth_failed`);
   }
 });
@@ -179,10 +158,7 @@ router.get('/me', (req, res) => {
 
 router.post('/logout', (req, res) => {
   req.session.destroy((err) => {
-    if (err) {
-      console.error('Logout error session destruction failure:', err);
-      return res.status(500).json({ success: false, error: 'Could not destroy running cookie session context.' });
-    }
+    if (err) return res.status(500).json({ success: false, error: 'Could not destroy running session.' });
     res.clearCookie('connect.sid'); 
     return res.json({ success: true });
   });
