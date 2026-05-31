@@ -77,10 +77,10 @@ async function verifyDiscordOfficerRole(user) {
     // ✨ ALL CORE MANAGEMENT ROLES ARE FULLY UNCOMMENTED AND ACTIVE NOW
     const AUTHORIZED_ROLES = [
       'GUILD LEADER',
-      'Vice Guild Leader'//,
-      //'Commander',
-      //'Discord Management',
-      //'Guild Management'
+      'Vice Guild Leader',
+      'Commander',
+      'Discord Management',
+      'Guild Management'
     ];
 
     return targetMember.roles.cache.some(role => AUTHORIZED_ROLES.includes(role.name));

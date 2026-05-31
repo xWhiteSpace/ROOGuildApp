@@ -16,10 +16,10 @@ const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000'
 // 🧪 USER PROFILE CONFIGURATION ROLES MATRIX (Match this when toggling comments for testing)
 const CORE_MANAGEMENT_ROLES = [
   'GUILD LEADER',
-  'Vice Guild Leader'//,
-  //'Commander',
-  //'Discord Management',
-  //'Guild Management'
+  'Vice Guild Leader',
+  'Commander',
+  'Discord Management',
+  'Guild Management'
 ];
 
 function buildDiscordLoginUrl(state) {
