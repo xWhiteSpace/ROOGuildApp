@@ -10,17 +10,10 @@ const ITEM_LIMIT_DEFAULTS = {
   'Time&Space': 5
 };
 
-const CORE_MANAGEMENT_ROLES = [
-  'GUILD LEADER',
-  'Vice Guild Leader'//,
-  //'Commander',
-  //'Discord Management',
-  //'Guild Management'
-];
-
 export default function MimicBookTab({ user }) {
-  // Check if current session user is part of the management array list
-  const isOfficer = user?.roles?.some(role => CORE_MANAGEMENT_ROLES.includes(role)) || false;
+  // 🏛️ CENTRALIZED BOOLEAN RESOLVER
+  // Layout reads permission variables directly without hardcoding custom role strings
+  const isOfficer = user?.isOfficer === true;
 
   const [isAdminMode, setIsAdminMode] = useState(isOfficer); 
   const [activeStep, setActiveStep] = useState(1); 
@@ -46,7 +39,7 @@ export default function MimicBookTab({ user }) {
 
   // --- 📋 MASTER TARGET POOLS ---
   const [rankingsByItem, setRankingsByItem] = useState({ Puppet: [], Illu: [], 'Light&Dark': [], 'Time&Space': [] });
-  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': {}, 'Time&Space': {} });
+  const [requestsByItemDetails, setRequestsByItemDetails] = useState({ Puppet: {}, Illu: {}, 'Light&Dark': [], 'Time&Space': {} });
   const [masterGuildRoster, setMasterGuildRoster] = useState([]); 
 
   // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
@@ -1124,7 +1117,7 @@ export default function MimicBookTab({ user }) {
         {/* RIGHT COMPONENT */}
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
-            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">{viewLens === 'ALL' ? '📜 Master Allocation Ledger' : '🎯 Your Approved Item Tracker'}</h2>
+            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📜 Master Allocation Ledger</h2>
             <p className="text-[10px] text-slate-500 mt-0.5">Complete overview roster transparency sequence</p>
           </div>
 

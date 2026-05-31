@@ -13,13 +13,14 @@ let activeFetchPromise = null;
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// 🧪 USER PROFILE CONFIGURATION ROLES MATRIX (Match this when toggling comments for testing)
+// 🏛️ THE CENTRALIZED AND DEFINITIVE MANAGEMENT GUILD ROLES MATRIX
+// To add, remove, or modify officer groups in the future, edit this single list.
 const CORE_MANAGEMENT_ROLES = [
   'GUILD LEADER',
-  'Vice Guild Leader',
-  'Commander',
-  'Discord Management',
-  'Guild Management'
+  'Vice Guild Leader'//,
+  //'Commander',
+  //'Discord Management',
+  //'Guild Management'
 ];
 
 function buildDiscordLoginUrl(state) {
@@ -29,6 +30,7 @@ function buildDiscordLoginUrl(state) {
   return `${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(state)}`;
 }
 
+// 🛡️ REPAIRED ROSTER ENDPOINT WRAPPED IN TRUE PILL OBJECT ENVELOPE
 router.get('/discord-members', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
   if (!guildId) {
@@ -37,13 +39,13 @@ router.get('/discord-members', async (req, res) => {
 
   const now = Date.now();
   if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
-    return res.json(cachedMembers);
+    return res.json({ success: true, members: cachedMembers });
   }
 
   if (activeFetchPromise) {
     try {
-      const existingData = await activeFetchPromise;
-      return res.json(existingData);
+      const members = await activeFetchPromise;
+      return res.json({ success: true, members });
     } catch (err) {}
   }
 
@@ -68,7 +70,8 @@ router.get('/discord-members', async (req, res) => {
     const freshMembers = await activeFetchPromise;
     cachedMembers = freshMembers;
     lastFetchTime = Date.now();
-    return res.json(freshMembers);
+    // ✅ Returns the success wrapper object to satisfy the frontend's validation condition
+    return res.json({ success: true, members: freshMembers });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to extract active member matrix from Discord gateway.' });
   } finally {
@@ -137,6 +140,7 @@ router.get('/callback', async (req, res) => {
       discriminator: user.discriminator,
       avatar: user.avatar,
       displayName: serverNickname,
+      isOfficer: assignedCoreRoles.length > 0, // ✅ Centralized Boolean permission token
       roles: assignedCoreRoles
     };
 

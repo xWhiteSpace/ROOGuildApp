@@ -2,7 +2,6 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
-import { discordClient } from '../discord-bot/client.js'; 
 
 const router = Router();
 
@@ -49,6 +48,26 @@ function getGMT8DateString() {
   return `${month}/${day}/${year}`;
 }
 
+function parseCSVToRawArrays(csvText, headerMatchKeyword) {
+  const lines = csvText.split(/\r?\n/);
+  let tableStarted = false;
+  const dataRows = [];
+  for (let line of lines) {
+    if (!line.trim()) continue;
+    const cleanLine = line.replace(/^\ufeff/, '');
+    const cells = cleanLine.split(',').map(c => c.trim().replace(/^"|"$/g, '').trim());
+    if (!tableStarted) {
+      if (cells.map(c => c.toLowerCase()).includes(headerMatchKeyword.toLowerCase())) {
+        tableStarted = true;
+      }
+      continue;
+    }
+    if (cells.every(c => c === '')) continue;
+    dataRows.push(cells);
+  }
+  return dataRows;
+}
+
 function resolveUserIdentity(req) {
   if (req.session?.user) return req.session.user;
   const mobileHeaderToken = req.headers['x-user-profile'];
@@ -63,35 +82,15 @@ function resolveUserIdentity(req) {
 }
 
 /**
- * 🛡️ LIVE DISCORD ACCOUNT SERVER OFFICER AUTHENTICATION ENGINE
+ * 🛡️ CENTRALIZED VALUE COMPARATOR
+ * Replaces manual database round-trips by reading the pre-authenticated user session property directly.
  */
-async function verifyDiscordOfficerRole(user) {
-  if (!user || !user.id) return false;
-  try {
-    const guildId = process.env.DISCORD_GUILD_ID;
-    if (!guildId || !discordClient) return false;
-
-    const guildInstance = await discordClient.guilds.fetch(guildId);
-    const targetMember = await guildInstance.members.fetch(user.id);
-
-    // ✨ ALL CORE MANAGEMENT ROLES ARE FULLY UNCOMMENTED AND ACTIVE NOW
-    const AUTHORIZED_ROLES = [
-      'GUILD LEADER',
-      'Vice Guild Leader',
-      'Commander',
-      'Discord Management',
-      'Guild Management'
-    ];
-
-    return targetMember.roles.cache.some(role => AUTHORIZED_ROLES.includes(role.name));
-  } catch (error) {
-    console.error(`❌ [OFFICER GATEKEEPER DENIED]: Role lookup failed for account snowflake ID ${user.id}:`, error.message);
-    return false;
-  }
+function verifyDiscordOfficerRole(user) {
+  return user && user.isOfficer === true;
 }
 
 /**
- * ⚡ OPTIMIZED PRIORITY SCORE COMPUTATION ENGINE
+ * ⚡ PRIORITY SCORE ENGINE
  */
 async function calculatePriorityScore(db, playerDisplayName, itemName) {
   const playerHistorySnap = await db.ref('auction/web_requests')
@@ -132,7 +131,6 @@ async function calculatePriorityScore(db, playerDisplayName, itemName) {
 }
 
 /**
- * 🛰️ BACKEND-ROUTED LIVE SANDBOX ENGINE
  * GET /api/requests/active-session
  */
 router.get('/active-session', async (req, res) => {
@@ -154,7 +152,6 @@ router.get('/active-session', async (req, res) => {
     const maximumAllowedAgeInMs = 24 * 60 * 60 * 1000; 
 
     if (timeDeltaMilliseconds > maximumAllowedAgeInMs) {
-      console.log("⏰ [SANDBOX TIME EXPIRATION Purge]: Over 24 hours since last update. Reverting layout matrix down to clean default defaults.");
       const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
       await db.ref('auction/active_session').set(freshReset);
       return res.json({ success: true, session: freshReset });
@@ -175,14 +172,13 @@ router.get('/active-session', async (req, res) => {
 });
 
 /**
- * 🔄 SECURE REALTIME WORKSPACE SNAPSHOT WRITER
  * POST /api/requests/update-session
  */
 router.post('/update-session', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const isVerifiedOfficer = await verifyDiscordOfficerRole(user);
+  const isVerifiedOfficer = verifyDiscordOfficerRole(user);
   if (!isVerifiedOfficer) {
     return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
   }
@@ -205,7 +201,6 @@ router.post('/update-session', async (req, res) => {
 });
 
 /**
- * 🚀 INITIALIZATION PATHWAY
  * GET /api/requests/init
  */
 router.get('/init', async (req, res) => {
@@ -213,15 +208,60 @@ router.get('/init', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
+    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
+    const playerLower = playerDisplayName.trim().toLowerCase();
+    
     const timeGateStatus = getGateStatusDetails();
-    const currentGMT8Date = getGMT8DateString();
-    const db = getDatabase();
+    const currentGMT8Date = getGMT8DateString(); 
 
-    const liveCounts = { 'Puppet': 0, 'Illu': 0, 'Light&Dark': 0, 'Time&Space': 0 };
+    const requestUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=RequestHistory`;
+    const response = await fetch(requestUrl);
+    const csvText = await response.text();
+    const spreadsheetRows = parseCSVToRawArrays(csvText, 'Member');
+
+    const db = getDatabase();
+    const snapshot = await db.ref('auction/web_requests').once('value');
+    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+
+    const liveCounts = {};
+    AVAILABLE_ITEMS.forEach(item => { liveCounts[item.name] = 0; });
+
+    spreadsheetRows.forEach(row => {
+      if ((row[1] || '').trim().toLowerCase() === playerLower) {
+        const itemType = row[2];
+        const appStatus = (row[4] || '').trim().toLowerCase();
+        const selStatus = (row[5] || 'pending').trim().toLowerCase();
+        const liveStatus = (row[6] || '').trim().toLowerCase();
+        const itemQty = parseInt(row[3], 10) || 0;
+
+        const isAwaitingEvaluation = (selStatus === 'pending');
+        const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
+
+        if (isAwaitingEvaluation || isLiveInCurrentSession) {
+          if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
+          if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
+        }
+      }
+    });
+
+    firebaseRequests.forEach(req => {
+      if ((req.member || '').trim().toLowerCase() === playerLower) {
+        const selStatus = (req.selectionStatus || 'pending').toLowerCase();
+        const appStatus = (req.applicationStatus || '').toLowerCase();
+
+        if (selStatus === 'pending') {
+          if (appStatus === 'requested' && liveCounts[req.item] !== undefined) liveCounts[req.item] += req.quantity;
+          if (appStatus === 'canceled' && liveCounts[req.item] !== undefined)  liveCounts[req.item] -= req.quantity;
+        }
+      }
+    });
+
+    Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
+
     const rankingsByItem = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
     const requestsByItemDetails = { 'Puppet': {}, 'Illu': {}, 'Light&Dark': {}, 'Time&Space': {} };
-
+    
     const membersListSnap = await db.ref('auction/members').once('value');
     const fullRosterArray = [];
     if (membersListSnap.exists()) {
@@ -229,7 +269,7 @@ router.get('/init', async (req, res) => {
         if (membersListSnap.val()[key]?.displayName) {
           fullRosterArray.push(membersListSnap.val()[key].displayName);
         }
-      });
+      }); // ✅ Stray loose "Full" text snippet completely cleared to resolve compilation crashes
     }
 
     const allRequestsSnap = await db.ref('auction/web_requests').once('value');
@@ -238,24 +278,6 @@ router.get('/init', async (req, res) => {
       const allPendingRows = [];
 
       Object.values(rawRequests).forEach(req => {
-        const reqMember = (req.member || '').trim();
-
-        if (reqMember.toLowerCase() === playerDisplayName.toLowerCase()) {
-          const itemType = req.item;
-          const appStatus = (req.applicationStatus || '').trim().toLowerCase();
-          const selStatus = (req.selectionStatus || 'pending').trim().toLowerCase();
-          const liveStatus = (req.liveStatus || '').trim().toLowerCase();
-          const itemQty = parseInt(req.quantity, 10) || 0;
-
-          const isAwaitingEvaluation = (selStatus === 'pending');
-          const isLiveInCurrentSession = (selStatus === 'selected' && ['now', 'next', 'standby'].includes(liveStatus));
-
-          if (isAwaitingEvaluation || isLiveInCurrentSession) {
-            if (appStatus === 'requested' && liveCounts[itemType] !== undefined) liveCounts[itemType] += itemQty;
-            if (appStatus === 'canceled' && liveCounts[itemType] !== undefined)  liveCounts[itemType] -= itemQty;
-          }
-        }
-
         if (req.selectionStatus === 'Pending') {
           allPendingRows.push(req);
         }
@@ -263,6 +285,24 @@ router.get('/init', async (req, res) => {
 
       Object.keys(rankingsByItem).forEach(targetItem => {
         const userCalculationsMap = {};
+
+        spreadsheetRows.forEach(row => {
+          const player = (row[1] || '').trim();
+          const itemType = (row[2] || '').trim();
+          const qty = parseInt(row[3], 10) || 0;
+          const appStatus = (row[4] || '').trim().toLowerCase();
+          const selStatus = (row[5] || 'pending').trim().toLowerCase();
+          const priorityScore = parseInt(row[7], 10) || 0;
+
+          if (!player || player === '???' || itemType !== targetItem || selStatus !== 'pending') return;
+
+          if (!userCalculationsMap[player]) {
+            userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+          }
+
+          if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+          if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+        });
 
         allPendingRows.forEach(req => {
           const player = (req.member || '').trim();
@@ -284,8 +324,7 @@ router.get('/init', async (req, res) => {
         const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
         activeApplicants.sort((a, b) => b.priority - a.priority);
         
-        rankingsByItem[targetItem] = activeApplicants.map(u => u.name);
-        
+        rankingsByItem[targetItem] = activeApplicants.slice(0, 100).map(u => u.name);
         activeApplicants.forEach(u => {
           requestsByItemDetails[targetItem][u.name] = { quantity: u.netQty, priority: u.priority };
         });
@@ -315,7 +354,7 @@ router.get('/init', async (req, res) => {
 });
 
 /**
- * 🔄 SECURE DISCORD-TO-FIREBASE ROSTER SYNC BRIDGE
+ * POST /api/requests/sync-roster
  */
 router.post('/sync-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -372,7 +411,7 @@ router.post('/sync-roster', async (req, res) => {
 });
 
 /**
- * 📥 SUBMIT GATE REQUISITION PORTER
+ * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
   const timeGateStatus = getGateStatusDetails();
@@ -389,7 +428,9 @@ router.post('/submit', async (req, res) => {
   }
 
   try {
+    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
     const playerDisplayName = user.displayName || user.username;
+    const playerLower = playerDisplayName.trim().toLowerCase();
     const currentGMT8Date = getGMT8DateString();
     const db = getDatabase();
 
@@ -401,7 +442,36 @@ router.post('/submit', async (req, res) => {
       const targetQty = parseInt(selections[itemName], 10) || 0;
       if (targetQty <= 0) continue; 
 
-      const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemName);
+      const combinedItemTimeline = [];
+      const itemLower = itemName.trim().toLowerCase();
+
+      spreadsheetRows.forEach(row => {
+        if ((row[1] || '').trim().toLowerCase() === playerLower && (row[2] || '').trim().toLowerCase() === itemLower) {
+          combinedItemTimeline.push((row[5] || 'pending').trim().toLowerCase());
+        }
+      });
+
+      firebaseRequests.forEach(req => {
+        if ((req.member || '').trim().toLowerCase() === playerLower && (req.item || '').trim().toLowerCase() === itemLower) {
+          combinedItemTimeline.push((req.selectionStatus || 'pending').trim().toLowerCase());
+        }
+      });
+
+      let lastSelectedIdx = -1;
+      for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
+        if (combinedItemTimeline[i] === 'selected') {
+          lastSelectedIdx = i;
+          break;
+        }
+      }
+
+      let dynamicPriority = 0;
+      const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
+      for (let i = searchStart; i < combinedItemTimeline.length; i++) {
+        if (combinedItemTimeline[i] === 'notselected') {
+          dynamicPriority++;
+        }
+      }
 
       const newRequestRef = db.ref('auction/web_requests').push();
       await newRequestRef.set({
@@ -425,7 +495,7 @@ router.post('/submit', async (req, res) => {
 });
 
 /**
- * 🛑 CANCEL GATE REQUISITION PORTER
+ * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -461,13 +531,13 @@ router.post('/cancel', async (req, res) => {
 });
 
 /**
- * 🚀 COMMIT SESSION LEDGER ARCHIVER
+ * POST /api/requests/commit-session
  */
 router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const isVerifiedOfficer = await verifyDiscordOfficerRole(user);
+  const isVerifiedOfficer = verifyDiscordOfficerRole(user);
   if (!isVerifiedOfficer) {
     return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
   }
@@ -575,9 +645,7 @@ router.post('/commit-session', async (req, res) => {
       }
     }
 
-    console.log("💥 [COMMIT REGISTRATION SUCCESSFUL]: Clearing the continuous workspace session tree for future raid nights.");
     await db.ref('auction/active_session').remove();
-
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -585,7 +653,7 @@ router.post('/commit-session', async (req, res) => {
 });
 
 /**
- * 📦 PERMANENT LOOT HISTORY ARCHIVE LEDGER ENDPOINT
+ * GET /api/requests/loot-history
  */
 router.get('/loot-history', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -615,7 +683,7 @@ router.get('/loot-history', async (req, res) => {
 });
 
 /**
- * 💡 COMPACT PAST AUCTION LEDGER DATA STREAM ENDPOINT
+ * GET /api/requests/past-auctions
  */
 router.get('/past-auctions', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -644,7 +712,6 @@ router.get('/past-auctions', async (req, res) => {
 });
 
 /**
- * 📊 🌟 UPGRADED CHRONOLOGICAL REQUISITION AUDIT LEAD PIPELINE
  * GET /api/requests/request-history
  */
 router.get('/request-history', async (req, res) => {
