@@ -535,9 +535,10 @@ router.post('/commit-session', async (req, res) => {
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];
-          await db.ref(`auction/web_requests/${primaryWinnerKey}`).update({
+            await db.ref(`auction/web_requests/${primaryWinnerKey}`).update({
             selectionStatus: 'Selected',
-            quantity: slots 
+            quantity: slots,
+            liveStatus: 'Done'
           });
 
           const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
