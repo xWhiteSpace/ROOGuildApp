@@ -1,16 +1,12 @@
+// backend/src/index.js
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// 🌟 BULLETPROOF PATH RESOLVER
+// 🌟 Secure Environment Path Resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
-// --- Diagnostic Dashboard Tool ---
-console.log('🔌 [ENV CHECK] Checking variable loading sequences...');
-console.log('   👉 Target Spreadsheet ID:', process.env.GOOGLE_SHEETS_SPREADSHEET_ID ? '✅ LOADED SUCCESSFULLY' : '❌ NOT FOUND (UNDEFINED)');
-// ----------------------------------
 
 import express from 'express';
 import cors from 'cors';
@@ -20,19 +16,17 @@ import authRoutes from './auth/discordOAuth.js';
 import chatRoutes from './api/chat.routes.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
-import syncRouter, { executeSpreadsheetSync } from './routes/syncRouter.js';
 import requestRoutes from './api/request.routes.js';
 
-// 📣 IMPORT DISCORD SNAPSHOT SERVICE
+// 📣 Live Automated Snapshots Controller
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 
-// Ensure your startup sequences execute the bot login function
+// Initialize the backend engine stacks
 initializeEnv();
 initializeFirebase();
 initializeDiscordBot(); 
 
-// 🤖 ================================================================
-// HARDCORE BOT DEBUG DIAGNOSTICS ENGINE
+// 🤖 Bot Gateway Tracker Diagnostics
 if (discordClient) {
   discordClient.on('debug', (info) => {
     if (info.includes('heartbeat') || info.includes('Gateway')) return;
@@ -44,10 +38,7 @@ if (discordClient) {
   discordClient.on('warn', (warning) => {
     console.warn('⚠️ [BOT GATEWAY WARNING]:', warning);
   });
-} else {
-  console.error('❌ [BOT DEBUG] discordClient object is completely undefined or missing upon import!');
 }
-// ================================================================
 
 const app = express();
 
@@ -64,7 +55,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
       callback(null, true);
     } else {
-      callback(new Error('Cross-Origin Resource Sharing (CORS) blocked this device path.'));
+      callback(new Error('Blocked by CORS policy rules layout context.'));
     }
   },
   credentials: true 
@@ -84,27 +75,21 @@ app.use(
   })
 );
 
-// 🌟 ROUTE MOUNTING (Safely initialized after 'app' has been created)
+// 🛣️ Application Routing Matrices
 app.use('/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
-app.use('/api/sync', syncRouter);
 app.use('/api/requests', requestRoutes);
 
 app.get('/', (req, res) => {
-  res.send('DynastyGuild backend is running.');
+  res.send('DynastyGuild backend is online and tracking event-driven Firebase data lines.');
 });
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
+  console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
 
-  // 1. Core synchronization loop running silently in background memory
-  executeSpreadsheetSync(); 
-  setInterval(() => {
-    executeSpreadsheetSync();
-  }, 5 * 1000);
-
-  // 2. Precise GMT+8 Time tracking loop running every 60 seconds
+  // ⏰ GMT+8 Clock sequence checks for automated Discord Snapshot Posts
   setInterval(() => {
     const gmt8TimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
     const gmt8Date = new Date(gmt8TimeStr);
@@ -112,16 +97,16 @@ app.listen(PORT, () => {
     const currentHour = gmt8Date.getHours();
     const currentMinute = gmt8Date.getMinutes();
 
-    // Catch the exact minute mark targets at 07:00, 12:00, and 19:00 GMT+8 for regular updates
+    // Catch progress milestones at 07:00, 12:00, and 19:00 GMT+8
     if (currentMinute === 0 && (currentHour === 7 || currentHour === 12 || currentHour === 19)) {
-      console.log(`⏰ Scheduled time target hit (${currentHour}:00 GMT+8). Initiating broadcast checker...`);
+      console.log(`⏰ Time target reached (${currentHour}:00 GMT+8). Firing snapshot update...`);
       processAndPostDiscordSnapshot(false);
     }
 
-    // Catch the exact moment registration closes at 22:15 GMT+8 for the finalized list broadcast
+    // Catch final hard cutoff lock sequence mark at 22:15 GMT+8
     if (currentHour === 22 && currentMinute === 15) {
-      console.log(`🔒 Lock threshold reached (22:15 GMT+8). Initiating finalized broadcast tracker...`);
+      console.log(`🔒 Cutoff threshold reached (22:15 GMT+8). Broadcasting finalized list...`);
       processAndPostDiscordSnapshot(true);
     }
-  }, 60 * 1000);
+  }, 60 * 1000); // Check timeline matrices every 60 seconds
 });

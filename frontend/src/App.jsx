@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
@@ -18,7 +19,6 @@ function App() {
     async function loadUser() {
       setAuthLoading(true);
 
-      // 1. Check if the backend passed the user profile inside the URL (Unblocks Mobile Login)
       const urlParams = new URLSearchParams(window.location.search);
       const authUserRaw = urlParams.get('auth_user');
 
@@ -27,10 +27,7 @@ function App() {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
           setAuthUser(parsedUser);
           
-          // Persist the user profile so it survives a browser page refresh
           localStorage.setItem('dynasty_raid_session', JSON.stringify(parsedUser));
-          
-          // Instantly wipe the messy data token out of the browser address bar
           window.history.replaceState({}, document.title, window.location.pathname);
           setAuthLoading(false);
           return; 
@@ -39,7 +36,6 @@ function App() {
         }
       }
 
-      // 2. Fallback: If no URL parameters exist, check local storage (Unblocks Mobile Page Refresh)
       const savedSession = localStorage.getItem('dynasty_raid_session');
       if (savedSession) {
         try {
@@ -51,7 +47,6 @@ function App() {
         }
       }
 
-      // 3. Default fallback: Execute standard cookie validation check (For Desktop Monitors)
       try {
         const result = await fetchCurrentUser();
         if (result.authenticated) {
@@ -71,13 +66,11 @@ function App() {
   }, []);
 
   const handleLogout = async () => {
-    // Completely clear out the session token from local storage cache
     localStorage.removeItem('dynasty_raid_session');
     await logoutUser();
     setAuthUser(null);
   };
 
-  // Prevent UI flashing before the login sequence determination finishes
   if (authLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-medium">
@@ -90,7 +83,8 @@ function App() {
     <BrowserRouter>
       <MainLayout user={authUser} onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={<RequestTab />} />
+          {/* ✅ Passed user context prop to RequestTab for root alignment mapping */}
+          <Route path="/" element={<RequestTab user={authUser} />} />
           <Route path="/live-bidding" element={<LiveBiddingTab user={authUser} />} />
           <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
           <Route path="/request-history" element={<RequestHistoryTab />} />
