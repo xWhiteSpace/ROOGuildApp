@@ -9,6 +9,7 @@ import RequestHistoryTab from './pages/RequestHistoryTab';
 import PastAuctionTab from './pages/PastAuctionTab';
 import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
 import LoginPage from './pages/LoginPage';
+import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
 import { fetchCurrentUser, logoutUser } from './services/authService';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -20,7 +21,6 @@ export default function App() {
   useEffect(() => {
     async function loadUser() {
       setAuthLoading(true);
-
       const urlParams = new URLSearchParams(window.location.search);
       const authUserRaw = urlParams.get('auth_user');
 
@@ -28,13 +28,12 @@ export default function App() {
         try {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
           setAuthUser(parsedUser);
-          
           localStorage.setItem('dynasty_raid_session', JSON.stringify(parsedUser));
           window.history.replaceState({}, document.title, window.location.pathname);
           setAuthLoading(false);
           return; 
         } catch (error) {
-          console.error("Failed to parse cross-origin session credentials:", error);
+          console.error(error);
         }
       }
 
@@ -50,33 +49,26 @@ export default function App() {
       }
 
       try {
-        // Fallback profile token handshake synchronization for strict browser contexts
         const headers = { 'Content-Type': 'application/json' };
         if (savedSession) {
           headers['x-user-profile'] = encodeURIComponent(savedSession);
         }
-
         const response = await fetch(`${backendUrl}/auth/me`, {
           credentials: 'include',
           headers: headers
         });
         const result = await response.json();
-
         if (result.authenticated && result.user) {
           setAuthUser(result.user);
-          localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
         } else {
           setAuthUser(null);
-          localStorage.removeItem('dynasty_raid_session');
         }
       } catch (err) {
-        console.error("Failed to fetch current user profile context:", err);
         setAuthUser(null);
       } finally {
         setAuthLoading(false);
       }
     }
-
     loadUser();
   }, []);
 
@@ -96,7 +88,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* 🔮 RESTORED CORE DEVELOP LAYOUT FRAME WRAPPER */}
       <MainLayout user={authUser} onLogout={handleLogout}>
         <Routes>
           <Route path="/" element={<RequestTab user={authUser} />} />
@@ -106,6 +97,9 @@ export default function App() {
           <Route path="/past-auction" element={<PastAuctionTab />} />
           <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
           <Route path="/login" element={<LoginPage />} />
+          
+          {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
+          <Route path="/settings-configuration" element={<SettingsTab />} />
         </Routes>
       </MainLayout>
     </BrowserRouter>
