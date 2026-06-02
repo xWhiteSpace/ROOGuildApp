@@ -1,3 +1,4 @@
+// frontend/src/components/LeftNavBar.jsx
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
@@ -54,7 +55,6 @@ export default function LeftNavBar() {
               title={item.label}
             >
               {isCollapsed ? (
-                // Collapsed Token Icon Indicator representation
                 <span className="text-base font-black text-amber-400 font-mono select-none">
                   {item.label.charAt(0)}
                 </span>
@@ -80,7 +80,7 @@ export default function LeftNavBar() {
           title="System Settings Desk"
         >
           <span className="text-base font-sans select-none">⚙️</span>
-          {!isCollapsed && <span className="ml-3 whitespace-nowrap">Settings</span>}
+          {!isCollapsed && <span className="ml-3 whitespace-nowrap">System Settings</span>}
         </NavLink>
       </div>
 
