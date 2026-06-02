@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+// frontend/src/App.jsx
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import RequestTab from './pages/RequestTab';
 import LiveBiddingTab from './pages/LiveBiddingTab';
@@ -8,142 +9,105 @@ import RequestHistoryTab from './pages/RequestHistoryTab';
 import PastAuctionTab from './pages/PastAuctionTab';
 import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
 import LoginPage from './pages/LoginPage';
-import SettingsTab from './pages/SettingsTab'; // Dynamic Desk Workspace loaded here
+import { fetchCurrentUser, logoutUser } from './services/authService';
 
-// 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
-/**
- * 🔒 SECURE PROTECTED ROUTE GUARD FRAME
- * Prevents unauthenticated users from seeing inner control metrics or administrative tabs.
- */
-function ProtectedRoute({ user, children }) {
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
-
-/**
- * 🔓 PUBLIC ROUTE GUARD FRAME
- * Redirects logged-in users straight back to the main cockpit if they try to access the login sheet.
- */
-function PublicRoute({ user, children }) {
-  if (user) {
-    return <Navigate to="/" replace />;
-  }
-  return children;
-}
-
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    const synchronizeAuthenticationState = async () => {
-      try {
-        // Step 1: Intercept incoming OAuth redirect payload queries from the URL string
-        const urlParams = new URLSearchParams(window.location.search);
-        const authUserQueryParam = urlParams.get('auth_user');
+    async function loadUser() {
+      setAuthLoading(true);
 
-        if (authUserQueryParam) {
-          const decodedUserStr = decodeURIComponent(authUserQueryParam);
-          // Commit the profile object to the browser cache immediately
-          localStorage.setItem('dynasty_raid_session', decodedUserStr);
+      const urlParams = new URLSearchParams(window.location.search);
+      const authUserRaw = urlParams.get('auth_user');
+
+      if (authUserRaw) {
+        try {
+          const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
+          setAuthUser(parsedUser);
           
-          // Scrub the bloated parameter out of the Safari address bar cleanly without page refresh
-          const cleanWindowUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState({}, document.title, cleanWindowUrl);
+          localStorage.setItem('dynasty_raid_session', JSON.stringify(parsedUser));
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setAuthLoading(false);
+          return; 
+        } catch (error) {
+          console.error("Failed to parse cross-origin session credentials:", error);
+        }
+      }
+
+      const savedSession = localStorage.getItem('dynasty_raid_session');
+      if (savedSession) {
+        try {
+          setAuthUser(JSON.parse(savedSession));
+          setAuthLoading(false);
+          return;
+        } catch (e) {
+          localStorage.removeItem('dynasty_raid_session');
+        }
+      }
+
+      try {
+        // Fallback profile token handshake synchronization for strict browser contexts
+        const headers = { 'Content-Type': 'application/json' };
+        if (savedSession) {
+          headers['x-user-profile'] = encodeURIComponent(savedSession);
         }
 
-        // Step 2: Query the backend status verification gate utilizing hybrid fallback mechanisms
-        const savedSessionData = localStorage.getItem('dynasty_raid_session');
-        const customSecurityHeaders = { 'Content-Type': 'application/json' };
-        
-        if (savedSessionData) {
-          customSecurityHeaders['x-user-profile'] = encodeURIComponent(savedSessionData);
-        }
-
-        const res = await fetch(`${backendUrl}/auth/me`, {
-          method: 'GET',
-          headers: customSecurityHeaders,
-          credentials: 'include'
+        const response = await fetch(`${backendUrl}/auth/me`, {
+          credentials: 'include',
+          headers: headers
         });
+        const result = await response.json();
 
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          setUser(data.user);
-          // Keep data synchronized with any live status updates from the server
-          localStorage.setItem('dynasty_raid_session', JSON.stringify(data.user));
+        if (result.authenticated && result.user) {
+          setAuthUser(result.user);
+          localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
         } else {
-          setUser(null);
+          setAuthUser(null);
           localStorage.removeItem('dynasty_raid_session');
         }
       } catch (err) {
-        console.error("❌ Authentication gateway sync crash:", err);
-        // Resilient Fallback: If Render times out but a local session exists, trust cache to prevent lockouts
-        const cachedSessionFallback = localStorage.getItem('dynasty_raid_session');
-        if (cachedSessionFallback) {
-          try {
-            setUser(JSON.parse(cachedSessionFallback));
-          } catch (_) {
-            localStorage.removeItem('dynasty_raid_session');
-          }
-        }
+        console.error("Failed to fetch current user profile context:", err);
+        setAuthUser(null);
       } finally {
-        setLoading(false);
+        setAuthLoading(false);
       }
-    };
+    }
 
-    synchronizeAuthenticationState();
+    loadUser();
   }, []);
 
-  // 🌀 HIGH-FIDELITY DARK GATEWAY LOADER 
-  // Freezes the initialization frame until authentication is explicitly checked or restored
-  if (loading) {
+  const handleLogout = async () => {
+    localStorage.removeItem('dynasty_raid_session');
+    await logoutUser();
+    setAuthUser(null);
+  };
+
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white font-sans select-none">
-        <div className="w-7 h-7 border-2 border-t-amber-500 border-slate-900 rounded-full animate-spin mb-4.5"></div>
-        <div className="text-[10px] font-mono text-slate-500 tracking-widest uppercase animate-pulse">Initializing Security Gateway...</div>
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-mono text-xs uppercase tracking-widest animate-pulse">
+        Synchronizing Security Workspace Modules...
       </div>
     );
   }
 
   return (
-    <Router>
-      <Routes>
-        {/* Isolated Authentication Pathway View */}
-        <Route 
-          path="/login" 
-          element={
-            <PublicRoute user={user}>
-              <LoginPage />
-            </PublicRoute>
-          } 
-        />
-        
-        {/* Core Layout Frame Shell Wrapper */}
-        <Route 
-          element={
-            <ProtectedRoute user={user}>
-              <MainLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/" element={<RequestTab />} />
-          <Route path="/live-bidding" element={<LiveBiddingTab />} />
-          <Route path="/mimic-book" element={<MimicBookTab />} />
+    <BrowserRouter>
+      {/* 🔮 RESTORED CORE DEVELOP LAYOUT FRAME WRAPPER */}
+      <MainLayout user={authUser} onLogout={handleLogout}>
+        <Routes>
+          <Route path="/" element={<RequestTab user={authUser} />} />
+          <Route path="/live-bidding" element={<LiveBiddingTab user={authUser} />} />
+          <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
           <Route path="/request-history" element={<RequestHistoryTab />} />
           <Route path="/past-auction" element={<PastAuctionTab />} />
           <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
-          
-          {/* ⚙️ Secure Administrative Settings Workspace View Route */}
-          <Route path="/settings-configuration" element={<SettingsTab />} />
-        </Route>
-
-        {/* Catch-all fallback matrix redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          <Route path="/login" element={<LoginPage />} />
+        </Routes>
+      </MainLayout>
+    </BrowserRouter>
   );
 }

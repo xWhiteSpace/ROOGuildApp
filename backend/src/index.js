@@ -1,49 +1,25 @@
 // backend/src/index.js
-
-// 🚀 PHASE 1: BOOTSTRAP CRITICAL CORE INFRASTRUCTURE
-// These modules must execute immediately to insulate downstream routers from initialization errors.
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeEnv } from './config/env.js';
-import { initializeFirebase } from './config/firebase.js';
 
-// Secure Environment Path Resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Execute cluster and environment configurations immediately
-initializeEnv();
-initializeFirebase();
-
-// 🚀 PHASE 2: LOAD ROUTING AND APPLICATION MODULE LAYERS
-// Safe to load now that environment variables and Firebase are fully initialized.
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import { initializeEnv } from './config/env.js';
 import authRoutes from './auth/discordOAuth.js';
 import chatRoutes from './api/chat.routes.js';
+import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
-import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 
-// Bootstrap the Discord gateway protocol handshake loops
+initializeEnv();
+initializeFirebase();
 initializeDiscordBot(); 
-
-// 🤖 Bot Gateway Tracker Diagnostics
-if (discordClient) {
-  discordClient.on('debug', (info) => {
-    if (info.includes('heartbeat') || info.includes('Gateway')) return;
-    console.log('🤖 [BOT GATEWAY TRACE]:', info);
-  });
-  discordClient.on('error', (error) => {
-    console.error('❌ [BOT CRITICAL ERROR]:', error);
-  });
-  discordClient.on('warn', (warning) => {
-    console.warn('⚠️ [BOT GATEWAY WARNING]:', warning);
-  });
-}
 
 const app = express();
 
@@ -56,11 +32,7 @@ const allowedOrigins = [
   'https://dynasty-guild-frontend-staging.vercel.app'
 ];
 
-/**
- * 📡 HARDENED MULTI-HOST CORS CONFIGURATION MATRIX
- * Explicitly whitelist custom headers and methods to handle Safari's strict
- * cross-origin preflight tracking validation checks.
- */
+// 📡 PRODUCTION HARDENED EXPLICIT CORS WHITELIST FOR MULTI-HOST HANDSHAKES
 app.use(cors({ 
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
@@ -77,15 +49,15 @@ app.use(cors({
     'X-Requested-With', 
     'Accept', 
     'Origin',
-    'x-user-profile' // 🌟 CRITICAL FIX: Explicitly permits the custom fallback token header
-  ],
-  exposedHeaders: ['set-cookie']
+    'x-user-profile',      // Whitelists fallback auth headers
+    'x-authorized-user'    // Whitelists mobile chat verification headers
+  ]
 }));
 
 app.use(express.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'dynasty_staging_secret_key_123',
+    secret: process.env.SESSION_SECRET || 'dynasty_secret_pass',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -96,38 +68,15 @@ app.use(
   })
 );
 
-// 🛣️ Application Routing Matrices
 app.use('/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/requests', requestRoutes);
 
 app.get('/', (req, res) => {
-  res.send('DynastyGuild backend is online and tracking event-driven Firebase data lines.');
+  res.send('DynastyGuild backend is online.');
 });
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
-  console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
-
-  // ⏰ GMT+8 Clock sequence checks for automated Discord Snapshot Posts
-  setInterval(() => {
-    const gmt8TimeStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-    const gmt8Date = new Date(gmt8TimeStr);
-    
-    const currentHour = gmt8Date.getHours();
-    const currentMinute = gmt8Date.getMinutes();
-
-    // Catch progress milestones at 07:00, 12:00, and 19:00 GMT+8
-    if (currentMinute === 0 && (currentHour === 7 || currentHour === 12 || currentHour === 19)) {
-      console.log(`⏰ Time target reached (${currentHour}:00 GMT+8). Firing snapshot update...`);
-      processAndPostDiscordSnapshot(false);
-    }
-
-    // Catch final hard cutoff lock sequence mark at 22:15 GMT+8
-    if (currentHour === 22 && currentMinute === 15) {
-      console.log(`🔒 Cutoff threshold reached (22:15 GMT+8). Broadcasting finalized list...`);
-      processAndPostDiscordSnapshot(true);
-    }
-  }, 60 * 1000); // Check timeline matrices every 60 seconds
 });
