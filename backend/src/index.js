@@ -1,31 +1,31 @@
 // backend/src/index.js
+
+// 🚀 PHASE 1: BOOTSTRAP CRITICAL CORE INFRASTRUCTURE
+// These modules must execute immediately to insulate downstream routers from initialization errors.
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { initializeEnv } from './config/env.js';
+import { initializeFirebase } from './config/firebase.js';
 
-// 🌟 Secure Environment Path Resolution
+// Secure Environment Path Resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-import express from 'express';
-import cors from 'cors';
-import session from 'express-session';
-import { initializeEnv } from './config/env.js';
-import { initializeFirebase } from './config/firebase.js';
-
-// Initialize core environmental protections and cloud clusters first 
-// to insulate downstream routers against initialization errors.
+// Execute cluster and environment configurations immediately
 initializeEnv();
 initializeFirebase();
 
-// Safe to load remaining asynchronous and platform module layers
+// 🚀 PHASE 2: LOAD ROUTING AND APPLICATION MODULE LAYERS
+// Safe to load now that environment variables and Firebase are fully initialized.
+import express from 'express';
+import cors from 'cors';
+import session from 'express-session';
 import authRoutes from './auth/discordOAuth.js';
 import chatRoutes from './api/chat.routes.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
-
-// 📣 Live Automated Snapshots Controller
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 
 // Bootstrap the Discord gateway protocol handshake loops

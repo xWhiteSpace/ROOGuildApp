@@ -126,7 +126,6 @@ async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFal
 
 /**
  * POST /api/requests/settings/unlock
- * Verifies master password against server-side variables
  */
 router.post('/settings/unlock', (req, res) => {
   const { masterKey } = req.body;
@@ -148,7 +147,6 @@ router.post('/settings/unlock', (req, res) => {
 
 /**
  * GET /api/requests/settings/get
- * Extracts system options matrix directly out of Firebase paths
  */
 router.get('/settings/get', async (req, res) => {
   try {
@@ -189,7 +187,6 @@ router.get('/settings/get', async (req, res) => {
 
 /**
  * POST /api/requests/settings/save
- * Commits panel adjustments down into cloud storage nodes
  */
 router.post('/settings/save', async (req, res) => {
   if (!req.session?.settingsUnlocked) {
