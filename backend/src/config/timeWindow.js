@@ -1,147 +1,134 @@
 /**
- * ⏳ GUILD REGISTRATION TIME MATRIX SYSTEM (GMT+8)
- * Explicitly states current session status, next opening tracks, and 3-phase tracking.
+ * ⏳ DYNAMIC GUILD REGISTRATION TIME MATRIX SYSTEM
+ * Fetches rolling weekly schedules, timezones, and lock states dynamically from Firebase Realtime Database.
  */
-export function getGateStatusDetails() {
-  // Grab system clock time and normalize it to a true GMT+8 zone profile string (Manila/Singapore)
-  const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-  const gmt8Date = new Date(gmt8String);
+import { getDatabase } from 'firebase-admin/database';
 
-  const dayOfWeek = gmt8Date.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, ...
-  const hours = gmt8Date.getHours();
-  const minutes = gmt8Date.getMinutes();
-  
-  // Convert current daily clock time to absolute minutes
-  const currentMinutesOffset = hours * 60 + minutes;
-  const cutoffMinutesOffset = 22 * 60 + 15; // 22:15 GMT+8 Cutoff Marks
-  const eventMinutesOffset = 20 * 60 + 55;  // 20:55 GMT+8 Event Start Time
-
-  let isGateOpen = false;
-  let currentSessionLabel = "";
-  let nextStatusChangeMessage = "";
-
-  switch (dayOfWeek) {
-    case 0: // SUNDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = false;
-        currentSessionLabel = "Sunday Raid Session";
-        nextStatusChangeMessage = "Bidding for tonight's Sunday raid is CLOSED. Registration for Tuesday's event opens tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = true;
-        currentSessionLabel = "Tuesday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Tuesday's raid. Submissions close Monday night at 22:15 GMT+8.";
+export async function getGateStatusDetails() {
+  let timezone = "Asia/Manila";
+  let isForceLocked = false;
+  let events = {
+    "ev_001": {
+      title: "GuildLeague",
+      phases: {
+        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" },
+        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" },
+        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }
       }
-      break;
+    }
+  };
 
-    case 1: // MONDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = true;
-        currentSessionLabel = "Tuesday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Tuesday's raid. Submissions close tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = false;
-        currentSessionLabel = "Tuesday Raid Session";
-        nextStatusChangeMessage = "Bidding for Tuesday's raid is CLOSED. Registration for Thursday's event opens Tuesday night at 22:15 GMT+8.";
-      }
-      break;
-
-    case 2: // TUESDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = false;
-        currentSessionLabel = "Tuesday Raid Session";
-        nextStatusChangeMessage = "Bidding for tonight's Tuesday raid is CLOSED. Registration for Thursday's event opens tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = true;
-        currentSessionLabel = "Thursday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Thursday's raid. Submissions close Wednesday night at 22:15 GMT+8.";
-      }
-      break;
-
-    case 3: // WEDNESDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = true;
-        currentSessionLabel = "Thursday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Thursday's raid. Submissions close tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = false;
-        currentSessionLabel = "Thursday Raid Session";
-        nextStatusChangeMessage = "Bidding for Thursday's raid is CLOSED. Registration for Sunday's event opens Thursday night at 22:15 GMT+8.";
-      }
-      break;
-
-    case 4: // THURSDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = false;
-        currentSessionLabel = "Thursday Raid Session";
-        nextStatusChangeMessage = "Bidding for tonight's Thursday raid is CLOSED. Registration for Sunday's event opens tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = true;
-        currentSessionLabel = "Sunday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Sunday's raid. Submissions close Saturday night at 22:15 GMT+8.";
-      }
-      break;
-
-    case 5: // FRIDAY
-      isGateOpen = true;
-      currentSessionLabel = "Sunday Registration Period";
-      nextStatusChangeMessage = "Registration is OPEN for Sunday's raid. Submissions close Saturday night at 22:15 GMT+8.";
-      break;
-
-    case 6: // SATURDAY
-      if (currentMinutesOffset < cutoffMinutesOffset) {
-        isGateOpen = true;
-        currentSessionLabel = "Sunday Registration Period";
-        nextStatusChangeMessage = "Registration is OPEN for Sunday's raid. Submissions close tonight at 22:15 GMT+8.";
-      } else {
-        isGateOpen = false;
-        currentSessionLabel = "Sunday Raid Session";
-        nextStatusChangeMessage = "Bidding for Sunday's raid is CLOSED. Registration for Tuesday's event opens Sunday night at 22:15 GMT+8.";
-      }
-      break;
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (configSnap.exists()) {
+      const data = configSnap.val();
+      if (data.timezone) timezone = data.timezone;
+      if (data.isForceLocked !== undefined) isForceLocked = data.isForceLocked;
+      if (data.events) events = data.events;
+    }
+  } catch (err) {
+    console.error("⚠️ Error pulling time configurations from Firebase Realtime Database:", err.message);
   }
 
-  // 🔒 DETERMINISTIC 3-PHASE State Loop Engine
-  let currentPhase = 1; // Default to Phase 1: Bid Request Open
-  if (!isGateOpen) {
-    const isRaidNight = [0, 2, 4].includes(dayOfWeek);
-    if (isRaidNight && currentMinutesOffset >= eventMinutesOffset) {
-      currentPhase = 3; // Phase 3: Event + Live Auction
-    } else {
-      currentPhase = 2; // Phase 2: Bid Request Locked
+  // Enforce system clock normalization to the configured adjustable timezone profile
+  const tzString = new Date().toLocaleString("en-US", { timeZone: timezone });
+  const localClock = new Date(tzString);
+
+  const dayOfWeek = localClock.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, ...
+  const hours = localClock.getHours();
+  const minutes = localClock.getMinutes();
+  const currentMinutesOffset = hours * 60 + minutes;
+
+  // ⭕ 1. Simple Manual Overriding Gate Lockdown Check
+  if (isForceLocked) {
+    return {
+      isGateOpen: false,
+      currentSessionLabel: "Forced Operational Lockdown",
+      nextStatusChangeMessage: "Bidding channels are forcefully locked by Management Officers.",
+      currentPhase: 2,
+      phaseIntervals: { phase1: "Force Locked", phase2: "Force Locked", phase3: "Force Locked" }
+    };
+  }
+
+  let currentPhase = 2; // Default fallback to Phase 2 (Request Locked) if no window matches
+  let activeEventTitle = "Raid Session";
+
+  function getAbsoluteMinutes(day, timeStr) {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return day * 1440 + h * 60 + m;
+  }
+
+  if (events && typeof events === 'object') {
+    for (const evId of Object.keys(events)) {
+      const ev = events[evId];
+      if (!ev || !ev.phases) continue;
+      activeEventTitle = ev.title || "Raid Session";
+
+      for (const phaseKey of ['1', '2', '3']) {
+        const p = ev.phases[phaseKey];
+        if (!p) continue;
+
+        const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+        const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
+        const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
+
+        let isMatch = false;
+        if (endAbs < startAbs) {
+          // Window wraps around the weekly continuous boundary line
+          if (currentAbs >= startAbs || currentAbs < endAbs) isMatch = true;
+        } else {
+          if (currentAbs >= startAbs && currentAbs < endAbs) isMatch = true;
+        }
+
+        if (isMatch) {
+          currentPhase = Number(phaseKey);
+        }
+      }
     }
   }
 
-  // ⏳ APPROACH A: DYNAMIC TIME INTERVAL MAPPER WITH TRUE LOCK OVERLAPS (GMT+8)
-  let phaseIntervals = { phase1: "", phase2: "", phase3: "" };
-  let targetRaidDay = "Tuesday";
+  const isGateOpen = (currentPhase === 1);
+  
+  let currentSessionLabel = "";
+  let nextStatusChangeMessage = "";
 
-  // Resolve active target raid window based on calendar offsets
-  if (dayOfWeek === 0) {
-    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Sunday" : "Tuesday";
-  } else if (dayOfWeek === 1) {
-    targetRaidDay = "Tuesday";
-  } else if (dayOfWeek === 2) {
-    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Tuesday" : "Thursday";
-  } else if (dayOfWeek === 3) {
-    targetRaidDay = "Thursday";
-  } else if (dayOfWeek === 4) {
-    targetRaidDay = currentMinutesOffset < cutoffMinutesOffset ? "Thursday" : "Sunday";
+  if (currentPhase === 1) {
+    currentSessionLabel = `${activeEventTitle} Registration Open`;
+    nextStatusChangeMessage = "Registration paths are OPEN. Modify choices freely inside your basket.";
+  } else if (currentPhase === 3) {
+    currentSessionLabel = `${activeEventTitle} Live Event Active`;
+    nextStatusChangeMessage = "Live Event Auction is currently ACTIVE. Bidding parameters are running live.";
   } else {
-    targetRaidDay = "Sunday";
+    currentSessionLabel = `${activeEventTitle} Registration Closed`;
+    nextStatusChangeMessage = "Registration is LOCKED. Review pending allocation priority indexes.";
   }
 
-  if (targetRaidDay === "Tuesday") {
-    phaseIntervals.phase1 = "Sun 22:15 ~ Mon 22:15 GMT+8";
-    phaseIntervals.phase2 = "Mon 22:15 ~ Tue 22:15 GMT+8";
-    phaseIntervals.phase3 = "Tue 20:55 ~ 22:15 GMT+8";
-  } else if (targetRaidDay === "Thursday") {
-    phaseIntervals.phase1 = "Tue 22:15 ~ Wed 22:15 GMT+8";
-    phaseIntervals.phase2 = "Wed 22:15 ~ Thu 22:15 GMT+8";
-    phaseIntervals.phase3 = "Thu 20:55 ~ 22:15 GMT+8";
-  } else if (targetRaidDay === "Sunday") {
-    phaseIntervals.phase1 = "Thu 22:15 ~ Sat 22:15 GMT+8";
-    phaseIntervals.phase2 = "Sat 22:15 ~ Sun 22:15 GMT+8";
-    phaseIntervals.phase3 = "Sun 20:55 ~ 22:15 GMT+8";
+  // Resolve time zone display name abbreviation or GMT string dynamically
+  let gmtIndicator = "UTC";
+  try {
+    const formatterLong = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
+    const tzParts = formatterLong.formatToParts(new Date());
+    const tzNamePart = tzParts.find(p => p.type === 'timeZoneName');
+    if (tzNamePart) gmtIndicator = tzNamePart.value;
+  } catch (e) {
+    gmtIndicator = "UTC";
+  }
+
+  const daysMap = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
+
+  if (events && typeof events === 'object') {
+    const firstEvent = Object.values(events)[0];
+    if (firstEvent && firstEvent.phases) {
+      for (const pk of ['1', '2', '3']) {
+        const phaseData = firstEvent.phases[pk];
+        if (phaseData) {
+          phaseIntervals[`phase${pk}`] = `${daysMap[phaseData.dayStart]} ${phaseData.timeStart} ~ ${daysMap[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
+        }
+      }
+    }
   }
 
   return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase, phaseIntervals };
