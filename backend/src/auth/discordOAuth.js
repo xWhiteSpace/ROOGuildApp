@@ -149,11 +149,32 @@ router.get('/callback', async (req, res) => {
   }
 });
 
+/**
+ * GET /auth/me
+ * 📡 HYBRID CROSS-DOMAIN ACCESS OVERHAUL
+ * Extracts validation tokens from cookies OR header fallbacks to completely bypass 
+ * third-party browser suffix blocks on production multi-host clusters.
+ */
 router.get('/me', (req, res) => {
-  if (!req.session?.user) {
+  let user = req.session?.user;
+  
+  // If browser privacy shields stripped the cross-domain cookie context, fall back to headers
+  if (!user) {
+    const fallbackToken = req.headers['x-user-profile'];
+    if (fallbackToken) {
+      try {
+        user = JSON.parse(decodeURIComponent(fallbackToken));
+      } catch (e) {
+        console.error("❌ Failed to decode cross-domain profile header token inside /me check:", e.message);
+      }
+    }
+  }
+
+  if (!user) {
     return res.status(200).json({ authenticated: false, user: null });
   }
-  return res.json({ authenticated: true, user: req.session.user });
+  
+  return res.json({ authenticated: true, user });
 });
 
 router.post('/logout', (req, res) => {
