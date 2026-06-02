@@ -37,7 +37,6 @@ router.get('/discord-members', async (req, res) => {
     if (!discordClient) {
       throw new Error('Discord bot client is uninitialized.');
     }
-    // Removed strict .isReady() restriction to allow low-latency REST access during gateway warmup
     const guild = await discordClient.guilds.fetch(guildId);
     const membersMap = await guild.members.fetch({ limit: 1000 });
     
@@ -108,12 +107,10 @@ router.get('/callback', async (req, res) => {
 
     if (discordClient && guildId) {
       try {
-        // Direct REST query bypasses gateway readiness bottlenecks entirely
         const guild = await discordClient.guilds.fetch(guildId);
         const member = await guild.members.fetch(user.id);
         if (member) {
           serverNickname = member.nickname || member.displayName || serverNickname;
-          // Extract ALL role names to enable dynamic authorization evaluations down the line
           memberRolesNames = member.roles.cache.map(role => role.name);
         }
       } catch (err) {
@@ -129,6 +126,7 @@ router.get('/callback', async (req, res) => {
     // Evaluate officer permissions matching member roles array against real-time data configurations
     const isOfficerMatch = memberRolesNames.some(roleName => dynamicAdminRoles.includes(roleName));
 
+    // Store the heavy role array strictly in the backend session context
     req.session.user = {
       id: user.id,
       username: user.username,
@@ -140,7 +138,18 @@ router.get('/callback', async (req, res) => {
     };
 
     return req.session.save(() => {
-      const encodedUser = encodeURIComponent(JSON.stringify(req.session.user));
+      // 🌟 LEAN REDIRECT COMPLIANCE PASS
+      // We explicitly emit ONLY baseline profile properties down the URL query string.
+      // This keeps the URL short and matches your working baseline branch perfectly for Safari.
+      const leanOutboundProfile = {
+        id: user.id,
+        username: user.username,
+        discriminator: user.discriminator,
+        avatar: user.avatar,
+        displayName: serverNickname,
+        isOfficer: isOfficerMatch
+      };
+      const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
     });
   } catch (error) {
@@ -149,16 +158,9 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-/**
- * GET /auth/me
- * 📡 HYBRID CROSS-DOMAIN ACCESS OVERHAUL
- * Extracts validation tokens from cookies OR header fallbacks to completely bypass 
- * third-party browser suffix blocks on production multi-host clusters.
- */
 router.get('/me', (req, res) => {
   let user = req.session?.user;
   
-  // If browser privacy shields stripped the cross-domain cookie context, fall back to headers
   if (!user) {
     const fallbackToken = req.headers['x-user-profile'];
     if (fallbackToken) {
