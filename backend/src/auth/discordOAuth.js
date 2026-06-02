@@ -148,6 +148,7 @@ router.get('/callback', async (req, res) => {
         avatar: user.avatar,
         displayName: serverNickname,
         isOfficer: isOfficerMatch
+        roles: []
       };
       const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
