@@ -1,3 +1,4 @@
+// backend/src/config/timeWindow.js
 /**
  * ⏳ DYNAMIC TIME MATRIX SYSTEM (REAL-TIME CACHED)
  * Listens to Firebase real-time nodes on boot to maintain a localized memory cache.
@@ -5,7 +6,7 @@
  */
 import { getDatabase } from 'firebase-admin/database';
 
-// Local volatile server memory cache block
+// Local volatile server memory cache block seeded with robust default parameters
 let cachedConfig = {
   timezone: "Asia/Manila",
   isForceLocked: false,
@@ -29,6 +30,9 @@ let cachedConfig = {
 };
 
 let isListenerAttached = false;
+
+const DAYS_OF_WEEK_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
  * 📡 BOOTSTRAP REAL-TIME CACHE LISTENER
@@ -87,7 +91,7 @@ export function getGateStatusDetails() {
     return {
       isGateOpen: false,
       currentSessionLabel: "Forced Operational Lockdown",
-      nextStatusChangeMessage: "Bidding channels are forcefully locked by Management Officers.",
+      nextStatusChangeMessage: "🔒 Bidding channels are forcefully locked by Management Officers.",
       currentPhase: 2,
       phaseIntervals: { phase1: "Force Locked", phase2: "Force Locked", phase3: "Force Locked" }
     };
@@ -95,6 +99,7 @@ export function getGateStatusDetails() {
 
   let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
   let activeEventTitle = "Raid Session";
+  let activePhaseConfig = null;
 
   function getAbsoluteMinutes(day, timeStr) {
     if (!timeStr) return 0;
@@ -106,6 +111,8 @@ export function getGateStatusDetails() {
     for (const evId of Object.keys(events)) {
       const ev = events[evId];
       if (!ev || !ev.phases) continue;
+      
+      // Resolve descriptive title text dynamically from parameters instead of using raw codes like ev_001
       activeEventTitle = ev.title || "Raid Session";
 
       for (const phaseKey of ['1', '2', '3']) {
@@ -116,25 +123,40 @@ export function getGateStatusDetails() {
         const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
         const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
 
-        let isMatch = false;
+        let isInsideWindow = false;
         if (endAbs < startAbs) {
           // Rolling schedule window wraps across continuous weekly boundary line marks
-          if (currentAbs >= startAbs || currentAbs < endAbs) isMatch = true;
+          if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
         } else {
-          if (currentAbs >= startAbs && currentAbs < endAbs) isMatch = true;
+          if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
         }
 
-        if (isMatch) {
+        if (isInsideWindow) {
           currentPhase = Number(phaseKey);
+          activePhaseConfig = p;
         }
       }
     }
   }
 
   const isGateOpen = (currentPhase === 1);
-  let nextStatusChangeMessage = isGateOpen 
-    ? "Registration paths are OPEN. Modify choices freely inside your basket."
-    : "Registration is LOCKED. Review pending allocation priority indexes.";
+  let nextStatusChangeMessage = "";
+
+  // 🔮 REPAIRED ACCURATE DAY & TIME DESCRIPTION INJECTOR
+  if (activePhaseConfig) {
+    const endDayName = DAYS_OF_WEEK_NAMES[activePhaseConfig.dayEnd] || "Target Day";
+    if (currentPhase === 1) {
+      nextStatusChangeMessage = `🟢 Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
+    } else if (currentPhase === 2) {
+      nextStatusChangeMessage = `🔒 Submissions for ${activeEventTitle} are locked. Live bidding preparation commences on ${endDayName} at ${activePhaseConfig.timeEnd}.`;
+    } else {
+      nextStatusChangeMessage = `⚡ ${activeEventTitle} Event Session is currently LIVE inside the auction arena.`;
+    }
+  } else {
+    nextStatusChangeMessage = isGateOpen 
+      ? `Registration paths are OPEN for ${activeEventTitle}. Modify choices freely inside your basket.`
+      : `Registration is LOCKED for ${activeEventTitle}. Review pending allocation priority indexes.`;
+  }
 
   // Dynamic automatic computation of active zone indicator text layout parameters
   let gmtIndicator = "UTC";
@@ -147,7 +169,6 @@ export function getGateStatusDetails() {
     gmtIndicator = "UTC";
   }
 
-  const daysMap = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
 
   if (events && typeof events === 'object') {
@@ -156,7 +177,7 @@ export function getGateStatusDetails() {
       for (const pk of ['1', '2', '3']) {
         const phaseData = primaryEvent.phases[pk];
         if (phaseData) {
-          phaseIntervals[`phase${pk}`] = `${daysMap[phaseData.dayStart]} ${phaseData.timeStart} ~ ${daysMap[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
+          phaseIntervals[`phase${pk}`] = `${DAYS_SHORT_NAMES[phaseData.dayStart]} ${phaseData.timeStart} ~ ${DAYS_SHORT_NAMES[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
         }
       }
     }

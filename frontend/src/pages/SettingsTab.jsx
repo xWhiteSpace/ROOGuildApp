@@ -1,7 +1,17 @@
+// frontend/src/pages/SettingsTab.jsx
 import { useState, useEffect } from 'react';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+
+const COMMON_TIMEZONES = [
+  { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
+  { value: 'Asia/Singapore', label: 'Singapore (GMT+8)' },
+  { value: 'Asia/Taipei', label: 'Taipei (GMT+8)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (GMT+9)' },
+  { value: 'America/New_York', label: 'New York (EST/EDT)' },
+  { value: 'UTC', label: 'Coordinated Universal Time (UTC)' }
+];
 
 export default function SettingsTab() {
   const [isLocked, setIsLocked] = useState(true);
@@ -75,6 +85,20 @@ export default function SettingsTab() {
       }
     } catch (err) {
       setErrorMsg('Network timeout connecting to server authentication gateway.');
+    }
+  };
+
+  const handleDetectBrowserTimezone = () => {
+    try {
+      setSuccessMsg('');
+      setErrorMsg('');
+      const systemZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (systemZone) {
+        setConfig(prev => ({ ...prev, timezone: systemZone }));
+        setSuccessMsg(`🧭 Auto-detected browser environment location: ${systemZone}`);
+      }
+    } catch (e) {
+      setErrorMsg('Could not securely auto-detect browser timezone variables.');
     }
   };
 
@@ -258,16 +282,25 @@ export default function SettingsTab() {
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3 flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Global Timezone Environment Profile</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">IANA Location String used to normalize calendar logic and dynamic UTC offsets globally.</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Select your target timeline region, or hit Auto-Detect to instantly parse browser configurations.</p>
           </div>
-          <div>
-            <input 
-              type="text"
-              value={config.timezone || ''}
+          <div className="flex gap-2">
+            <select
+              value={config.timezone || 'Asia/Manila'}
               onChange={(e) => setConfig(prev => ({ ...prev, timezone: e.target.value }))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-500 outline-none focus:border-slate-700/60"
-              placeholder="e.g., Asia/Manila, America/New_York"
-            />
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-sans text-amber-500 outline-none focus:border-slate-700/60 font-semibold"
+            >
+              {COMMON_TIMEZONES.map(z => <option key={z.value} value={z.value}>{z.label}</option>)}
+              {!COMMON_TIMEZONES.find(z => z.value === config.timezone) && (
+                <option value={config.timezone}>{config.timezone} (Custom)</option>
+              )}
+            </select>
+            <button
+              onClick={handleDetectBrowserTimezone}
+              className="px-4 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap font-bold transition cursor-pointer"
+            >
+              🧭 Auto-Detect
+            </button>
           </div>
         </div>
       </div>
@@ -384,7 +417,7 @@ export default function SettingsTab() {
         )}
       </div>
 
-      {/* SECTION 2: SIGN-IN RELATED PARAMETERS (DISCORD MANAGEMENT ROLE GATEWAYS) */}
+      {/* SECTION 2: SIGN-IN RELATED PARAMETERS */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
         <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
           <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 2: Sign-In Related Discord Admin Roles</h3>
@@ -428,7 +461,7 @@ export default function SettingsTab() {
         )}
       </div>
 
-      {/* SECTION 3: IN-GAME RELATED PARAMETERS (RELATIONAL LOOT REGISTRY MAPS) */}
+      {/* SECTION 3: IN-GAME RELATED PARAMETERS */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
         <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
           <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 3: In-Game Related Item Capacity & Limits</h3>
@@ -458,7 +491,7 @@ export default function SettingsTab() {
                   placeholder="Loot Name Track Label..."
                 />
                 
-                {/* ➕ RELATIONAL VALUE INCREMENT CONTROLLER CONTROLS [-] VAL [+] */}
+                {/* ➕ RELATIONAL VALUE INCREMENT CONTROLLER CONTROLS */}
                 <div className="col-span-3 flex items-center justify-end gap-2.5 select-none pr-1">
                   <button 
                     onClick={() => handleUpdateItemLimit(item.id, 'down')} 
@@ -490,7 +523,7 @@ export default function SettingsTab() {
         </div>
       </div>
 
-      {/* FIXED FOOTER CONTROLLER ACTIONS BAR - FLUID OVERLAY WITH BLUR FRAME */}
+      {/* FIXED FOOTER CONTROLLER ACTIONS BAR */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/85 backdrop-blur-md p-4 z-50">
         <div className="mx-auto max-w-4xl flex items-center justify-end gap-3.5">
           <button 
