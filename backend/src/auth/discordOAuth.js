@@ -118,15 +118,12 @@ router.get('/callback', async (req, res) => {
       }
     }
 
-    // Pull down dynamic administrative permission configuration parameters straight from Firebase
     const db = getDatabase();
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicAdminRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
 
-    // Evaluate officer permissions matching member roles array against real-time data configurations
     const isOfficerMatch = memberRolesNames.some(roleName => dynamicAdminRoles.includes(roleName));
 
-    // Store the heavy role array strictly in the backend session context
     req.session.user = {
       id: user.id,
       username: user.username,
@@ -138,16 +135,13 @@ router.get('/callback', async (req, res) => {
     };
 
     return req.session.save(() => {
-      // 🌟 LEAN REDIRECT COMPLIANCE PASS
-      // We explicitly emit ONLY baseline profile properties down the URL query string.
-      // This keeps the URL short and matches your working baseline branch perfectly for Safari.
       const leanOutboundProfile = {
         id: user.id,
         username: user.username,
         discriminator: user.discriminator,
         avatar: user.avatar,
         displayName: serverNickname,
-        isOfficer: isOfficerMatch
+        isOfficer: isOfficerMatch,
         roles: []
       };
       const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));

@@ -126,6 +126,7 @@ async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFal
 
 /**
  * POST /api/requests/settings/unlock
+ * Verifies master password against server-side variables
  */
 router.post('/settings/unlock', (req, res) => {
   const { masterKey } = req.body;
@@ -147,6 +148,7 @@ router.post('/settings/unlock', (req, res) => {
 
 /**
  * GET /api/requests/settings/get
+ * Extracts system options matrix directly out of Firebase paths
  */
 router.get('/settings/get', async (req, res) => {
   try {
@@ -187,6 +189,7 @@ router.get('/settings/get', async (req, res) => {
 
 /**
  * POST /api/requests/settings/save
+ * Commits panel adjustments down into cloud storage nodes
  */
 router.post('/settings/save', async (req, res) => {
   if (!req.session?.settingsUnlocked) {
@@ -577,6 +580,7 @@ router.post('/commit-session', async (req, res) => {
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const allowedRoles = dynamicConfig.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"];
   const timezone = dynamicConfig.timezone || "Asia/Manila";
+  const itemsList = dynamicConfig.items || [];
 
   if (!verifyDiscordOfficerRole(user, allowedRoles)) {
     return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
@@ -598,11 +602,13 @@ router.post('/commit-session', async (req, res) => {
       for (const itemKeyId of Object.keys(summary)) {
         const itemData = summary[itemKeyId];
         if (itemData && itemData.qty > 0) {
+          const resolvedItem = itemsList.find(i => i.id === itemKeyId) || { name: itemKeyId };
           const newLootHistoryRef = db.ref('auction/loot_history').push();
           await newLootHistoryRef.set({
             id: newLootHistoryRef.key,
             date: timestampDate,
             event: event || 'GuildLeague',
+            item: resolvedItem.name, // ✨ FIXED: Resolves legacy friendly description names dynamically
             itemId: itemKeyId,
             quantity: parseInt(itemData.qty, 10),
             max: parseInt(itemData.limit, 10),
@@ -614,14 +620,15 @@ router.post('/commit-session', async (req, res) => {
 
     for (const targetItemId of itemIds) {
       const { selected = [], absent = [], notSelected = [] } = allocations[targetItemId];
+      const resolvedItem = itemsList.find(i => i.id === targetItemId) || { name: targetItemId };
 
       const keysByMember = {};
       Object.keys(firebaseRequests).forEach(key => {
         const r = firebaseRequests[key];
         
         let reqItemId = r.itemId;
-        if (!reqItemId && r.item && dynamicConfig.items) {
-          const found = dynamicConfig.items.find(i => i.name === r.item);
+        if (!reqItemId && r.item) {
+          const found = itemsList.find(i => i.name === r.item);
           if (found) reqItemId = found.id;
         }
 
@@ -671,6 +678,7 @@ router.post('/commit-session', async (req, res) => {
             id: newRequestRef.key,
             date: timestampDate,
             member: name,
+            item: resolvedItem.name, // ✨ FIXED: Resolves legacy string properties during dynamic force-add inserts
             itemId: targetItemId,
             quantity: slots,
             applicationStatus: 'ForcedAdd',
@@ -685,6 +693,7 @@ router.post('/commit-session', async (req, res) => {
           id: newPastAuctionRef.key,
           date: timestampDate,
           event: event || 'GuildLeague',
+          item: resolvedItem.name, // ✨ FIXED: Prevents Past Auctions UI rendering empty text rows
           itemId: targetItemId,
           quantity: slots,
           mem: name
@@ -717,7 +726,7 @@ router.get('/loot-history', async (req, res) => {
       id: key,
       date: rawData[key].date || "",
       event: rawData[key].event || "",
-      item: rawData[key].item || "",
+      item: rawData[key].item || "", 
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       max: parseInt(rawData[key].max, 10) || 1,
@@ -748,7 +757,7 @@ router.get('/past-auctions', async (req, res) => {
       id: key,
       date: rawData[key].date || "",
       event: rawData[key].event || "",
-      item: rawData[key].item || "",
+      item: rawData[key].item || "", 
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
       mem: rawData[key].mem || ""
