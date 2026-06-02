@@ -5,7 +5,7 @@ import { getGateStatusDetails } from '../config/timeWindow.js';
 
 const router = Router();
 
-// 💡 DEFAULT STRUCTURAL SEED DATA (Only fallback used if the Firebase database configuration node is completely empty)
+// 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
 const DEFAULT_SESSION_STRUCTURE = {
   activeStep: 1,
   lootRows: [
@@ -18,6 +18,15 @@ const DEFAULT_SESSION_STRUCTURE = {
   activeMatrixFilter: 'item_001',
   sidebarTab: 'standby'
 };
+
+function getGMT8DateString() {
+  const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+  const gmt8Date = new Date(gmt8String);
+  const month = gmt8Date.getMonth() + 1;
+  const day = gmt8Date.getDate();
+  const year = gmt8Date.getFullYear();
+  return `${month}/${day}/${year}`;
+}
 
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
   const lines = csvText.split(/\r?\n/);
@@ -46,16 +55,15 @@ function resolveUserIdentity(req) {
     try {
       return JSON.parse(decodeURIComponent(mobileHeaderToken));
     } catch (e) {
-      console.error("Failed to parse mobile authorization token:", e.message);
+      console.error("Failed to parse mobile authorization header token:", e.message);
     }
   }
   return null;
 }
 
 /**
- * 🛡️ DYNAMIC ADMINISTRATIVE ROLE INTERSECTOR
- * Validates the authenticated user session profile directly against 
- * the customizable roles array stored inside the live database.
+ * 🛡️ DYNAMIC ROLE INTERSECTOR
+ * Compares the active Discord user profile arrays directly against authorized configurations
  */
 function verifyDiscordOfficerRole(user, allowedRoles = []) {
   if (!user) return false;
@@ -67,8 +75,7 @@ function verifyDiscordOfficerRole(user, allowedRoles = []) {
 
 /**
  * ⚡ RELATIONAL PRIORITY SCORE ENGINE
- * Tracks priorities strictly via unchanging index tracking identifiers (e.g., item_001)
- * so textual adjustments or renames never corrupt history tracks or application metrics.
+ * Tracks historical targets strictly using unchanging relational sequence identifiers (item_001)
  */
 async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFallback) {
   const playerHistorySnap = await db.ref('auction/web_requests')
@@ -119,21 +126,21 @@ async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFal
 
 /**
  * POST /api/requests/settings/unlock
- * Validates the master security verification key against backend environment secrets
+ * Verifies master password against server-side variables
  */
 router.post('/settings/unlock', (req, res) => {
   const { masterKey } = req.body;
   const trueSecret = process.env.SETTINGS_MASTER_KEY;
 
   if (!trueSecret) {
-    return res.status(500).json({ success: false, error: 'Server configuration mismatch: SETTINGS_MASTER_KEY is unconfigured.' });
+    return res.status(500).json({ success: false, error: 'Server config mismatch: SETTINGS_MASTER_KEY is unconfigured.' });
   }
 
   if (masterKey === trueSecret) {
     if (req.session) {
       req.session.settingsUnlocked = true;
     }
-    return res.json({ success: true, message: 'Authorization verified. Configuration fields unlocked.' });
+    return res.json({ success: true, message: 'Authorization verified. Configuration channels unlocked.' });
   }
 
   return res.status(401).json({ success: false, error: 'Invalid configuration master verification key.' });
@@ -141,7 +148,7 @@ router.post('/settings/unlock', (req, res) => {
 
 /**
  * GET /api/requests/settings/get
- * Pulls current dynamic parameterized properties safely out of Firebase
+ * Extracts system options matrix directly out of Firebase paths
  */
 router.get('/settings/get', async (req, res) => {
   try {
@@ -182,20 +189,20 @@ router.get('/settings/get', async (req, res) => {
 
 /**
  * POST /api/requests/settings/save
- * Syncs workspace manager layouts safely back into real-time clusters
+ * Commits panel adjustments down into cloud storage nodes
  */
 router.post('/settings/save', async (req, res) => {
   if (!req.session?.settingsUnlocked) {
-    return res.status(403).json({ success: false, error: 'Operation rejected: Input channels are key locked.' });
+    return res.status(403).json({ success: false, error: 'Operation rejected: Configuration desk input gates are key locked.' });
   }
 
   try {
     const { config } = req.body;
-    if (!config) return res.status(400).json({ success: false, error: 'Omitted payload configuration parameter snapshot.' });
+    if (!config) return res.status(400).json({ success: false, error: 'Omitted payload configuration parameter maps.' });
 
     const db = getDatabase();
     await db.ref('settings/configuration').set(config);
-    return res.json({ success: true, message: 'Global parameters updated successfully.' });
+    return res.json({ success: true, message: 'Global parameter fields synchronized successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -270,15 +277,15 @@ router.post('/update-session', async (req, res) => {
   try {
     const db = getDatabase();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
 
     if (!verifyDiscordOfficerRole(user, allowedRoles)) {
-      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Officers.' });
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
     }
 
     const incomingWorkspacePayload = req.body.session;
     if (!incomingWorkspacePayload) {
-      return res.status(400).json({ success: false, error: 'Payload data snapshot parameters missing.' });
+      return res.status(400).json({ success: false, error: 'Payload configuration parameters missing.' });
     }
 
     incomingWorkspacePayload.lastUpdated = Date.now();
@@ -291,7 +298,6 @@ router.post('/update-session', async (req, res) => {
 
 /**
  * GET /api/requests/init
- * Completely decoupled from static lists to assemble configurations dynamically from real-time parameters
  */
 router.get('/init', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -308,7 +314,7 @@ router.get('/init', async (req, res) => {
     const timezone = dynamicConfig.timezone || "Asia/Manila";
     const targetSessionDate = dynamicConfig.targetSessionDate || new Date().toLocaleDateString("en-US", { timeZone: timezone });
     
-    const timeGateStatus = await getGateStatusDetails();
+    const timeGateStatus = getGateStatusDetails();
     const snapshot = await db.ref('auction/web_requests').once('value');
     const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
 
@@ -471,7 +477,7 @@ router.post('/sync-roster', async (req, res) => {
  * POST /api/requests/submit
  */
 router.post('/submit', async (req, res) => {
-  const timeGateStatus = await getGateStatusDetails();
+  const timeGateStatus = getGateStatusDetails();
   if (!timeGateStatus.isGateOpen) {
     return res.status(423).json({ success: false, error: `Bidding registration is closed. ${timeGateStatus.nextStatusChangeMessage}` });
   }

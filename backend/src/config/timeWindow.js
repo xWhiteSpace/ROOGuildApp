@@ -1,46 +1,88 @@
 /**
- * ⏳ DYNAMIC GUILD REGISTRATION TIME MATRIX SYSTEM
- * Fetches rolling weekly schedules, timezones, and lock states dynamically from Firebase Realtime Database.
+ * ⏳ DYNAMIC TIME MATRIX SYSTEM (REAL-TIME CACHED)
+ * Listens to Firebase real-time nodes on boot to maintain a localized memory cache.
+ * Keeps function execution synchronous to protect background system loops against promise crashes.
  */
 import { getDatabase } from 'firebase-admin/database';
 
-export async function getGateStatusDetails() {
-  let timezone = "Asia/Manila";
-  let isForceLocked = false;
-  let events = {
+// Local volatile server memory cache block
+let cachedConfig = {
+  timezone: "Asia/Manila",
+  isForceLocked: false,
+  adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+  items: [
+    { id: "item_001", name: "Puppet Scroll", limitQty: 1 },
+    { id: "item_002", name: "Illusion Scroll", limitQty: 1 },
+    { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
+    { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
+  ],
+  events: {
     "ev_001": {
       title: "GuildLeague",
       phases: {
-        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" },
-        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" },
-        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }
+        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, // Sun 22:15 ~ Mon 22:15
+        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, // Mon 22:15 ~ Tue 20:55
+        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  // Tue 20:55 ~ Tue 22:15
       }
     }
-  };
+  }
+};
 
+let isListenerAttached = false;
+
+/**
+ * 📡 BOOTSTRAP REAL-TIME CACHE LISTENER
+ * Attaches a permanent real-time stream listener to the Firebase parameters tree.
+ */
+function initConfigListener() {
+  if (isListenerAttached) return;
+  
   try {
     const db = getDatabase();
-    const configSnap = await db.ref('settings/configuration').once('value');
-    if (configSnap.exists()) {
-      const data = configSnap.val();
-      if (data.timezone) timezone = data.timezone;
-      if (data.isForceLocked !== undefined) isForceLocked = data.isForceLocked;
-      if (data.events) events = data.events;
-    }
+    const configRef = db.ref('settings/configuration');
+
+    configRef.on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        // Dynamic merge payload structural modifications safely into server memory
+        cachedConfig = {
+          timezone: data.timezone || "Asia/Manila",
+          isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
+          adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+          items: data.items || cachedConfig.items,
+          events: data.events || cachedConfig.events
+        };
+      }
+    }, (error) => {
+      console.error("⚠️ Firebase real-time synchronization listener failure:", error.message);
+    });
+
+    isListenerAttached = true;
   } catch (err) {
-    console.error("⚠️ Error pulling time configurations from Firebase Realtime Database:", err.message);
+    console.error("⚠️ Server bootstrap initialization error attaching Firebase time listeners:", err.message);
+  }
+}
+
+/**
+ * Synchronous Gate State Evaluation Engine
+ * Instantly parses current calendar structures against cached cloud parameters without promises.
+ */
+export function getGateStatusDetails() {
+  // Ensure the live configuration cache listener is initialized on evaluation pass
+  if (!isListenerAttached) {
+    initConfigListener();
   }
 
-  // Enforce system clock normalization to the configured adjustable timezone profile
-  const tzString = new Date().toLocaleString("en-US", { timeZone: timezone });
-  const localClock = new Date(tzString);
+  const { timezone, isForceLocked, events } = cachedConfig;
 
-  const dayOfWeek = localClock.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, ...
-  const hours = localClock.getHours();
-  const minutes = localClock.getMinutes();
-  const currentMinutesOffset = hours * 60 + minutes;
+  // Enforce system clock normalization to your adjustable timezone configuration profile
+  const targetTimeStr = new Date().toLocaleString("en-US", { timeZone: timezone });
+  const localClock = new Date(targetTimeStr);
 
-  // ⭕ 1. Simple Manual Overriding Gate Lockdown Check
+  const dayOfWeek = localClock.getDay();
+  const currentMinutesOffset = localClock.getHours() * 60 + localClock.getMinutes();
+
+  // 🔒 1. Simple Manual Overriding Gate Lockdown Check
   if (isForceLocked) {
     return {
       isGateOpen: false,
@@ -51,7 +93,7 @@ export async function getGateStatusDetails() {
     };
   }
 
-  let currentPhase = 2; // Default fallback to Phase 2 (Request Locked) if no window matches
+  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
   let activeEventTitle = "Raid Session";
 
   function getAbsoluteMinutes(day, timeStr) {
@@ -76,7 +118,7 @@ export async function getGateStatusDetails() {
 
         let isMatch = false;
         if (endAbs < startAbs) {
-          // Window wraps around the weekly continuous boundary line
+          // Rolling schedule window wraps across continuous weekly boundary line marks
           if (currentAbs >= startAbs || currentAbs < endAbs) isMatch = true;
         } else {
           if (currentAbs >= startAbs && currentAbs < endAbs) isMatch = true;
@@ -90,28 +132,17 @@ export async function getGateStatusDetails() {
   }
 
   const isGateOpen = (currentPhase === 1);
-  
-  let currentSessionLabel = "";
-  let nextStatusChangeMessage = "";
+  let nextStatusChangeMessage = isGateOpen 
+    ? "Registration paths are OPEN. Modify choices freely inside your basket."
+    : "Registration is LOCKED. Review pending allocation priority indexes.";
 
-  if (currentPhase === 1) {
-    currentSessionLabel = `${activeEventTitle} Registration Open`;
-    nextStatusChangeMessage = "Registration paths are OPEN. Modify choices freely inside your basket.";
-  } else if (currentPhase === 3) {
-    currentSessionLabel = `${activeEventTitle} Live Event Active`;
-    nextStatusChangeMessage = "Live Event Auction is currently ACTIVE. Bidding parameters are running live.";
-  } else {
-    currentSessionLabel = `${activeEventTitle} Registration Closed`;
-    nextStatusChangeMessage = "Registration is LOCKED. Review pending allocation priority indexes.";
-  }
-
-  // Resolve time zone display name abbreviation or GMT string dynamically
+  // Dynamic automatic computation of active zone indicator text layout parameters
   let gmtIndicator = "UTC";
   try {
-    const formatterLong = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
-    const tzParts = formatterLong.formatToParts(new Date());
-    const tzNamePart = tzParts.find(p => p.type === 'timeZoneName');
-    if (tzNamePart) gmtIndicator = tzNamePart.value;
+    const formatterShort = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
+    const tzParts = formatterShort.formatToParts(new Date());
+    const foundPart = tzParts.find(p => p.type === 'timeZoneName');
+    if (foundPart) gmtIndicator = foundPart.value;
   } catch (e) {
     gmtIndicator = "UTC";
   }
@@ -120,10 +151,10 @@ export async function getGateStatusDetails() {
   const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
 
   if (events && typeof events === 'object') {
-    const firstEvent = Object.values(events)[0];
-    if (firstEvent && firstEvent.phases) {
+    const primaryEvent = Object.values(events)[0];
+    if (primaryEvent && primaryEvent.phases) {
       for (const pk of ['1', '2', '3']) {
-        const phaseData = firstEvent.phases[pk];
+        const phaseData = primaryEvent.phases[pk];
         if (phaseData) {
           phaseIntervals[`phase${pk}`] = `${daysMap[phaseData.dayStart]} ${phaseData.timeStart} ~ ${daysMap[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
         }
@@ -131,5 +162,11 @@ export async function getGateStatusDetails() {
     }
   }
 
-  return { isGateOpen, currentSessionLabel, nextStatusChangeMessage, currentPhase, phaseIntervals };
+  return {
+    isGateOpen,
+    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
+    nextStatusChangeMessage,
+    currentPhase,
+    phaseIntervals
+  };
 }
