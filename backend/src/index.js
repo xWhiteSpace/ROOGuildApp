@@ -12,18 +12,23 @@ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { initializeEnv } from './config/env.js';
+import { initializeFirebase } from './config/firebase.js';
+
+// Initialize core environmental protections and cloud clusters first 
+// to insulate downstream routers against initialization errors.
+initializeEnv();
+initializeFirebase();
+
+// Safe to load remaining asynchronous and platform module layers
 import authRoutes from './auth/discordOAuth.js';
 import chatRoutes from './api/chat.routes.js';
-import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
 
 // 📣 Live Automated Snapshots Controller
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 
-// Initialize the backend engine stacks
-initializeEnv();
-initializeFirebase();
+// Bootstrap the Discord gateway protocol handshake loops
 initializeDiscordBot(); 
 
 // 🤖 Bot Gateway Tracker Diagnostics

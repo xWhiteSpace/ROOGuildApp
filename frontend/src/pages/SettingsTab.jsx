@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 
+// 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
+const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+
 export default function SettingsTab() {
   const [isLocked, setIsLocked] = useState(true);
   const [passphrase, setPassphrase] = useState('');
@@ -19,9 +22,27 @@ export default function SettingsTab() {
   const [newRoleStr, setNewRoleStr] = useState('');
   const [newEventName, setNewEventName] = useState('');
 
+  /**
+   * 🛡️ AUTOMATED HEADER EXTRACTOR UTILITY
+   * Packs structural identity vectors directly out of the browser's local cache
+   * to guarantee safe transit to Render hosts if cookies get dropped by cross-site policies.
+   */
+  const getRequestHeaders = () => {
+    const savedUserSession = localStorage.getItem('dynasty_raid_session');
+    const headers = { 'Content-Type': 'application/json' };
+    if (savedUserSession) {
+      headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+    }
+    return headers;
+  };
+
   const loadGlobalConfigurationTree = async () => {
     try {
-      const res = await fetch('/api/requests/settings/get');
+      const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
+        method: 'GET',
+        headers: getRequestHeaders(),
+        credentials: 'include'
+      });
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
@@ -38,9 +59,10 @@ export default function SettingsTab() {
   const handleVerifyPassphrase = async () => {
     try {
       setErrorMsg('');
-      const res = await fetch('/api/requests/settings/unlock', {
+      const res = await fetch(`${backendUrl}/api/requests/settings/unlock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRequestHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ masterKey: passphrase })
       });
       const data = await res.json();
@@ -131,9 +153,10 @@ export default function SettingsTab() {
     try {
       setSuccessMsg('');
       setErrorMsg('');
-      const res = await fetch('/api/requests/settings/save', {
+      const res = await fetch(`${backendUrl}/api/requests/settings/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getRequestHeaders(),
+        credentials: 'include',
         body: JSON.stringify({ config })
       });
       const data = await res.json();
