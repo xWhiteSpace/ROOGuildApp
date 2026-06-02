@@ -52,9 +52,15 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   process.env.FRONTEND_URL, 
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'https://dynasty-guild-frontend-staging.vercel.app'
 ];
 
+/**
+ * 📡 HARDENED MULTI-HOST CORS CONFIGURATION MATRIX
+ * Explicitly whitelist custom headers and methods to handle Safari's strict
+ * cross-origin preflight tracking validation checks.
+ */
 app.use(cors({ 
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
@@ -63,13 +69,23 @@ app.use(cors({
       callback(new Error('Blocked by CORS policy rules layout context.'));
     }
   },
-  credentials: true 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'Accept', 
+    'Origin',
+    'x-user-profile' // 🌟 CRITICAL FIX: Explicitly permits the custom fallback token header
+  ],
+  exposedHeaders: ['set-cookie']
 }));
 
 app.use(express.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'dynasty_secret_pass',
+    secret: process.env.SESSION_SECRET || 'dynasty_staging_secret_key_123',
     resave: false,
     saveUninitialized: false,
     cookie: {
