@@ -224,13 +224,6 @@ export default function MimicBookTab({ user }) {
     pushActiveSessionToBackend(fullSnapshot);
   };
 
-  useEffect(() => {
-    loadTrueRequestPool();
-    fetchActiveSessionFromBackend(true);
-    const pollerInterval = setInterval(() => { fetchActiveSessionFromBackend(false); }, 3500);
-    return () => clearInterval(pollerInterval);
-  }, [user]);
-
   const handleAddLootRow = () => {
     if (!isAdminMode || !isOfficer || items.length === 0) return;
     const nextId = lootRows.length > 0 ? Math.max(...lootRows.map(r => r.id)) + 1 : 1;
@@ -442,6 +435,7 @@ export default function MimicBookTab({ user }) {
     saveWorkspaceState({ generatedSlots: matrixSlots, activeStep: 3 });
   };
 
+  // 💾 FIREBASE permanency ledger transaction router flow preserved explicitly here
   const handleCommitSessionAndFlash = async () => {
     if (!commitDate.trim() || !isOfficer) return alert("Operation locked or criteria missing.");
     try {
@@ -759,6 +753,29 @@ export default function MimicBookTab({ user }) {
               <div className="flex justify-between pt-2">
                 <button onClick={() => saveWorkspaceState({ activeStep: 1 })} className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold">◀ Back</button>
                 <button onClick={handleOriginalMatrixAssembly} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide">LOCK MATRIX ROSTER ➔</button>
+              </div>
+            </div>
+          )}
+
+          {/* 🔮 STEP 3 WORKSPACE: MIMIC CONTENT BOARD CONTROL OVERLAY */}
+          {activeStep === 3 && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3.5 rounded-xl font-sans font-semibold shadow-md">
+                👀 MIMIC BOOK PREVIEW MODE: Review page layout matrix contents. Content here regulates the exact grid mapping sent out to active player tablets.
+              </div>
+              <div className="flex justify-start gap-4 pt-1">
+                <button 
+                  onClick={() => saveWorkspaceState({ activeStep: 2 })} 
+                  className="px-5 py-2 rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold text-slate-400 hover:text-white transition cursor-pointer shadow"
+                >
+                  ↩️ Return to Selection Mode (Phase 2)
+                </button>
+                <button 
+                  onClick={() => saveWorkspaceState({ activeStep: 4 })} 
+                  className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-md transition cursor-pointer"
+                >
+                  Approve Matrix Layout Preview & Proceed ➔
+                </button>
               </div>
             </div>
           )}
