@@ -20,11 +20,12 @@ let cachedConfig = {
   events: {
     "ev_001": {
       title: "GuildLeague",
-      phases: {
-        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, // Sun 22:15 ~ Mon 22:15
-        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, // Mon 22:15 ~ Tue 20:55
-        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  // Tue 20:55 ~ Tue 22:15
-      }
+      phases: [
+        null,
+        { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
+        { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
+        { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
+      ]
     }
   }
 };
@@ -77,13 +78,13 @@ export function getGateStatusDetails() {
 
   const { timezone, isForceLocked, events } = cachedConfig;
 
-  // 1. Normalize current clock time into target timezone coordinates safely
+  // Enforce system clock normalization to your adjustable timezone configuration profile
   const targetTimeStr = new Date().toLocaleString("en-US", { timeZone: timezone });
   const localClock = new Date(targetTimeStr);
 
   const dayOfWeek = localClock.getDay();
   const currentMinutesOffset = localClock.getHours() * 60 + localClock.getMinutes();
-  const currentAbsMinutes = dayOfWeek * 1440 + currentMinutesOffset;
+  const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
 
   // 🔒 Manual administrative override lockdown check
   if (isForceLocked) {
@@ -96,9 +97,10 @@ export function getGateStatusDetails() {
     };
   }
 
-  let currentPhase = 2; // Default fallback to Registration Closed
+  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
   let activeEventTitle = "Raid Session";
   let activePhaseConfig = null;
+  let selectedEventContext = null;
 
   function getAbsoluteMinutes(day, timeStr) {
     if (!timeStr) return 0;
@@ -106,43 +108,52 @@ export function getGateStatusDetails() {
     return day * 1440 + h * 60 + m;
   }
 
-  // 🎯 Find the active event and check its current phase window
+  // 🎯 True Event Horizon Scan: Iterates through all keys to find the live active schedule window
   if (events && typeof events === 'object') {
-    const eventKeys = Object.keys(events);
-    if (eventKeys.length > 0) {
-      const ev = events[eventKeys[0]]; // Look at active event row directly
-      if (ev) {
-        activeEventTitle = ev.title || "Raid Session"; // Grab moniker exactly as written
+    const eventIds = Object.keys(events);
+    
+    for (const evId of eventIds) {
+      const ev = events[evId];
+      if (!ev || !ev.phases) continue;
 
-        if (ev.phases) {
-          // Check phase windows to see where current timestamp intersects
-          for (const phaseKey of ['1', '2', '3']) {
-            const p = ev.phases[phaseKey];
-            if (!p) continue;
+      // Scan phases 1, 2, and 3 (supports both object schemas and null-padded arrays safely)
+      for (const phaseKey of [1, 2, 3]) {
+        const p = ev.phases[phaseKey];
+        if (!p) continue;
 
-            const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
-            const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
+        const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+        const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
 
-            let isInsideWindow = false;
-            if (endAbs < startAbs) {
-              // Handles weekly calendar wrapping transitions cleanly
-              if (currentAbsMinutes >= startAbs || currentAbsMinutes < endAbs) isInsideWindow = true;
-            } else {
-              if (currentAbsMinutes >= startAbs && currentAbsMinutes < endAbs) isInsideWindow = true;
-            }
+        let isInsideWindow = false;
+        if (endAbs < startAbs) {
+          // Rolling schedule window wraps across continuous weekly boundary line marks
+          if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
+        } else {
+          if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
+        }
 
-            if (isInsideWindow) {
-              currentPhase = Number(phaseKey);
-              activePhaseConfig = p;
-              break; // Mapped onto active window, exit phase check loop
-            }
-          }
+        if (isInsideWindow) {
+          currentPhase = Number(phaseKey);
+          activeEventTitle = ev.title || "Raid Session";
+          activePhaseConfig = p;
+          selectedEventContext = ev;
+          break;
         }
       }
+      
+      // Stop scanning subsequent event profiles if the active tracking window is located
+      if (activePhaseConfig) {
+        break;
+      }
+    }
+
+    // Fallback title safety check to ensure dashboard text is never generic
+    if (!activePhaseConfig && eventIds.length > 0 && events[eventIds[0]]) {
+      activeEventTitle = events[eventIds[0]].title || "Raid Session";
     }
   }
 
-  const isGateOpen = (currentPhase === 1); // Open only if explicitly inside Phase 1 bounds
+  const isGateOpen = (currentPhase === 1);
   let nextStatusChangeMessage = "";
 
   if (activePhaseConfig) {
@@ -160,7 +171,7 @@ export function getGateStatusDetails() {
       : `Registration is LOCKED for ${activeEventTitle}. Review pending allocation priority indexes.`;
   }
 
-  // Automatic computation of zone display tags
+  // Dynamic automatic computation of phase interval display string lines
   let gmtIndicator = "UTC";
   try {
     const formatterShort = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' });
@@ -172,14 +183,13 @@ export function getGateStatusDetails() {
   }
 
   const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
-  if (events && typeof events === 'object') {
-    const primaryEvent = Object.values(events)[0];
-    if (primaryEvent && primaryEvent.phases) {
-      for (const pk of ['1', '2', '3']) {
-        const phaseData = primaryEvent.phases[pk];
-        if (phaseData) {
-          phaseIntervals[`phase${pk}`] = `${DAYS_SHORT_NAMES[phaseData.dayStart]} ${phaseData.timeStart} ~ ${DAYS_SHORT_NAMES[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
-        }
+  const displayTargetEvent = selectedEventContext || (events && typeof events === 'object' ? Object.values(events)[0] : null);
+
+  if (displayTargetEvent && displayTargetEvent.phases) {
+    for (const pk of [1, 2, 3]) {
+      const phaseData = displayTargetEvent.phases[pk];
+      if (phaseData) {
+        phaseIntervals[`phase${pk}`] = `${DAYS_SHORT_NAMES[phaseData.dayStart]} ${phaseData.timeStart} ~ ${DAYS_SHORT_NAMES[phaseData.dayEnd]} ${phaseData.timeEnd} ${gmtIndicator}`;
       }
     }
   }
