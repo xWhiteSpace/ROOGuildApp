@@ -9,6 +9,7 @@ export default function RequestHistoryTab() {
   const [loading, setLoading] = useState(true);
   const [historyData, setHistoryData] = useState([]);
   const [currentUserName, setCurrentUserName] = useState('');
+  const [configItems, setConfigItems] = useState([]); // Dynamic setting collection matrix
   const [authError, setAuthError] = useState(false);
   
   // --- 🔍 ADVANCED FILTER, SEARCH, AND SORT STATES ---
@@ -53,6 +54,20 @@ export default function RequestHistoryTab() {
       const data = await res.json();
       if (data.success) {
         setHistoryData(data.history || []);
+
+        // Query dynamic item mapping tables to link relational styling indexes inline
+        try {
+          const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
+            headers: customHeaders,
+            credentials: 'include'
+          });
+          const configData = await configRes.json();
+          if (configData.success && configData.config?.items) {
+            setConfigItems(configData.config.items);
+          }
+        } catch (err) {
+          console.error("Failed to map live configuration styles:", err);
+        }
       }
     } catch (err) {
       console.error("Connection link offline:", err);
@@ -81,14 +96,32 @@ export default function RequestHistoryTab() {
     return sortDirection === 'asc' ? '▲' : '▼';
   };
 
-  const getItemStyleProfile = (itemType) => {
-    switch (itemType) {
-      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
-      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
-      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
-      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
+  const getItemStyleProfile = (itemType, itemId) => {
+    const THEME_MAP = {
+      purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
+      yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
+      slate:  'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]',
+      red:    'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600'
+    };
+
+    // Match config based on current Relational ID or description strings
+    const matchedItem = configItems.find(i => 
+      (itemId && i.id.toLowerCase() === itemId.toLowerCase()) || 
+      (itemType && i.name.toLowerCase() === itemType.toLowerCase())
+    );
+
+    if (matchedItem && matchedItem.colorTheme) {
+      return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
     }
+
+    // Direct fallback for legacy data records transparency
+    const legacyLabel = (itemType || '').toLowerCase();
+    if (legacyLabel.includes('puppet')) return THEME_MAP.purple;
+    if (legacyLabel.includes('illu')) return THEME_MAP.yellow;
+    if (legacyLabel.includes('light')) return THEME_MAP.slate;
+    if (legacyLabel.includes('time') || legacyLabel.includes('space')) return THEME_MAP.red;
+
+    return 'text-slate-400 border-slate-800 bg-slate-900/50';
   };
 
   // 📋 Apply Filtering Matrix Logic
@@ -309,11 +342,11 @@ export default function RequestHistoryTab() {
                   <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
                     <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
                     <td className="p-3 font-sans font-bold text-slate-100 whitespace-nowrap">{row.member}</td>
-                    <td className="p-3 font-sans whitespace-nowrap">
-                      <span className={`px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold ${getItemStyleProfile(row.item)}`}>
-                        {row.item}
-                      </span>
-                    </td>
+                        <td className="p-3 font-sans whitespace-nowrap">
+                          <span className={`px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold ${getItemStyleProfile(row.item, row.itemId)}`}>
+                            {row.item || row.itemId}
+                          </span>
+                        </td>
                     <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
                     <td className="p-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight border ${

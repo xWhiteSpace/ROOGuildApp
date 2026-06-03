@@ -93,11 +93,11 @@ async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFal
     const record = records[key];
     const recordItemId = record.itemId;
     
-    let isMatch = false;
+let isMatch = false;
     if (recordItemId) {
-      if (recordItemId.trim() === itemId.trim()) isMatch = true;
+      if (recordItemId.trim().toLowerCase() === itemId.trim().toLowerCase()) isMatch = true;
     } else if (record.item && itemNameFallback) {
-      if (record.item.trim() === itemNameFallback.trim()) isMatch = true;
+      if (record.item.trim().toLowerCase() === itemNameFallback.trim().toLowerCase()) isMatch = true;
     }
 
     if (isMatch) {
@@ -161,10 +161,10 @@ router.get('/settings/get', async (req, res) => {
         isForceLocked: false,
         adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
         items: [
-          { id: "item_001", name: "Puppet Scroll", limitQty: 1 },
-          { id: "item_002", name: "Illusion Scroll", limitQty: 1 },
-          { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
-          { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
+          { id: "item_001", name: "Puppet Scroll", limitQty: 1, colorTheme: "purple" },
+          { id: "item_002", name: "Illusion Scroll", limitQty: 1, colorTheme: "yellow" },
+          { id: "item_003", name: "Light & Dark Scroll", limitQty: 3, colorTheme: "slate" },
+          { id: "item_004", name: "Time & Space Scroll", limitQty: 5, colorTheme: "red" }
         ],
         events: {
           "ev_001": {

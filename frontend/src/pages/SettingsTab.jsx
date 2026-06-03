@@ -118,7 +118,8 @@ export default function SettingsTab() {
     const newItemObj = {
       id: `item_${paddingStr}`,
       name: `Custom Loot Classification ${nextIndex}`,
-      limitQty: 1
+      limitQty: 1,
+      colorTheme: 'slate' // Seeds a baseline theme style structure instantly
     };
     setConfig(prev => ({ ...prev, items: [...prev.items, newItemObj] }));
   };
@@ -487,10 +488,25 @@ export default function SettingsTab() {
                     const updated = config.items.map(i => i.id === item.id ? { ...i, name: e.target.value } : i);
                     setConfig(prev => ({ ...prev, items: updated }));
                   }}
-                  className="col-span-6 bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-1 text-xs text-slate-200 outline-none focus:border-slate-700 font-sans font-bold"
+                  className="col-span-4 bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-1 text-xs text-slate-200 outline-none focus:border-slate-700 font-sans font-bold"
                   placeholder="Loot Name Track Label..."
                 />
                 
+                {/* 🎨 INTERACTIVE COLOR PRESETS DROPDOWN SELECTION COMPONENT */}
+                <select
+                  value={item.colorTheme || 'slate'}
+                  onChange={(e) => {
+                    const updated = config.items.map(i => i.id === item.id ? { ...i, colorTheme: e.target.value } : i);
+                    setConfig(prev => ({ ...prev, items: updated }));
+                  }}
+                  className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-xs font-sans text-slate-300 outline-none focus:border-slate-700/60 font-semibold cursor-pointer text-center"
+                >
+                  <option value="purple">💜 Purple</option>
+                  <option value="yellow">💛 Yellow</option>
+                  <option value="slate">🩶 Slate</option>
+                  <option value="red">❤️ Red</option>
+                </select>
+
                 {/* ➕ RELATIONAL VALUE INCREMENT CONTROLLER CONTROLS */}
                 <div className="col-span-3 flex items-center justify-end gap-2.5 select-none pr-1">
                   <button 

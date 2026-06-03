@@ -546,11 +546,25 @@ export default function MimicBookTab({ user }) {
   };
 
   const getItemStyleProfile = (id) => {
+    const THEME_MAP = {
+      purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
+      yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
+      slate:  'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]',
+      red:    'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600'
+    };
+
+    // Extract match from settings items collection array mapping relational parameters
+    const matchedItem = items.find(i => i.id === id);
+    if (matchedItem && matchedItem.colorTheme) {
+      return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
+    }
+
+    // Direct fallback array lookup loop to maintain integrity for initial render sequences
     const idx = items.findIndex(i => i.id === id) % 4;
-    if (idx === 0) return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-    if (idx === 1) return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
-    if (idx === 2) return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
-    return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
+    if (idx === 0) return THEME_MAP.purple;
+    if (idx === 1) return THEME_MAP.yellow;
+    if (idx === 2) return THEME_MAP.slate;
+    return THEME_MAP.red;
   };
 
   const currentUserName = user?.displayName || user?.username || '';
