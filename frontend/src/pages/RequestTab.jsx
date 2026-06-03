@@ -5,7 +5,7 @@ const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:500
 
 export default function RequestTab() {
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState({ name: '', date: '' });
+  const [userData, setUserData] = useState({ name: '', date: '', eventId: '', eventName: '' });
   const [items, setItems] = useState([]);
   const [liveCounts, setLiveCounts] = useState({});
   const [localSelections, setLocalSelections] = useState({});
@@ -47,7 +47,12 @@ export default function RequestTab() {
       if (data.success) {
         setItems(data.items);
         setLiveCounts(data.liveCounts || {});
-        setUserData({ name: data.displayName, date: data.date });
+        setUserData({ 
+          name: data.displayName, 
+          date: data.date, 
+          eventId: data.eventId || 'ev_002', 
+          eventName: data.eventName || data.activeEventTitle || 'GuildLeague(Thu)' 
+        });
         
         if (data.isGateOpen !== undefined) setIsGateOpen(data.isGateOpen);
         if (data.nextStatusChangeMessage) setStatusMessage(data.nextStatusChangeMessage);
@@ -179,9 +184,10 @@ export default function RequestTab() {
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-100">Advance Request Deck</h1>
-          <div className="text-xs text-slate-400 mt-1 space-x-4">
+          <div className="text-xs text-slate-400 mt-1 space-x-4 flex flex-wrap items-center">
             <span>User: <strong className="text-indigo-400">{userData.name}</strong></span>
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
+            <span>Event: <strong className="text-amber-400">[{userData.eventId}] {userData.eventName}</strong></span>
           </div>
           {!isGateOpen && statusMessage && (
             <div className="text-xs font-semibold text-amber-500 mt-2">

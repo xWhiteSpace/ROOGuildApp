@@ -7,7 +7,7 @@ export default function LoginPage() {
       <p className="mt-3 text-slate-400">Authenticate with Discord to access request and live bidding features.</p>
       <a
         href={`${backendUrl}/auth/login`}
-        className="mt-6 inline-flex rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
+        className="mt-6 inline-flex w-max rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
       >
         Sign in with Discord
       </a>

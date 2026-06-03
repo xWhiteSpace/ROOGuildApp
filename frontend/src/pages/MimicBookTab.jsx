@@ -334,7 +334,8 @@ export default function MimicBookTab({ user }) {
       const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
       if (calculatedSummary[row.itemType]) {
         calculatedSummary[row.itemType].qty += qty;
-        calculatedSummary[row.itemType].limit = row.limit;
+        const itemSetting = items.find(i => i.id === row.itemType);
+        calculatedSummary[row.itemType].limit = itemSetting ? (itemSetting.limitQty || 1) : 1;
       }
     }
 
@@ -686,41 +687,41 @@ export default function MimicBookTab({ user }) {
                         </td>
                         
                         <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 select-none">
+                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPage', Math.max(1, row.startPage - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <span className="w-6 text-center text-slate-200 text-xs font-mono">{row.startPage}</span>
+                            <input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-200 text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPage', row.startPage + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
                           </div>
                         </td>
                         
                         <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 select-none">
+                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.max(1, row.startPos - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <span className="w-6 text-center text-amber-500 font-bold text-xs font-mono">{row.startPos}</span>
+                            <input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.min(qtyPerPage, row.startPos + 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
                           </div>
                         </td>
 
                         <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 select-none">
+                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPage', Math.max(1, row.endPage - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <span className="w-6 text-center text-slate-200 text-xs font-mono">{row.endPage}</span>
+                            <input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', e.target.value)} className="w-10 bg-transparent text-center text-slate-200 text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPage', row.endPage + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
                           </div>
                         </td>
 
                         <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 select-none">
+                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.max(1, row.endPos - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <span className="w-6 text-center text-amber-500 font-bold text-xs font-mono">{row.endPos}</span>
+                            <input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', e.target.value)} className="w-10 bg-transparent text-center text-amber-500 font-bold text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.min(qtyPerPage, row.endPos + 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
                           </div>
                         </td>
 
                         <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 select-none">
+                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', Math.max(1, row.limit - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <span className="w-6 text-center text-white font-black text-xs font-mono">{row.limit}</span>
+                            <input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-transparent text-center text-white font-black text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', row.limit + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
                           </div>
                         </td>
@@ -748,8 +749,11 @@ export default function MimicBookTab({ user }) {
                   const currentAllocatedSum = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "").length;
                   return (
                     <div key={item.id} className={`p-2 rounded-lg border bg-slate-900/40 cursor-pointer flex-1 min-w-[140px] transition ${activeMatrixFilter === item.id ? 'ring-2 ring-violet-500 border-transparent bg-slate-900' : 'border-slate-800'}`} onClick={() => { saveWorkspaceState({ activeMatrixFilter: item.id }); }}>
-                      <div className="text-[10px] text-slate-400 font-bold uppercase truncate">{item.name}</div>
-                      <div className="text-base font-black text-white mt-1 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase truncate flex items-center justify-between gap-1">
+                      <span>{item.name}</span>
+                      <span className="text-amber-500 normal-case font-mono font-semibold tracking-tight">Limit: {item.limitQty || 1}</span>
+                    </div>
+                    <div className="text-base font-black text-white mt-0.5 font-mono">{currentAllocatedSum} / {dropTotalQty}</div>
                     </div>
                   );
                 })}
@@ -889,9 +893,8 @@ export default function MimicBookTab({ user }) {
         
         {/* LEFT COMPONENT */}
         <div className="lg:col-span-5 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl relative space-y-4">
-          <div className="flex items-center justify-between">
+          <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📖 Game Auction Book Preview</h2>
-            <div className="text-[10px] font-mono font-bold text-slate-400">Page <span className="text-white bg-slate-900 px-1.5 py-0.5 rounded mx-0.5">{bookCurrentPage}</span> of {totalPagesCount}</div>
           </div>
 
           <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 min-h-[220px] shadow-inner flex flex-col justify-between space-y-2">
@@ -924,6 +927,7 @@ export default function MimicBookTab({ user }) {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-900/60">
               <button onClick={() => setBookCurrentPage(Math.max(1, bookCurrentPage - 1))} disabled={bookCurrentPage === 1} className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-black disabled:opacity-20 transition">◀ PREV</button>
+              <div className="text-[10px] font-mono font-bold text-slate-400 text-center flex-1">Page <span className="text-white bg-slate-900 px-1.5 py-0.5 rounded mx-0.5">{bookCurrentPage}</span> of {totalPagesCount}</div>
               <button onClick={() => setBookCurrentPage(Math.min(totalPagesCount, bookCurrentPage + 1))} disabled={bookCurrentPage === totalPagesCount} className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-black disabled:opacity-20 transition">NEXT ▶</button>
             </div>
           </div>
@@ -1077,6 +1081,10 @@ export default function MimicBookTab({ user }) {
                   );
                 })
               )}
+            </div>
+            
+            <div className="bg-slate-950/60 border border-slate-900 p-2.5 rounded-xl text-[10px] text-slate-500 leading-relaxed font-sans">
+            💡 <strong className="text-slate-400">Quick-Jump Shortcut:</strong> Select any row line item in the right table to forcefully flip the digital twin book preview directly to that exact target page window index!
             </div>
 
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
