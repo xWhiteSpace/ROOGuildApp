@@ -31,7 +31,7 @@ export default function MimicBookTab({ user }) {
   const [syncingRoster, setSyncingRoster] = useState(false);
 
   // --- 📋 MASTER TARGET POOLS ---
-  const [items, setItems] = useState([]); // 🌟 Parameterized items list from server
+  const [items, setItems] = useState([]); 
   const [rankingsByItem, setRankingsByItem] = useState({});
   const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
   const [masterGuildRoster, setMasterGuildRoster] = useState([]); 
@@ -109,11 +109,6 @@ export default function MimicBookTab({ user }) {
         setRankingsByItem(data.rankingsByItem || {});
         setRequestsByItemDetails(data.requestsByItemDetails || {});
         setMasterGuildRoster(data.fullRoster || []);
-        
-        if (data.items?.length > 0 && !activeMatrixFilter) {
-          setActiveMatrixFilter(data.items[0].id);
-          setLootRows([{ id: 1, itemType: data.items[0].id, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: data.items[0].limitQty || 1 }]);
-        }
       }
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
@@ -121,6 +116,14 @@ export default function MimicBookTab({ user }) {
       setLoadingPool(false);
     }
   };
+
+  // Safe fallback initializing default rows only if server confirms database cache is clean
+  useEffect(() => {
+    if (items.length > 0 && !activeMatrixFilter && lootRows.length === 0) {
+      setActiveMatrixFilter(items[0].id);
+      setLootRows([{ id: 1, itemType: items[0].id, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: items[0].limitQty || 1 }]);
+    }
+  }, [items, activeMatrixFilter, lootRows]);
 
   const handleSyncRosterFromDiscord = async () => {
     try {
@@ -182,6 +185,9 @@ export default function MimicBookTab({ user }) {
         if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
         if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
         if (s.sidebarTab) setSidebarTab(s.sidebarTab);
+      } else if (isInitialMount) {
+        setActiveStep(1);
+        setSidebarTab('standby');
       }
     } catch (err) {
       if (isInitialMount) console.error(err);
@@ -223,6 +229,13 @@ export default function MimicBookTab({ user }) {
     if (updatedStateFields.sidebarTab) setSidebarTab(updatedStateFields.sidebarTab);
     pushActiveSessionToBackend(fullSnapshot);
   };
+
+  useEffect(() => {
+    loadTrueRequestPool();
+    fetchActiveSessionFromBackend(true);
+    const pollerInterval = setInterval(() => { fetchActiveSessionFromBackend(false); }, 3500);
+    return () => clearInterval(pollerInterval);
+  }, [user]);
 
   const handleAddLootRow = () => {
     if (!isAdminMode || !isOfficer || items.length === 0) return;
@@ -280,6 +293,7 @@ export default function MimicBookTab({ user }) {
     saveWorkspaceState({ lootRows: updatedRows });
   };
 
+  // Safety checks shield database engine loop from crashing if async records haven't loaded
   const handleCheckAndRegisterLoot = () => {
     if (!isAdminMode || !isOfficer || items.length === 0) return;
     setValidationError('');
@@ -326,16 +340,18 @@ export default function MimicBookTab({ user }) {
 
     Object.keys(calculatedSummary).forEach(key => {
       const item = calculatedSummary[key];
+      if (!item) return;
       item.seats = Math.floor(item.qty / item.limit); 
       
-      const priorityApplicants = rankingsByItem[key] || [];
-      const detailsMap = requestsByItemDetails[key] || {};
+      const priorityApplicants = (rankingsByItem && rankingsByItem[key]) ? rankingsByItem[key] : [];
+      const detailsMap = (requestsByItemDetails && requestsByItemDetails[key]) ? requestsByItemDetails[key] : {};
       const flatStaticBoxArray = Array(item.qty).fill("");
       let globalBoxCursor = 0;
 
       for (let p = 0; p < priorityApplicants.length; p++) {
         if (globalBoxCursor >= item.qty) break;
         const pName = priorityApplicants[p];
+        if (!pName) continue;
         const requestedQuantity = detailsMap[pName]?.quantity || 1;
         const allowedBoxSpan = Math.min(requestedQuantity, item.limit);
 
@@ -435,7 +451,6 @@ export default function MimicBookTab({ user }) {
     saveWorkspaceState({ generatedSlots: matrixSlots, activeStep: 3 });
   };
 
-  // 💾 FIREBASE permanency ledger transaction router flow preserved explicitly here
   const handleCommitSessionAndFlash = async () => {
     if (!commitDate.trim() || !isOfficer) return alert("Operation locked or criteria missing.");
     try {
@@ -670,11 +685,46 @@ export default function MimicBookTab({ user }) {
                           </select>
                         </td>
                         
-                        <td className="p-2 text-center"><input type="number" value={row.startPage} onChange={(e) => handleUpdateLootRow(row.id, 'startPage', e.target.value)} className="w-10 bg-slate-950 border border-slate-800 rounded text-center outline-none font-mono text-xs"/></td>
-                        <td className="p-2 text-center"><input type="number" value={row.startPos} onChange={(e) => handleUpdateLootRow(row.id, 'startPos', e.target.value)} className="w-10 bg-slate-950 border border-slate-800 rounded text-center text-amber-500 font-bold outline-none font-mono text-xs"/></td>
-                        <td className="p-2 text-center"><input type="number" value={row.endPage} onChange={(e) => handleUpdateLootRow(row.id, 'endPage', e.target.value)} className="w-10 bg-slate-950 border border-slate-800 rounded text-center outline-none font-mono text-xs"/></td>
-                        <td className="p-2 text-center"><input type="number" value={row.endPos} onChange={(e) => handleUpdateLootRow(row.id, 'endPos', e.target.value)} className="w-10 bg-slate-950 border border-slate-800 rounded text-center text-amber-500 font-bold outline-none font-mono text-xs"/></td>
-                        <td className="p-2 text-center"><input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-slate-950 border border-slate-800 rounded text-center text-white font-black outline-none font-mono text-xs"/></td>
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1 select-none">
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPage', Math.max(1, row.startPage - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
+                            <span className="w-6 text-center text-slate-200 text-xs font-mono">{row.startPage}</span>
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPage', row.startPage + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
+                          </div>
+                        </td>
+                        
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1 select-none">
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.max(1, row.startPos - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
+                            <span className="w-6 text-center text-amber-500 font-bold text-xs font-mono">{row.startPos}</span>
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'startPos', Math.min(qtyPerPage, row.startPos + 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1 select-none">
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPage', Math.max(1, row.endPage - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
+                            <span className="w-6 text-center text-slate-200 text-xs font-mono">{row.endPage}</span>
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPage', row.endPage + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1 select-none">
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.max(1, row.endPos - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
+                            <span className="w-6 text-center text-amber-500 font-bold text-xs font-mono">{row.endPos}</span>
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'endPos', Math.min(qtyPerPage, row.endPos + 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
+                          </div>
+                        </td>
+
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1 select-none">
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', Math.max(1, row.limit - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
+                            <span className="w-6 text-center text-white font-black text-xs font-mono">{row.limit}</span>
+                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', row.limit + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
+                          </div>
+                        </td>
+
                         <td className="p-2 text-center"><button onClick={() => handleRemoveLootRow(row.id)} className="text-slate-600 hover:text-rose-400 p-1">🗑️</button></td>
                       </tr>
                     ))}
@@ -689,6 +739,7 @@ export default function MimicBookTab({ user }) {
             </div>
           )}
 
+          {/* STEP 2 WORKSPACE */}
           {activeStep === 2 && (
             <div className="space-y-4 animate-fadeIn relative">
               <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-wrap gap-2 text-center">
@@ -751,30 +802,38 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-between pt-2">
-                <button onClick={() => saveWorkspaceState({ activeStep: 1 })} className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold">◀ Back</button>
-                <button onClick={handleOriginalMatrixAssembly} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide">LOCK MATRIX ROSTER ➔</button>
+                {/* 🛡️ RE-INJECTED LOSS PROTECTION COGNITIVE CONFIRMATION PROMPT */}
+                <button 
+                  onClick={() => {
+                    if (window.confirm("⚠️ WARNING: Reverting back to Phase 1 will completely wipe your current layout matrix selections and manually assigned bidders. Are you sure you want to proceed?")) {
+                      saveWorkspaceState({ activeStep: 1 });
+                    }
+                  }} 
+                  className="px-4 py-1.5 rounded-xl border border-slate-800 text-slate-400 text-xs font-bold cursor-pointer"
+                >
+                  ◀ Back
+                </button>
+                <button onClick={handleOriginalMatrixAssembly} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-md transition cursor-pointer">LOCK MATRIX ROSTER ➔</button>
               </div>
             </div>
           )}
 
-          {/* 🔮 STEP 3 WORKSPACE: MIMIC CONTENT BOARD CONTROL OVERLAY */}
+          {/* 🔮 STEP 3: DYNAMIC TWIN LAYOUT RE-INTERCEPT PANEL */}
           {activeStep === 3 && (
-            <div className="space-y-4 animate-fadeIn">
-              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3.5 rounded-xl font-sans font-semibold shadow-md">
-                👀 MIMIC BOOK PREVIEW MODE: Review page layout matrix contents. Content here regulates the exact grid mapping sent out to active player tablets.
-              </div>
-              <div className="flex justify-start gap-4 pt-1">
+            <div className="flex p-3 bg-slate-950 border border-slate-900 rounded-xl items-center justify-between gap-4 animate-fadeIn">
+              <div className="text-xs text-slate-400 font-medium">✨ Reviewing the digital twin auction book preview sequence below.</div>
+              <div className="flex gap-3">
                 <button 
                   onClick={() => saveWorkspaceState({ activeStep: 2 })} 
-                  className="px-5 py-2 rounded-xl border border-slate-700 bg-slate-950 text-xs font-bold text-slate-400 hover:text-white transition cursor-pointer shadow"
+                  className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition shadow cursor-pointer"
                 >
-                  ↩️ Return to Selection Mode (Phase 2)
+                  ↩️ Return to Allocations
                 </button>
                 <button 
                   onClick={() => saveWorkspaceState({ activeStep: 4 })} 
-                  className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-md transition cursor-pointer"
+                  className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
                 >
-                  Approve Matrix Layout Preview & Proceed ➔
+                  Proceed to Commit Ledger ➔
                 </button>
               </div>
             </div>
