@@ -12,13 +12,57 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     // Access database instance securely from the firebase-admin module scope
     const db = admin.database();
     
-    const leaderboardSnap = await db.ref('leaderboards').once('value');
-    if (!leaderboardSnap.exists()) {
+    // FETCH LIVE SOURCE ROWS FROM SOURCE-OF-TRUTH DATA PATH
+    const allRequestsSnap = await db.ref('auction/web_requests').once('value');
+    if (!allRequestsSnap.exists()) {
       console.log("⚠️ [SNAPSHOT SKIPPED]: No active auction records logged in database folder.");
       return;
     }
 
-    const leaderboards = leaderboardSnap.val();
+    const rawRequests = allRequestsSnap.val();
+    const allPendingRows = [];
+
+    // Filter strictly for lines awaiting operational action
+    Object.values(rawRequests).forEach(req => {
+      if (req && req.selectionStatus === 'Pending') {
+        allPendingRows.push(req);
+      }
+    });
+
+    const targetCategories = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
+    const leaderboards = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
+
+    // Dynamically compile active net requests per scroll type category
+    targetCategories.forEach(targetItem => {
+      const userCalculationsMap = {};
+
+      allPendingRows.forEach(req => {
+        const player = (req.member || '').trim();
+        const itemType = (req.item || '').trim();
+        const qty = parseInt(req.quantity, 10) || 0;
+        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+        const priorityScore = parseInt(req.priority, 10) || 0;
+
+        if (itemType !== targetItem || !player) return;
+
+        if (!userCalculationsMap[player]) {
+          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
+        }
+
+        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
+        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
+      });
+
+      // Filter out empty balances, sort by priority descending, and clamp to the top 100
+      const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
+      activeApplicants.sort((a, b) => b.priority - a.priority);
+      
+      leaderboards[targetItem] = activeApplicants.slice(0, 100).map(u => ({
+        name: u.name,
+        quantity: u.netQty,
+        priority: u.priority
+      }));
+    });
     
     // Establish the text template header layout
     let messagePayload = isFinalThreshold
