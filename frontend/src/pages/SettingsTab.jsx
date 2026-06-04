@@ -544,6 +544,89 @@ export default function SettingsTab() {
         </div>
       </div>
 
+      {/* 📢 SECTION 4: BOT AUTOMATION ANNOUNCEMENT SCHEDULER DESK */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+          <div>
+            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 4: Discord Bot Automation Announcement Scheduler Desk</h3>
+            <p className="text-[11px] text-slate-500 font-medium font-sans mt-0.5">Map automated milestone list distributions to current cycle step phases</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* PHASE 1 INPUT DESK */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">🟣 Phase 1: Request Registration Open (Max 3 Alerts)</label>
+            <div className="flex flex-wrap gap-3 items-center">
+              {(config.announcements?.phase1 || []).map((time, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
+                  <input 
+                    type="time" 
+                    value={time} 
+                    onChange={(e) => {
+                      const updatedPhase1 = [...config.announcements.phase1];
+                      updatedPhase1[idx] = e.target.value;
+                      setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
+                    }}
+                    className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
+                  />
+                  <button
+                    onClick={() => {
+                      const updatedPhase1 = config.announcements.phase1.filter((_, i) => i !== idx);
+                      setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
+                    }}
+                    className="text-[10px] font-bold text-slate-600 hover:text-rose-400 transition pl-1 cursor-pointer"
+                  >
+                    ✖
+                  </button>
+                </div>
+              ))}
+
+              {(config.announcements?.phase1 || []).length < 3 && (
+                <button
+                  onClick={() => {
+                    const updatedPhase1 = [...(config.announcements?.phase1 || []), "12:00"];
+                    setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
+                  }}
+                  className="px-3 py-1.5 rounded-xl border border-dashed border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600 text-[10px] font-bold tracking-tight transition cursor-pointer"
+                >
+                  + Add Time Slot
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800/40 my-2"></div>
+
+          {/* PHASE 2 & 3 CONTAINER */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">🔒 Phase 2: Registration Closed (1 Alert)</label>
+              <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
+                <input 
+                  type="time" 
+                  value={config.announcements?.phase2 || "22:15"} 
+                  onChange={(e) => setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase2: e.target.value } }))}
+                  className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">⚔️ Phase 3: Live Auction Night (1 Alert)</label>
+              <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
+                <input 
+                  type="time" 
+                  value={config.announcements?.phase3 || "20:55"} 
+                  onChange={(e) => setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase3: e.target.value } }))}
+                  className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* FIXED FOOTER CONTROLLER ACTIONS BAR */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/85 backdrop-blur-md p-4 z-50">
         <div className="mx-auto max-w-4xl flex items-center justify-end gap-3.5">
