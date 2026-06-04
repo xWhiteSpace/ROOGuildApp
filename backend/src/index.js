@@ -38,7 +38,8 @@ const allowedOrigins = [
 // 📡 PRODUCTION HARDENED EXPLICIT CORS WHITELIST FOR MULTI-HOST HANDSHAKES
 app.use(cors({ 
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.')) {
+    // Broadens origin matches to accept ngrok tunnels and vercel staging indicators cleanly
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.includes('ngrok-free.app')) {
       callback(null, true);
     } else {
       callback(new Error('Blocked by CORS policy rules layout context.'));
@@ -96,14 +97,15 @@ app.listen(PORT, () => {
         phase3: "20:55"
       };
 
-      // Native 24-hour token format extractor guarantees environment-independent time tracking strings
-      const timeFormatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Asia/Manila",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false
-      });
-      const timeTokenString = timeFormatter.format(new Date());
+      // Bypasses language locale variations by pulling hours and minutes directly via a localized date constructor
+      const localizedString = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+      const localizedDate = new Date(localizedString);
+
+      const true24HourInt = localizedDate.getHours();
+      const trueMinuteInt = localizedDate.getMinutes();
+
+      // Guarantees an exact 24-hour match format string (e.g. "07:00", "19:00") matching your frontend
+      const timeTokenString = `${String(true24HourInt).padStart(2, '0')}:${String(trueMinuteInt).padStart(2, '0')}`;
 
       if (gateDataContext.currentPhase === 1) {
         const matchFound = (activeAnnounceLimits.phase1 || ["07:00", "12:00", "19:00"]).includes(timeTokenString);
