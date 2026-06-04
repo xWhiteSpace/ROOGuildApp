@@ -107,7 +107,10 @@ app.listen(PORT, () => {
       // Guarantees an exact 24-hour match format string (e.g. "07:00", "19:00") matching your frontend
       const timeTokenString = `${String(true24HourInt).padStart(2, '0')}:${String(trueMinuteInt).padStart(2, '0')}`;
 
-      if (gateDataContext.currentPhase === 1) {
+        // 🔬 TEMPORARY LIVE DESK DIAGNOSTIC LOG
+        console.log(`[DEBUG] Clock Ticker Active | True Phase: ${gateDataContext.currentPhase} | Extracted Time Token: "${timeTokenString}"`);
+
+        if (gateDataContext.currentPhase === 1) {
         const matchFound = (activeAnnounceLimits.phase1 || ["07:00", "12:00", "19:00"]).includes(timeTokenString);
         if (matchFound) {
           console.log(`⏰ [PHASE 1 TRIGGER] Milestone schedule matched (${timeTokenString}). Dispensing live demand matrix...`);
