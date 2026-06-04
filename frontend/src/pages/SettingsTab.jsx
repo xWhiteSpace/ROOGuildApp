@@ -155,6 +155,11 @@ export default function SettingsTab() {
         1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" },
         2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" },
         3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }
+      },
+      announcements: {
+        phase1: ["07:00", "12:00", "19:00"],
+        phase2: "22:15",
+        phase3: "20:55"
       }
     };
 
@@ -414,10 +419,109 @@ export default function SettingsTab() {
                       </div>
                     );
                   })}
+              </div>
+
+              {/* 📢 DYNAMIC CONTEXTUAL BOT ANNOUNCEMENT SCHEDULER DESK */}
+              <div className="bg-slate-900/30 border border-slate-900 p-3 rounded-xl space-y-3">
+                <div>
+                  <h4 className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">📢 Bot Announcement Cadence for this Event</h4>
+                  <p className="text-[10px] text-slate-500 font-sans mt-0.5">Define automated leaderboard alerts explicitly dedicated to this event lifecycle</p>
+                </div>
+
+                <div className="space-y-3">
+                  {/* PHASE 1 ANNOUNCEMENTS */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🟣 Phase 1: Request Registration Open (Max 3 Alerts)</label>
+                    <div className="flex flex-wrap gap-2.5 items-center">
+                      {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).map((time, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
+                          <input 
+                            type="time" 
+                            value={time} 
+                            onChange={(e) => {
+                              const updated = { ...config.events };
+                              const currentAnnouncements = updated[evKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                              const updatedPhase1 = [...(currentAnnouncements.phase1 || [])];
+                              updatedPhase1[idx] = e.target.value;
+                              updated[evKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                              setConfig(prev => ({ ...prev, events: updated }));
+                            }}
+                            className="bg-transparent font-mono text-xs text-slate-200 dialect-none outline-none select-none cursor-pointer"
+                          />
+                          <button
+                            onClick={() => {
+                              const updated = { ...config.events };
+                              const currentAnnouncements = updated[evKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                              const updatedPhase1 = (currentAnnouncements.phase1 || []).filter((_, i) => i !== idx);
+                              updated[evKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                              setConfig(prev => ({ ...prev, events: updated }));
+                            }}
+                            className="text-[9px] font-bold text-slate-600 hover:text-rose-400 transition cursor-pointer"
+                          >
+                            ✖
+                          </button>
+                        </div>
+                      ))}
+
+                      {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).length < 3 && (
+                        <button
+                          onClick={() => {
+                            const updated = { ...config.events };
+                            const currentAnnouncements = updated[evKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                            const updatedPhase1 = [...(currentAnnouncements.phase1 || []), "12:00"];
+                            updated[evKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                            setConfig(prev => ({ ...prev, events: updated }));
+                          }}
+                          className="px-2.5 py-1 rounded-xl border border-dashed border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600 text-[10px] font-bold tracking-tight transition cursor-pointer"
+                        >
+                          + Add Alert
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PHASE 2 & 3 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-900/60 pt-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🔒 Phase 2: Closed Matrix Snapshot (1 Alert)</label>
+                      <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
+                        <input 
+                          type="time" 
+                          value={ev.announcements?.phase2 || "22:15"} 
+                          onChange={(e) => {
+                            const updated = { ...config.events };
+                            const currentAnnouncements = updated[evKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                            updated[evKey].announcements = { ...currentAnnouncements, phase2: e.target.value };
+                            setConfig(prev => ({ ...prev, events: updated }));
+                          }}
+                          className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">⚔️ Phase 3: Live Arena Countdown (1 Alert)</label>
+                      <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
+                        <input 
+                          type="time" 
+                          value={ev.announcements?.phase3 || "20:55"} 
+                          onChange={(e) => {
+                            const updated = { ...config.events };
+                            const currentAnnouncements = updated[evKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                            updated[evKey].announcements = { ...currentAnnouncements, phase3: e.target.value };
+                            setConfig(prev => ({ ...prev, events: updated }));
+                          }}
+                          className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            );
-          })
+
+            </div>
+          );
+        })
         ) : (
           <div className="text-center py-6 text-xs text-slate-500 font-mono">No rolling weekly event nodes mapped inside configuration.</div>
         )}
@@ -541,89 +645,6 @@ export default function SettingsTab() {
           ) : (
             <div className="text-center py-6 text-xs text-slate-500 font-mono">No inventory item registry nodes uncoiled. Add custom limits using the trigger button.</div>
           )}
-        </div>
-      </div>
-
-      {/* 📢 SECTION 4: BOT AUTOMATION ANNOUNCEMENT SCHEDULER DESK */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
-          <div>
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 4: Discord Bot Automation Announcement Scheduler Desk</h3>
-            <p className="text-[11px] text-slate-500 font-medium font-sans mt-0.5">Map automated milestone list distributions to current cycle step phases</p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {/* PHASE 1 INPUT DESK */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">🟣 Phase 1: Request Registration Open (Max 3 Alerts)</label>
-            <div className="flex flex-wrap gap-3 items-center">
-              {(config.announcements?.phase1 || []).map((time, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
-                  <input 
-                    type="time" 
-                    value={time} 
-                    onChange={(e) => {
-                      const updatedPhase1 = [...config.announcements.phase1];
-                      updatedPhase1[idx] = e.target.value;
-                      setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
-                    }}
-                    className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
-                  />
-                  <button
-                    onClick={() => {
-                      const updatedPhase1 = config.announcements.phase1.filter((_, i) => i !== idx);
-                      setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
-                    }}
-                    className="text-[10px] font-bold text-slate-600 hover:text-rose-400 transition pl-1 cursor-pointer"
-                  >
-                    ✖
-                  </button>
-                </div>
-              ))}
-
-              {(config.announcements?.phase1 || []).length < 3 && (
-                <button
-                  onClick={() => {
-                    const updatedPhase1 = [...(config.announcements?.phase1 || []), "12:00"];
-                    setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase1: updatedPhase1 } }));
-                  }}
-                  className="px-3 py-1.5 rounded-xl border border-dashed border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-600 text-[10px] font-bold tracking-tight transition cursor-pointer"
-                >
-                  + Add Time Slot
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800/40 my-2"></div>
-
-          {/* PHASE 2 & 3 CONTAINER */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">🔒 Phase 2: Registration Closed (1 Alert)</label>
-              <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
-                <input 
-                  type="time" 
-                  value={config.announcements?.phase2 || "22:15"} 
-                  onChange={(e) => setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase2: e.target.value } }))}
-                  className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black uppercase tracking-wide text-slate-400 block">⚔️ Phase 3: Live Auction Night (1 Alert)</label>
-              <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm">
-                <input 
-                  type="time" 
-                  value={config.announcements?.phase3 || "20:55"} 
-                  onChange={(e) => setConfig(prev => ({ ...prev, announcements: { ...prev.announcements, phase3: e.target.value } }))}
-                  className="bg-transparent font-mono text-xs text-slate-200 outline-none select-none cursor-pointer"
-                />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

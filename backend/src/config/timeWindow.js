@@ -16,11 +16,6 @@ let cachedConfig = {
     { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
     { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
   ],
-  announcements: {
-    phase1: ["07:00", "12:00", "19:00"],
-    phase2: "22:15",
-    phase3: "20:55"
-  },
   events: {
     "ev_001": {
       title: "GuildLeague",
@@ -29,7 +24,12 @@ let cachedConfig = {
         { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
         { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
         { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-      ]
+      ],
+      announcements: {
+        phase1: ["07:00", "12:00", "19:00"],
+        phase2: "22:15",
+        phase3: "20:55"
+      }
     }
   }
 };
@@ -58,8 +58,7 @@ function initConfigListener() {
           isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
           adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
           items: data.items || cachedConfig.items,
-          events: data.events || cachedConfig.events,
-          announcements: data.announcements || cachedConfig.announcements
+          events: data.events || cachedConfig.events
         };
       }
     }, (error) => {
@@ -201,10 +200,15 @@ export function getGateStatusDetails() {
 
   return {
     isGateOpen,
-  currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
-  nextStatusChangeMessage,
-  currentPhase,
-  phaseIntervals,
-  announcements: cachedConfig.announcements
-};
+    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
+    nextStatusChangeMessage,
+    currentPhase,
+    phaseIntervals,
+    // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
+    announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
+      phase1: ["07:00", "12:00", "19:00"],
+      phase2: "22:15",
+      phase3: "20:55"
+    }
+  };
 }
