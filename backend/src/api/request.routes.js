@@ -166,6 +166,11 @@ router.get('/settings/get', async (req, res) => {
           { id: "item_003", name: "Light & Dark Scroll", limitQty: 3, colorTheme: "slate" },
           { id: "item_004", name: "Time & Space Scroll", limitQty: 5, colorTheme: "red" }
         ],
+        announcements: {
+          phase1: ["07:00", "12:00", "19:00"],
+          phase2: "22:15",
+          phase3: "20:55"
+        },
         events: {
           "ev_001": {
             title: "GuildLeague",

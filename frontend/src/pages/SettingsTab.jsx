@@ -25,7 +25,12 @@ export default function SettingsTab() {
     isForceLocked: false,
     adminRoles: [],
     items: [],
-    events: {}
+    events: {},
+    announcements: {
+      phase1: ["07:00", "12:00", "19:00"],
+      phase2: "22:15",
+      phase3: "20:55"
+    }
   });
 
   // State handles for inputting new items, roles, and events

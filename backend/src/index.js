@@ -17,6 +17,9 @@ import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
 
+import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
+import { getGateStatusDetails } from './config/timeWindow.js';
+
 initializeEnv();
 initializeFirebase();
 initializeDiscordBot(); 
@@ -80,4 +83,47 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
+
+  // ⏰ Automated Clock Loop evaluating custom database snapshot schedules every 60 seconds
+  setInterval(() => {
+    try {
+      const gateDataContext = getGateStatusDetails() || {};
+
+      // Safe fallback layers ensure loops execute seamlessly even during initial database sync windows
+      const activeAnnounceLimits = gateDataContext.announcements || {
+        phase1: ["07:00", "12:00", "19:00"],
+        phase2: "22:15",
+        phase3: "20:55"
+      };
+
+      // Native 24-hour token format extractor guarantees environment-independent time tracking strings
+      const timeFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+      const timeTokenString = timeFormatter.format(new Date());
+
+      if (gateDataContext.currentPhase === 1) {
+        const matchFound = (activeAnnounceLimits.phase1 || ["07:00", "12:00", "19:00"]).includes(timeTokenString);
+        if (matchFound) {
+          console.log(`⏰ [PHASE 1 TRIGGER] Milestone schedule matched (${timeTokenString}). Dispensing live demand matrix...`);
+          processAndPostDiscordSnapshot(false);
+        }
+      } else if (gateDataContext.currentPhase === 2) {
+        if ((activeAnnounceLimits.phase2 || "22:15") === timeTokenString) {
+          console.log(`🔒 [PHASE 2 TRIGGER] Cutoff schedule matched (${timeTokenString}). Transmitting closed snapshot ledger...`);
+          processAndPostDiscordSnapshot(true);
+        }
+      } else if (gateDataContext.currentPhase === 3) {
+        if ((activeAnnounceLimits.phase3 || "20:55") === timeTokenString) {
+          console.log(`⚔️ [PHASE 3 TRIGGER] Live auction schedule matched (${timeTokenString}). Initializing arena countdown notice...`);
+          processAndPostDiscordSnapshot(false);
+        }
+      }
+    } catch (loopErr) {
+      console.error("⚠️ Background announcement interval ticker exception caught:", loopErr.message);
+    }
+  }, 60 * 1000);
 });

@@ -6,7 +6,6 @@
  */
 import { getDatabase } from 'firebase-admin/database';
 
-// Local volatile server memory cache block seeded with robust default parameters
 let cachedConfig = {
   timezone: "Asia/Manila",
   isForceLocked: false,
@@ -17,6 +16,11 @@ let cachedConfig = {
     { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
     { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
   ],
+  announcements: {
+    phase1: ["07:00", "12:00", "19:00"],
+    phase2: "22:15",
+    phase3: "20:55"
+  },
   events: {
     "ev_001": {
       title: "GuildLeague",
@@ -54,7 +58,8 @@ function initConfigListener() {
           isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
           adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
           items: data.items || cachedConfig.items,
-          events: data.events || cachedConfig.events
+          events: data.events || cachedConfig.events,
+          announcements: data.announcements || cachedConfig.announcements
         };
       }
     }, (error) => {
@@ -196,9 +201,10 @@ export function getGateStatusDetails() {
 
   return {
     isGateOpen,
-    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
-    nextStatusChangeMessage,
-    currentPhase,
-    phaseIntervals
-  };
+  currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
+  nextStatusChangeMessage,
+  currentPhase,
+  phaseIntervals,
+  announcements: cachedConfig.announcements
+};
 }
