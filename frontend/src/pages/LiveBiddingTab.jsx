@@ -60,7 +60,8 @@ export default function LiveBiddingTab({ user }) {
               method: 'GET', 
               credentials: 'include',
               headers: {
-                'ngrok-skip-browser-warning': 'true',
+                // Injects the bypass flag dynamically only if the path targets a tunnel loop
+                ...(targetUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {}),
                 'Accept': 'application/json'
               }
             });
