@@ -50,7 +50,8 @@ app.use(cors({
     'Accept', 
     'Origin',
     'x-user-profile',      // Whitelists fallback auth headers
-    'x-authorized-user'    // Whitelists mobile chat verification headers
+    'x-authorized-user',   // Whitelists mobile chat verification headers
+    'ngrok-skip-browser-warning' // Whitelists tunnel warning bypass flags
   ]
 }));
 
