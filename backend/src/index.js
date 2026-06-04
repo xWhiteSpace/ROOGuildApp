@@ -85,32 +85,26 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
 
-  // ⏰ Automated Clock Loop evaluating custom database snapshot schedules every 60 seconds
-  setInterval(() => {
+  // ⏰ Isolated schedule evaluator helper can be cleanly called on demand
+  function evaluateAnnouncementSchedules() {
     try {
       const gateDataContext = getGateStatusDetails() || {};
-
-      // Safe fallback layers ensure loops execute seamlessly even during initial database sync windows
       const activeAnnounceLimits = gateDataContext.announcements || {
         phase1: ["07:00", "12:00", "19:00"],
         phase2: "22:15",
         phase3: "20:55"
       };
 
-      // Bypasses language locale variations by pulling hours and minutes directly via a localized date constructor
       const localizedString = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
       const localizedDate = new Date(localizedString);
 
       const true24HourInt = localizedDate.getHours();
       const trueMinuteInt = localizedDate.getMinutes();
-
-      // Guarantees an exact 24-hour match format string (e.g. "07:00", "19:00") matching your frontend
       const timeTokenString = `${String(true24HourInt).padStart(2, '0')}:${String(trueMinuteInt).padStart(2, '0')}`;
 
-        // 🔬 TEMPORARY LIVE DESK DIAGNOSTIC LOG
-        console.log(`[DEBUG] Clock Ticker Active | True Phase: ${gateDataContext.currentPhase} | Extracted Time Token: "${timeTokenString}"`);
+      console.log(`[DEBUG] Clock Ticker Active | True Phase: ${gateDataContext.currentPhase} | Extracted Time Token: "${timeTokenString}"`);
 
-        if (gateDataContext.currentPhase === 1) {
+      if (gateDataContext.currentPhase === 1) {
         const matchFound = (activeAnnounceLimits.phase1 || ["07:00", "12:00", "19:00"]).includes(timeTokenString);
         if (matchFound) {
           console.log(`⏰ [PHASE 1 TRIGGER] Milestone schedule matched (${timeTokenString}). Dispensing live demand matrix...`);
@@ -130,5 +124,11 @@ app.listen(PORT, () => {
     } catch (loopErr) {
       console.error("⚠️ Background announcement interval ticker exception caught:", loopErr.message);
     }
-  }, 60 * 1000);
+  }
+
+  // 🚀 Execution Step 1: Fire an evaluation immediately right now on server boot
+  evaluateAnnouncementSchedules();
+
+  // 🔄 Execution Step 2: Queue the function to run continuously every 60 seconds thereafter
+  setInterval(evaluateAnnouncementSchedules, 60 * 1000);
 });
