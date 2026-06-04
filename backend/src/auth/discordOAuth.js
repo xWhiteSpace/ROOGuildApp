@@ -21,6 +21,10 @@ router.get('/discord-members', async (req, res) => {
     return res.status(500).json({ error: 'DISCORD_GUILD_ID is not configured in your backend .env file' });
   }
 
+  if (!discordClient || !discordClient.isReady()) {
+    return res.status(503).json({ success: false, error: 'Discord bot client is offline or initializing gateway protocols.' });
+  }
+
   const now = Date.now();
   if (cachedMembers && (now - lastFetchTime < CACHE_DURATION)) {
     return res.json({ success: true, members: cachedMembers });
@@ -34,9 +38,6 @@ router.get('/discord-members', async (req, res) => {
   }
 
   activeFetchPromise = (async () => {
-    if (!discordClient) {
-      throw new Error('Discord bot client is uninitialized.');
-    }
     const guild = await discordClient.guilds.fetch(guildId);
     const membersMap = await guild.members.fetch({ limit: 1000 });
     
