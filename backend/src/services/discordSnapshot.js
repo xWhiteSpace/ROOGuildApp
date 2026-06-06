@@ -12,69 +12,60 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     // Access database instance securely from the firebase-admin module scope
     const db = admin.database();
     
-    // FETCH LIVE SOURCE ROWS FROM SOURCE-OF-TRUTH DATA PATH
-    const allRequestsSnap = await db.ref('auction/web_requests').once('value');
-    if (!allRequestsSnap.exists()) {
+    // Fetch dynamic item templates and live web requests to compile the matrix dynamically
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+    const itemsList = dynamicConfig.items || [];
+
+    const requestsSnap = await db.ref('auction/web_requests').once('value');
+    if (!requestsSnap.exists()) {
       console.log("⚠️ [SNAPSHOT SKIPPED]: No active auction records logged in database folder.");
       return;
     }
 
-    const rawRequests = allRequestsSnap.val();
-    const allPendingRows = [];
+    const firebaseRequests = Object.values(requestsSnap.val());
+    const userCalculationsMap = {};
+    itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 
-    // Filter strictly for lines awaiting operational action
-    Object.values(rawRequests).forEach(req => {
-      if (req && req.selectionStatus === 'Pending') {
-        allPendingRows.push(req);
-      }
-    });
-
-    const targetCategories = ['Puppet', 'Illu', 'Light&Dark', 'Time&Space'];
-    const leaderboards = { 'Puppet': [], 'Illu': [], 'Light&Dark': [], 'Time&Space': [] };
-
-    // Dynamically compile active net requests per scroll type category
-    targetCategories.forEach(targetItem => {
-      const userCalculationsMap = {};
-
-      allPendingRows.forEach(req => {
-        const player = (req.member || '').trim();
-        const itemType = (req.item || '').trim();
-        const qty = parseInt(req.quantity, 10) || 0;
-        const appStatus = (req.applicationStatus || 'requested').toLowerCase();
-        const priorityScore = parseInt(req.priority, 10) || 0;
-
-        if (itemType !== targetItem || !player) return;
-
-        if (!userCalculationsMap[player]) {
-          userCalculationsMap[player] = { name: player, netQty: 0, priority: priorityScore };
-        }
-
-        if (appStatus === 'requested') userCalculationsMap[player].netQty += qty;
-        if (appStatus === 'canceled')  userCalculationsMap[player].netQty -= qty;
-      });
-
-      // Filter out empty balances, sort by priority descending, and clamp to the top 100
-      const activeApplicants = Object.values(userCalculationsMap).filter(u => u.netQty > 0);
-      activeApplicants.sort((a, b) => b.priority - a.priority);
+    // Aggregate user net quantities and filter for pending entries sequentially
+    firebaseRequests.forEach(req => {
+      if ((req.selectionStatus || 'Pending').toLowerCase() !== 'pending') return;
       
-      leaderboards[targetItem] = activeApplicants.slice(0, 100).map(u => ({
-        name: u.name,
-        quantity: u.netQty,
-        priority: u.priority
-      }));
+      const player = (req.member || '').trim();
+      const qty = parseInt(req.quantity, 10) || 0;
+      const appStatus = (req.applicationStatus || 'requested').toLowerCase();
+      const priorityScore = parseInt(req.priority, 10) || 0;
+
+      let reqItemId = req.itemId;
+      if (!reqItemId && req.item) {
+        const found = itemsList.find(i => i.name.toLowerCase() === req.item.toLowerCase());
+        if (found) reqItemId = found.id;
+      }
+
+      if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
+
+      if (!userCalculationsMap[reqItemId][player]) {
+        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore };
+      }
+
+      if (appStatus === 'requested') userCalculationsMap[reqItemId][player].netQty += qty;
+      if (appStatus === 'canceled')  userCalculationsMap[reqItemId][player].netQty -= qty;
     });
-    
+
     // Establish the text template header layout
     let messagePayload = isFinalThreshold
-      ? `🔒 === REQUISITION REGISTRATION CLOSED (FINAL LIST) ===\n`
-      : `📊 === LIVE DYNASTY GUILD REQUEST MATRIX ===\n`;
-    
-    // Parse records directly into the text template layout string
-    Object.keys(leaderboards).forEach(itemKey => {
-      messagePayload += `\n🏷️ Scroll Type: ${itemKey.toUpperCase()}\n`;
-      if (Array.isArray(leaderboards[itemKey])) {
-        leaderboards[itemKey].forEach((entry, index) => {
-          messagePayload += `   [Rank ${index + 1}] ${entry.name} - Qty: ${entry.quantity} (Priority Score: ${entry.priorityScore || entry.priority || 0})\n`;
+      ? `🔒 === BID REQUEST REGISTRATION CLOSED (FINAL LIST) ===\n`
+      : `📊 === CURRENT BID REQUEST LIST ===\n`;
+
+    // Parse the aggregated live parameters directly into the markdown snapshot string
+    itemsList.forEach(item => {
+      const activeApplicants = Object.values(userCalculationsMap[item.id] || {}).filter(u => u.netQty > 0);
+      activeApplicants.sort((a, b) => b.priority - a.priority);
+
+      if (activeApplicants.length > 0) {
+        messagePayload += `\n🏷️ Item Name: ${item.name.toUpperCase()}\n`;
+        activeApplicants.forEach((entry, index) => {
+          messagePayload += `   [Rank ${index + 1}] ${entry.name} - Qty: ${entry.netQty} (Priority Score: ${entry.priority})\n`;
         });
       }
     });

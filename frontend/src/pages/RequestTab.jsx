@@ -1,10 +1,11 @@
+// frontend/src/pages/RequestTab.jsx
 import { useState, useEffect } from 'react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
 export default function RequestTab() {
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState({ name: '', date: '' });
+  const [userData, setUserData] = useState({ name: '', date: '', eventId: '', eventName: '' });
   const [items, setItems] = useState([]);
   const [liveCounts, setLiveCounts] = useState({});
   const [localSelections, setLocalSelections] = useState({});
@@ -18,7 +19,7 @@ export default function RequestTab() {
   const [currentPhase, setCurrentPhase] = useState(1);
   const [rankingsByItem, setRankingsByItem] = useState({});
   const [phaseIntervals, setPhaseIntervals] = useState({ phase1: '', phase2: '', phase3: '' });
-  const [activeListTab, setActiveListTab] = useState('Puppet');
+  const [activeListTab, setActiveListTab] = useState('');
 
   const initLobbyDashboard = async () => {
     try {
@@ -45,8 +46,14 @@ export default function RequestTab() {
       const data = await res.json();
       if (data.success) {
         setItems(data.items);
-        setLiveCounts(data.liveCounts);
-        setUserData({ name: data.displayName, date: data.date });
+        setLiveCounts(data.liveCounts || {});
+        // 🛡️ Safe Binding Pass: Mounts clean backend server metadata directly with zero client assumptions or hardcoded fallbacks
+        setUserData({ 
+          name: data.displayName, 
+          date: data.date, 
+          eventId: data.eventId || "Unconfigured", 
+          eventName: data.eventName || "No Active Target Event Scheduled" 
+        });
         
         if (data.isGateOpen !== undefined) setIsGateOpen(data.isGateOpen);
         if (data.nextStatusChangeMessage) setStatusMessage(data.nextStatusChangeMessage);
@@ -54,9 +61,14 @@ export default function RequestTab() {
         if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
         if (data.phaseIntervals) setPhaseIntervals(data.phaseIntervals);
 
+        // Dynamically initialize selection baskets and tabs based on database IDs
         const blankInputs = {};
-        data.items.forEach(item => { blankInputs[item.name] = 0; });
+        data.items.forEach(item => { blankInputs[item.id] = 0; });
         setLocalSelections(blankInputs);
+
+        if (data.items.length > 0) {
+          setActiveListTab(data.items[0].id);
+        }
       }
     } catch (err) {
       console.error("Connection link offline:", err);
@@ -69,13 +81,13 @@ export default function RequestTab() {
     initLobbyDashboard();
   }, []);
 
-  const adjustCounter = (itemName, direction, maxQty, currentActive) => {
+  const adjustCounter = (itemId, direction, limitQty, currentActive) => {
     if (!isGateOpen) return; 
-    const currentInput = localSelections[itemName] || 0;
-    if (direction === 'up' && currentActive + currentInput < maxQty) {
-      setLocalSelections(prev => ({ ...prev, [itemName]: currentInput + 1 }));
+    const currentInput = localSelections[itemId] || 0;
+    if (direction === 'up' && currentActive + currentInput < limitQty) {
+      setLocalSelections(prev => ({ ...prev, [itemId]: currentInput + 1 }));
     } else if (direction === 'down' && currentInput > 0) {
-      setLocalSelections(prev => ({ ...prev, [itemName]: currentInput - 1 }));
+      setLocalSelections(prev => ({ ...prev, [itemId]: currentInput - 1 }));
     }
   };
 
@@ -85,9 +97,9 @@ export default function RequestTab() {
     let activeItemsCount = 0;
 
     items.forEach(item => {
-      const selectedQty = localSelections[item.name] || 0;
+      const selectedQty = localSelections[item.id] || 0;
       if (selectedQty > 0) {
-        batchPayload[item.name] = selectedQty;
+        batchPayload[item.id] = selectedQty;
         activeItemsCount++;
       }
     });
@@ -119,8 +131,7 @@ export default function RequestTab() {
     }
   };
 
-  const handleExecuteCancel = async (itemName, activeQty) => {
-    // 🔓 Early lock gate guard removed to allow cancellation processing inside all phases
+  const handleExecuteCancel = async (itemId, itemName, activeQty) => {
     try {
       setProcessing(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
@@ -132,8 +143,7 @@ export default function RequestTab() {
       const res = await fetch(`${backendUrl}/api/requests/cancel`, {
         method: 'POST',
         headers: customHeaders,
-        // 🛠️ Repaired correct payload variables matching backend requirements
-        body: JSON.stringify({ itemName, cancelQty: activeQty }), 
+        body: JSON.stringify({ itemId, itemName, cancelQty: activeQty }), 
         credentials: 'include'
       });
       const data = await res.json();
@@ -159,13 +169,13 @@ export default function RequestTab() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse">
-        Reading historical priority allocations from spreadsheet...
+      <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse text-xs font-mono tracking-widest uppercase">
+        Loading Relational Loot Configuration Matrix...
       </div>
     );
   }
 
-  const activeCancelableItems = items.filter(item => (liveCounts[item.name] || 0) > 0);
+  const activeCancelableItems = items.filter(item => (liveCounts[item.id] || 0) > 0);
   const totalStagedInCart = Object.values(localSelections).reduce((sum, val) => sum + val, 0);
   const currentRosterList = rankingsByItem[activeListTab] || [];
 
@@ -174,10 +184,11 @@ export default function RequestTab() {
       
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-100">Advance Request Deck</h1>
-          <div className="text-xs text-slate-400 mt-1 space-x-4">
-            <span>User: <strong className="text-indigo-400">{userData.name}</strong></span>
+          <h1 className="text-xl font-bold tracking-tight text-slate-100">Request Deck</h1>
+          <div className="text-xs text-slate-400 mt-1 space-x-4 flex flex-wrap items-center">
+            <span>Name: <strong className="text-indigo-400">{userData.name}</strong></span>
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
+            <span>Event: <strong className="text-amber-400">[{userData.eventId}] {userData.eventName}</strong></span>
           </div>
           {!isGateOpen && statusMessage && (
             <div className="text-xs font-semibold text-amber-500 mt-2">
@@ -187,20 +198,19 @@ export default function RequestTab() {
         </div>
         <button
           onClick={() => setIsCancelModalOpen(true)}
-          // 🔓 Disabled trigger removed so modal opens freely during lock phase periods
           className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white"
         >
-          Cancel Existing Request
+          Cancel Existing Request...
         </button>
       </div>
 
-      {/* 🛠️ ASYMMETRIC GRID WORKSPACE (Left Sideboards + Right Core Cards) */}
+      {/* ASYMMETRIC GRID WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* PANEL ROW TRACK: Sidebars occupy 4 out of 12 columns */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* ⏳ TIMELINE PHASE FLOW TREE CONTAINER (DYNAMIC INTERVALS INJECTED) */}
+          {/* TIMELINE PHASE FLOW TREE CONTAINER */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider mb-4">Bidding Cycle</h2>
             <div className="space-y-4 font-sans relative pl-2">
@@ -264,10 +274,10 @@ export default function RequestTab() {
             <div className="flex flex-wrap gap-1 mb-4 border-b border-slate-800 pb-2.5">
               {items.map(item => (
                 <button
-                  key={item.name}
-                  onClick={() => setActiveListTab(item.name)}
+                  key={item.id}
+                  onClick={() => setActiveListTab(item.id)}
                   className={`rounded-lg px-2.5 py-1 text-[10px] font-black tracking-tight transition ${
-                    activeListTab === item.name 
+                    activeListTab === item.id 
                       ? 'bg-indigo-600 text-white shadow' 
                       : 'bg-slate-950 text-slate-400 hover:bg-slate-800'
                   }`}
@@ -299,16 +309,17 @@ export default function RequestTab() {
 
         </div>
 
-        {/* CARDS REGISTRATION DECK: Consume the remaining 8 out of 12 desktop grid tracks */}
+        {/* CARDS REGISTRATION DECK */}
         <div className="lg:col-span-8">
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2">
             {items.map(item => {
-              const currentActive = liveCounts[item.name] || 0;
-              const localInput = localSelections[item.name] || 0;
+              const currentActive = liveCounts[item.id] || 0;
+              const localInput = localSelections[item.id] || 0;
               const combinedTotal = currentActive + localInput;
+              const limitQty = item.limitQty || 1;
 
               return (
-                <div key={item.name} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+                <div key={item.id} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
                   <div className="flex items-start justify-between">
                     <h3 className="text-md font-bold text-slate-200">{item.name}</h3>
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${currentActive > 0 ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
@@ -318,21 +329,21 @@ export default function RequestTab() {
 
                   <div className="my-6 flex items-center justify-center gap-4">
                     <button
-                      onClick={() => adjustCounter(item.name, 'down')}
+                      onClick={() => adjustCounter(item.id, 'down', limitQty, currentActive)}
                       disabled={localInput === 0 || processing || !isGateOpen}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20 select-none cursor-pointer text-slate-300"
                     >
                       -
                     </button>
                     <div className="text-center">
                       <span className="text-2xl font-black">{combinedTotal}</span>
                       <span className="mx-1 text-slate-600">/</span>
-                      <span className="text-xs text-slate-500">{item.maxQty} Max</span>
+                      <span className="text-xs text-slate-500">{limitQty} Max</span>
                     </div>
                     <button
-                      onClick={() => adjustCounter(item.name, 'up', item.maxQty, currentActive)}
-                      disabled={combinedTotal >= item.maxQty || processing || !isGateOpen}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20"
+                      onClick={() => adjustCounter(item.id, 'up', limitQty, currentActive)}
+                      disabled={combinedTotal >= limitQty || processing || !isGateOpen}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 font-bold hover:bg-slate-700 disabled:opacity-20 select-none cursor-pointer text-slate-300"
                     >
                       +
                     </button>
@@ -360,7 +371,6 @@ export default function RequestTab() {
                       </span>
                     </div>
                   </div>
-
                 </div>
               );
             })}
@@ -369,7 +379,7 @@ export default function RequestTab() {
 
       </div>
 
-      {/* FOOTER CONFIRMATION BAR BARRIER */}
+      {/* STICKY BAR ACTIONS BOTTOM CONTROL FLUID RUNNER */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <div className="flex flex-col">
@@ -381,7 +391,7 @@ export default function RequestTab() {
           <button
             onClick={handleBatchSubmitRequests}
             disabled={totalStagedInCart === 0 || processing || !isGateOpen}
-            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg"
+            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg cursor-pointer"
           >
             {!isGateOpen ? 'Roster Locked' : processing ? 'Processing Order...' : 'Confirm & Submit All Requests'}
           </button>
@@ -393,23 +403,22 @@ export default function RequestTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
             <h2 className="text-md font-bold text-slate-200">Ongoing Active Requests</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5 mb-4">Select an item row block position below to undo your advance request.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 mb-4">Select an item below to undo your Bid request.</p>
 
             {activeCancelableItems.length === 0 ? (
               <p className="text-xs text-slate-500 py-6 text-center italic">You have no active pending requests currently in queue.</p>
             ) : (
               <div className="space-y-2">
                 {activeCancelableItems.map(item => (
-                  <div key={item.name} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 p-2.5">
+                  <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 p-2.5">
                     <div>
                       <div className="text-xs font-bold text-slate-300">{item.name}</div>
-                      <div className="text-[10px] text-indigo-400">Allocated Balance: {liveCounts[item.name]}</div>
+                      <div className="text-[10px] text-indigo-400">Qty: {liveCounts[item.id]}</div>
                     </div>
                     <button
-                      onClick={() => handleExecuteCancel(item.name, liveCounts[item.name])}
-                      // 🔓 Gate block removed to allow execution actions inside locked windows
+                      onClick={() => handleExecuteCancel(item.id, item.name, liveCounts[item.id])}
                       disabled={processing} 
-                      className="rounded-lg bg-rose-500/10 px-3 py-1.5 text-[10px] font-bold text-rose-400 hover:bg-rose-600 hover:text-white disabled:opacity-20 disabled:bg-slate-800 disabled:text-slate-600"
+                      className="rounded-lg bg-rose-500/10 px-3 py-1.5 text-[10px] font-bold text-rose-400 hover:bg-rose-600 hover:text-white disabled:opacity-20 disabled:bg-slate-800 disabled:text-slate-600 cursor-pointer"
                     >
                       Cancel Request
                     </button>
@@ -419,7 +428,7 @@ export default function RequestTab() {
             )}
 
             <div className="mt-5 flex justify-end">
-              <button onClick={() => setIsCancelModalOpen(false)} className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold hover:bg-slate-700">
+              <button onClick={() => setIsCancelModalOpen(false)} className="rounded-lg bg-slate-800 px-4 py-1.5 text-xs font-semibold hover:bg-slate-700 cursor-pointer text-slate-300">
                 Return to Lobby
               </button>
             </div>

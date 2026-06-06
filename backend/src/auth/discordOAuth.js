@@ -1,5 +1,6 @@
 // backend/src/auth/discordOAuth.js
 import { Router } from 'express';
+import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 const router = Router();
@@ -13,28 +14,15 @@ let activeFetchPromise = null;
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// 🏛️ THE CENTRALIZED AND DEFINITIVE MANAGEMENT GUILD ROLES MATRIX
-// To add, remove, or modify officer groups in the future, edit this single list.
-const CORE_MANAGEMENT_ROLES = [
-  'GUILD LEADER',
-  'Vice Guild Leader',
-  'Commander',
-  'Discord Management',
-  'Guild Management'
-];
-
-function buildDiscordLoginUrl(state) {
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const redirectUri = encodeURIComponent(process.env.OAUTH_REDIRECT_URI);
-  const scope = encodeURIComponent('identify');
-  return `${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(state)}`;
-}
-
-// 🛡️ REPAIRED ROSTER ENDPOINT WRAPPED IN TRUE PILL OBJECT ENVELOPE
+// 🛡️ REPAIRED ROSTER ENDPOINT
 router.get('/discord-members', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
   if (!guildId) {
     return res.status(500).json({ error: 'DISCORD_GUILD_ID is not configured in your backend .env file' });
+  }
+
+  if (!discordClient || !discordClient.isReady()) {
+    return res.status(503).json({ success: false, error: 'Discord bot client is offline or initializing gateway protocols.' });
   }
 
   const now = Date.now();
@@ -50,9 +38,6 @@ router.get('/discord-members', async (req, res) => {
   }
 
   activeFetchPromise = (async () => {
-    if (!discordClient || !discordClient.isReady()) {
-      throw new Error('Discord bot client is offline or initializing gateway protocols.');
-    }
     const guild = await discordClient.guilds.fetch(guildId);
     const membersMap = await guild.members.fetch({ limit: 1000 });
     
@@ -70,7 +55,6 @@ router.get('/discord-members', async (req, res) => {
     const freshMembers = await activeFetchPromise;
     cachedMembers = freshMembers;
     lastFetchTime = Date.now();
-    // ✅ Returns the success wrapper object to satisfy the frontend's validation condition
     return res.json({ success: true, members: freshMembers });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to extract active member matrix from Discord gateway.' });
@@ -81,7 +65,10 @@ router.get('/discord-members', async (req, res) => {
 
 router.get('/login', (req, res) => {
   const state = req.query.state || 'no_state';
-  res.redirect(buildDiscordLoginUrl(state));
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirectUri = encodeURIComponent(process.env.OAUTH_REDIRECT_URI);
+  const scope = encodeURIComponent('identify');
+  res.redirect(`${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(state)}`);
 });
 
 router.get('/callback', async (req, res) => {
@@ -116,23 +103,27 @@ router.get('/callback', async (req, res) => {
 
     const user = await userResponse.json();
     let serverNickname = user.global_name || user.username;
-    let assignedCoreRoles = [];
+    let memberRolesNames = [];
     const guildId = process.env.DISCORD_GUILD_ID;
 
-    if (discordClient && discordClient.isReady() && guildId) {
+    if (discordClient && guildId) {
       try {
         const guild = await discordClient.guilds.fetch(guildId);
         const member = await guild.members.fetch(user.id);
         if (member) {
           serverNickname = member.nickname || member.displayName || serverNickname;
-          assignedCoreRoles = member.roles.cache
-            .map(role => role.name)
-            .filter(roleName => CORE_MANAGEMENT_ROLES.includes(roleName));
+          memberRolesNames = member.roles.cache.map(role => role.name);
         }
       } catch (err) {
-        console.warn('⚠️ Could not fetch guild profile details.');
+        console.warn('⚠️ Could not fetch guild profile details via REST API:', err.message);
       }
     }
+
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const dynamicAdminRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    const isOfficerMatch = memberRolesNames.some(roleName => dynamicAdminRoles.includes(roleName));
 
     req.session.user = {
       id: user.id,
@@ -140,24 +131,48 @@ router.get('/callback', async (req, res) => {
       discriminator: user.discriminator,
       avatar: user.avatar,
       displayName: serverNickname,
-      isOfficer: assignedCoreRoles.length > 0, // ✅ Centralized Boolean permission token
-      roles: assignedCoreRoles
+      isOfficer: isOfficerMatch, 
+      roles: memberRolesNames
     };
 
     return req.session.save(() => {
-      const encodedUser = encodeURIComponent(JSON.stringify(req.session.user));
+      const leanOutboundProfile = {
+        id: user.id,
+        username: user.username,
+        discriminator: user.discriminator,
+        avatar: user.avatar,
+        displayName: serverNickname,
+        isOfficer: isOfficerMatch,
+        roles: memberRolesNames
+      };
+      const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
     });
   } catch (error) {
+    console.error("❌ OAuth callback processing failed:", error);
     return res.redirect(`${targetFrontend}/login?error=discord_oauth_failed`);
   }
 });
 
 router.get('/me', (req, res) => {
-  if (!req.session?.user) {
+  let user = req.session?.user;
+  
+  if (!user) {
+    const fallbackToken = req.headers['x-user-profile'];
+    if (fallbackToken) {
+      try {
+        user = JSON.parse(decodeURIComponent(fallbackToken));
+      } catch (e) {
+        console.error("❌ Failed to decode cross-domain profile header token inside /me check:", e.message);
+      }
+    }
+  }
+
+  if (!user) {
     return res.status(200).json({ authenticated: false, user: null });
   }
-  return res.json({ authenticated: true, user: req.session.user });
+  
+  return res.json({ authenticated: true, user });
 });
 
 router.post('/logout', (req, res) => {

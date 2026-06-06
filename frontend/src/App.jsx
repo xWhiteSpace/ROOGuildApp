@@ -9,16 +9,18 @@ import RequestHistoryTab from './pages/RequestHistoryTab';
 import PastAuctionTab from './pages/PastAuctionTab';
 import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
 import LoginPage from './pages/LoginPage';
+import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
 import { fetchCurrentUser, logoutUser } from './services/authService';
 
-function App() {
+const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+
+export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     async function loadUser() {
       setAuthLoading(true);
-
       const urlParams = new URLSearchParams(window.location.search);
       const authUserRaw = urlParams.get('auth_user');
 
@@ -26,13 +28,12 @@ function App() {
         try {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
           setAuthUser(parsedUser);
-          
           localStorage.setItem('dynasty_raid_session', JSON.stringify(parsedUser));
           window.history.replaceState({}, document.title, window.location.pathname);
           setAuthLoading(false);
           return; 
         } catch (error) {
-          console.error("Failed to parse cross-origin session credentials:", error);
+          console.error(error);
         }
       }
 
@@ -48,20 +49,26 @@ function App() {
       }
 
       try {
-        const result = await fetchCurrentUser();
-        if (result.authenticated) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (savedSession) {
+          headers['x-user-profile'] = encodeURIComponent(savedSession);
+        }
+        const response = await fetch(`${backendUrl}/auth/me`, {
+          credentials: 'include',
+          headers: headers
+        });
+        const result = await response.json();
+        if (result.authenticated && result.user) {
           setAuthUser(result.user);
         } else {
           setAuthUser(null);
         }
       } catch (err) {
-        console.error("Failed to fetch current user:", err);
         setAuthUser(null);
       } finally {
         setAuthLoading(false);
       }
     }
-
     loadUser();
   }, []);
 
@@ -73,8 +80,8 @@ function App() {
 
   if (authLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-medium">
-        Loading DynastyGuild Dashboard...
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-mono text-xs uppercase tracking-widest animate-pulse">
+        Synchronizing Security Workspace Modules...
       </div>
     );
   }
@@ -83,7 +90,6 @@ function App() {
     <BrowserRouter>
       <MainLayout user={authUser} onLogout={handleLogout}>
         <Routes>
-          {/* ✅ Passed user context prop to RequestTab for root alignment mapping */}
           <Route path="/" element={<RequestTab user={authUser} />} />
           <Route path="/live-bidding" element={<LiveBiddingTab user={authUser} />} />
           <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
@@ -91,10 +97,11 @@ function App() {
           <Route path="/past-auction" element={<PastAuctionTab />} />
           <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
           <Route path="/login" element={<LoginPage />} />
+          
+          {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
+          <Route path="/settings-configuration" element={<SettingsTab />} />
         </Routes>
       </MainLayout>
     </BrowserRouter>
   );
 }
-
-export default App;

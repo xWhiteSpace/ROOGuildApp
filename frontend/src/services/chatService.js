@@ -26,7 +26,8 @@ export async function sendChatMessage(content) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true',
+        // Injects the ngrok bypass flag dynamically only if the target points to a tunnel instance
+        ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {}),
         // encodeURIComponent keeps special characters from breaking the HTTP header value rules
         'X-Authorized-User': storedUser ? encodeURIComponent(storedUser) : '',
       },

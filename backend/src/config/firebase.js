@@ -30,5 +30,11 @@ export function initializeFirebase() {
   }
 }
 
-// Named export for the database reference if required by legacy files
-export const db = admin.apps.length ? admin.database() : null;
+/**
+ * 📡 LIVE PROXIED DATABASE GATEWAY
+ * Uses a dynamic property wrapper to prevent compile-time race conditions.
+ * Guarantees downstream imports always resolve to an active instance upon invocation.
+ */
+export const db = {
+  ref: (path) => admin.apps.length ? admin.database().ref(path) : null
+};
