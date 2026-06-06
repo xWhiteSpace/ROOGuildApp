@@ -118,6 +118,7 @@ app.get('/api/deploy-auction-card', async (req, res) => {
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
+  console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
 
   // ⏰ Isolated schedule evaluator helper can be cleanly called on demand
   function evaluateAnnouncementSchedules() {

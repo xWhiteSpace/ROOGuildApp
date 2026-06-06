@@ -4,6 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
+const ITEM_LIMIT_DEFAULTS = {
+  'Puppet': 1,
+  'Illu': 1,
+  'Light&Dark': 3,
+  'Time&Space': 5
+};
+
 export default function MimicBookTab({ user }) {
   // 🏛️ CENTRALIZED USER INTENT PERMISSION RESOLVER
   const isOfficer = user?.isOfficer === true;
@@ -49,6 +56,15 @@ export default function MimicBookTab({ user }) {
   const [activeMatrixFilter, setActiveMatrixFilter] = useState('');
   const [categoryAllocations, setCategoryAllocations] = useState({});
   const [initialWinnersByItem, setInitialWinnersByItem] = useState({});
+
+  // --- 🔍 SIDEBAR TAB NAVIGATION CONTROLS ---
+  const [sidebarTab, setSidebarTab] = useState('standby'); 
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const popoverAnchorRef = useRef(null);
+
+  // --- Drag and Drop State Holders ---
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+  const isUserDraggingRef = useRef(false); 
 
   // --- 🔍 SIDEBAR TAB NAVIGATION CONTROLS ---
   const [sidebarTab, setSidebarTab] = useState('standby'); 
@@ -157,7 +173,74 @@ export default function MimicBookTab({ user }) {
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
     } finally {
-      setLoadingPool(false);
+      setSyncingRoster(false);
+    }
+  };
+
+  const fetchLootHistoryLog = async () => {
+    try {
+      setLoadingLootHistory(true);
+      setExpandedGroups({}); 
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+      const res = await fetch(`${backendUrl}/api/requests/loot-history`, { method: 'GET', headers: customHeaders, credentials: 'include' });
+      const data = await res.json();
+      if (data.success) setLootHistoryData(data.history || []);
+    } catch (err) {
+      console.error("Failed to extract loot history logs:", err);
+    } finally {
+      setLoadingLootHistory(false);
+    }
+  };
+
+  const fetchActiveSessionFromBackend = async (isInitialMount = false) => {
+    if (isUserDraggingRef.current) return; 
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+      const res = await fetch(`${backendUrl}/api/requests/active-session`, { method: 'GET', headers: customHeaders, credentials: 'include' });
+      const data = await res.json();
+      if (data.success && data.session) {
+        const s = data.session;
+        if (s.activeStep !== undefined) setActiveStep(s.activeStep);
+        if (s.lootRows) setLootRows(s.lootRows);
+        if (s.lootSummary) setLootSummary(s.lootSummary);
+        if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
+        if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
+        if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
+        if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
+        if (s.sidebarTab) setSidebarTab(s.sidebarTab);
+      }
+    } catch (err) {
+      if (isInitialMount) console.error("Could not complete initial sandbox setup sync:", err);
+    }
+  };
+
+  const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {
+    if (!isOfficer) return;
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) {
+        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+      }
+      const res = await fetch(`${backendUrl}/api/requests/update-session`, {
+        method: 'POST',
+        headers: customHeaders,
+        body: JSON.stringify({ session: updatedWorkspaceSnapshot }),
+        credentials: 'include'
+      });
+      if (!res.ok) {
+        fetchActiveSessionFromBackend(false); 
+      }
+    } catch (err) {
+      console.error("Backend packet transmission timeout:", err);
     }
   };
 
@@ -850,6 +933,7 @@ export default function MimicBookTab({ user }) {
                       </div>
                     ))}
                   </div>
+
                 </div>
               </div>
 
@@ -1144,6 +1228,88 @@ export default function MimicBookTab({ user }) {
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
               <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500" >📥 Export CSV</button>
               <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition" >↩️ Return</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 🌟 GROUPED TIMELINE ACCORDION LOOT HISTORICAL MATRIX MODAL --- */}
+      {isLootHistoryOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-[#111216] border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-slate-100 tracking-wide">📜 Registered Loot Supply History Ledger</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">Historical verification records compiled directly from raid configurations</p>
+              </div>
+              <button onClick={() => setIsLootHistoryOpen(false)} className="text-slate-500 hover:text-slate-300 font-mono text-sm p-1">✕</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-grow space-y-2 scrollbar-thin">
+              {loadingLootHistory ? (
+                <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting historical index criteria parameters...</div>
+              ) : getGroupedHistoryTimeline().length === 0 ? (
+                <div className="text-center py-12 text-slate-600 italic font-sans text-xs">No legacy loot logs tracked within the database table folders.</div>
+              ) : (
+                getGroupedHistoryTimeline().map((group) => {
+                  const groupKey = `${group.date}_${group.event}`;
+                  const isExpanded = !!expandedGroups[groupKey];
+
+                  return (
+                    <div key={groupKey} className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-900/20">
+                      
+                      {/* ACCORDION HEADER ANCHOR ROW */}
+                      <div 
+                        onClick={() => toggleAccordionGroup(groupKey)}
+                        className="p-3 px-4 bg-slate-950/60 hover:bg-slate-950 transition-all flex items-center justify-between cursor-pointer text-xs font-mono select-none"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-sans text-sm w-4 text-center">{isExpanded ? '▼' : '▶'}</span>
+                          <span className="text-slate-200 font-bold">{group.date}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 font-sans font-bold text-slate-300">
+                            {group.event === 'GuildLeague' ? '🏆 GuildLeague' : '🔥 ' + group.event}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-sans text-indigo-400 font-medium tracking-tight bg-indigo-950/20 border border-indigo-900/30 px-2.5 py-0.5 rounded-lg">
+                          {isExpanded ? 'Click to Close' : 'Click to View'}
+                        </span>
+                      </div>
+
+                      {/* NESTED CONTENT SUB-TABLE */}
+                      {isExpanded && (
+                        <div className="p-4 bg-slate-950/30 border-t border-slate-900 animate-fadeIn overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs font-mono">
+                            <thead>
+                              <tr className="bg-slate-950/80 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800/80 text-[10px]">
+                                <th className="p-2.5">Item Category</th>
+                                <th className="p-2.5 text-center">Total Drops</th>
+                                <th className="p-2.5 text-center">Claim Limit</th>
+                                <th className="p-2.5 text-center">Active Seats</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900 text-slate-300">
+                              {(group.records || []).map((row) => (
+                                <tr key={row.id} className="hover:bg-slate-950/20 transition-all">
+                                  <td className="p-2.5 font-sans font-semibold text-slate-200">{row.item}</td>
+                                  <td className="p-2.5 text-center text-slate-300 font-bold">{row.quantity} pcs</td>
+                                  <td className="p-2.5 text-center text-amber-500 font-bold">Max {row.max}/p</td>
+                                  <td className="p-2.5 text-center text-emerald-400 font-bold">{row.mem} Members</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
+              <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-900 disabled:text-slate-600 tracking-wide" >📥 Export CSV</button>
+              <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white tracking-wide">↩️ Return</button>
             </div>
           </div>
         </div>
