@@ -244,18 +244,23 @@ export async function handleAuctionInteraction(interaction) {
     const itemId = valueParts[1];
 
     try {
-      // 🛰️ ATOMIC ALLOCATION INTERSECTOR: Mutates the true nested Phase 2 index field directly
-      await db.ref(`auction/active_session/categoryAllocations/${itemId}/selected`).transaction((currentSelected) => {
+        // 🛰️ ATOMIC ALLOCATION INTERSECTOR: Mutates the true nested Phase 2 index field directly
+      const txResult = await db.ref(`auction/active_session/categoryAllocations/${itemId}/selected`).transaction((currentSelected) => {
         if (!currentSelected) return currentSelected;
 
         // Anti-collision guard: Check if someone beat them to it
         if (currentSelected[targetIndex] !== "") {
-          throw new Error('COLLISION_DETECTED');
+          return; // 🛑 Return undefined to abort transaction safely without breaking internal Firebase engine loops
         }
 
         currentSelected[targetIndex] = finalRosterName;
         return currentSelected;
       });
+
+      // If the transaction aborted because another thread claimed it first, trigger collision handler
+      if (!txResult.committed) {
+        throw new Error('COLLISION_DETECTED');
+      }
 
       // Pull fresh copies to compute coordinates for the text receipt notice
       const updatedConfigSnap = await db.ref('settings/configuration').once('value');
