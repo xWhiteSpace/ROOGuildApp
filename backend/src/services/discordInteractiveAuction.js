@@ -1,6 +1,7 @@
 // backend/src/services/discordInteractiveAuction.js
 import admin from 'firebase-admin';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { getGateStatusDetails } from '../config/timeWindow.js'; // ⏰ Timeline Intersector: Imports master clock calculations
 
 // Pure message text block formatting the in-game display alignment rule
 const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
@@ -206,9 +207,17 @@ export async function handleAuctionInteraction(interaction) {
   const finalRosterName = (interaction.member?.nickname || interaction.member?.displayName || interaction.user?.globalName || interaction.user?.username || '').trim();
   const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\[\]]/g, '_');
 
-  // ─── STEP 1: USER CLICKS THE PUBLIC ENTRY BUTTON ───
+    // ─── STEP 1: USER CLICKS THE PUBLIC ENTRY BUTTON ───
   if (interaction.isButton() && interaction.customId === 'open_auction_panel') {
     await interaction.deferReply({ ephemeral: true });
+
+    // 🔒 Strict Calendar Time Gate: Rejects entry unless the schedule is actively inside Phase 3 (Live Auction)
+    const timeGateStatus = getGateStatusDetails() || {};
+    if (timeGateStatus.currentPhase !== 3) {
+      return await interaction.editReply({
+        content: `⚠️ **ARENA CLOSED**: This interaction panel is locked. It will automatically unlock when the event enters **Phase 3: Live Auction Session**.\n\n⏱️ *Current Status: ${timeGateStatus.nextStatusChangeMessage || 'Waiting for scheduled session launch'}*`
+      });
+    }
 
     const memberCheckSnap = await db.ref(`auction/members/${sanitizedFirebaseKey}`).once('value');
     if (!memberCheckSnap.exists()) {
