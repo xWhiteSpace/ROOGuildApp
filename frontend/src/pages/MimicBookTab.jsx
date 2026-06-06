@@ -20,6 +20,7 @@ export default function MimicBookTab({ user }) {
 
   // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
+  const [availableEvents, setAvailableEvents] = useState({}); // 🛡️ Dynamic Directory Hook: Tracks configuration titles added via SettingsTab
   const [commitDate, setCommitDate] = useState(() => {
     const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
     const gmt8Date = new Date(gmt8String);
@@ -144,6 +145,14 @@ export default function MimicBookTab({ user }) {
         setRankingsByItem(data.rankingsByItem || {});
         setRequestsByItemDetails(data.requestsByItemDetails || {});
         setMasterGuildRoster(data.fullRoster || []);
+        // 🛡️ Payload Alignment Pass: Cache dynamic custom event titles natively to unlock modular dropdown loops
+        if (data.events) {
+          setAvailableEvents(data.events);
+          const firstEvKey = Object.keys(data.events)[0];
+          if (firstEvKey && data.events[firstEvKey]?.title) {
+            setCommitEvent(data.events[firstEvKey].title);
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
@@ -612,8 +621,8 @@ export default function MimicBookTab({ user }) {
       {/* BRAND MONITOR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-white uppercase">Member-Item Request Allocation Preview</h1>
-          <p className="text-xs text-slate-400 mt-1">Digital Twin Pre-Raid Coordination Grid & Ledger Desk</p>
+          <h1 className="text-2xl font-black tracking-tight text-white uppercase">Game Auction Preview</h1>
+          <p className="text-xs text-slate-400 mt-1">Mirrored Item Mapping & Input Console</p>
         </div>
         <div className="flex items-center gap-3">
           {isOfficer && (
@@ -655,23 +664,23 @@ export default function MimicBookTab({ user }) {
         <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 shadow-xl space-y-4" ref={popoverAnchorRef}>
           
           <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto text-center text-xs font-bold border-b border-slate-800/60 pb-3">
-            <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 1 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>1. Loot Registry & Math</div>
+            <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 1 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>1. Loot Registry</div>
             <div className="text-slate-700">➔</div>
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 2 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>2. Allocation Selection</div>
             <div className="text-slate-700">➔</div>
             <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 3 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>3. Mimic Preview</div>
             <div className="text-slate-700">➔</div>
-            <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 4 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>4. Commit Archive</div>
+            <div className={`flex-1 py-1 rounded-lg transition-all ${activeStep === 4 ? 'bg-violet-600 text-white shadow-md' : 'text-slate-500'}`}>4. Commit Digital Version</div>
           </div>
 
           {/* STEP 1 WORKSPACE */}
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-bold text-slate-300">Register Dropped Quantities & Set Selection Constraints:</div>
+                <div className="text-sm font-bold text-slate-300">Register In-game Auction Item Position:</div>
                 <div className="flex items-center gap-3">
                   {loadingPool && <span className="text-[10px] text-amber-400 animate-pulse mr-2">Syncing with Request List...</span>}
-                  <label className="text-xs text-slate-400 font-semibold">Slots Per Game Page:</label>
+                  <label className="text-xs text-slate-400 font-semibold">Slots Per Page In-game:</label>
                   <input 
                     type="number" 
                     value={qtyPerPage} 
@@ -693,13 +702,13 @@ export default function MimicBookTab({ user }) {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 uppercase font-black tracking-wider text-[10px]">
-                      <th className="p-3">Dropped Item Category</th>
+                      <th className="p-3">Item Category</th>
                       <th className="p-3 text-center">Start Page</th>
                       <th className="p-3 text-center">Start Pos</th>
                       <th className="p-3 text-center">End Page</th>
                       <th className="p-3 text-center">End Pos</th>
-                      <th className="p-3 text-center">Bid/Claim Limit</th>
-                      <th className="p-3 text-center">Action</th>
+                      <th className="p-3 text-center">Bid Limit</th>
+                      <th className="p-3 text-center">Remove</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -763,8 +772,8 @@ export default function MimicBookTab({ user }) {
               </div>
 
               <div className="flex justify-between items-center pt-2">
-                <button onClick={handleAddLootRow} className="px-4 py-1.5 rounded-xl border border-slate-700 bg-slate-900 font-bold text-xs transition">+ AUTO-CHAIN NEXT BOX ➕</button>
-                <button onClick={handleCheckAndRegisterLoot} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg transition">RUN ELIGIBILITY ENGINE ➔</button>
+                <button onClick={handleAddLootRow} className="px-4 py-1.5 rounded-xl border border-slate-700 bg-slate-900 font-bold text-xs transition">➕ Add New Item...</button>
+                <button onClick={handleCheckAndRegisterLoot} className="px-6 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs tracking-wide shadow-lg transition">ALLOCATE MEMBERS ➔</button>
               </div>
             </div>
           )}
@@ -791,8 +800,8 @@ export default function MimicBookTab({ user }) {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                 <div className="md:col-span-2 border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
-                    {(currentActiveSelections.selected || []).map((name, i) => {
-                      // Look up the matching computed game coordinate on the fly
+                    {activeSelectedList.map((name, i) => {
+                    // Look up the matching computed game coordinate on the fly
                       const coords = generatedSlots.filter(s => s.itemType === activeMatrixFilter)[i];
                       const coordLabel = coords ? `Page ${coords.page} Slot ${coords.slot}` : `Slot ${i + 1}`;
 
@@ -810,7 +819,7 @@ export default function MimicBookTab({ user }) {
                           >
                             <div className="flex items-center gap-3">
                               <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-black tracking-wider border border-slate-800">{coordLabel}</span>
-                              <span>[ 📥 Drop Card Here to Assign Member ]</span>
+                              <span>[ 📥 Drag & Drop Here to Assign Member ]</span>
                             </div>
                           </div>
                         );
@@ -864,7 +873,7 @@ export default function MimicBookTab({ user }) {
           {/* 🔮 STEP 3: DYNAMIC TWIN LAYOUT RE-INTERCEPT PANEL */}
           {activeStep === 3 && (
             <div className="flex p-3 bg-slate-950 border border-slate-900 rounded-xl items-center justify-between gap-4 animate-fadeIn">
-              <div className="text-xs text-slate-400 font-medium">✨ Reviewing the digital twin auction book preview sequence below.</div>
+              <div className="text-xs text-slate-400 font-medium">✨ Review the Game Auction Book Preview allocation below.</div>
               <div className="flex gap-3">
                 <button 
                   onClick={() => saveWorkspaceState({ activeStep: 2 })} 
@@ -886,20 +895,27 @@ export default function MimicBookTab({ user }) {
           {activeStep === 4 && (
             <div className="bg-gradient-to-br from-slate-900 to-amber-950/10 border border-amber-500/20 p-5 rounded-xl text-center space-y-4 animate-fadeIn">
               <div className="space-y-1">
-                <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wide">Finalize Spreadsheet Registration</h3>
-                <p className="text-xs text-slate-400 max-w-xl mx-auto">Verify parameters below. Committing locks records straight into permanent database tables and frees up applicants for subsequent events.</p>
+                <h3 className="text-sm font-bold text-amber-400 uppercase tracking-wide">Finalize Database Registration</h3>
+                <p className="text-xs text-slate-400 max-w-xl mx-auto">Verify parameters below. Committing locks records straight into permanent database history and frees up applicants for subsequent events.</p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 max-w-md mx-auto p-3.5 bg-slate-950 rounded-xl border border-slate-800">
                 <div className="text-left w-full">
-                  <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Raid Event Night Date</label>
+                  <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Date</label>
                   <input type="text" value={commitDate} onChange={(e) => setCommitDate(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" placeholder="MM/DD/YYYY" />
                 </div>
                 <div className="text-left w-full">
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Category Origin</label>
                   <select value={commitEvent} onChange={(e) => setCommitEvent(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" >
-                    <option value="GuildLeague">🏆 GuildLeague</option>
-                    <option value="EmperiumOverrun">🔥 EmperiumOverrun</option>
+                    {Object.keys(availableEvents).length > 0 ? (
+                      Object.keys(availableEvents).map((evKey) => (
+                        <option key={evKey} value={availableEvents[evKey].title || ''}>
+                          ⚔️ {availableEvents[evKey].title || evKey}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="GuildLeague">🏆 GuildLeague (Fallback)</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -937,7 +953,7 @@ export default function MimicBookTab({ user }) {
           </div>
 
           <div className="bg-slate-950/80 border border-slate-900 rounded-xl p-3 min-h-[220px] shadow-inner flex flex-col justify-between space-y-2">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 text-center pb-2 border-b border-slate-900/60 font-mono">--- Book Page: {bookCurrentPage} ---</div>
+            <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 text-center pb-2 border-b border-slate-900/60 font-mono">--- [ALL] TAB Page: {bookCurrentPage} ---</div>
 
             <div className="space-y-1.5 flex-1 py-1">
               {pageSlotsToRender.map((slot, index) => {
@@ -966,7 +982,7 @@ export default function MimicBookTab({ user }) {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-900/60">
               <button onClick={() => setBookCurrentPage(Math.max(1, bookCurrentPage - 1))} disabled={bookCurrentPage === 1} className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-black disabled:opacity-20 transition">◀ PREV</button>
-              <div className="text-[10px] font-mono font-bold text-slate-400 text-center flex-1">Page <span className="text-white bg-slate-900 px-1.5 py-0.5 rounded mx-0.5">{bookCurrentPage}</span> of {totalPagesCount}</div>
+              <div className="text-[10px] font-mono font-bold text-slate-400">Page <span className="text-white bg-slate-900 px-1.5 py-0.5 rounded mx-0.5">{bookCurrentPage}</span> of {totalPagesCount} [ALL Tab]</div>
               <button onClick={() => setBookCurrentPage(Math.min(totalPagesCount, bookCurrentPage + 1))} disabled={bookCurrentPage === totalPagesCount} className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-black disabled:opacity-20 transition">NEXT ▶</button>
             </div>
           </div>
@@ -976,7 +992,7 @@ export default function MimicBookTab({ user }) {
         <div className="lg:col-span-7 bg-slate-900/20 border border-slate-800/60 rounded-2xl p-4 shadow-2xl space-y-4">
           <div>
             <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">📜 Master Allocation Ledger</h2>
-            <p className="text-[10px] text-slate-500 mt-0.5">Complete overview roster transparency sequence</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Complete list of Bid Requests</p>
           </div>
 
           <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
@@ -985,9 +1001,9 @@ export default function MimicBookTab({ user }) {
                 <thead className="sticky top-0 bg-slate-900 z-10 border-b border-slate-800 text-slate-400 uppercase font-black tracking-wider text-[9px]">
                   <tr>
                     <th className="p-2.5">Name</th>
-                    <th className="p-2.5">Target Item</th>
-                    <th className="p-2.5">Game Page</th>
-                    <th className="p-2.5">Box Position</th>
+                    <th className="p-2.5">Item</th>
+                    <th className="p-2.5">Page</th>
+                    <th className="p-2.5">Slot</th>
                     <th className="p-2.5 text-right">Status</th>
                   </tr>
                 </thead>
@@ -1052,6 +1068,9 @@ export default function MimicBookTab({ user }) {
               </table>
             </div>
           </div>
+            <div className="bg-slate-950/60 border border-slate-900 p-2.5 rounded-xl text-[10px] text-slate-500 leading-relaxed font-sans">
+            💡 <strong className="text-slate-400">Quick-Jump Shortcut:</strong> Select any row line item in the right table to forcefully flip the Game auction book preview directly to that exact target page window index!
+            </div>
         </div>
       </div>
 
@@ -1122,10 +1141,6 @@ export default function MimicBookTab({ user }) {
               )}
             </div>
             
-            <div className="bg-slate-950/60 border border-slate-900 p-2.5 rounded-xl text-[10px] text-slate-500 leading-relaxed font-sans">
-            💡 <strong className="text-slate-400">Quick-Jump Shortcut:</strong> Select any row line item in the right table to forcefully flip the digital twin book preview directly to that exact target page window index!
-            </div>
-
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-2xl">
               <button onClick={handleDownloadLootHistoryCSV} disabled={lootHistoryData.length === 0} className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white transition hover:bg-indigo-500" >📥 Export CSV</button>
               <button onClick={() => setIsLootHistoryOpen(false)} className="rounded-xl border border-slate-700 bg-slate-900 px-5 py-2 text-xs font-bold text-slate-300 transition" >↩️ Return</button>

@@ -220,14 +220,14 @@ export default function SettingsTab() {
     return (
       <div className="mx-auto max-w-md p-8 text-center text-white border border-slate-800 bg-slate-900 rounded-3xl mt-16 shadow-2xl">
         <div className="text-3xl mb-3 select-none">🔒</div>
-        <h2 className="text-base font-black tracking-wider uppercase text-slate-200">Settings Desk Key Locked</h2>
-        <p className="text-xs text-slate-400 mt-1 mb-6 font-sans">Input the environment operational master key to release database configuration channels.</p>
+        <h2 className="text-base font-black tracking-wider uppercase text-slate-200">Settings</h2>
+        <p className="text-xs text-slate-400 mt-1 mb-6 font-sans">Input the environment master key to access bidding configuration.</p>
         
         <input 
           type="password"
           value={passphrase}
           onChange={(e) => setPassphrase(e.target.value)}
-          placeholder="Enter Operational Master Key..."
+          placeholder="Enter env Master Key..."
           className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-center text-amber-500 font-mono tracking-widest outline-none mb-3 focus:border-amber-500/40"
           onKeyDown={(e) => e.key === 'Enter' && handleVerifyPassphrase()}
         />
@@ -249,14 +249,14 @@ export default function SettingsTab() {
       {/* HEADER SECTION BLOCK */}
       <div className="flex justify-between items-center border-b border-slate-800 pb-4">
         <div>
-          <h1 className="text-xl font-black anonymity-wider uppercase tracking-tight text-slate-100">⚙️ System Configuration Desk</h1>
-          <div className="text-xs text-slate-400 mt-0.5">Modify global server parameters, timetables, and relational layout structures safely.</div>
+          <h1 className="text-xl font-black anonymity-wider uppercase tracking-tight text-slate-100">⚙️ System Configuration</h1>
+          <div className="text-xs text-slate-400 mt-0.5">Modify events, notification time, items, admin roles parameters.</div>
         </div>
         <button 
           onClick={() => setIsLocked(true)} 
           className="px-3 py-1.5 bg-slate-900 border border-slate-800 text-[10px] uppercase font-black tracking-wider rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
         >
-          Lock Channels 🔒
+          Lock Setting 🔒
         </button>
       </div>
 
@@ -271,20 +271,20 @@ export default function SettingsTab() {
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3 flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Bidding Gate Switch Controller</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Manually lock registration channels or allow the rolling calendar clock to run automatically.</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Manually lock Bid Request or allow the event to run automatically.</p>
           </div>
           <div className="flex p-1 bg-slate-950 border border-slate-800 rounded-xl w-full">
             <button 
               onClick={() => setConfig(prev => ({ ...prev, isForceLocked: false }))}
               className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-lg transition cursor-pointer ${!config.isForceLocked ? 'bg-indigo-600 text-white shadow-inner' : 'text-slate-500 hover:bg-slate-900/40'}`}
             >
-              ⭕ Run Automated Weekly Cycle
+              ⭕ Run Bidding Cycle
             </button>
             <button 
               onClick={() => setConfig(prev => ({ ...prev, isForceLocked: true }))}
               className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-lg transition cursor-pointer ${config.isForceLocked ? 'bg-rose-600 text-white shadow-inner' : 'text-slate-500 hover:bg-slate-900/40'}`}
             >
-              🔒 Force Hard Override Lockdown
+              🔒 Force Lock Request
             </button>
           </div>
         </div>
@@ -292,7 +292,7 @@ export default function SettingsTab() {
         {/* TIMEZONE SELECTION CONFIGURATION TRACK */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3 flex flex-col justify-between">
           <div>
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Global Timezone Environment Profile</h3>
+            <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Global Timezone Setting</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Select your target timeline region, or hit Auto-Detect to instantly parse browser configurations.</p>
           </div>
           <div className="flex gap-2">
@@ -310,7 +310,7 @@ export default function SettingsTab() {
               onClick={handleDetectBrowserTimezone}
               className="px-4 rounded-xl border border-slate-700 bg-slate-950 text-slate-400 hover:text-white text-xs whitespace-nowrap font-bold transition cursor-pointer"
             >
-              🧭 Auto-Detect
+              🧭 Detect
             </button>
           </div>
         </div>
@@ -319,11 +319,11 @@ export default function SettingsTab() {
       {/* SECTION 1: REQUEST-RELATED PARAMETERS (EVENTS AND TIME MATRICES MAPPER) */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
         <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 1: Request-Related Timeline & Schedules Mapper</h3>
+          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 1: Event Setting & Notification</h3>
           <div className="flex gap-2">
             <input 
               type="text"
-              placeholder="New Event Title (e.g. CastleSiege)..."
+              placeholder="New Event Title (e.g. GL)..."
               value={newEventName}
               onChange={(e) => setNewEventName(e.target.value)}
               className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans"
@@ -424,14 +424,14 @@ export default function SettingsTab() {
               {/* 📢 DYNAMIC CONTEXTUAL BOT ANNOUNCEMENT SCHEDULER DESK */}
               <div className="bg-slate-900/30 border border-slate-900 p-3 rounded-xl space-y-3">
                 <div>
-                  <h4 className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">📢 Bot Announcement Cadence for this Event</h4>
-                  <p className="text-[10px] text-slate-500 font-sans mt-0.5">Define automated leaderboard alerts explicitly dedicated to this event lifecycle</p>
+                  <h4 className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">📢 Bot Announcement Setting</h4>
+                  <p className="text-[10px] text-slate-500 font-sans mt-0.5">Configure Bot Announcements explicitly dedicated to this event cycle</p>
                 </div>
 
                 <div className="space-y-3">
                   {/* PHASE 1 ANNOUNCEMENTS */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🟣 Phase 1: Request Registration Open (Max 3 Alerts)</label>
+                    <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🟣 Phase 1: Current Bid List Announcement(Max 3 Announcements)</label>
                     <div className="flex flex-wrap gap-2.5 items-center">
                       {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).map((time, idx) => (
                         <div key={idx} className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
@@ -483,7 +483,7 @@ export default function SettingsTab() {
                   {/* PHASE 2 & 3 */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-900/60 pt-2.5">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🔒 Phase 2: Closed Matrix Snapshot (1 Alert)</label>
+                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">🔒 Phase 2: Request Close & Final list Announcement (1 Announcement)</label>
                       <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
                         <input 
                           type="time" 
@@ -500,7 +500,7 @@ export default function SettingsTab() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">⚔️ Phase 3: Live Arena Countdown (1 Alert)</label>
+                      <label className="text-[10px] font-black uppercase tracking-wide text-slate-400 block">⚔️ Phase 3: Live Arena Countdown (1 Announcement)</label>
                       <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-sm">
                         <input 
                           type="time" 

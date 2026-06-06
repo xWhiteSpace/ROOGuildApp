@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
 const navItems = [
-  { label: 'Request', path: '/' },
-  { label: 'Live Bidding', path: '/live-bidding' },
-  { label: 'Mimic Book', path: '/mimic-book' },
-  { label: 'Request History', path: '/request-history' },
-  { label: 'Past Auction', path: '/past-auction' },
-  { label: 'Submit Evidence', path: '/submit-evidence' }
+  { label: 'Request', path: '/', icon: '📥' },
+  { label: 'Live Bidding', path: '/live-bidding', icon: '⚡' },
+  { label: 'Mimic Book', path: '/mimic-book', icon: '📖' },
+  { label: 'Request History', path: '/request-history', icon: '📜' },
+  { label: 'Past Auction', path: '/past-auction', icon: '📦' },
+  { label: 'Submit Evidence', path: '/submit-evidence', icon: '📷' }
 ];
 
 export default function LeftNavBar() {
@@ -32,8 +32,8 @@ export default function LeftNavBar() {
       <div className={`mb-8 px-3 py-4 text-slate-100 transition-all duration-200 overflow-hidden ${
         isCollapsed ? 'h-0 opacity-0 mb-0 py-0' : 'opacity-100'
       }`}>
-        <div className="text-2xl font-semibold whitespace-nowrap">DynastyGuild</div>
-        <div className="text-sm text-slate-400 mt-1 whitespace-nowrap">Loot Command Dashboard</div>
+        <div className="text-2xl font-semibold whitespace-nowrap">Auction Dashboard</div>
+        <div className="text-sm text-slate-400 mt-1 whitespace-nowrap">Request, View your bids, Check history</div>
       </div>
 
       {/* UNIFIED CORE LIST ELEMENT ANCHORS DECK */}
@@ -53,11 +53,14 @@ export default function LeftNavBar() {
             title={item.label}
           >
             {isCollapsed ? (
-              <span className="text-base font-black text-amber-400 font-mono select-none">
-                {item.label.charAt(0)}
+              <span className="text-base font-sans select-none" title={item.label}>
+                {item.icon}
               </span>
             ) : (
-              <span className="whitespace-nowrap">{item.label}</span>
+              <>
+                <span className="text-base font-sans select-none">{item.icon}</span>
+                <span className="ml-3 whitespace-nowrap">{item.label}</span>
+              </>
             )}
           </NavLink>
         ))}
@@ -70,14 +73,14 @@ export default function LeftNavBar() {
           className={({ isActive }) =>
             `flex items-center rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
               isActive
-                ? 'bg-slate-800 text-white shadow-sm font-bold'
-                : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                ? 'bg-slate-800 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-900 hover:text-white'
             } ${isCollapsed ? 'justify-center' : ''}`
           }
           title="System Settings Configuration Desk"
         >
           {isCollapsed ? (
-            <span className="text-base font-sans font-black select-none">⚙️</span>
+            <span className="text-base font-sans select-none">⚙️</span>
           ) : (
             <>
               <span className="text-base font-sans select-none">⚙️</span>

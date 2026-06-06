@@ -54,8 +54,8 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
     // Establish the text template header layout
     let messagePayload = isFinalThreshold
-      ? `🔒 === REQUISITION REGISTRATION CLOSED (FINAL LIST) ===\n`
-      : `📊 === LIVE DYNASTY GUILD REQUEST MATRIX ===\n`;
+      ? `🔒 === BID REQUEST REGISTRATION CLOSED (FINAL LIST) ===\n`
+      : `📊 === CURRENT BID REQUEST LIST ===\n`;
 
     // Parse the aggregated live parameters directly into the markdown snapshot string
     itemsList.forEach(item => {
@@ -63,7 +63,7 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
       activeApplicants.sort((a, b) => b.priority - a.priority);
 
       if (activeApplicants.length > 0) {
-        messagePayload += `\n🏷️ Scroll Type: ${item.name.toUpperCase()}\n`;
+        messagePayload += `\n🏷️ Item Name: ${item.name.toUpperCase()}\n`;
         activeApplicants.forEach((entry, index) => {
           messagePayload += `   [Rank ${index + 1}] ${entry.name} - Qty: ${entry.netQty} (Priority Score: ${entry.priority})\n`;
         });

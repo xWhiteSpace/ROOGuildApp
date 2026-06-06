@@ -52,8 +52,8 @@ export default function PastAuctionTab() {
   return (
     <div className="space-y-6 text-slate-200 select-none font-sans">
       <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl">
-        <h2 className="text-2xl font-black tracking-tight text-white uppercase">Past Auction Distributed Roster Records</h2>
-        <p className="mt-1 text-xs text-slate-400">Review historical verification data grouped by raid timelines</p>
+        <h2 className="text-2xl font-black tracking-tight text-white uppercase">Past Auction Distribution Records</h2>
+        <p className="mt-1 text-xs text-slate-400">Review Auction History per Events</p>
       </div>
 
       <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-6 shadow-lg min-h-[300px]">
@@ -100,7 +100,7 @@ export default function PastAuctionTab() {
                                   {itemRow.item}
                                 </span>
                               </td>
-                              <td className="p-2.5 px-5 text-right font-mono font-black text-emerald-400">{itemRow.quantity} pc</td>
+                              <td className="p-2.5 px-5 text-right font-mono font-black text-emerald-400">{itemRow.quantity}</td>
                             </tr>
                           ))}
                         </tbody>

@@ -417,6 +417,7 @@ router.get('/init', async (req, res) => {
       phaseIntervals: timeGateStatus.phaseIntervals,
       eventId: timeGateStatus.activeEventId || "", // 🛡️ Seamlessly tunnels calculated event ID tokens directly down the wire
       eventName: timeGateStatus.activeEventTitle || "Raid Session", // 🛡️ Securely exposes contextual title text to client states
+      events: dynamicConfig.events || {}, // 🛡️ Dynamic Directory Injection: Transmits custom user event configuration definitions
       rankingsByItem,
       requestsByItemDetails,
       fullRoster: fullRosterArray.sort()

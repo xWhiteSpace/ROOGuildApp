@@ -3,9 +3,9 @@ import admin from 'firebase-admin';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 
 // Pure message text block formatting the in-game display alignment rule
-const IN_GAME_TAB_REMINDER = `🚩 **CRITICAL IN-GAME INTERFACE CONFIGURATION**:\n` +
+const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
   `> Please make sure to click the **[ALL]** Tab on your in-game auction book screen! ` +
-  `This guarantees your game client layout matches our ledger's Page and Position grid coordinate tracking rules.`;
+  `This guarantees your game client layout matches our ledger's Page and Slot grid coordinates.`;
 
 /**
  * ⚙️ CORE COMPILER: Calculates book geometry coordinates dynamically in runtime memory
@@ -49,14 +49,14 @@ function compileUserClaimsSummary(virtualMatrix, finalRosterName) {
   const matchingClaims = virtualMatrix.filter(slot => slot.name === finalRosterName);
 
   if (matchingClaims.length === 0) {
-    return `📦 **YOUR SECURED SHOPPING LIST SUMMARY**:\n*• No item slot coordinates secured yet during this session.*`;
+    return `📦 **YOUR REQUEST LIST SUMMARY**:\n*• No item slot coordinates secured yet during this session.*`;
   }
 
   const listLines = matchingClaims.map(slot => 
-    `• **${slot.itemName}** ➔ Page ${slot.page}, Position ${slot.slot}`
+    `• **${slot.itemName}** ➔ Page ${slot.page}, Slot ${slot.slot}`
   );
 
-  return `📦 **YOUR SECURED SHOPPING LIST SUMMARY**:\n${listLines.join('\n')}`;
+  return `📦 **YOUR REQUEST LIST SUMMARY**:\n${listLines.join('\n')}`;
 }
 
 /**
@@ -64,14 +64,14 @@ function compileUserClaimsSummary(virtualMatrix, finalRosterName) {
  */
 export async function sendPublicAuctionCard(channel) {
   const embed = new EmbedBuilder()
-    .setTitle('⚔️ DYNASTY GUILD LIVE AUCTION DESK INTERACTION MATRICES')
-    .setDescription('Stay focused on your game client. Review and claim remaining vacant item slots right here.\n\nClick the button below to open your personal panel.')
+    .setTitle('⚔️ LIVE AUCTION INTERACTION PANEL')
+    .setDescription('During Live Auction, Please Review and claim remaining vacant item slots right here.\n\nClick the button below to open your personal Request panel.')
     .setColor('#4f46e5');
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('open_auction_panel')
-      .setLabel('🔍 Open My Personal Allocation Panel')
+      .setLabel('🔍 Open My Personal Request Panel')
       .setStyle(ButtonStyle.Primary)
   );
 
@@ -115,17 +115,17 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
 
   if (menuOptions.length === 0) {
     return await interaction.editReply({ 
-      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available position has been filled!`, 
+      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available slots has been filled!`, 
       components: [] 
     });
   }
 
   const itemSelectMenu = new StringSelectMenuBuilder()
     .setCustomId('auction_select_item_type')
-    .setPlaceholder('Select a Loot Classification Type to Inspect...')
+    .setPlaceholder('Select a Loot Category...')
     .addOptions(menuOptions);
 
-  const baseContent = `🔒 **PRIVATELY VIEWING VACANT SELECTION MATRIX**\n👤 Active Character Profile: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nPlease choose an available loot category below to view open layout coordinates as buttons:`;
+  const baseContent = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nPlease choose an Item category below to view open & available slots:`;
 
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
@@ -213,7 +213,7 @@ export async function handleAuctionInteraction(interaction) {
     const memberCheckSnap = await db.ref(`auction/members/${sanitizedFirebaseKey}`).once('value');
     if (!memberCheckSnap.exists()) {
       return await interaction.editReply({
-        content: `⚠️ **ROSTER DISCONNECT**: Your Discord identity (**${finalRosterName}**) is not linked to an active guild roster row.\n\n👉 *Please sign into the Web Dashboard once to automatically synchronize your identity variables.*`
+        content: `⚠️ **ROSTER DISCONNECT**: Your Discord identity (**${finalRosterName}**) is not linked to an active guild roster row.\n\n👉 *Please tell to a Guild officer to Synchronize the web app profile again.*`
       });
     }
 
@@ -278,11 +278,11 @@ export async function handleAuctionInteraction(interaction) {
 
       if (userClaimedCount >= maxAllowedLimit) {
         // 🚪 LIMIT EXHAUSTED KICKBACK: Auto-transfer them back to categories menu with a comprehensive notice
-        const limitReachedBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n🎉 **LIMIT COMPLETED**: You have fully filled your allocation quota (**${userClaimedCount}/${maxAllowedLimit}**) for this item category! Returning to main menu...`;
+        const limitReachedBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n🎉 **LIMIT COMPLETED**: You have fully filled your allocation quota (**${userClaimedCount}/${maxAllowedLimit}**) for this item category!...`;
         await renderItemCategoryView(interaction, finalRosterName, limitReachedBanner);
       } else {
         // 🕹️ STAY-AND-TAP CONTINUATION: Keep them locked on this exact grid view to rapid-fire their remaining bids
-        const continuousBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n• Running Total: **${userClaimedCount}/${maxAllowedLimit} Secured**\n\n*The ledger has updated. Tap another open coordinate button below to claim another:*`;
+        const continuousBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n• Running Total: **${userClaimedCount}/${maxAllowedLimit} Secured**\n\n*The ledger has updated. Tap another open item below to claim slot:*`;
         await renderSpecificSlotView(interaction, itemId, finalRosterName, continuousBanner);
       }
 
@@ -297,7 +297,7 @@ export async function handleAuctionInteraction(interaction) {
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
       if (err.message === 'COLLISION_DETECTED') {
         // 🎯 Safely parse coordinates directly from the dynamically compiled memory matrix 
-        const collisionBanner = `⚠️ **SLOT SNIPED!** Another member claimed **Page ${resolvedSlot?.page || '?'}, Slot ${resolvedSlot?.slot || '?'}** right before you tapped.\n\n*No layout cells were overwritten. Try hitting an alternative open coordinate button below:*`;
+        const collisionBanner = `⚠️ **SLOT OCCUPIED!** Another member claimed **Page ${resolvedSlot?.page || '?'}, Slot ${resolvedSlot?.slot || '?'}** right before you tapped.\n\n*No layout cells were overwritten. Try claiming another item below:*`;
 
         // Loop back smoothly inside that SAME button view so they can try an adjacent button instantly
         await renderSpecificSlotView(interaction, itemId, finalRosterName, collisionBanner);

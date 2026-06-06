@@ -184,9 +184,9 @@ export default function RequestTab() {
       
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-100">Advance Request Deck</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-100">Request Deck</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4 flex flex-wrap items-center">
-            <span>User: <strong className="text-indigo-400">{userData.name}</strong></span>
+            <span>Name: <strong className="text-indigo-400">{userData.name}</strong></span>
             <span>Date: <strong className="text-slate-300">{userData.date}</strong></span>
             <span>Event: <strong className="text-amber-400">[{userData.eventId}] {userData.eventName}</strong></span>
           </div>
@@ -200,7 +200,7 @@ export default function RequestTab() {
           onClick={() => setIsCancelModalOpen(true)}
           className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-2 text-xs font-semibold text-rose-400 transition hover:bg-rose-500 hover:text-white"
         >
-          Cancel Existing Request
+          Cancel Existing Request...
         </button>
       </div>
 
@@ -403,7 +403,7 @@ export default function RequestTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
             <h2 className="text-md font-bold text-slate-200">Ongoing Active Requests</h2>
-            <p className="text-[11px] text-slate-400 mt-0.5 mb-4">Select an item row block position below to undo your advance request.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 mb-4">Select an item below to undo your Bid request.</p>
 
             {activeCancelableItems.length === 0 ? (
               <p className="text-xs text-slate-500 py-6 text-center italic">You have no active pending requests currently in queue.</p>
@@ -413,7 +413,7 @@ export default function RequestTab() {
                   <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 p-2.5">
                     <div>
                       <div className="text-xs font-bold text-slate-300">{item.name}</div>
-                      <div className="text-[10px] text-indigo-400">Allocated Balance: {liveCounts[item.id]}</div>
+                      <div className="text-[10px] text-indigo-400">Qty: {liveCounts[item.id]}</div>
                     </div>
                     <button
                       onClick={() => handleExecuteCancel(item.id, item.name, liveCounts[item.id])}

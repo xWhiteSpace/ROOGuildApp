@@ -260,7 +260,7 @@ export default function RequestHistoryTab() {
       {/* --- 🔍 STREAMLINED LIVE FILTER CONTROL CONSOLE PANEL --- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
         <div className="space-y-1">
-          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Spotlight Query Search</label>
+          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Name/Item Search</label>
           <input 
             type="text"
             placeholder="🔍 Search member name or item category..."
