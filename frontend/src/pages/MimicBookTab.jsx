@@ -4,6 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
+const ITEM_LIMIT_DEFAULTS = {
+  'Puppet': 1,
+  'Illu': 1,
+  'Light&Dark': 3,
+  'Time&Space': 5
+};
+
 export default function MimicBookTab({ user }) {
   // 🏛️ CENTRALIZED USER INTENT PERMISSION RESOLVER
   const isOfficer = user?.isOfficer === true;
@@ -157,7 +164,7 @@ export default function MimicBookTab({ user }) {
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
     } finally {
-      setLoadingPool(false);
+      setSyncingRoster(false);
     }
   };
 
@@ -850,6 +857,7 @@ export default function MimicBookTab({ user }) {
                       </div>
                     ))}
                   </div>
+
                 </div>
               </div>
 
