@@ -415,6 +415,8 @@ router.get('/init', async (req, res) => {
       nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
       currentPhase: timeGateStatus.currentPhase,
       phaseIntervals: timeGateStatus.phaseIntervals,
+      eventId: timeGateStatus.activeEventId || "", // 🛡️ Seamlessly tunnels calculated event ID tokens directly down the wire
+      eventName: timeGateStatus.activeEventTitle || "Raid Session", // 🛡️ Securely exposes contextual title text to client states
       rankingsByItem,
       requestsByItemDetails,
       fullRoster: fullRosterArray.sort()

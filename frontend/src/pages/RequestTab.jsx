@@ -47,11 +47,12 @@ export default function RequestTab() {
       if (data.success) {
         setItems(data.items);
         setLiveCounts(data.liveCounts || {});
+        // 🛡️ Safe Binding Pass: Mounts clean backend server metadata directly with zero client assumptions or hardcoded fallbacks
         setUserData({ 
           name: data.displayName, 
           date: data.date, 
-          eventId: data.eventId || 'ev_002', 
-          eventName: data.eventName || data.activeEventTitle || 'GuildLeague(Thu)' 
+          eventId: data.eventId || "Unconfigured", 
+          eventName: data.eventName || "No Active Target Event Scheduled" 
         });
         
         if (data.isGateOpen !== undefined) setIsGateOpen(data.isGateOpen);

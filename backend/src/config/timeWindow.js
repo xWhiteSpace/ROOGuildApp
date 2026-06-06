@@ -101,59 +101,101 @@ export function getGateStatusDetails() {
     };
   }
 
-  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
-  let activeEventTitle = "Raid Session";
-  let activePhaseConfig = null;
-  let selectedEventContext = null;
-
   function getAbsoluteMinutes(day, timeStr) {
     if (!timeStr) return 0;
     const [h, m] = timeStr.split(':').map(Number);
     return day * 1440 + h * 60 + m;
   }
 
-  // 🎯 True Event Horizon Scan: Iterates through all keys to find the live active schedule window
+  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
+  let activePhaseConfig = null;
+  let selectedEventContext = null;
+  let activeEventId = "";
+  let activeEventTitle = "Raid Session";
+
   if (events && typeof events === 'object') {
     const eventIds = Object.keys(events);
-    
-    for (const evId of eventIds) {
-      const ev = events[evId];
-      if (!ev || !ev.phases) continue;
 
-      // Scan phases 1, 2, and 3 (supports both object schemas and null-padded arrays safely)
-      for (const phaseKey of [1, 2, 3]) {
-        const p = ev.phases[phaseKey];
-        if (!p) continue;
+    if (eventIds.length > 0) {
+      // 1️⃣ STEP 1: Scan for any currently live active Phase 3 windows
+      for (const evId of eventIds) {
+        const ev = events[evId];
+        const p3 = ev?.phases?.[3];
+        if (!p3) continue;
 
-        const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
-        const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
+        const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
+        const endAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
 
-        let isInsideWindow = false;
+        let isLiveNow = false;
         if (endAbs < startAbs) {
-          // Rolling schedule window wraps across continuous weekly boundary line marks
-          if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
+          if (currentAbs >= startAbs || currentAbs < endAbs) isLiveNow = true;
         } else {
-          if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
+          if (currentAbs >= startAbs && currentAbs < endAbs) isLiveNow = true;
         }
 
-        if (isInsideWindow) {
-          currentPhase = Number(phaseKey);
-          activeEventTitle = ev.title || "Raid Session";
-          activePhaseConfig = p;
-          selectedEventContext = ev;
+        if (isLiveNow) {
+          activeEventId = evId;
           break;
         }
       }
-      
-      // Stop scanning subsequent event profiles if the active tracking window is located
-      if (activePhaseConfig) {
-        break;
-      }
-    }
 
-    // Fallback title safety check to ensure dashboard text is never generic
-    if (!activePhaseConfig && eventIds.length > 0 && events[eventIds[0]]) {
-      activeEventTitle = events[eventIds[0]].title || "Raid Session";
+      // 2️⃣ STEP 2: If no event is currently live, look ahead for the closest upcoming Phase 3 anchor
+      if (!activeEventId) {
+        let minDistance = Infinity;
+        let closestEvId = eventIds[0];
+
+        for (const evId of eventIds) {
+          const ev = events[evId];
+          const p3 = ev?.phases?.[3];
+          if (!p3) continue;
+
+          const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
+          
+          // Calculate look-ahead distance inside the 10080-minute weekly loop boundary
+          let distance = 0;
+          if (startAbs >= currentAbs) {
+            distance = startAbs - currentAbs;
+          } else {
+            distance = (10080 - currentAbs) + startAbs;
+          }
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestEvId = evId;
+          }
+        }
+        activeEventId = closestEvId;
+      }
+
+      // 3️⃣ STEP 3: Evaluate target phase state constraints exclusively for the resolved event context
+      const ev = events[activeEventId];
+      if (ev) {
+        activeEventTitle = ev.title || "Raid Session";
+        selectedEventContext = ev;
+
+        if (ev.phases) {
+          for (const phaseKey of [1, 2, 3]) {
+            const p = ev.phases[phaseKey];
+            if (!p) continue;
+
+            const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+            const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
+
+            let isInsideWindow = false;
+            if (endAbs < startAbs) {
+              if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
+            } else {
+              if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
+            }
+
+            if (isInsideWindow) {
+              currentPhase = Number(phaseKey);
+              activePhaseConfig = p;
+              break;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -204,6 +246,8 @@ export function getGateStatusDetails() {
     nextStatusChangeMessage,
     currentPhase,
     phaseIntervals,
+    activeEventId: activeEventId || "", // 🛡️ Explicit property injection ensures downstream route endpoints can map IDs natively
+    activeEventTitle: activeEventTitle || "Raid Session", // 🛡️ Explicit property injection ensures descriptive matching text
     // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
       phase1: ["07:00", "12:00", "19:00"],
