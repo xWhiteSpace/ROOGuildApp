@@ -19,10 +19,20 @@ import requestRoutes from './api/request.routes.js';
 
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
+import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
 
 initializeEnv();
 initializeFirebase();
 initializeDiscordBot(); 
+
+// 🛰️ DISCORD INTERACTIVE COMPONENT INTERCEPT ROUTER
+discordClient.on('interactionCreate', async (interaction) => {
+  try {
+    await handleAuctionInteraction(interaction);
+  } catch (err) {
+    console.error("❌ Root Discord interaction event handler exception:", err.message);
+  }
+});
 
 const app = express();
 
@@ -79,6 +89,29 @@ app.use('/api/requests', requestRoutes);
 
 app.get('/', (req, res) => {
   res.send('DynastyGuild backend is online.');
+});
+
+// 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP
+app.get('/api/deploy-auction-card', async (req, res) => {
+  try {
+    const channelId = process.env.DISCORD_CHANNEL_ID || process.env.DISCORD_AUCTION_CHANNEL_ID;
+    if (!channelId) {
+      return res.status(400).send("❌ Failure: System missing structural target channel ID variable setups.");
+    }
+
+    const targetChannel = await discordClient.channels.fetch(channelId);
+    if (!targetChannel) {
+      return res.status(404).send("❌ Failure: Discord gateway client failed to locate matching server channel pointer.");
+    }
+
+    const { sendPublicAuctionCard } = await import('./services/discordInteractiveAuction.js');
+    await sendPublicAuctionCard(targetChannel);
+
+    res.send("📟 SUCCESS: The Interactive Public Auction Card layout has dropped into your channel!");
+  } catch (err) {
+    console.error("Deployer Route Failure Exception Caught:", err.message);
+    res.status(500).send(`❌ Server Exception: ${err.message}`);
+  }
 });
 
 const PORT = process.env.PORT || 5001;
