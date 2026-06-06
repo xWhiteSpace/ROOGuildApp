@@ -94,9 +94,10 @@ app.get('/', (req, res) => {
 // 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP
 app.get('/api/deploy-auction-card', async (req, res) => {
   try {
-    const channelId = process.env.DISCORD_CHANNEL_ID || process.env.DISCORD_AUCTION_CHANNEL_ID;
+    // 🛡️ Secure Channel Separation: Directs the initialization card straight into your clean Auction Request lobby space
+    const channelId = process.env.DISCORD_AUCREQ_CHANNEL_ID;
     if (!channelId) {
-      return res.status(400).send("❌ Failure: System missing structural target channel ID variable setups.");
+      return res.status(400).send("❌ Failure: System missing the structural DISCORD_AUCREQ_CHANNEL_ID environment setup.");
     }
 
     const targetChannel = await discordClient.channels.fetch(channelId);
