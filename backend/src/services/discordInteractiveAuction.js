@@ -8,11 +8,41 @@ const IN_GAME_TAB_REMINDER = `🚩 **CRITICAL IN-GAME INTERFACE CONFIGURATION**:
   `This guarantees your game client layout matches our ledger's Page and Position grid coordinate tracking rules.`;
 
 /**
+ * ⚙️ CORE COMPILER: Calculates book geometry coordinates dynamically in runtime memory
+ * Projects a pure Single Source of Truth layout map out of Phase 2 flat allocation arrays.
+ */
+function computeVirtualMatrix(items, categoryAllocations, qtyPerPage = 4) {
+  let currentVirtualPage = 1, currentVirtualSlot = 1;
+  const matrix = [];
+
+  items.forEach(item => {
+    const flatBoxArray = categoryAllocations[item.id]?.selected || [];
+    flatBoxArray.forEach((playerName, index) => {
+      matrix.push({
+        itemType: item.id,
+        itemName: item.name,
+        index: index, // Stores the true flat index reference position
+        page: currentVirtualPage,
+        slot: currentVirtualSlot,
+        name: playerName === "" ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName
+      });
+
+      currentVirtualSlot++;
+      if (currentVirtualSlot > qtyPerPage) {
+        currentVirtualSlot = 1;
+        currentVirtualPage++;
+      }
+    });
+  });
+  return matrix;
+}
+
+/**
  * 🛰️ HELPER: Dynamically generates the real-time personal ledger claim summary text block
  */
-function compileUserClaimsSummary(generatedSlots, finalRosterName) {
-  const matchingClaims = generatedSlots.filter(slot => slot.name === finalRosterName);
-  
+function compileUserClaimsSummary(virtualMatrix, finalRosterName) {
+  const matchingClaims = virtualMatrix.filter(slot => slot.name === finalRosterName);
+
   if (matchingClaims.length === 0) {
     return `📦 **YOUR SECURED SHOPPING LIST SUMMARY**:\n*• No item slot coordinates secured yet during this session.*`;
   }
@@ -56,10 +86,13 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
   }
 
   const { items = [] } = configSnap.val();
-  const { generatedSlots = [] } = sessionSnap.val();
+  const { categoryAllocations = {}, qtyPerPage = 4 } = sessionSnap.val();
+
+  // Compile dynamic layout map from Phase 2 array blocks
+  const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage);
 
   const itemVacancyCounts = {};
-  generatedSlots.forEach(slot => {
+  virtualMatrix.forEach(slot => {
     if (slot.name === '[⚠️ EXTRA UNALLOCATED SLOT]') {
       itemVacancyCounts[slot.itemType] = (itemVacancyCounts[slot.itemType] || 0) + 1;
     }
@@ -73,7 +106,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
       value: `select_item_${item.id}`
     }));
 
-  const userClaimsSummaryText = compileUserClaimsSummary(generatedSlots, finalRosterName);
+  const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, finalRosterName);
 
   if (menuOptions.length === 0) {
     return await interaction.editReply({ 
@@ -88,7 +121,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     .addOptions(menuOptions);
 
   const baseContent = `🔒 **PRIVATELY VIEWING VACANT SELECTION MATRIX**\n👤 Active Character Profile: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nPlease choose an available loot category below to view open layout coordinates as buttons:`;
-  
+
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
     components: [new ActionRowBuilder().addComponents(itemSelectMenu)]
@@ -104,27 +137,28 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const sessionSnap = await db.ref('auction/active_session').once('value');
 
   const { items = [] } = configSnap.val();
-  const { generatedSlots = [] } = sessionSnap.val();
+  const { categoryAllocations = {}, qtyPerPage = 4 } = sessionSnap.val();
 
   const selectedItemObj = items.find(i => i.id === itemId);
   const maxAllowedLimit = selectedItemObj ? (selectedItemObj.limitQty || 1) : 1;
 
-  const userClaimedCount = generatedSlots.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
+  const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage);
+  const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
 
-  // 1. Build an array of standard button components for every vacancy found
+  // Build functional buttons using the index location inside categoryAllocations list maps
   const rawButtonsArray = [];
-  generatedSlots.forEach((slot, index) => {
+  virtualMatrix.forEach((slot) => {
     if (slot.itemType === itemId && slot.name === '[⚠️ EXTRA UNALLOCATED SLOT]') {
       rawButtonsArray.push(
         new ButtonBuilder()
-          .setCustomId(`claim_slot_btn_${index}_item_${itemId}`) // Securely chains parameters
-          .setLabel(`P${slot.page} Pos${slot.slot}`)
+          .setCustomId(`claim_slot_btn_${slot.index}_item_${itemId}`) // Maps straight to flat index
+          .setLabel(`Page ${slot.page} Slot ${slot.slot}`)
           .setStyle(ButtonStyle.Secondary)
       );
     }
   });
 
-  const userClaimsSummaryText = compileUserClaimsSummary(generatedSlots, finalRosterName);
+  const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, finalRosterName);
 
   if (userClaimedCount >= maxAllowedLimit) {
     return await renderItemCategoryView(interaction, finalRosterName, `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for **${selectedItemObj?.name}**.`);
@@ -134,17 +168,14 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
     return await renderItemCategoryView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up!`);
   }
 
-  // 2. DISCORD INTERFACE MATRIX MATH: Slice array down to 20 options max to guarantee room for back utility buttons
   const cappedButtons = rawButtonsArray.slice(0, 20);
   const totalComponentRows = [];
 
-  // Break flat button array into rows containing up to 5 elements each
   for (let i = 0; i < cappedButtons.length; i += 5) {
     const actionRow = new ActionRowBuilder().addComponents(cappedButtons.slice(i, i + 5));
     totalComponentRows.push(actionRow);
   }
 
-  // 3. Append the primary navigation options to the bottom row profile
   const backButton = new ButtonBuilder()
     .setCustomId('open_auction_panel_back')
     .setLabel('↩️ Return to Categories')
@@ -201,44 +232,49 @@ export async function handleAuctionInteraction(interaction) {
   if (interaction.isButton() && interaction.customId.startsWith('claim_slot_btn_')) {
     await interaction.deferUpdate();
     
-    // Deconstruct metadata parameters out of the button token id
     const rawValueToken = interaction.customId.replace('claim_slot_btn_', '');
     const valueParts = rawValueToken.split('_item_');
-    
+
     const targetIndex = parseInt(valueParts[0], 10);
     const itemId = valueParts[1];
 
-    let targetPage = 1;
-    let targetSlotCoordinate = 1;
-    let targetItemName = "Item";
-
     try {
-      await db.ref('auction/active_session').transaction((currentSession) => {
-        if (!currentSession || !currentSession.generatedSlots || !currentSession.generatedSlots[targetIndex]) {
-          return currentSession; 
-        }
+      // 🛰️ ATOMIC ALLOCATION INTERSECTOR: Mutates the true nested Phase 2 index field directly
+      await db.ref(`auction/active_session/categoryAllocations/${itemId}/selected`).transaction((currentSelected) => {
+        if (!currentSelected) return currentSelected;
 
-        const slot = currentSession.generatedSlots[targetIndex];
-        targetPage = slot.page;
-        targetSlotCoordinate = slot.slot;
-        targetItemName = slot.itemName;
-
-        if (slot.name !== '[⚠️ EXTRA UNALLOCATED SLOT]') {
+        // Anti-collision guard: Check if someone beat them to it
+        if (currentSelected[targetIndex] !== "") {
           throw new Error('COLLISION_DETECTED');
         }
 
-        slot.name = finalRosterName;
-        slot.status = 'Selected';
-
-        return currentSession;
+        currentSelected[targetIndex] = finalRosterName;
+        return currentSelected;
       });
 
-      const successBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${targetItemName} (Page ${targetPage}, Position ${targetSlotCoordinate})**\n\n*The ledger has mutated successfully. Choose another category below to continue allocations:*`;
-      
-      // Loop back smoothly to main categories view while showing updated shopping list data
+      // Pull fresh copies to compute coordinates for the text receipt notice
+      const updatedConfigSnap = await db.ref('settings/configuration').once('value');
+      const updatedSessionSnap = await db.ref('auction/active_session').once('value');
+      const finalItems = updatedConfigSnap.val().items || [];
+      const finalAllocations = updatedSessionSnap.val().categoryAllocations || {};
+      const finalQtyPerPage = updatedSessionSnap.val().qtyPerPage || 4;
+
+      const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
+      const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
+
+      const successBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n*The allocation ledger has updated! Choose another category below to continue assignments:*`;
+
       await renderItemCategoryView(interaction, finalRosterName, successBanner);
 
     } catch (err) {
+      // Re-read current database layout parameters to recover slot details safely for collision receipts
+      const updatedConfigSnap = await db.ref('settings/configuration').once('value');
+      const updatedSessionSnap = await db.ref('auction/active_session').once('value');
+      const finalItems = updatedConfigSnap.val().items || [];
+      const finalAllocations = updatedSessionSnap.val().categoryAllocations || {};
+      const finalQtyPerPage = updatedSessionSnap.val().qtyPerPage || 4;
+      const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
+      const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
       if (err.message === 'COLLISION_DETECTED') {
         const collisionBanner = `⚠️ **SLOT SNIPED!** Another member claimed **Page ${targetPage}, Position ${targetSlotCoordinate}** right before you tapped.\n\n*No layout cells were overwritten. Try hitting an alternative open coordinate button below:*`;
         

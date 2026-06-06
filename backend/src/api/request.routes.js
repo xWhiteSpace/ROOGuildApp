@@ -7,14 +7,14 @@ const router = Router();
 
 // 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
 const DEFAULT_SESSION_STRUCTURE = {
-  activeStep: 1,
+activeStep: 1,
+  qtyPerPage: 4, // 🎯 Baked directly into the true session structure as the master geometric guide
   lootRows: [
     { id: 1, itemType: 'item_001', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }
   ],
   lootSummary: {},
   categoryAllocations: {},
   initialWinnersByItem: {},
-  generatedSlots: [],
   activeMatrixFilter: 'item_001',
   sidebarTab: 'standby'
 };
@@ -258,13 +258,18 @@ router.get('/active-session', async (req, res) => {
 
     if (currentSessionData.categoryAllocations) {
       itemsList.forEach(item => {
-        if (!currentSessionData.categoryAllocations[item.id]) {
+      if (!currentSessionData.categoryAllocations[item.id]) {
           currentSessionData.categoryAllocations[item.id] = { selected: [] };
         }
         if (!currentSessionData.lootSummary[item.id]) {
           currentSessionData.lootSummary[item.id] = { qty: 0, limit: item.limitQty, seats: 0 };
         }
       });
+    }
+
+    // 🛡️ Ensure default geometric layout parameter maps are never undefined
+    if (currentSessionData.qtyPerPage === undefined) {
+      currentSessionData.qtyPerPage = 4;
     }
 
     return res.json({ success: true, session: currentSessionData });

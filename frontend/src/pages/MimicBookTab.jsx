@@ -68,6 +68,36 @@ export default function MimicBookTab({ user }) {
     setIsAdminMode(isOfficer);
   }, [user, isOfficer]);
 
+// 🔄 REAL-TIME GEOMETRIC CALCULATION ENGINE: Derives book layout positions from the Single Source of Truth
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+
+    let currentVirtualPage = 1, currentVirtualSlot = 1;
+    const matrixSlots = [];
+
+    items.forEach(item => {
+      const flatBoxArray = categoryAllocations[item.id]?.selected || [];
+      flatBoxArray.forEach((playerName, index) => {
+        matrixSlots.push({
+          name: playerName === "" ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName,
+          itemType: item.id,
+          itemName: item.name,
+          index: index, // Stores the exact sequential row index
+          page: currentVirtualPage,
+          slot: currentVirtualSlot,
+          status: playerName === "" ? 'NotSelected' : 'Selected'
+        });
+
+        currentVirtualSlot++;
+        if (currentVirtualSlot > qtyPerPage) {
+          currentVirtualSlot = 1;
+          currentVirtualPage++;
+        }
+      });
+    });
+
+    setGeneratedSlots(matrixSlots);
+  }, [categoryAllocations, items, qtyPerPage]);
   // --- COORDINATE SEQUENCE GAP ENGINE ---
   useEffect(() => {
     if (lootRows.length <= 1) {
@@ -422,34 +452,11 @@ export default function MimicBookTab({ user }) {
   };
 
   const handleOriginalMatrixAssembly = () => {
-    if (!isAdminMode || !isOfficer) return;
-    let currentVirtualPage = 1, currentVirtualSlot = 1;
-    const matrixSlots = [];
-    
-    items.forEach(item => {
-      const itemsInfo = lootSummary[item.id];
-      if (!itemsInfo || itemsInfo.qty === 0) return;
-      const flatBoxArray = categoryAllocations[item.id]?.selected || [];
-      
-      flatBoxArray.forEach(playerName => {
-        matrixSlots.push({
-          name: playerName === "" ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName,
-          itemType: item.id,
-          itemName: item.name,
-          page: currentVirtualPage,
-          slot: currentVirtualSlot,
-          status: playerName === "" ? 'NotSelected' : 'Selected'
-        });
-        currentVirtualSlot++;
-        if (currentVirtualSlot > qtyPerPage) {
-          currentVirtualSlot = 1;
-          currentVirtualPage++;
-        }
-      });
-    });
+  if (!isAdminMode || !isOfficer) return;
 
+    // 🎯 Transition smoothly without pushing rigid, destructive static overwrites to Firebase
     setBookCurrentPage(1);
-    saveWorkspaceState({ generatedSlots: matrixSlots, activeStep: 3 });
+    saveWorkspaceState({ activeStep: 3 });
   };
 
   const handleCommitSessionAndFlash = async () => {
@@ -777,6 +784,10 @@ export default function MimicBookTab({ user }) {
                 <div className="md:col-span-2 border border-slate-800 rounded-xl p-3 bg-slate-950/40 space-y-2">
                   <div className="grid grid-cols-1 gap-1.5 max-h-80 overflow-y-auto pr-1">
                     {(currentActiveSelections.selected || []).map((name, i) => {
+                      // Look up the matching computed game coordinate on the fly
+                      const coords = generatedSlots.filter(s => s.itemType === activeMatrixFilter)[i];
+                      const coordLabel = coords ? `Page ${coords.page} Slot ${coords.slot}` : `Slot ${i + 1}`;
+
                       if (name === "") {
                         return (
                           <div 
@@ -789,14 +800,20 @@ export default function MimicBookTab({ user }) {
                             }}
                             className="p-2 px-3 rounded-xl border-2 border-dashed border-slate-800 bg-slate-955/20 text-xs font-mono text-slate-600 flex items-center justify-between min-h-[44px]"
                           >
-                            <span>[ 📥 Drop Roster Card Here to Assign Member ]</span>
+                            <div className="flex items-center gap-3">
+                              <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-black tracking-wider border border-slate-800">{coordLabel}</span>
+                              <span>[ 📥 Drop Card Here to Assign Member ]</span>
+                            </div>
                           </div>
                         );
                       }
 
                       return (
                         <div key={i} draggable="true" onDragStart={(e) => handleRowDragStart(e, i)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); handleRowDrop(e, i); }} className="p-2 px-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between min-h-[44px] text-xs font-mono">
-                          <div>#{i + 1} ☰ <span className="font-sans font-bold text-slate-200 ml-2">{name}</span></div>
+                          <div className="flex items-center gap-3">
+                            <span className="px-2 py-0.5 rounded bg-violet-950/80 text-violet-300 text-[10px] font-black tracking-wider border border-violet-800">{coordLabel}</span>
+                            <div>☰ <span className="font-sans font-bold text-slate-200 ml-1">{name}</span></div>
+                          </div>
                           <button onClick={() => handleDropBidderBoxSlot(i)} className="text-rose-400 font-sans text-[10px]">Remove ✖</button>
                         </div>
                       );
