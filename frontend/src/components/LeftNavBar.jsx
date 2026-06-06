@@ -33,7 +33,8 @@ export default function LeftNavBar() {
         isCollapsed ? 'h-0 opacity-0 mb-0 py-0' : 'opacity-100'
       }`}>
         <div className="text-2xl font-semibold whitespace-nowrap">Auction Dashboard</div>
-        <div className="text-sm text-slate-400 mt-1 whitespace-nowrap">Request, View your bids, Check history</div>
+        {/* 🛡️ Responsive Wrap Pass: Removing whitespace-nowrap allows long descriptive items to stack into two lines */}
+        <div className="text-xs text-slate-400 mt-1 leading-relaxed">Request, view your bids, and check history</div>
       </div>
 
       {/* UNIFIED CORE LIST ELEMENT ANCHORS DECK */}

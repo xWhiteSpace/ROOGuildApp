@@ -237,7 +237,7 @@ export default function SettingsTab() {
           onClick={handleVerifyPassphrase}
           className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider transition shadow-lg cursor-pointer"
         >
-          Verify Authorization Key
+          Verify Key & Unlock
         </button>
       </div>
     );

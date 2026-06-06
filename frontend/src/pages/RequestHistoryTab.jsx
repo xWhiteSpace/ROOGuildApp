@@ -232,8 +232,8 @@ export default function RequestHistoryTab() {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request History Ledger</h1>
           <div className="text-xs text-slate-400 mt-1 space-x-4">
-            <span>Roster Agent: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
-            <span>Total Logged Row Matrix: <strong className="text-slate-300">{sortedRecords.length} lines</strong></span>
+            <span>User: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
+            <span>History Count: <strong className="text-slate-300">{sortedRecords.length} Rows</strong></span>
           </div>
         </div>
 
@@ -252,7 +252,7 @@ export default function RequestHistoryTab() {
               viewFilter === 'mine' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
             }`}
           >
-            👤 My Filter
+            👤 My History
           </button>
         </div>
       </div>
@@ -260,7 +260,7 @@ export default function RequestHistoryTab() {
       {/* --- 🔍 STREAMLINED LIVE FILTER CONTROL CONSOLE PANEL --- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
         <div className="space-y-1">
-          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Name/Item Search</label>
+          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Name / Item Search</label>
           <input 
             type="text"
             placeholder="🔍 Search member name or item category..."
@@ -316,7 +316,7 @@ export default function RequestHistoryTab() {
                 </th>
                 
                 <th className="p-3.5 border-r border-slate-800/60 text-center text-slate-500 font-medium">Qty</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">ActionContext</th>
+                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">BidRequestStatus</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">SelectionStatus</th>
                 <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">LiveStatus</th>
                 
