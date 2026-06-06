@@ -44,7 +44,7 @@ export async function sendPublicAuctionCard(channel) {
 }
 
 /**
- * 🛰️ HELPER: Generates the Master Item Category Selection View
+ * 🛰️ HELPER: Generates the Master Item Category Selection View (Step 2)
  */
 async function renderItemCategoryView(interaction, finalRosterName, prefixMessage = "") {
   const db = admin.database();
@@ -69,16 +69,15 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     .filter(item => (itemVacancyCounts[item.id] || 0) > 0)
     .map(item => ({
       label: item.name,
-      description: `${itemVacancyCounts[item.id]} empty layout slot positions available.`,
+      description: `${itemVacancyCounts[item.id]} empty layout slots available.`,
       value: `select_item_${item.id}`
     }));
 
-  // Generate dynamic shopping summary list block
   const userClaimsSummaryText = compileUserClaimsSummary(generatedSlots, finalRosterName);
 
   if (menuOptions.length === 0) {
     return await interaction.editReply({ 
-      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available position has been filled! Panel closing out.`, 
+      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available position has been filled!`, 
       components: [] 
     });
   }
@@ -88,7 +87,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     .setPlaceholder('Select a Loot Classification Type to Inspect...')
     .addOptions(menuOptions);
 
-  const baseContent = `🔒 **PRIVATELY VIEWING VACANT SELECTION MATRIX**\n👤 Active Character Profile: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n Please choose an available loot category below to check open layout coordinates:`;
+  const baseContent = `🔒 **PRIVATELY VIEWING VACANT SELECTION MATRIX**\n👤 Active Character Profile: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nPlease choose an available loot category below to view open layout coordinates as buttons:`;
   
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
@@ -97,7 +96,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
 }
 
 /**
- * 🛰️ HELPER: Generates the Specific Position Coordinate Dropdown Selection View
+ * 🛰️ HELPER: Generates the Fast-Tap Button Grid Matrix (Step 3 Upgraded)
  */
 async function renderSpecificSlotView(interaction, itemId, finalRosterName, prefixMessage = "") {
   const db = admin.database();
@@ -112,45 +111,53 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
 
   const userClaimedCount = generatedSlots.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
 
-  const availableSlotOptions = [];
+  // 1. Build an array of standard button components for every vacancy found
+  const rawButtonsArray = [];
   generatedSlots.forEach((slot, index) => {
     if (slot.itemType === itemId && slot.name === '[⚠️ EXTRA UNALLOCATED SLOT]') {
-      availableSlotOptions.push({
-        label: `Page ${slot.page}, Position ${slot.slot}`,
-        description: `Claim this vacant grid square for ${slot.itemName}`,
-        value: `claim_slot_idx_${index}_item_${itemId}`
-      });
+      rawButtonsArray.push(
+        new ButtonBuilder()
+          .setCustomId(`claim_slot_btn_${index}_item_${itemId}`) // Securely chains parameters
+          .setLabel(`P${slot.page} Pos${slot.slot}`)
+          .setStyle(ButtonStyle.Secondary)
+      );
     }
   });
 
   const userClaimsSummaryText = compileUserClaimsSummary(generatedSlots, finalRosterName);
 
   if (userClaimedCount >= maxAllowedLimit) {
-    return await renderItemCategoryView(interaction, finalRosterName, `❌ **CLAIM RESTRICTED**: You have reached your maximum allowed capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for item node **${selectedItemObj?.name}**.`);
+    return await renderItemCategoryView(interaction, finalRosterName, `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for **${selectedItemObj?.name}**.`);
   }
 
-  if (availableSlotOptions.length === 0) {
-    return await renderItemCategoryView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up! Returning to main register...`);
+  if (rawButtonsArray.length === 0) {
+    return await renderItemCategoryView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up!`);
   }
 
-  const slotSelectMenu = new StringSelectMenuBuilder()
-    .setCustomId('auction_claim_specific_slot')
-    .setPlaceholder('Choose an empty layout position coordinate...')
-    .addOptions(availableSlotOptions.slice(0, 25));
+  // 2. DISCORD INTERFACE MATRIX MATH: Slice array down to 20 options max to guarantee room for back utility buttons
+  const cappedButtons = rawButtonsArray.slice(0, 20);
+  const totalComponentRows = [];
 
+  // Break flat button array into rows containing up to 5 elements each
+  for (let i = 0; i < cappedButtons.length; i += 5) {
+    const actionRow = new ActionRowBuilder().addComponents(cappedButtons.slice(i, i + 5));
+    totalComponentRows.push(actionRow);
+  }
+
+  // 3. Append the primary navigation options to the bottom row profile
   const backButton = new ButtonBuilder()
     .setCustomId('open_auction_panel_back')
     .setLabel('↩️ Return to Categories')
-    .setStyle(ButtonStyle.Secondary);
+    .setStyle(ButtonStyle.Danger);
 
-  const baseContent = `📋 **Loot Target**: **${selectedItemObj?.name}**\n👤 Your Limit Status: **${userClaimedCount}/${maxAllowedLimit} Claimed**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nSelect an unallocated book coordinate below to claim this item slot immediately:`;
+  const utilityRow = new ActionRowBuilder().addComponents(backButton);
+  totalComponentRows.push(utilityRow);
+
+  const baseContent = `📋 **Loot Target**: **${selectedItemObj?.name}**\n👤 Your Limit Status: **${userClaimedCount}/${maxAllowedLimit} Claimed**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nTap any vacant grid coordinate button below to lock your claim instantly:`;
 
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
-    components: [
-      new ActionRowBuilder().addComponents(slotSelectMenu),
-      new ActionRowBuilder().addComponents(backButton)
-    ]
+    components: totalComponentRows
   });
 }
 
@@ -190,11 +197,12 @@ export async function handleAuctionInteraction(interaction) {
     await renderSpecificSlotView(interaction, itemId, finalRosterName);
   }
 
-  // ─── STEP 3: USER SELECTS A SPECIFIC COORDINATE TO CLAIM ───
-  if (interaction.isStringSelectMenu() && interaction.customId === 'auction_claim_specific_slot') {
+  // ─── STEP 3 & 4: USER TAPS A SPECIFIC GRID CANVAS BUTTON MATRIX CELL ───
+  if (interaction.isButton() && interaction.customId.startsWith('claim_slot_btn_')) {
     await interaction.deferUpdate();
     
-    const rawValueToken = interaction.values[0].replace('claim_slot_idx_', '');
+    // Deconstruct metadata parameters out of the button token id
+    const rawValueToken = interaction.customId.replace('claim_slot_btn_', '');
     const valueParts = rawValueToken.split('_item_');
     
     const targetIndex = parseInt(valueParts[0], 10);
@@ -225,17 +233,19 @@ export async function handleAuctionInteraction(interaction) {
         return currentSession;
       });
 
-      const successBanner = `✅ **SUCCESSFULLY LOCKED IN!**\n• Bound Profile: **${finalRosterName}**\n• Allocation: **${targetItemName} (Page ${targetPage}, Position ${targetSlotCoordinate})**\n\n*The officer dashboard has updated! Your session remains active below—feel free to claim another item category row slot:*`;
+      const successBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${targetItemName} (Page ${targetPage}, Position ${targetSlotCoordinate})**\n\n*The ledger has mutated successfully. Choose another category below to continue allocations:*`;
       
+      // Loop back smoothly to main categories view while showing updated shopping list data
       await renderItemCategoryView(interaction, finalRosterName, successBanner);
 
     } catch (err) {
       if (err.message === 'COLLISION_DETECTED') {
-        const collisionBanner = `⚠️ **SLOT ACQUIRED MID-FLIGHT**: Another player locked down **Page ${targetPage}, Position ${targetSlotCoordinate}** a microsecond before you clicked!\n\n*No structural ledger parameters were overwritten. The menu below has refreshed automatically—please select an alternative available coordinate:*`;
+        const collisionBanner = `⚠️ **SLOT SNIPED!** Another member claimed **Page ${targetPage}, Position ${targetSlotCoordinate}** right before you tapped.\n\n*No layout cells were overwritten. Try hitting an alternative open coordinate button below:*`;
         
+        // Loop back smoothly inside that SAME button view so they can try an adjacent button instantly
         await renderSpecificSlotView(interaction, itemId, finalRosterName, collisionBanner);
       } else {
-        console.error("Interaction Open Loop Step 3 Exception Caught:", err.message);
+        console.error("Button Matrix Open Loop Step 3 Exception Caught:", err.message);
         await interaction.editReply({ content: '❌ Critical error executing real-time database ledger updates.', components: [] });
       }
     }
