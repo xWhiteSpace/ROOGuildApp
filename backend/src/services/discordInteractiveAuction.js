@@ -261,10 +261,20 @@ export async function handleAuctionInteraction(interaction) {
 
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
+        // 🔍 LIMIT INTEGRITY CHECK: Calculate current claims vs configuration maximums
+      const selectedItemObj = finalItems.find(i => i.id === itemId);
+      const maxAllowedLimit = selectedItemObj ? (selectedItemObj.limitQty || 1) : 1;
+      const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
 
-      const successBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n*The allocation ledger has updated! Choose another category below to continue assignments:*`;
-
-      await renderItemCategoryView(interaction, finalRosterName, successBanner);
+      if (userClaimedCount >= maxAllowedLimit) {
+        // 🚪 LIMIT EXHAUSTED KICKBACK: Auto-transfer them back to categories menu with a comprehensive notice
+        const limitReachedBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n🎉 **LIMIT COMPLETED**: You have fully filled your allocation quota (**${userClaimedCount}/${maxAllowedLimit}**) for this item category! Returning to main menu...`;
+        await renderItemCategoryView(interaction, finalRosterName, limitReachedBanner);
+      } else {
+        // 🕹️ STAY-AND-TAP CONTINUATION: Keep them locked on this exact grid view to rapid-fire their remaining bids
+        const continuousBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n• Running Total: **${userClaimedCount}/${maxAllowedLimit} Secured**\n\n*The ledger has updated. Tap another open coordinate button below to claim another:*`;
+        await renderSpecificSlotView(interaction, itemId, finalRosterName, continuousBanner);
+      }
 
     } catch (err) {
       // Re-read current database layout parameters to recover slot details safely for collision receipts
@@ -276,8 +286,7 @@ export async function handleAuctionInteraction(interaction) {
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
       if (err.message === 'COLLISION_DETECTED') {
-        const collisionBanner = `⚠️ **SLOT SNIPED!** Another member claimed **Page ${targetPage}, Position ${targetSlotCoordinate}** right before you tapped.\n\n*No layout cells were overwritten. Try hitting an alternative open coordinate button below:*`;
-        
+        const collisionBanner = `⚠️ **SLOT TAKEN!** Another member claimed **Page ${resolvedSlot?.page || '?'}, Slot ${resolvedSlot?.slot || '?'}** right before you tapped.\n\n*No layout cells were overwritten. Try hitting an alternative open coordinate button below:*`;
         // Loop back smoothly inside that SAME button view so they can try an adjacent button instantly
         await renderSpecificSlotView(interaction, itemId, finalRosterName, collisionBanner);
       } else {
