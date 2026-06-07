@@ -160,6 +160,7 @@ router.get('/settings/get', async (req, res) => {
         timezone: "Asia/Manila",
         isForceLocked: false,
         adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+        helpEmbedUrl: "",
         items: [
           { id: "item_001", name: "Puppet Scroll", limitQty: 1, colorTheme: "purple" },
           { id: "item_002", name: "Illusion Scroll", limitQty: 1, colorTheme: "yellow" },
@@ -417,6 +418,7 @@ router.get('/init', async (req, res) => {
       phaseIntervals: timeGateStatus.phaseIntervals,
       eventId: timeGateStatus.activeEventId || "", // 🛡️ Seamlessly tunnels calculated event ID tokens directly down the wire
       eventName: timeGateStatus.activeEventTitle || "Raid Session", // 🛡️ Securely exposes contextual title text to client states
+      helpEmbedUrl: timeGateStatus.helpEmbedUrl || "",
       events: dynamicConfig.events || {}, // 🛡️ Dynamic Directory Injection: Transmits custom user event configuration definitions
       rankingsByItem,
       requestsByItemDetails,

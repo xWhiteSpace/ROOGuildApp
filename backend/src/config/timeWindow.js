@@ -10,6 +10,7 @@ let cachedConfig = {
   timezone: "Asia/Manila",
   isForceLocked: false,
   adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+  helpEmbedUrl: "",
   items: [
     { id: "item_001", name: "Puppet Scroll", limitQty: 1 },
     { id: "item_002", name: "Illusion Scroll", limitQty: 1 },
@@ -57,6 +58,7 @@ function initConfigListener() {
           timezone: data.timezone || "Asia/Manila",
           isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
           adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+          helpEmbedUrl: data.helpEmbedUrl || "",
           items: data.items || cachedConfig.items,
           events: data.events || cachedConfig.events
         };
@@ -248,6 +250,7 @@ export function getGateStatusDetails() {
     phaseIntervals,
     activeEventId: activeEventId || "", // 🛡️ Explicit property injection ensures downstream route endpoints can map IDs natively
     activeEventTitle: activeEventTitle || "Raid Session", // 🛡️ Explicit property injection ensures descriptive matching text
+    helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
     // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
       phase1: ["07:00", "12:00", "19:00"],
