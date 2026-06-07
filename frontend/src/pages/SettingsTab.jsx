@@ -23,6 +23,7 @@ export default function SettingsTab() {
   const [config, setConfig] = useState({
     timezone: 'Asia/Manila',
     isForceLocked: false,
+    helpEmbedUrl: '',
     adminRoles: [],
     items: [],
     events: {},
@@ -314,6 +315,21 @@ export default function SettingsTab() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* SYSTEM HELP GUIDE CONFIGURATION */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+        <div>
+          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">💡 System Help Guide URL</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">Paste your Google Slides published embed or view link here. This link feeds directly into the public Help Tab overlay popup.</p>
+        </div>
+        <input
+          type="text"
+          value={config.helpEmbedUrl || ''}
+          onChange={(e) => setConfig(prev => ({ ...prev, helpEmbedUrl: e.target.value }))}
+          placeholder="https://docs.google.com/presentation/d/.../embed"
+          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-indigo-500 transition"
+        />
       </div>
 
       {/* SECTION 1: REQUEST-RELATED PARAMETERS (EVENTS AND TIME MATRICES MAPPER) */}
