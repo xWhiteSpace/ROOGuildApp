@@ -534,6 +534,13 @@ router.post('/submit', async (req, res) => {
       if (targetQty <= 0) continue; 
 
       const resolvedItemObj = itemsList.find(i => i.id === itemId) || { name: itemId };
+      const activeEvent = dynamicConfig.events?.[timeGateStatus.activeEventId];
+      const maxAllowedLimit = activeEvent?.loots?.[itemId] || 0;
+
+      if (maxAllowedLimit === 0 || targetQty > maxAllowedLimit) {
+        return res.status(422).json({ success: false, error: `Submission rejected: Requested volume for ${resolvedItemObj.name} exceeds the allowed event cap.` });
+      }
+
       const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemId, resolvedItemObj.name);
 
       const newRequestRef = db.ref('auction/web_requests').push();

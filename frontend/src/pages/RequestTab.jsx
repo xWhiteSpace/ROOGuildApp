@@ -312,8 +312,13 @@ export default function RequestTab() {
         {/* CARDS REGISTRATION DECK */}
         <div className="lg:col-span-8">
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2">
-            {items.map(item => {
-              const currentActive = liveCounts[item.id] || 0;
+            {items.length === 0 ? (
+              <div className="col-span-2 rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-center text-slate-500 font-sans italic text-xs">
+                ❌ No items are scheduled for registration in tonight's auction cycle.
+              </div>
+            ) : (
+              items.map(item => {
+                const currentActive = liveCounts[item.id] || 0;
               const localInput = localSelections[item.id] || 0;
               const combinedTotal = currentActive + localInput;
               const limitQty = item.limitQty || 1;
@@ -373,7 +378,8 @@ export default function RequestTab() {
                   </div>
                 </div>
               );
-            })}
+              })
+          )}
           </div>
         </div>
 

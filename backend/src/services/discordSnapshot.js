@@ -1,6 +1,7 @@
 // backend/src/services/discordSnapshot.js
 import admin from 'firebase-admin';
 import { discordClient } from '../discord-bot/client.js';
+import { getGateStatusDetails } from '../config/timeWindow.js';
 
 /**
  * 📣 REQ024 & REQ025: Live Automated Snapshots Controller
@@ -57,16 +58,27 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
       ? `🔒 === BID REQUEST REGISTRATION CLOSED (FINAL LIST) ===\n`
       : `📊 === CURRENT BID REQUEST LIST ===\n`;
 
+    const gateDetails = getGateStatusDetails() || {};
+    const activeEventObj = dynamicConfig.events?.[gateDetails.activeEventId];
+
     // Parse the aggregated live parameters directly into the markdown snapshot string
     itemsList.forEach(item => {
+      messagePayload += `\n🏷️ Item Name: ${item.name.toUpperCase()}\n`;
+      
+      if (activeEventObj?.loots?.[item.id] === undefined) {
+        messagePayload += `   ❌ This item is not included in tonight's auction cycle.\n`;
+        return;
+      }
+
       const activeApplicants = Object.values(userCalculationsMap[item.id] || {}).filter(u => u.netQty > 0);
       activeApplicants.sort((a, b) => b.priority - a.priority);
 
       if (activeApplicants.length > 0) {
-        messagePayload += `\n🏷️ Item Name: ${item.name.toUpperCase()}\n`;
         activeApplicants.forEach((entry, index) => {
           messagePayload += `   [Rank ${index + 1}] ${entry.name} - Qty: ${entry.netQty} (Priority Score: ${entry.priority})\n`;
         });
+      } else {
+        messagePayload += `   (No active bid requests filed for this item)\n`;
       }
     });
 

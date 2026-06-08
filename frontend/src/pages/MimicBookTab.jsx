@@ -790,13 +790,9 @@ export default function MimicBookTab({ user }) {
                           </div>
                         </td>
 
-                        <td className="p-2 text-center">
-                          <div className="flex items-center justify-center gap-1 bg-slate-950/40 border border-slate-800/40 rounded-lg px-1">
-                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', Math.max(1, row.limit - 1))} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">-</button>
-                            <input type="number" value={row.limit} onChange={(e) => handleUpdateLootRow(row.id, 'limit', e.target.value)} className="w-10 bg-transparent text-center text-white font-black text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                            <button type="button" onClick={() => handleUpdateLootRow(row.id, 'limit', row.limit + 1)} className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold cursor-pointer">+</button>
-                          </div>
-                        </td>
+                      <td className="p-2 text-center text-amber-500 font-bold text-xs select-none">
+                        {row.limit || 1}
+                      </td>
 
                         <td className="p-2 text-center"><button onClick={() => handleRemoveLootRow(row.id)} className="text-slate-600 hover:text-rose-400 p-1">🗑️</button></td>
                       </tr>

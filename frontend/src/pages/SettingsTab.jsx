@@ -641,7 +641,7 @@ export default function SettingsTab() {
       {/* SECTION 3: IN-GAME RELATED PARAMETERS */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
         <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 3: In-Game Related Item Capacity & Limits</h3>
+          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Section 3: Master Item Registry Inventory</h3>
           <button 
             onClick={handleAddItemNode}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"

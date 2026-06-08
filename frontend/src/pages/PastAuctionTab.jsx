@@ -8,6 +8,8 @@ export default function PastAuctionTab() {
   const [pastAuctionsData, setPastAuctionsData] = useState([]);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
 
+const [configItems, setConfigItems] = useState([]);
+
   const fetchPastAuctionsLog = async () => {
     try {
       setLoading(true);
@@ -22,9 +24,21 @@ export default function PastAuctionTab() {
         credentials: 'include' 
       });
       const data = await res.json();
-      if (data.success) {
-        setPastAuctionsData(data.history || []);
-      }
+        if (data.success) {
+          setPastAuctionsData(data.history || []);
+          try {
+            const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
+              headers: customHeaders,
+              credentials: 'include'
+            });
+            const configData = await configRes.json();
+            if (configData.success && configData.config?.items) {
+              setConfigItems(configData.config.items);
+            }
+          } catch (err) {
+            console.error("Failed to map live configuration styles:", err);
+          }
+        }
     } catch (err) {
       console.error("Failed to extract past auction records:", err);
     } finally {
@@ -36,14 +50,30 @@ export default function PastAuctionTab() {
     fetchPastAuctionsLog();
   }, []);
 
-  const getItemStyleProfile = (itemType) => {
-    switch (itemType) {
-      case 'Puppet': return 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]';
-      case 'Illu': return 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]';
-      case 'Light&Dark': return 'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]';
-      case 'Time&Space': return 'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600';
-      default: return 'text-slate-400 border-slate-800 bg-slate-900/50';
+    const getItemStyleProfile = (itemType, itemId) => {
+    const THEME_MAP = {
+      purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
+      yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
+      slate:  'text-slate-100 border-slate-700 bg-slate-900/40 shadow-[0_0_15px_rgba(255,255,255,0.05)]',
+      red:    'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600'
+    };
+
+    const matchedItem = configItems.find(i => 
+      (itemId && i.id.toLowerCase() === itemId.toLowerCase()) || 
+      (itemType && i.name.toLowerCase() === itemType.toLowerCase())
+    );
+
+    if (matchedItem && matchedItem.colorTheme) {
+      return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
     }
+
+    const legacyLabel = (itemType || '').toLowerCase();
+    if (legacyLabel.includes('puppet')) return THEME_MAP.purple;
+    if (legacyLabel.includes('illu')) return THEME_MAP.yellow;
+    if (legacyLabel.includes('light')) return THEME_MAP.slate;
+    if (legacyLabel.includes('time') || legacyLabel.includes('space')) return THEME_MAP.red;
+
+    return 'text-slate-400 border-slate-800 bg-slate-900/50';
   };
 
   // Pre-calculate unique date-event headers to build the accordion tabs
@@ -96,8 +126,8 @@ export default function PastAuctionTab() {
                             <tr key={itemRow.id} className="hover:bg-slate-900/10 transition-colors">
                               <td className="p-2.5 px-5 text-slate-200 font-bold font-sans">{itemRow.mem}</td>
                               <td className="p-2.5">
-                                <span className={`px-2 py-0.5 rounded text-[10px] border font-sans ${getItemStyleProfile(itemRow.item)}`}>
-                                  {itemRow.item}
+                                <span className={`px-2 py-0.5 rounded text-[10px] border font-sans ${getItemStyleProfile(itemRow.item, itemRow.itemId)}`}>
+                                  {itemRow.item || itemRow.itemId}
                                 </span>
                               </td>
                               <td className="p-2.5 px-5 text-right font-mono font-black text-emerald-400">{itemRow.quantity}</td>

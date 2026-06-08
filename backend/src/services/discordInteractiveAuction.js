@@ -146,7 +146,9 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const { categoryAllocations = {}, qtyPerPage = 4 } = sessionSnap.val();
 
   const selectedItemObj = items.find(i => i.id === itemId);
-  const maxAllowedLimit = selectedItemObj ? (selectedItemObj.limitQty || 1) : 1;
+  const gateDetails = getGateStatusDetails() || {};
+  const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId];
+  const maxAllowedLimit = activeEventObj?.loots?.[itemId] || 1;
 
   const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage);
   const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
@@ -281,8 +283,9 @@ export async function handleAuctionInteraction(interaction) {
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
         // 🔍 LIMIT INTEGRITY CHECK: Calculate current claims vs configuration maximums
-      const selectedItemObj = finalItems.find(i => i.id === itemId);
-      const maxAllowedLimit = selectedItemObj ? (selectedItemObj.limitQty || 1) : 1;
+      const gateDetails = getGateStatusDetails() || {};
+      const activeEventObj = updatedConfigSnap.val().events?.[gateDetails.activeEventId];
+      const maxAllowedLimit = activeEventObj?.loots?.[itemId] || 1;
       const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
 
       if (userClaimedCount >= maxAllowedLimit) {
