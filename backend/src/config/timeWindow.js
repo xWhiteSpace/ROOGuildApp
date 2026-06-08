@@ -10,22 +10,27 @@ let cachedConfig = {
   timezone: "Asia/Manila",
   isForceLocked: false,
   adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
-  helpEmbedUrl: "",
+helpEmbedUrl: "",
   items: [
-    { id: "item_001", name: "Puppet Scroll", limitQty: 1 },
-    { id: "item_002", name: "Illusion Scroll", limitQty: 1 },
-    { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
-    { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
+    { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
+    { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
+    { id: "item_003", name: "Light & Dark Scroll", colorTheme: "slate" },
+    { id: "item_004", name: "Time & Space Scroll", colorTheme: "red" }
   ],
   events: {
     "ev_001": {
       title: "GuildLeague",
-      phases: [
-        null,
-        { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
-        { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
-        { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-      ],
+      phases: {
+        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
+        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
+        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
+      },
+      loots: {
+        "item_001": 1,
+        "item_002": 1,
+        "item_003": 3,
+        "item_004": 5
+      },
       announcements: {
         phase1: ["07:00", "12:00", "19:00"],
         phase2: "22:15",

@@ -108,14 +108,18 @@ export default function SettingsTab() {
     }
   };
 
-  const handleUpdateItemLimit = (id, direction) => {
-    const updatedItems = config.items.map(item => {
-      if (item.id !== id) return item;
-      const currentQty = item.limitQty || 0;
-      const nextQty = direction === 'up' ? currentQty + 1 : Math.max(0, currentQty - 1);
-      return { ...item, limitQty: nextQty };
-    });
-    setConfig(prev => ({ ...prev, items: updatedItems }));
+    const handleUpdateEventLootLimit = (evKey, itemId, direction) => {
+    const updatedEvents = { ...config.events };
+    if (!updatedEvents[evKey].loots) updatedEvents[evKey].loots = {};
+    const currentQty = updatedEvents[evKey].loots[itemId] || 0;
+    const nextQty = direction === 'up' ? currentQty + 1 : Math.max(0, currentQty - 1);
+    
+    if (nextQty <= 0) {
+      delete updatedEvents[evKey].loots[itemId];
+    } else {
+      updatedEvents[evKey].loots[itemId] = nextQty;
+    }
+    setConfig(prev => ({ ...prev, events: updatedEvents }));
   };
 
   const handleAddItemNode = () => {
@@ -124,8 +128,7 @@ export default function SettingsTab() {
     const newItemObj = {
       id: `item_${paddingStr}`,
       name: `Custom Loot Classification ${nextIndex}`,
-      limitQty: 1,
-      colorTheme: 'slate' // Seeds a baseline theme style structure instantly
+      colorTheme: 'slate'
     };
     setConfig(prev => ({ ...prev, items: [...prev.items, newItemObj] }));
   };
@@ -157,6 +160,7 @@ export default function SettingsTab() {
         2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" },
         3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }
       },
+      loots: {},
       announcements: {
         phase1: ["07:00", "12:00", "19:00"],
         phase2: "22:15",
@@ -532,6 +536,53 @@ export default function SettingsTab() {
                       </div>
                     </div>
                   </div>
+                </div>
+</div>
+
+              {/* 💎 NESTED EVENT LOOT DROPS & QUANTITY CONFIGURATOR */}
+              <div className="bg-slate-900/30 border border-slate-900 p-3 rounded-xl space-y-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-[11px] font-black uppercase text-amber-400 tracking-wider">💎 Event Loot Drops Configuration</h4>
+                    <p className="text-[10px] text-slate-500 font-sans mt-0.5">Link items from Master Registry and specify target limit quantities for this event context.</p>
+                  </div>
+                  <select
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      handleUpdateEventLootLimit(evKey, e.target.value, 'up');
+                      e.target.value = '';
+                    }}
+                    className="bg-slate-950 border border-slate-800 text-[10px] font-black uppercase tracking-wider rounded-xl px-2.5 py-1.5 outline-none text-slate-300 cursor-pointer"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>+ Link Registry Item...</option>
+                    {config.items.map(mi => (
+                      <option key={mi.id} value={mi.id} disabled={ev.loots?.[mi.id] !== undefined}>
+                        {mi.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {ev.loots && Object.keys(ev.loots).length > 0 ? (
+                    Object.keys(ev.loots).map(lootItemId => {
+                      const matchedItem = config.items.find(i => i.id === lootItemId) || { name: 'Unknown Item' };
+                      const currentLimit = ev.loots[lootItemId] || 0;
+                      return (
+                        <div key={lootItemId} className="flex items-center justify-between bg-slate-950 border border-slate-800/60 p-2 rounded-xl text-xs font-mono">
+                          <span className="text-slate-300 font-sans font-bold truncate pr-2">📦 {matchedItem.name}</span>
+                          <div className="flex items-center gap-2 select-none shrink-0">
+                            <button type="button" onClick={() => handleUpdateEventLootLimit(evKey, lootItemId, 'down')} className="w-5 h-5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-sans text-[10px] font-black hover:bg-slate-800 transition">-</button>
+                            <span className="text-xs font-black text-amber-500 w-5 text-center">{currentLimit}</span>
+                            <button type="button" onClick={() => handleUpdateEventLootLimit(evKey, lootItemId, 'up')} className="w-5 h-5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-sans text-[10px] font-black hover:bg-slate-800 transition">+</button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-2 text-center py-2 text-[10px] text-slate-500 italic font-mono">No item drops assigned to this event context yet.</div>
+                  )}
                 </div>
               </div>
 

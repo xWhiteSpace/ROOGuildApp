@@ -157,26 +157,31 @@ router.get('/settings/get', async (req, res) => {
     
     if (!configSnap.exists()) {
       const defaultData = {
-        timezone: "Asia/Manila",
-        isForceLocked: false,
-        adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
-        helpEmbedUrl: "",
-        items: [
-          { id: "item_001", name: "Puppet Scroll", limitQty: 1, colorTheme: "purple" },
-          { id: "item_002", name: "Illusion Scroll", limitQty: 1, colorTheme: "yellow" },
-          { id: "item_003", name: "Light & Dark Scroll", limitQty: 3, colorTheme: "slate" },
-          { id: "item_004", name: "Time & Space Scroll", limitQty: 5, colorTheme: "red" }
-        ],
-        events: {
-          "ev_001": {
-            title: "GuildLeague",
-            phases: {
-              1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
-              2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
-              3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-            },
-            // Pre-seeds notifications cleanly within the specific event's structural envelope
-            announcements: {
+            timezone: "Asia/Manila",
+            isForceLocked: false,
+            adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+            helpEmbedUrl: "",
+            items: [
+              { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
+              { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
+              { id: "item_003", name: "Light & Dark Scroll", colorTheme: "slate" },
+              { id: "item_004", name: "Time & Space Scroll", colorTheme: "red" }
+            ],
+            events: {
+              "ev_001": {
+                title: "GuildLeague",
+                phases: {
+                  1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
+                  2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
+                  3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
+                },
+                loots: {
+                  "item_001": 1,
+                  "item_002": 1,
+                  "item_003": 3,
+                  "item_004": 5
+                },
+                announcements: {
               phase1: ["07:00", "12:00", "19:00"],
               phase2: "22:15",
               phase3: "20:55"
@@ -231,15 +236,7 @@ router.get('/active-session', async (req, res) => {
     const sessionSnap = await db.ref('auction/active_session').once('value');
 
     if (!sessionSnap.exists()) {
-      const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
-      itemsList.forEach(item => {
-        freshReset.lootSummary[item.id] = { qty: 0, limit: item.limitQty, seats: 0 };
-        freshReset.categoryAllocations[item.id] = { selected: [] };
-        freshReset.initialWinnersByItem[item.id] = [];
-      });
-      
-      await db.ref('auction/active_session').set(freshReset);
-      return res.json({ success: true, session: freshReset });
+      return res.json({ success: true, session: null });
     }
 
     const currentSessionData = sessionSnap.val();
@@ -258,14 +255,14 @@ router.get('/active-session', async (req, res) => {
     }
 
     if (currentSessionData.categoryAllocations) {
-      itemsList.forEach(item => {
-      if (!currentSessionData.categoryAllocations[item.id]) {
-          currentSessionData.categoryAllocations[item.id] = { selected: [] };
-        }
-        if (!currentSessionData.lootSummary[item.id]) {
-          currentSessionData.lootSummary[item.id] = { qty: 0, limit: item.limitQty, seats: 0 };
-        }
-      });
+        itemsList.forEach(item => {
+          if (!currentSessionData.categoryAllocations[item.id]) {
+            currentSessionData.categoryAllocations[item.id] = { selected: [] };
+          }
+          if (!currentSessionData.lootSummary[item.id]) {
+            currentSessionData.lootSummary[item.id] = { qty: 0, limit: 1, seats: 0 };
+          }
+        });
     }
 
     // 🛡️ Ensure default geometric layout parameter maps are never undefined
@@ -327,14 +324,29 @@ router.get('/init', async (req, res) => {
     const targetSessionDate = dynamicConfig.targetSessionDate || new Date().toLocaleDateString("en-US", { timeZone: timezone });
     
     const timeGateStatus = getGateStatusDetails();
-    const snapshot = await db.ref('auction/web_requests').once('value');
-    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+      // Dynamic Filter Pass: Extract only items that are explicitly included in the active event's loot tree
+      const activeEvent = dynamicConfig.events?.[timeGateStatus.activeEventId];
+      const activeLoots = activeEvent?.loots || {};
+      const activeItemsList = [];
+      itemsList.forEach(masterItem => {
+        if (activeLoots[masterItem.id] !== undefined) {
+          activeItemsList.push({
+            id: masterItem.id,
+            name: masterItem.name,
+            colorTheme: masterItem.colorTheme || 'slate',
+            limitQty: activeLoots[masterItem.id]
+          });
+        }
+      });
 
-    const liveCounts = {};
-    const rankingsByItem = {};
-    const requestsByItemDetails = {};
+      const snapshot = await db.ref('auction/web_requests').once('value');
+      const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
 
-    itemsList.forEach(item => { 
+      const liveCounts = {};
+      const rankingsByItem = {};
+      const requestsByItemDetails = {};
+
+      activeItemsList.forEach(item => { 
       liveCounts[item.id] = 0; 
       rankingsByItem[item.id] = [];
       requestsByItemDetails[item.id] = {};
@@ -409,7 +421,7 @@ router.get('/init', async (req, res) => {
       success: true,
       displayName: playerDisplayName,
       date: targetSessionDate, 
-      items: itemsList,
+      items: activeItemsList,
       liveCounts,
       isGateOpen: timeGateStatus.isGateOpen,
       currentSessionLabel: timeGateStatus.currentSessionLabel,

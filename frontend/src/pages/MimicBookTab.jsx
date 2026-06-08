@@ -305,8 +305,10 @@ export default function MimicBookTab({ user }) {
       derivedStartPos = calcPos;
     }
 
-    const defaultTypeId = items[0].id;
-    const defaultLimit = items[0].limitQty || 1;
+    const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+    const allowedLootIds = selectedEventObj?.loots ? Object.keys(selectedEventObj.loots) : [];
+    const defaultTypeId = allowedLootIds[0] || (items[0]?.id || 'item_001');
+    const defaultLimit = selectedEventObj?.loots?.[defaultTypeId] || 1;
 
     const updatedRows = [
       ...lootRows, 
@@ -336,8 +338,8 @@ export default function MimicBookTab({ user }) {
         updatedFields[key] = Math.max(1, parsedPage);
       }
       if (key === 'itemType') {
-        const selectedItemObj = items.find(i => i.id === val);
-        updatedFields.limit = selectedItemObj ? (selectedItemObj.limitQty || 1) : 1;
+        const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+        updatedFields.limit = selectedEventObj?.loots?.[val] || 1;
       }
       return { ...r, ...updatedFields };
     });
@@ -385,8 +387,8 @@ export default function MimicBookTab({ user }) {
       const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
       if (calculatedSummary[row.itemType]) {
         calculatedSummary[row.itemType].qty += qty;
-        const itemSetting = items.find(i => i.id === row.itemType);
-        calculatedSummary[row.itemType].limit = itemSetting ? (itemSetting.limitQty || 1) : 1;
+        const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+        calculatedSummary[row.itemType].limit = selectedEventObj?.loots?.[row.itemType] || 1;
       }
     }
 
@@ -683,6 +685,25 @@ export default function MimicBookTab({ user }) {
           {/* STEP 1 WORKSPACE */}
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/40 pb-3">
+                <div className="text-sm font-bold text-slate-300">🎯 Select Target Event Profile:</div>
+                <select
+                  value={commitEvent}
+                  onChange={(e) => {
+                    setCommitEvent(e.target.value);
+                    const selEv = Object.values(availableEvents).find(ev => ev.title === e.target.value);
+                    const firstLootId = selEv?.loots ? Object.keys(selEv.loots)[0] : (items[0]?.id || 'item_001');
+                    const firstLootLimit = selEv?.loots?.[firstLootId] || 1;
+                    setLootRows([{ id: 1, itemType: firstLootId, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: firstLootLimit }]);
+                  }}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-bold focus:border-violet-500"
+                >
+                  {Object.values(availableEvents).map(ev => (
+                    <option key={ev.title} value={ev.title}>⚔️ {ev.title}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="text-sm font-bold text-slate-300">Register In-game Auction Item Position:</div>
                 <div className="flex items-center gap-3">
@@ -727,7 +748,13 @@ export default function MimicBookTab({ user }) {
                             onChange={(e) => handleUpdateLootRow(row.id, 'itemType', e.target.value)}
                             className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs font-sans text-slate-200 outline-none w-44 focus:border-violet-500 font-bold"
                           >
-                            {items.map(i => <option key={i.id} value={i.id}>📦 {i.name}</option>)}
+                            {(() => {
+                              const selEv = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+                              const allowedIds = selEv?.loots ? Object.keys(selEv.loots) : [];
+                              return items.filter(i => allowedIds.includes(i.id)).map(i => (
+                                <option key={i.id} value={i.id}>📦 {i.name}</option>
+                              ));
+                            })()}
                           </select>
                         </td>
                         
@@ -912,19 +939,11 @@ export default function MimicBookTab({ user }) {
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Date</label>
                   <input type="text" value={commitDate} onChange={(e) => setCommitDate(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" placeholder="MM/DD/YYYY" />
                 </div>
-                <div className="text-left w-full">
+                  <div className="text-left w-full">
                   <label className="text-[10px] uppercase font-black text-slate-400 tracking-tight">Event Category Origin</label>
-                  <select value={commitEvent} onChange={(e) => setCommitEvent(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 mt-1 focus:border-indigo-500 outline-none transition" >
-                    {Object.keys(availableEvents).length > 0 ? (
-                      Object.keys(availableEvents).map((evKey) => (
-                        <option key={evKey} value={availableEvents[evKey].title || ''}>
-                          ⚔️ {availableEvents[evKey].title || evKey}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="GuildLeague">🏆 GuildLeague (Fallback)</option>
-                    )}
-                  </select>
+                  <div className="w-full bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-xs font-sans text-amber-500 font-bold mt-1 shadow-inner select-none">
+                    ⚔️ {commitEvent} (Locked from Step 1)
+                  </div>
                 </div>
               </div>
 
