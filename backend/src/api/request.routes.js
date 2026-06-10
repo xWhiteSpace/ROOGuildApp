@@ -245,8 +245,10 @@ router.get('/active-session', async (req, res) => {
 
     if (timeDeltaMilliseconds > maximumAllowedAgeInMs) {
       const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
+      const gateDetails = getGateStatusDetails() || {};
+      const activeLoots = dynamicConfig.events?.[gateDetails.activeEventId]?.loots || {};
       itemsList.forEach(item => {
-        freshReset.lootSummary[item.id] = { qty: 0, limit: item.limitQty, seats: 0 };
+        freshReset.lootSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
         freshReset.categoryAllocations[item.id] = { selected: [] };
         freshReset.initialWinnersByItem[item.id] = [];
       });
@@ -255,12 +257,14 @@ router.get('/active-session', async (req, res) => {
     }
 
     if (currentSessionData.categoryAllocations) {
+        const gateDetails = getGateStatusDetails() || {};
+        const activeLoots = dynamicConfig.events?.[gateDetails.activeEventId]?.loots || {};
         itemsList.forEach(item => {
           if (!currentSessionData.categoryAllocations[item.id]) {
             currentSessionData.categoryAllocations[item.id] = { selected: [] };
           }
           if (!currentSessionData.lootSummary[item.id]) {
-            currentSessionData.lootSummary[item.id] = { qty: 0, limit: 1, seats: 0 };
+            currentSessionData.lootSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
           }
         });
     }
