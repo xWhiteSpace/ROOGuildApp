@@ -145,7 +145,10 @@ export function getGateStatusDetails() {
     });
 
     let activeMatch = null;
+
+    // 🌟 PASS 1: Scan for any currently active Phase 3 (Live Auction) windows with absolute priority
     for (const entry of timelinePhases) {
+      if (entry.phase !== 3) continue;
       let isLiveNow = false;
       if (entry.endAbs < entry.startAbs) {
         if (currentAbs >= entry.startAbs || currentAbs < entry.endAbs) isLiveNow = true;
@@ -155,6 +158,23 @@ export function getGateStatusDetails() {
       if (isLiveNow) {
         activeMatch = entry;
         break;
+      }
+    }
+
+    // 🌟 PASS 2: If no live auction is running, evaluate standard Phase 1 and Phase 2 windows
+    if (!activeMatch) {
+      for (const entry of timelinePhases) {
+        if (entry.phase === 3) continue;
+        let isLiveNow = false;
+        if (entry.endAbs < entry.startAbs) {
+          if (currentAbs >= entry.startAbs || currentAbs < entry.endAbs) isLiveNow = true;
+        } else {
+          if (currentAbs >= entry.startAbs && currentAbs < entry.endAbs) isLiveNow = true;
+        }
+        if (isLiveNow) {
+          activeMatch = entry;
+          break;
+        }
       }
     }
 
@@ -179,6 +199,7 @@ export function getGateStatusDetails() {
       activePhaseConfig = null;
     }
   }
+
 
   const isGateOpen = (currentPhase === 1);
   let nextStatusChangeMessage = "";
