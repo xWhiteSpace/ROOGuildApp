@@ -126,7 +126,7 @@ export function getGateStatusDetails() {
     return day * 1440 + h * 60 + m;
   }
 
- let currentPhase = 2;
+let currentPhase = 2;
   let activePhaseConfig = null;
   let selectedEventContext = null;
   let activeEventId = "";
@@ -135,80 +135,74 @@ export function getGateStatusDetails() {
   const validEventIds = Object.keys(events || {}).filter(id => events[id]);
 
   if (validEventIds.length > 0) {
-    const timelinePhases = [];
-
-    validEventIds.forEach(evId => {
-      const ev = events[evId];
-      if (!ev || !ev.phases) return;
-
-      Object.keys(ev.phases).forEach(phaseKey => {
-        const p = ev.phases[phaseKey];
-        if (!p) return;
-        timelinePhases.push({
-          eventId: evId,
-          eventTitle: ev.title || "Raid Session",
-          phase: Number(phaseKey),
-          startAbs: getAbsoluteMinutes(p.dayStart, p.timeStart),
-          endAbs: getAbsoluteMinutes(p.dayEnd, p.timeEnd),
-          config: p,
-          evConfig: ev
-        });
-      });
-    });
-
     let activeMatch = null;
 
-    // 🌟 PASS 1: Scan for any currently active Phase 3 (Live Auction) windows with absolute priority
-    for (const entry of timelinePhases) {
-      if (entry.phase !== 3) continue;
-      let isLiveNow = false;
-      if (entry.endAbs < entry.startAbs) {
-        if (currentAbs >= entry.startAbs || currentAbs < entry.endAbs) isLiveNow = true;
-      } else {
-        if (currentAbs >= entry.startAbs && currentAbs < entry.endAbs) isLiveNow = true;
-      }
-      if (isLiveNow) {
-        activeMatch = entry;
-        break;
-      }
-    }
+    // 🌟 PASS 1: Scan for any currently active window across ALL events and ALL phases
+    for (const evId of validEventIds) {
+      const ev = events[evId];
+      if (!ev || !ev.phases) continue;
 
-    // 🌟 PASS 2: If no live auction is running, evaluate standard Phase 1 and Phase 2 windows
-    if (!activeMatch) {
-      for (const entry of timelinePhases) {
-        if (entry.phase === 3) continue;
-        let isLiveNow = false;
-        if (entry.endAbs < entry.startAbs) {
-          if (currentAbs >= entry.startAbs || currentAbs < entry.endAbs) isLiveNow = true;
+      for (const phaseKey of [1, 2, 3]) {
+        const p = ev.phases[phaseKey];
+        if (!p) continue;
+
+        const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+        const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
+
+        let isInsideWindow = false;
+        if (endAbs < startAbs) {
+          if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
         } else {
-          if (currentAbs >= entry.startAbs && currentAbs < entry.endAbs) isLiveNow = true;
+          if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
         }
-        if (isLiveNow) {
-          activeMatch = entry;
-          break;
+
+        if (isInsideWindow) {
+          // If we find an active Phase 3 window, it has absolute override priority
+          if (Number(phaseKey) === 3) {
+            activeMatch = { evId, ev, phaseKey: 3, p };
+            break;
+          }
+          // Otherwise, cache the registration window but keep scanning to ensure no Phase 3 overrides it
+          if (!activeMatch || activeMatch.phaseKey !== 3) {
+            activeMatch = { evId, ev, phaseKey: Number(phaseKey), p };
+          }
         }
       }
+      if (activeMatch && activeMatch.phaseKey === 3) break;
     }
 
     if (activeMatch) {
-      activeEventId = activeMatch.eventId;
-      activeEventTitle = activeMatch.eventTitle;
-      selectedEventContext = activeMatch.evConfig;
-      currentPhase = activeMatch.phase;
-      activePhaseConfig = activeMatch.config;
-    } else if (timelinePhases.length > 0) {
-      const sortedByClosestUpcoming = [...timelinePhases].sort((a, b) => {
-        const distA = a.startAbs >= currentAbs ? (a.startAbs - currentAbs) : (10080 - currentAbs + a.startAbs);
-        const distB = b.startAbs >= currentAbs ? (b.startAbs - currentAbs) : (10080 - currentAbs + b.startAbs);
-        return distA - distB;
+      activeEventId = activeMatch.getGateStatusDetails || activeMatch.evId;
+      activeEventTitle = activeMatch.ev.title || "Raid Session";
+      selectedEventContext = activeMatch.ev;
+      currentPhase = activeMatch.phaseKey;
+      activePhaseConfig = activeMatch.p;
+    } else {
+      // 🌟 PASS 2: If completely off-schedule, look ahead EXCLUSIVELY at Phase 1 anchors to pick the next event cycle
+      let minDistance = Infinity;
+      let closestMatch = null;
+
+      validEventIds.forEach(evId => {
+        const ev = events[evId];
+        const p1 = ev?.phases?.[1];
+        if (!p1) return;
+
+        const startAbs = getAbsoluteMinutes(p1.dayStart, p1.timeStart);
+        let distance = startAbs >= currentAbs ? (startAbs - currentAbs) : (10080 - currentAbs + startAbs);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestMatch = { evId, ev };
+        }
       });
 
-      const upcomingMatch = sortedByClosestUpcoming[0];
-      activeEventId = upcomingMatch.eventId;
-      activeEventTitle = upcomingMatch.eventTitle;
-      selectedEventContext = upcomingMatch.evConfig;
-      currentPhase = 2;
-      activePhaseConfig = null;
+      if (closestMatch) {
+        activeEventId = closestMatch.evId;
+        activeEventTitle = closestMatch.ev.title || "Raid Session";
+        selectedEventContext = closestMatch.ev;
+        currentPhase = 2;
+        activePhaseConfig = null;
+      }
     }
   }
 
