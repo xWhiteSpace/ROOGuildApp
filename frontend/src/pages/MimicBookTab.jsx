@@ -153,13 +153,10 @@ export default function MimicBookTab({ user }) {
         setRequestsByItemDetails(data.requestsByItemDetails || {});
         setMasterGuildRoster(data.fullRoster || []);
         // 🛡️ Payload Alignment Pass: Cache dynamic custom event titles natively to unlock modular dropdown loops
-        if (data.events) {
-          setAvailableEvents(data.events);
-          const firstEvKey = Object.keys(data.events)[0];
-          if (firstEvKey && data.events[firstEvKey]?.title) {
-            setCommitEvent(data.events[firstEvKey].title);
-          }
-        }
+      if (data.events) {
+        setAvailableEvents(data.events);
+        setCommitEvent(data.eventName || "No Active Target Event Scheduled");
+      }
       }
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
@@ -686,22 +683,10 @@ export default function MimicBookTab({ user }) {
           {activeStep === 1 && (
             <div className="space-y-4 animate-fadeIn">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/40 pb-3">
-                <div className="text-sm font-bold text-slate-300">🎯 Select Target Event Profile:</div>
-                <select
-                  value={commitEvent}
-                  onChange={(e) => {
-                    setCommitEvent(e.target.value);
-                    const selEv = Object.values(availableEvents).find(ev => ev.title === e.target.value);
-                    const firstLootId = selEv?.loots ? Object.keys(selEv.loots)[0] : (items[0]?.id || 'item_001');
-                    const firstLootLimit = selEv?.loots?.[firstLootId] || 1;
-                    setLootRows([{ id: 1, itemType: firstLootId, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: firstLootLimit }]);
-                  }}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-bold focus:border-violet-500"
-                >
-                  {Object.values(availableEvents).map(ev => (
-                    <option key={ev.title} value={ev.title}>⚔️ {ev.title}</option>
-                  ))}
-                </select>
+                <div className="text-sm font-bold text-slate-300">🎯 Active Scheduled Event Context:</div>
+                <div className="bg-slate-950 border border-slate-850 rounded-xl px-4 py-1.5 text-xs font-sans text-amber-400 font-black tracking-wide select-none shadow-inner">
+                  ⚔️ {commitEvent || 'Syncing Active Schedule...'}
+                </div>
               </div>
 
               <div className="flex items-center justify-between">

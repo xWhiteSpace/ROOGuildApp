@@ -667,7 +667,6 @@ export default function SettingsTab() {
                   className="col-span-4 bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-1 text-xs text-slate-200 outline-none focus:border-slate-700 font-sans font-bold"
                   placeholder="Loot Name Track Label..."
                 />
-                
                 {/* 🎨 INTERACTIVE COLOR PRESETS DROPDOWN SELECTION COMPONENT */}
                 <select
                   value={item.colorTheme || 'slate'}
@@ -675,7 +674,7 @@ export default function SettingsTab() {
                     const updated = config.items.map(i => i.id === item.id ? { ...i, colorTheme: e.target.value } : i);
                     setConfig(prev => ({ ...prev, items: updated }));
                   }}
-                  className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-xs font-sans text-slate-300 outline-none focus:border-slate-700/60 font-semibold cursor-pointer text-center"
+                  className="col-span-3 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-xs font-sans text-slate-300 outline-none focus:border-slate-700/60 font-semibold cursor-pointer text-center"
                 >
                   <option value="purple">💜 Purple</option>
                   <option value="yellow">💛 Yellow</option>
@@ -683,28 +682,14 @@ export default function SettingsTab() {
                   <option value="red">❤️ Red</option>
                 </select>
 
-                {/* ➕ RELATIONAL VALUE INCREMENT CONTROLLER CONTROLS */}
-                <div className="col-span-3 flex items-center justify-end gap-2.5 select-none pr-1">
+                <div className="col-span-2 flex items-center justify-end pr-1">
                   <button 
-                    onClick={() => handleUpdateItemLimit(item.id, 'down')} 
-                    className="w-6 h-6 rounded-lg bg-slate-900 text-slate-400 font-sans text-xs font-black border border-slate-800 hover:bg-slate-800 hover:text-white transition cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <span className="text-xs font-black text-amber-500 w-6 text-center tracking-tight">{item.limitQty || 0}</span>
-                  <button 
-                    onClick={() => handleUpdateItemLimit(item.id, 'up')} 
-                    className="w-6 h-6 rounded-lg bg-slate-900 text-slate-400 font-sans text-xs font-black border border-slate-800 hover:bg-slate-800 hover:text-white transition cursor-pointer"
-                  >
-                    +
-                  </button>
-                  
-                  <button 
+                    type="button"
                     onClick={() => setConfig(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}
-                    className="text-[10px] text-slate-700 hover:text-rose-500 transition pl-1 font-sans font-bold cursor-pointer"
+                    className="text-[10px] text-slate-500 hover:text-rose-400 transition font-sans font-bold cursor-pointer"
                     title="Delete item node configuration parameters"
                   >
-                    ✖
+                    Remove ✖
                   </button>
                 </div>
               </div>
