@@ -66,10 +66,7 @@ export default function RequestTab() {
         data.items.forEach(item => { blankInputs[item.id] = 0; });
         setLocalSelections(blankInputs);
 
-        if (data.items.length > 0) {
-          setActiveListTab(data.items[0].id);
         }
-      }
     } catch (err) {
       console.error("Connection link offline:", err);
     } finally {
@@ -80,6 +77,17 @@ export default function RequestTab() {
   useEffect(() => {
     initLobbyDashboard();
   }, []);
+
+  useEffect(() => {
+    if (items.length > 0) {
+      const isCurrentTabValid = items.some(item => item.id === activeListTab);
+      if (!activeListTab || !isCurrentTabValid) {
+        setActiveListTab(items[0].id);
+      }
+    } else {
+      setActiveListTab('');
+    }
+  }, [items, activeListTab]);
 
   const adjustCounter = (itemId, direction, limitQty, currentActive) => {
     if (!isGateOpen) return; 
@@ -321,7 +329,7 @@ export default function RequestTab() {
                 const currentActive = liveCounts[item.id] || 0;
               const localInput = localSelections[item.id] || 0;
               const combinedTotal = currentActive + localInput;
-              const limitQty = item.limitQty || 1;
+              const limitQty = item.limitQty;
 
               return (
                 <div key={item.id} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">

@@ -4,13 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
-const ITEM_LIMIT_DEFAULTS = {
-  'Puppet': 1,
-  'Illu': 1,
-  'Light&Dark': 3,
-  'Time&Space': 5
-};
-
 export default function MimicBookTab({ user }) {
   // 🏛️ CENTRALIZED USER INTENT PERMISSION RESOLVER
   const isOfficer = user?.isOfficer === true;
@@ -168,11 +161,11 @@ export default function MimicBookTab({ user }) {
   // Safe fallback initializing default rows only if server confirms database cache is clean
   useEffect(() => {
     if (items.length > 0 && !activeMatrixFilter && lootRows.length === 0) {
-      setActiveMatrixFilter(items[0].id);
-      setLootRows([{ id: 1, itemType: items[0].id, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: items[0].limitQty || 1 }]);
+      const fallbackItem = items[0];
+      setActiveMatrixFilter(fallbackItem.id);
+      setLootRows([{ id: 1, itemType: fallbackItem.id, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: fallbackItem.limitQty || 1 }]);
     }
   }, [items, activeMatrixFilter, lootRows]);
-
   const handleSyncRosterFromDiscord = async () => {
     try {
       setSyncingRoster(true);
@@ -302,7 +295,8 @@ export default function MimicBookTab({ user }) {
       derivedStartPos = calcPos;
     }
 
-    const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+    const historicalEventKeys = Object.keys(availableEvents || {});
+    const selectedEventObj = Object.values(availableEvents || {}).find(ev => ev.title === commitEvent) || (historicalEventKeys.length > 0 ? availableEvents[historicalEventKeys[0]] : null);
     const allowedLootIds = selectedEventObj?.loots ? Object.keys(selectedEventObj.loots) : [];
     const defaultTypeId = allowedLootIds[0] || (items[0]?.id || 'item_001');
     const defaultLimit = selectedEventObj?.loots?.[defaultTypeId] || 1;
@@ -352,8 +346,11 @@ export default function MimicBookTab({ user }) {
     const initialAllocations = {};
     const initialWinnersTrack = {};
 
+    const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+    const activeLoots = selectedEventObj?.loots || {};
+
     items.forEach(item => {
-      calculatedSummary[item.id] = { qty: 0, limit: item.limitQty || 1, seats: 0 };
+      calculatedSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
       initialWinnersTrack[item.id] = [];
     });
 
@@ -528,7 +525,12 @@ export default function MimicBookTab({ user }) {
         alert("💥 SUCCESS: Raid records written to ledger repository! Server staging sandbox cleared.");
         setActiveStep(1);
         setBookCurrentPage(1);
-        setLootRows([{ id: 1, itemType: items[0]?.id || 'item_001', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }]);
+        const currentActiveEvent = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+        const scheduledLootIds = currentActiveEvent?.loots ? Object.keys(currentActiveEvent.loots) : [];
+        const dynamicFirstItemType = scheduledLootIds[0] || (items[0]?.id || 'item_001');
+        const dynamicFirstItemLimit = currentActiveEvent?.loots?.[dynamicFirstItemType] || 1;
+
+        setLootRows([{ id: 1, itemType: dynamicFirstItemType, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: dynamicFirstItemLimit }]);
         setLootSummary({});
         setCategoryAllocations({});
         setGeneratedSlots([]);
@@ -586,12 +588,7 @@ export default function MimicBookTab({ user }) {
       return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
     }
 
-    // Direct fallback array lookup loop to maintain integrity for initial render sequences
-    const idx = items.findIndex(i => i.id === id) % 4;
-    if (idx === 0) return THEME_MAP.purple;
-    if (idx === 1) return THEME_MAP.yellow;
-    if (idx === 2) return THEME_MAP.slate;
-    return THEME_MAP.red;
+    return THEME_MAP.slate;
   };
 
   const currentUserName = user?.displayName || user?.username || '';

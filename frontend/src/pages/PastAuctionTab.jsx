@@ -25,20 +25,20 @@ const [configItems, setConfigItems] = useState([]);
       });
       const data = await res.json();
         if (data.success) {
-          setPastAuctionsData(data.history || []);
-          try {
-            const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
-              headers: customHeaders,
-              credentials: 'include'
-            });
-            const configData = await configRes.json();
-            if (configData.success && configData.config?.items) {
-              setConfigItems(configData.config.items);
-            }
-          } catch (err) {
-            console.error("Failed to map live configuration styles:", err);
+        setPastAuctionsData(data.history || []);
+        try {
+          const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
+            headers: customHeaders,
+            credentials: 'include'
+          });
+          const configData = await configRes.json();
+          if (configData.success && configData.config?.items) {
+            setConfigItems(configData.config.items);
           }
+        } catch (err) {
+          console.error("Failed to map live configuration styles:", err);
         }
+      }
     } catch (err) {
       console.error("Failed to extract past auction records:", err);
     } finally {

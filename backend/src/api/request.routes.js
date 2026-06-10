@@ -7,15 +7,13 @@ const router = Router();
 
 // 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
 const DEFAULT_SESSION_STRUCTURE = {
-activeStep: 1,
-  qtyPerPage: 4, // 🎯 Baked directly into the true session structure as the master geometric guide
-  lootRows: [
-    { id: 1, itemType: 'item_001', startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: 1 }
-  ],
+  activeStep: 1,
+  qtyPerPage: 4,
+  lootRows: [],
   lootSummary: {},
   categoryAllocations: {},
   initialWinnersByItem: {},
-  activeMatrixFilter: 'item_001',
+  activeMatrixFilter: '',
   sidebarTab: 'standby'
 };
 
@@ -244,9 +242,17 @@ router.get('/active-session', async (req, res) => {
     const maximumAllowedAgeInMs = 24 * 60 * 60 * 1000; 
 
     if (timeDeltaMilliseconds > maximumAllowedAgeInMs) {
-      const freshReset = { ...DEFAULT_SESSION_STRUCTURE, lastUpdated: Date.now() };
       const gateDetails = getGateStatusDetails() || {};
       const activeLoots = dynamicConfig.events?.[gateDetails.activeEventId]?.loots || {};
+      const firstItemId = itemsList.length > 0 ? itemsList[0].id : '';
+
+      const freshReset = {
+        ...DEFAULT_SESSION_STRUCTURE,
+        activeMatrixFilter: firstItemId,
+        lootRows: firstItemId ? [{ id: 1, itemType: firstItemId, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: activeLoots[firstItemId] || 1 }] : [],
+        lastUpdated: Date.now()
+      };
+
       itemsList.forEach(item => {
         freshReset.lootSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
         freshReset.categoryAllocations[item.id] = { selected: [] };
@@ -267,6 +273,10 @@ router.get('/active-session', async (req, res) => {
             currentSessionData.lootSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
           }
         });
+    }
+
+    if (currentSessionData.activeMatrixFilter && !itemsList.some(i => i.id === currentSessionData.activeMatrixFilter)) {
+      currentSessionData.activeMatrixFilter = itemsList.length > 0 ? itemsList[0].id : '';
     }
 
     // 🛡️ Ensure default geometric layout parameter maps are never undefined

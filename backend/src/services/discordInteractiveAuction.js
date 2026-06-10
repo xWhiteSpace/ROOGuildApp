@@ -104,8 +104,12 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     }
   });
 
+  const gateDetails = getGateStatusDetails() || {};
+  const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId];
+  const activeLoots = activeEventObj?.loots || {};
+
   const menuOptions = items
-    .filter(item => (itemVacancyCounts[item.id] || 0) > 0)
+    .filter(item => activeLoots[item.id] !== undefined && (itemVacancyCounts[item.id] || 0) > 0)
     .map(item => ({
       label: item.name,
       description: `${itemVacancyCounts[item.id]} empty layout slots available.`,
@@ -113,6 +117,13 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     }));
 
   const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, finalRosterName);
+
+  if (Object.keys(activeLoots).length === 0) {
+    return await interaction.editReply({
+      content: `${prefixMessage}\n\n❌ **NO ITEMS SCHEDULED**: There are no items scheduled for registration in tonight's auction cycle.`,
+      components: []
+    });
+  }
 
   if (menuOptions.length === 0) {
     return await interaction.editReply({ 
@@ -148,7 +159,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const selectedItemObj = items.find(i => i.id === itemId);
   const gateDetails = getGateStatusDetails() || {};
   const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId];
-  const maxAllowedLimit = activeEventObj?.loots?.[itemId] || 1;
+  const maxAllowedLimit = activeEventObj?.loots && activeEventObj.loots[itemId] !== undefined ? activeEventObj.loots[itemId] : 0;
 
   const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage);
   const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
@@ -285,7 +296,7 @@ export async function handleAuctionInteraction(interaction) {
         // 🔍 LIMIT INTEGRITY CHECK: Calculate current claims vs configuration maximums
       const gateDetails = getGateStatusDetails() || {};
       const activeEventObj = updatedConfigSnap.val().events?.[gateDetails.activeEventId];
-      const maxAllowedLimit = activeEventObj?.loots?.[itemId] || 1;
+      const maxAllowedLimit = activeEventObj?.loots && activeEventObj.loots[itemId] !== undefined ? activeEventObj.loots[itemId] : 0;
       const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && s.name === finalRosterName).length;
 
       if (userClaimedCount >= maxAllowedLimit) {

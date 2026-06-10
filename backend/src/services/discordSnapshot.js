@@ -54,12 +54,22 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     });
 
     // Establish the text template header layout
-    let messagePayload = isFinalThreshold
-      ? `🔒 === BID REQUEST REGISTRATION CLOSED (FINAL LIST) ===\n`
-      : `📊 === CURRENT BID REQUEST LIST ===\n`;
-
     const gateDetails = getGateStatusDetails() || {};
     const activeEventObj = dynamicConfig.events?.[gateDetails.activeEventId];
+    const resolvedEventTitle = gateDetails.activeEventTitle || "Raid Session";
+    const targetTimezone = dynamicConfig.timezone || "Asia/Manila";
+
+    const timestampString = new Date().toLocaleString("en-US", { 
+      timeZone: targetTimezone,
+      dateStyle: "short",
+      timeStyle: "short"
+    });
+
+    let messagePayload = isFinalThreshold
+      ? `🔒 === ${resolvedEventTitle.toUpperCase()} REGISTRATION CLOSED (FINALIZED LIST - LOCKED) ===\n`
+      : `📊 === ${resolvedEventTitle.toUpperCase()} CURRENT BID REQUEST LIST ===\n`;
+    
+    messagePayload += `⏱️ Compiled At: ${timestampString} (${targetTimezone} Time)\n`;
 
     // Parse the aggregated live parameters directly into the markdown snapshot string
     itemsList.forEach(item => {

@@ -114,95 +114,69 @@ export function getGateStatusDetails() {
     return day * 1440 + h * 60 + m;
   }
 
-  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
+ let currentPhase = 2;
   let activePhaseConfig = null;
   let selectedEventContext = null;
   let activeEventId = "";
   let activeEventTitle = "Raid Session";
 
-  if (events && typeof events === 'object') {
-    const eventIds = Object.keys(events);
+  const validEventIds = Object.keys(events || {}).filter(id => events[id]);
 
-    if (eventIds.length > 0) {
-      // 1️⃣ STEP 1: Scan for any currently live active Phase 3 windows
-      for (const evId of eventIds) {
-        const ev = events[evId];
-        const p3 = ev?.phases?.[3];
-        if (!p3) continue;
+  if (validEventIds.length > 0) {
+    const timelinePhases = [];
 
-        const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
-        const endAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
+    validEventIds.forEach(evId => {
+      const ev = events[evId];
+      if (!ev || !ev.phases) return;
 
-        let isLiveNow = false;
-        if (endAbs < startAbs) {
-          if (currentAbs >= startAbs || currentAbs < endAbs) isLiveNow = true;
-        } else {
-          if (currentAbs >= startAbs && currentAbs < endAbs) isLiveNow = true;
-        }
+      Object.keys(ev.phases).forEach(phaseKey => {
+        const p = ev.phases[phaseKey];
+        if (!p) return;
+        timelinePhases.push({
+          eventId: evId,
+          eventTitle: ev.title || "Raid Session",
+          phase: Number(phaseKey),
+          startAbs: getAbsoluteMinutes(p.dayStart, p.timeStart),
+          endAbs: getAbsoluteMinutes(p.dayEnd, p.timeEnd),
+          config: p,
+          evConfig: ev
+        });
+      });
+    });
 
-        if (isLiveNow) {
-          activeEventId = evId;
-          break;
-        }
+    let activeMatch = null;
+    for (const entry of timelinePhases) {
+      let isLiveNow = false;
+      if (entry.endAbs < entry.startAbs) {
+        if (currentAbs >= entry.startAbs || currentAbs < entry.endAbs) isLiveNow = true;
+      } else {
+        if (currentAbs >= entry.startAbs && currentAbs < entry.endAbs) isLiveNow = true;
       }
-
-      // 2️⃣ STEP 2: If no event is currently live, look ahead for the closest upcoming Phase 3 anchor
-      if (!activeEventId) {
-        let minDistance = Infinity;
-        let closestEvId = eventIds[0];
-
-        for (const evId of eventIds) {
-          const ev = events[evId];
-          const p3 = ev?.phases?.[3];
-          if (!p3) continue;
-
-          const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
-          
-          // Calculate look-ahead distance inside the 10080-minute weekly loop boundary
-          let distance = 0;
-          if (startAbs >= currentAbs) {
-            distance = startAbs - currentAbs;
-          } else {
-            distance = (10080 - currentAbs) + startAbs;
-          }
-
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestEvId = evId;
-          }
-        }
-        activeEventId = closestEvId;
+      if (isLiveNow) {
+        activeMatch = entry;
+        break;
       }
+    }
 
-      // 3️⃣ STEP 3: Evaluate target phase state constraints exclusively for the resolved event context
-      const ev = events[activeEventId];
-      if (ev) {
-        activeEventTitle = ev.title || "Raid Session";
-        selectedEventContext = ev;
+    if (activeMatch) {
+      activeEventId = activeMatch.eventId;
+      activeEventTitle = activeMatch.eventTitle;
+      selectedEventContext = activeMatch.evConfig;
+      currentPhase = activeMatch.phase;
+      activePhaseConfig = activeMatch.config;
+    } else if (timelinePhases.length > 0) {
+      const sortedByClosestUpcoming = [...timelinePhases].sort((a, b) => {
+        const distA = a.startAbs >= currentAbs ? (a.startAbs - currentAbs) : (10080 - currentAbs + a.startAbs);
+        const distB = b.startAbs >= currentAbs ? (b.startAbs - currentAbs) : (10080 - currentAbs + b.startAbs);
+        return distA - distB;
+      });
 
-        if (ev.phases) {
-          for (const phaseKey of [1, 2, 3]) {
-            const p = ev.phases[phaseKey];
-            if (!p) continue;
-
-            const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
-            const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
-
-            let isInsideWindow = false;
-            if (endAbs < startAbs) {
-              if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
-            } else {
-              if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
-            }
-
-            if (isInsideWindow) {
-              currentPhase = Number(phaseKey);
-              activePhaseConfig = p;
-              break;
-            }
-          }
-        }
-      }
+      const upcomingMatch = sortedByClosestUpcoming[0];
+      activeEventId = upcomingMatch.eventId;
+      activeEventTitle = upcomingMatch.eventTitle;
+      selectedEventContext = upcomingMatch.evConfig;
+      currentPhase = 2;
+      activePhaseConfig = null;
     }
   }
 
@@ -236,7 +210,7 @@ export function getGateStatusDetails() {
   }
 
   const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
-  const displayTargetEvent = selectedEventContext || (events && typeof events === 'object' ? Object.values(events)[0] : null);
+  const displayTargetEvent = selectedEventContext || (validEventIds.length > 0 ? events[validEventIds[0]] : null);
 
   if (displayTargetEvent && displayTargetEvent.phases) {
     for (const pk of [1, 2, 3]) {

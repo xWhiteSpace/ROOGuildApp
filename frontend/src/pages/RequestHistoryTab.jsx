@@ -114,14 +114,7 @@ export default function RequestHistoryTab() {
       return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
     }
 
-    // Direct fallback for legacy data records transparency
-    const legacyLabel = (itemType || '').toLowerCase();
-    if (legacyLabel.includes('puppet')) return THEME_MAP.purple;
-    if (legacyLabel.includes('illu')) return THEME_MAP.yellow;
-    if (legacyLabel.includes('light')) return THEME_MAP.slate;
-    if (legacyLabel.includes('time') || legacyLabel.includes('space')) return THEME_MAP.red;
-
-    return 'text-slate-400 border-slate-800 bg-slate-900/50';
+    return THEME_MAP.slate;
   };
 
   // 📋 Apply Filtering Matrix Logic
