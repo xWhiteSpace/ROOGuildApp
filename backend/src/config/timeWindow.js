@@ -93,7 +93,9 @@ export function getGateStatusDetails() {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     hour12: false,
-    weekday: 'short',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
     hour: 'numeric',
     minute: 'numeric'
   }).formatToParts(now);
@@ -101,10 +103,15 @@ export function getGateStatusDetails() {
   const timeObj = {};
   parts.forEach(p => { timeObj[p.type] = p.value; });
 
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const dayOfWeek = dayNames.indexOf(timeObj.weekday);
+  const year = parseInt(timeObj.year, 10);
+  const month = parseInt(timeObj.month, 10) - 1; // 0-indexed adjustment for JavaScript months
+  const day = parseInt(timeObj.day, 10);
   const trueHours = parseInt(timeObj.hour, 10) % 24;
   const trueMinutes = parseInt(timeObj.minute, 10);
+
+  // Construct a localized snapshot instance to extract the true day of week integer cleanly
+  const localSnap = new Date(year, month, day);
+  const dayOfWeek = localSnap.getDay();
 
   const currentMinutesOffset = trueHours * 60 + trueMinutes;
   const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
@@ -172,7 +179,7 @@ let currentPhase = 2;
     }
 
     if (activeMatch) {
-      activeEventId = activeMatch.getGateStatusDetails || activeMatch.evId;
+      activeEventId = activeMatch.evId;
       activeEventTitle = activeMatch.ev.title || "Raid Session";
       selectedEventContext = activeMatch.ev;
       currentPhase = activeMatch.phaseKey;
