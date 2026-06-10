@@ -89,12 +89,24 @@ export function getGateStatusDetails() {
 
   const { timezone, isForceLocked, events } = cachedConfig;
 
-  // Enforce system clock normalization to your adjustable timezone configuration profile
-  const targetTimeStr = new Date().toLocaleString("en-US", { timeZone: timezone });
-  const localClock = new Date(targetTimeStr);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour12: false,
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric'
+  }).formatToParts(now);
 
-  const dayOfWeek = localClock.getDay();
-  const currentMinutesOffset = localClock.getHours() * 60 + localClock.getMinutes();
+  const timeObj = {};
+  parts.forEach(p => { timeObj[p.type] = p.value; });
+
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayOfWeek = dayNames.indexOf(timeObj.weekday);
+  const trueHours = parseInt(timeObj.hour, 10) % 24;
+  const trueMinutes = parseInt(timeObj.minute, 10);
+
+  const currentMinutesOffset = trueHours * 60 + trueMinutes;
   const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
 
   // 🔒 Manual administrative override lockdown check
