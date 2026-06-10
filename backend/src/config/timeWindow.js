@@ -261,8 +261,10 @@ let currentPhase = 2;
     nextStatusChangeMessage,
     currentPhase,
     phaseIntervals,
-    activeEventId: activeEventId || "", // 🛡️ Explicit property injection ensures downstream route endpoints can map IDs natively
-    activeEventTitle: activeEventTitle || "Raid Session", // 🛡️ Explicit property injection ensures descriptive matching text
+    eventId: activeEventId || "",
+    eventName: activeEventTitle || "Raid Session",
+    activeEventId: activeEventId || "", 
+    activeEventTitle: activeEventTitle || "Raid Session", 
     helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
     // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
