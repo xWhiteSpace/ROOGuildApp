@@ -360,7 +360,8 @@ router.get('/init', async (req, res) => {
       const rankingsByItem = {};
       const requestsByItemDetails = {};
 
-      activeItemsList.forEach(item => { 
+      // ✅ FIX: Initializing with itemsList covers all master indices, preventing TypeErrors on empty context pools
+      itemsList.forEach(item => { 
       liveCounts[item.id] = 0; 
       rankingsByItem[item.id] = [];
       requestsByItemDetails[item.id] = {};
