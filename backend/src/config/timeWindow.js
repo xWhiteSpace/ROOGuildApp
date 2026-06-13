@@ -133,7 +133,9 @@ export function getGateStatusDetails() {
     return day * 1440 + h * 60 + m;
   }
 
-let currentPhase = 2;
+const getModularDistance = (from, to) => (to - from + 10080) % 10080;
+
+  let currentPhase = 2;
   let activePhaseConfig = null;
   let selectedEventContext = null;
   let activeEventId = "";
@@ -142,77 +144,50 @@ let currentPhase = 2;
   const validEventIds = Object.keys(events || {}).filter(id => events[id]);
 
   if (validEventIds.length > 0) {
-    let activeMatch = null;
+    let minP3EndDistance = Infinity;
+    let targetEventId = "";
 
-    // 🌟 PASS 1: Scan for any currently active window across ALL events and ALL phases
-    for (const evId of validEventIds) {
+    // 1. Determine active event utilizing the min(P3 End) distance metric
+    validEventIds.forEach(evId => {
       const ev = events[evId];
-      if (!ev || !ev.phases) continue;
+      const p3 = ev?.phases?.[3];
+      if (!p3) return;
 
-      for (const phaseKey of [1, 2, 3]) {
-        const p = ev.phases[phaseKey];
-        if (!p) continue;
+      const p3EndAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
+      const distanceToP3End = getModularDistance(currentAbs, p3EndAbs);
 
-        const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
-        const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
-
-        let isInsideWindow = false;
-        if (endAbs < startAbs) {
-          if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
-        } else {
-          if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
-        }
-
-        if (isInsideWindow) {
-          // If we find an active Phase 3 window, it has absolute override priority
-          if (Number(phaseKey) === 3) {
-            activeMatch = { evId, ev, phaseKey: 3, p };
-            break;
-          }
-          // Otherwise, cache the registration window but keep scanning to ensure no Phase 3 overrides it
-          if (!activeMatch || activeMatch.phaseKey !== 3) {
-            activeMatch = { evId, ev, phaseKey: Number(phaseKey), p };
-          }
-        }
+      if (distanceToP3End < minP3EndDistance) {
+        minP3EndDistance = distanceToP3End;
+        targetEventId = evId;
       }
-      if (activeMatch && activeMatch.phaseKey === 3) break;
-    }
+    });
 
-    if (activeMatch) {
-      activeEventId = activeMatch.evId;
-      activeEventTitle = activeMatch.ev.title || "Raid Session";
-      selectedEventContext = activeMatch.ev;
-      currentPhase = activeMatch.phaseKey;
-      activePhaseConfig = activeMatch.p;
-    } else {
-      // 🌟 PASS 2: If completely off-schedule, look ahead EXCLUSIVELY at Phase 1 anchors to pick the next event cycle
-      let minDistance = Infinity;
-      let closestMatch = null;
+    if (targetEventId) {
+      activeEventId = targetEventId;
+      selectedEventContext = events[activeEventId];
+      activeEventTitle = selectedEventContext.title || "Raid Session";
 
-      validEventIds.forEach(evId => {
-        const ev = events[evId];
-        const p1 = ev?.phases?.[1];
-        if (!p1) return;
+      // 2. Evaluate active sub-phase using wrap-around circular duration rules
+      if (selectedEventContext.phases) {
+        for (const phaseKey of [1, 2, 3]) {
+          const p = selectedEventContext.phases[phaseKey];
+          if (!p) continue;
 
-        const startAbs = getAbsoluteMinutes(p1.dayStart, p1.timeStart);
-        let distance = startAbs >= currentAbs ? (startAbs - currentAbs) : (10080 - currentAbs + startAbs);
+          const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+          const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
 
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestMatch = { evId, ev };
+          const totalDuration = getModularDistance(startAbs, endAbs);
+          const distanceFromStart = getModularDistance(startAbs, currentAbs);
+
+          if (distanceFromStart <= totalDuration) {
+            currentPhase = Number(phaseKey);
+            activePhaseConfig = p;
+            if (currentPhase === 3) break;
+          }
         }
-      });
-
-      if (closestMatch) {
-        activeEventId = closestMatch.evId;
-        activeEventTitle = closestMatch.ev.title || "Raid Session";
-        selectedEventContext = closestMatch.ev;
-        currentPhase = 2;
-        activePhaseConfig = null;
       }
     }
   }
-
 
   const isGateOpen = (currentPhase === 1);
   let nextStatusChangeMessage = "";
@@ -255,6 +230,42 @@ let currentPhase = 2;
     }
   }
 
+const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
+
+  if (selectedEventContext && selectedEventContext.phases) {
+    const evAnn = selectedEventContext.announcements || {};
+    
+    // Phase 1 alerts: Evaluated as daily repeating variations constrained inside the Phase 1 window
+    const p1 = selectedEventContext.phases[1];
+    if (p1 && evAnn.phase1) {
+      const p1Start = (p1.dayStart * 1440) + parseInt(p1.timeStart.split(':')[0], 10) * 60 + parseInt(p1.timeStart.split(':')[1], 10);
+      const p1End = (p1.dayEnd * 1440) + parseInt(p1.timeEnd.split(':')[0], 10) * 60 + parseInt(p1.timeEnd.split(':')[1], 10);
+      const p1Duration = (p1End - p1Start + 10080) % 10080;
+
+      evAnn.phase1.forEach(timeStr => {
+        for (let d = 0; d <= 6; d++) {
+          const annAbs = (d * 1440) + parseInt(timeStr.split(':')[0], 10) * 60 + parseInt(timeStr.split(':')[1], 10);
+          if (((annAbs - p1Start + 10080) % 10080) <= p1Duration) {
+            computedAnnouncementMinutes.phase1.push(annAbs);
+          }
+        }
+      });
+      computedAnnouncementMinutes.phase1.sort((a, b) => a - b);
+    }
+
+    // Phase 2 alerts: Milestone anchored explicitly to P2 Day Start
+    const p2 = selectedEventContext.phases[2];
+    if (p2 && evAnn.phase2) {
+      computedAnnouncementMinutes.phase2 = (p2.dayStart * 1440) + parseInt(evAnn.phase2.split(':')[0], 10) * 60 + parseInt(evAnn.phase2.split(':')[1], 10);
+    }
+
+    // Phase 3 alerts: Milestone anchored explicitly to P3 Day Start
+    const p3 = selectedEventContext.phases[3];
+    if (p3 && evAnn.phase3) {
+      computedAnnouncementMinutes.phase3 = (p3.dayStart * 1440) + parseInt(evAnn.phase3.split(':')[0], 10) * 60 + parseInt(evAnn.phase3.split(':')[1], 10);
+    }
+  }
+
   return {
     isGateOpen,
     currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
@@ -266,7 +277,7 @@ let currentPhase = 2;
     activeEventId: activeEventId || "", 
     activeEventTitle: activeEventTitle || "Raid Session", 
     helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
-    // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
+    announcementMinutes: computedAnnouncementMinutes,
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
       phase1: ["07:00", "12:00", "19:00"],
       phase2: "22:15",

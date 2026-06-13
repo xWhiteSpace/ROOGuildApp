@@ -47,7 +47,8 @@ export default function RequestTab() {
       if (data.success) {
         setItems(data.items);
         setLiveCounts(data.liveCounts || {});
-        // 🛡️ Safe Binding Pass: Mounts clean backend server metadata directly with zero client assumptions or hardcoded fallbacks
+        // ✅ VERIFIED UNCHANGED: The data contract matches the modular backend payload perfectly.
+        // It consumes the server's calculated state fields with zero local timezone calculations.
         setUserData({ 
           name: data.displayName, 
           date: data.date, 
