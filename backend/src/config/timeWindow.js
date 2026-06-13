@@ -135,7 +135,8 @@ export function getGateStatusDetails() {
 
 const getModularDistance = (from, to) => (to - from + 10080) % 10080;
 
-  let currentPhase = 2;
+  // ⏳ Phase 0 Blueprint: Fallback defaults strictly to Phase 0 (Intermission) if right now is outside of active cycle hours
+  let currentPhase = 0;
   let activePhaseConfig = null;
   let selectedEventContext = null;
   let activeEventId = "";
@@ -192,7 +193,13 @@ const getModularDistance = (from, to) => (to - from + 10080) % 10080;
   const isGateOpen = (currentPhase === 1);
   let nextStatusChangeMessage = "";
 
-  if (activePhaseConfig) {
+  if (currentPhase === 0) {
+    // Look ahead directly at Phase 1 parameters to show exactly when the gates open up next
+    const p1 = selectedEventContext?.phases?.[1];
+    const startDayName = p1 ? DAYS_OF_WEEK_NAMES[p1.dayStart] : "Target Day";
+    const openTime = p1 ? p1.timeStart : "00:00";
+    nextStatusChangeMessage = `⏳ Cycle Intermission: Preparing next event deck. Registration for ${activeEventTitle} opens on ${startDayName} at ${openTime} (${timezone} Time).`;
+  } else if (activePhaseConfig) {
     const endDayName = DAYS_OF_WEEK_NAMES[activePhaseConfig.dayEnd] || "Target Day";
     if (currentPhase === 1) {
       nextStatusChangeMessage = `🟢 Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
@@ -268,7 +275,7 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
 
   return {
     isGateOpen,
-    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
+    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : currentPhase === 0 ? `${activeEventTitle} Cycle Intermission` : `${activeEventTitle} Registration Closed`,
     nextStatusChangeMessage,
     currentPhase,
     phaseIntervals,
