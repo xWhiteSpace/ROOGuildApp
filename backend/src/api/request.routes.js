@@ -3,6 +3,8 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
 
+import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
+
 const router = Router();
 
 // 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
@@ -14,15 +16,20 @@ const DEFAULT_SESSION_STRUCTURE = {
   categoryAllocations: {},
   initialWinnersByItem: {},
   activeMatrixFilter: '',
-  sidebarTab: 'standby'
+  sidebarTab: 'standby',
+  isDiscordGateOpen: false 
 };
 
 function getGMT8DateString() {
-  const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-  const gmt8Date = new Date(gmt8String);
-  const month = gmt8Date.getMonth() + 1;
-  const day = gmt8Date.getDate();
-  const year = gmt8Date.getFullYear();
+  // 🌐 CLOCK SYNC: Extract active timezone directly from our synchronous timeWindow memory cache
+  const timeGateStatus = getGateStatusDetails() || {};
+  const targetTimezone = timeGateStatus.timezone || "Asia/Manila";
+
+  const localString = new Date().toLocaleString("en-US", { timeZone: targetTimezone });
+  const tzDate = new Date(localString);
+  const month = tzDate.getMonth() + 1;
+  const day = tzDate.getDate();
+  const year = tzDate.getFullYear();
   return `${month}/${day}/${year}`;
 }
 
@@ -51,7 +58,26 @@ function resolveUserIdentity(req) {
   const mobileHeaderToken = req.headers['x-user-profile'];
   if (mobileHeaderToken) {
     try {
-      return JSON.parse(decodeURIComponent(mobileHeaderToken));
+      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
+      
+      // 🔒 TAMPER-PROOF VERIFICATION GATEWAY: Re-hash profile and assert cryptographic signature matching
+      if (decodedPayload && decodedPayload._sig) {
+        const clientSignature = decodedPayload._sig;
+        const profileToVerify = { ...decodedPayload };
+        delete profileToVerify._sig;
+
+        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+        const expectedSignature = crypto
+          .createHmac('sha256', tokenSigningSecret)
+          .update(JSON.stringify(profileToVerify))
+          .digest('hex');
+
+        if (clientSignature === expectedSignature) {
+          return profileToVerify; // Clear authorization verified successfully
+        } else {
+          console.error("🛑 [API ROUTE INTERCEPT]: Detected forged header signature tamper attempt!");
+        }
+      }
     } catch (e) {
       console.error("Failed to parse mobile authorization header token:", e.message);
     }
@@ -87,8 +113,24 @@ async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFal
   const sortedKeys = Object.keys(records).sort();
   const combinedItemTimeline = [];
 
+  // ⚙️ DYNAMIC LOOKBACK SETTING: Fetch the preference from configuration, defaulting to 30 days if unconfigured
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+  const lookbackDays = parseInt(dynamicConfig.priorityLookbackDays, 10) || 30; 
+  
+  const expirationWindowInMs = lookbackDays * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+
   sortedKeys.forEach(key => {
     const record = records[key];
+    
+    // 🛡️ ROLLING EXPIRATION FILTER: Dynamically drops rows older than your custom setting window
+    const recordDateStr = record.date || "";
+    const recordTimeMs = Date.parse(recordDateStr);
+    if (!isNaN(recordTimeMs) && (nowMs - recordTimeMs) > expirationWindowInMs) {
+      return; // Safe lookback boundary: skips this entry and proceeds to next key
+    }
+
     const recordItemId = record.itemId;
     
 let isMatch = false;
@@ -353,7 +395,11 @@ router.get('/init', async (req, res) => {
         }
       });
 
-      const snapshot = await db.ref('auction/web_requests').once('value');
+      // 🚀 INDEXED MEMORY OPTIMIZATION: Query only active 'Pending' records to prevent historical table bloat
+      const snapshot = await db.ref('auction/web_requests')
+        .orderByChild('selectionStatus')
+        .equalTo('Pending')
+        .once('value');
       const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
 
       const liveCounts = {};
@@ -378,6 +424,7 @@ router.get('/init', async (req, res) => {
           if (found) targetItemId = found.id;
         }
 
+        // ✅ FIXED: Stripped out unauthorized date window filters to adhere strictly to global master pending status policies
         if (selStatus === 'pending' && targetItemId && liveCounts[targetItemId] !== undefined) {
           if (appStatus === 'requested') liveCounts[targetItemId] += req.quantity;
           if (appStatus === 'canceled')  liveCounts[targetItemId] -= req.quantity;
@@ -398,8 +445,9 @@ router.get('/init', async (req, res) => {
     const userCalculationsMap = {};
     itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 
+   // Aggregate user net quantities and handle queue placement states chronologically
     firebaseRequests.forEach(req => {
-      if (req.selectionStatus !== 'Pending') return;
+      if (req.selectionStatus !== 'Pending') return; // ✅ FIXED: Relying exclusively on pending status verification as requested
       
       const player = (req.member || '').trim();
       const qty = parseInt(req.quantity, 10) || 0;
@@ -415,18 +463,43 @@ router.get('/init', async (req, res) => {
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
       if (!userCalculationsMap[reqItemId][player]) {
-        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore };
+        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore, firstKey: null };
       }
 
-      if (appStatus === 'requested') userCalculationsMap[reqItemId][player].netQty += qty;
-      if (appStatus === 'canceled')  userCalculationsMap[reqItemId][player].netQty -= qty;
+      if (appStatus === 'requested') {
+        userCalculationsMap[reqItemId][player].netQty += qty;
+        // 🎟️ TICKET LOCK: Secure original position token permanently on first request entry
+        if (!userCalculationsMap[reqItemId][player].firstKey) {
+          userCalculationsMap[reqItemId][player].firstKey = req.id;
+        }
+      }
+      if (appStatus === 'canceled') {
+        userCalculationsMap[reqItemId][player].netQty -= qty;
+        
+        // 🚨 TICKET FORFEITURE RULE: If user completely drops to 0, wipe their ticket stub out of memory
+        if (userCalculationsMap[reqItemId][player].netQty <= 0) {
+          userCalculationsMap[reqItemId][player].netQty = 0;
+          userCalculationsMap[reqItemId][player].firstKey = null;
+        }
+      }
     });
 
+    // Compile clean, synchronized leaderboards using stable ticket tokens
     itemsList.forEach(item => {
       const activeApplicants = Object.values(userCalculationsMap[item.id]).filter(u => u.netQty > 0);
-      activeApplicants.sort((a, b) => b.priority - a.priority);
+
+      // ✅ DETERMINISTIC SORT: Resolves ties strictly by original entry token time, tracking line exits
+      activeApplicants.sort((a, b) => {
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority;
+        }
+        const tokenA = a.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
+        const tokenB = b.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
+        return tokenA.localeCompare(tokenB);
+      });
       
       rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.name);
+      
       activeApplicants.forEach(u => {
         requestsByItemDetails[item.id][u.name] = { quantity: u.netQty, priority: u.priority };
       });
@@ -536,6 +609,8 @@ router.post('/submit', async (req, res) => {
 
   try {
     const playerDisplayName = user.displayName || user.username;
+    // ✅ FIXED: Declared playerLower locally to prevent the ReferenceError crash during ledger compilation
+    const playerLower = playerDisplayName.trim().toLowerCase();
     const db = getDatabase();
 
     const configSnap = await db.ref('settings/configuration').once('value');
@@ -545,34 +620,81 @@ router.post('/submit', async (req, res) => {
     const targetSessionDate = dynamicConfig.targetSessionDate || "";
 
     const chosenItemIds = Object.keys(selections);
+    // 🚀 INDEXED MEMORY OPTIMIZATION: Query only this specific raider's history to minimize processing latency
+    const snapshot = await db.ref('auction/web_requests')
+      .orderByChild('member')
+      .equalTo(playerDisplayName)
+      .once('value');
+    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+    
+    const currentNetCounts = {};
+    itemsList.forEach(item => { currentNetCounts[item.id] = 0; });
+
+    firebaseRequests.forEach(req => {
+      if ((req.member || '').trim().toLowerCase() === playerLower && (req.selectionStatus || 'Pending') === 'Pending') {
+        let targetItemId = req.itemId;
+        if (!targetItemId && req.item) {
+          const found = itemsList.find(i => i.name === req.item);
+          if (found) targetItemId = found.id;
+        }
+        if (targetItemId && currentNetCounts[targetItemId] !== undefined) {
+          if (req.applicationStatus.toLowerCase() === 'requested') currentNetCounts[targetItemId] += req.quantity;
+          if (req.applicationStatus.toLowerCase() === 'canceled')  currentNetCounts[targetItemId] -= req.quantity;
+        }
+      }
+    });
+
+    // 2. Loop through the submission payload to process the transaction deltas
     for (const itemId of chosenItemIds) {
-      const targetQty = parseInt(selections[itemId], 10) || 0;
-      if (targetQty <= 0) continue; 
+      const desiredQty = parseInt(selections[itemId], 10) || 0;
+      const currentQty = currentNetCounts[itemId] || 0;
+      const delta = desiredQty - currentQty;
+
+      if (delta === 0) continue; // No modification made to this selection size, skip safely
 
       const resolvedItemObj = itemsList.find(i => i.id === itemId) || { name: itemId };
       const activeEvent = dynamicConfig.events?.[timeGateStatus.activeEventId];
       const maxAllowedLimit = activeEvent?.loots?.[itemId] || 0;
 
-      if (maxAllowedLimit === 0 || targetQty > maxAllowedLimit) {
+      // Validate quantity boundaries against cap maximums only when adding items
+      if (desiredQty > maxAllowedLimit) {
         return res.status(422).json({ success: false, error: `Submission rejected: Requested volume for ${resolvedItemObj.name} exceeds the allowed event cap.` });
       }
 
       const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemId, resolvedItemObj.name);
-
       const newRequestRef = db.ref('auction/web_requests').push();
-      await newRequestRef.set({
-        id: newRequestRef.key,
-        date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
-        member: playerDisplayName,
-        item: resolvedItemObj.name, 
-        itemId: itemId,             
-        quantity: targetQty,
-        applicationStatus: 'Requested', 
-        selectionStatus: 'Pending',     
-        liveStatus: '',                 
-        priority: dynamicPriority,
-        eventDate: targetSessionDate    
-      });
+
+      if (delta > 0) {
+        // Log an incremental addition transaction record
+        await newRequestRef.set({
+          id: newRequestRef.key,
+          date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
+          member: playerDisplayName,
+          item: resolvedItemObj.name, 
+          itemId: itemId,             
+          quantity: delta,
+          applicationStatus: 'Requested', 
+          selectionStatus: 'Pending',     
+          liveStatus: '',                 
+          priority: dynamicPriority,
+          eventDate: targetSessionDate    
+        });
+      } else if (delta < 0) {
+        // Log an incremental reduction transaction record
+        await newRequestRef.set({
+          id: newRequestRef.key,
+          date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
+          member: playerDisplayName,
+          item: resolvedItemObj.name, 
+          itemId: itemId,             
+          quantity: Math.abs(delta),
+          applicationStatus: 'Canceled', 
+          selectionStatus: 'Pending',     
+          liveStatus: '',                 
+          priority: 0,
+          eventDate: targetSessionDate    
+        });
+      }
     }
 
     return res.json({ success: true });
@@ -591,13 +713,40 @@ router.post('/cancel', async (req, res) => {
   const { itemId, itemName, cancelQty } = req.body;
   try {
     const playerDisplayName = user.displayName || user.username;
+    const playerLower = playerDisplayName.trim().toLowerCase();
     const db = getDatabase();
     
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
     const timezone = dynamicConfig.timezone || "Asia/Manila";
     const targetSessionDate = dynamicConfig.targetSessionDate || "";
+    const itemsList = dynamicConfig.items || [];
 
+    // 1. Query history to find current active balance to force total down to 0
+    const snapshot = await db.ref('auction/web_requests').once('value');
+    const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+    
+    let activeNetQty = 0;
+    firebaseRequests.forEach(req => {
+      if ((req.member || '').trim().toLowerCase() === playerLower && (req.selectionStatus || 'Pending') === 'Pending') {
+        let targetItemId = req.itemId;
+        if (!targetItemId && req.item) {
+          const found = itemsList.find(i => i.name === req.item);
+          if (found) targetItemId = found.id;
+        }
+        
+        if (targetItemId === itemId || req.item === itemName) {
+          if (req.applicationStatus.toLowerCase() === 'requested') activeNetQty += req.quantity;
+          if (req.applicationStatus.toLowerCase() === 'canceled')  activeNetQty -= req.quantity;
+        }
+      }
+    });
+
+    if (activeNetQty <= 0) {
+      return res.json({ success: true, message: 'Selection registry is already empty.' });
+    }
+
+    // 2. Append the formal cancellation entry to the request ledger history
     const newCancelRef = db.ref('auction/web_requests').push();
     await newCancelRef.set({
       id: newCancelRef.key,
@@ -605,13 +754,52 @@ router.post('/cancel', async (req, res) => {
       member: playerDisplayName,
       item: itemName || itemId,
       itemId: itemId || "item_unknown",
-      quantity: parseInt(cancelQty, 10),
+      quantity: activeNetQty,
       applicationStatus: 'Canceled', 
       selectionStatus: 'Pending',    
       liveStatus: '',                 
       priority: 0,
       eventDate: targetSessionDate 
     });
+
+    // 🧼 3. AUTO-SCRUBBER HOOK: Silently clear this player out of active officer allocations
+    const sessionSnap = await db.ref('auction/active_session').once('value');
+    if (sessionSnap.exists()) {
+      const sessionData = sessionSnap.val();
+      const targetAllocationPath = `auction/active_session/categoryAllocations/${itemId}/selected`;
+      let selectedList = sessionData.categoryAllocations?.[itemId]?.selected || [];
+
+      if (selectedList.length > 0) {
+        const initialLength = selectedList.length;
+        let reclaimedSlotsCount = 0;
+
+        // Strip the player object matching our user out of the allocation array
+        selectedList = selectedList.filter(winner => {
+          const winnerName = typeof winner === 'string' ? winner : (winner?.name || '');
+          if (winnerName.trim().toLowerCase() === playerLower) {
+            reclaimedSlotsCount += typeof winner === 'object' ? (parseInt(winner.slots, 10) || 0) : 0;
+            return false;
+          }
+          return true;
+        });
+
+        // If a match was found and stripped, update the matrix rows and summary statistics counters
+        if (selectedList.length !== initialLength) {
+          await db.ref(targetAllocationPath).set(selectedList);
+
+          if (sessionData.lootSummary?.[itemId]) {
+            const currentSummary = sessionData.lootSummary[itemId];
+            const updatedAllocatedQty = Math.max(0, (parseInt(currentSummary.qty, 10) || 0) - reclaimedSlotsCount);
+            const updatedFilledSeats = Math.max(0, (parseInt(currentSummary.seats, 10) || 0) - 1);
+
+            await db.ref(`auction/active_session/lootSummary/${itemId}`).update({
+              qty: updatedAllocatedQty,
+              seats: updatedFilledSeats
+            });
+          }
+        }
+      }
+    }
 
     return res.json({ success: true });
   } catch (error) {
@@ -649,22 +837,26 @@ router.post('/commit-session', async (req, res) => {
     const itemIds = Object.keys(allocations);
     const timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
     
+    // 🛡️ ATOMIC TRANSACTION BUNDLE: Consolidate all database actions into a single operational pass
+    const atomicUpdates = {};
+
     if (summary) {
       for (const itemKeyId of Object.keys(summary)) {
         const itemData = summary[itemKeyId];
         if (itemData && itemData.qty > 0) {
           const resolvedItem = itemsList.find(i => i.id === itemKeyId) || { name: itemKeyId };
-          const newLootHistoryRef = db.ref('auction/loot_history').push();
-          await newLootHistoryRef.set({
-            id: newLootHistoryRef.key,
+          const newPushKey = db.ref('auction/loot_history').push().key;
+          
+          atomicUpdates[`auction/loot_history/${newPushKey}`] = {
+            id: newPushKey,
             date: timestampDate,
             event: event || 'GuildLeague',
-            item: resolvedItem.name, // ✨ FIXED: Resolves legacy friendly description names dynamically
+            item: resolvedItem.name,
             itemId: itemKeyId,
             quantity: parseInt(itemData.qty, 10),
             max: parseInt(itemData.limit, 10),
             mem: parseInt(itemData.seats, 10)
-          });
+          };
         }
       }
     }
@@ -676,7 +868,6 @@ router.post('/commit-session', async (req, res) => {
       const keysByMember = {};
       Object.keys(firebaseRequests).forEach(key => {
         const r = firebaseRequests[key];
-        
         let reqItemId = r.itemId;
         if (!reqItemId && r.item) {
           const found = itemsList.find(i => i.name === r.item);
@@ -684,9 +875,7 @@ router.post('/commit-session', async (req, res) => {
         }
 
         if (reqItemId === targetItemId && (r.selectionStatus || 'pending').toLowerCase() === 'pending') {
-          if (!keysByMember[r.member]) {
-            keysByMember[r.member] = [];
-          }
+          if (!keysByMember[r.member]) keysByMember[r.member] = [];
           keysByMember[r.member].push(key);
         }
       });
@@ -694,14 +883,14 @@ router.post('/commit-session', async (req, res) => {
       for (const name of absent) {
         const keyList = keysByMember[name] || [];
         for (const key of keyList) {
-          await db.ref(`auction/web_requests/${key}`).update({ selectionStatus: 'Absent' });
+          atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'Absent';
         }
       }
 
       for (const name of notSelected) {
         const keyList = keysByMember[name] || [];
         for (const key of keyList) {
-          await db.ref(`auction/web_requests/${key}`).update({ selectionStatus: 'NotSelected' });
+          atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'NotSelected';
         }
       }
 
@@ -711,48 +900,50 @@ router.post('/commit-session', async (req, res) => {
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];
-          await db.ref(`auction/web_requests/${primaryWinnerKey}`).update({
-            selectionStatus: 'Selected',
-            quantity: slots,
-            liveStatus: 'Done'
-          });
+          atomicUpdates[`auction/web_requests/${primaryWinnerKey}/selectionStatus`] = 'Selected';
+          atomicUpdates[`auction/web_requests/${primaryWinnerKey}/quantity`] = slots;
+          atomicUpdates[`auction/web_requests/${primaryWinnerKey}/liveStatus`] = 'Done';
 
           const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
           for (const duplicateKey of intermediateRedundantLines) {
             const currentLine = firebaseRequests[duplicateKey];
             const fallbackStatus = (currentLine?.applicationStatus === 'Canceled') ? 'Canceled' : 'NotSelected';
-            await db.ref(`auction/web_requests/${duplicateKey}`).update({ selectionStatus: fallbackStatus });
+            atomicUpdates[`auction/web_requests/${duplicateKey}/selectionStatus`] = fallbackStatus;
           }
         } else {
-          const newRequestRef = db.ref('auction/web_requests').push();
-          await newRequestRef.set({
-            id: newRequestRef.key,
+          const newRequestKey = db.ref('auction/web_requests').push().key;
+          atomicUpdates[`auction/web_requests/${newRequestKey}`] = {
+            id: newRequestKey,
             date: timestampDate,
             member: name,
-            item: resolvedItem.name, // ✨ FIXED: Resolves legacy string properties during dynamic force-add inserts
+            item: resolvedItem.name,
             itemId: targetItemId,
             quantity: slots,
             applicationStatus: 'ForcedAdd',
             selectionStatus: 'Selected',
             liveStatus: 'Done',
             priority: 0
-          });
+          };
         }
 
-        const newPastAuctionRef = db.ref('auction/past_auctions').push();
-        await newPastAuctionRef.set({
-          id: newPastAuctionRef.key,
+        const newPastAuctionKey = db.ref('auction/past_auctions').push().key;
+        atomicUpdates[`auction/past_auctions/${newPastAuctionKey}`] = {
+          id: newPastAuctionKey,
           date: timestampDate,
           event: event || 'GuildLeague',
-          item: resolvedItem.name, // ✨ FIXED: Prevents Past Auctions UI rendering empty text rows
+          item: resolvedItem.name,
           itemId: targetItemId,
           quantity: slots,
           mem: name
-        });
+        };
       }
     }
 
-    await db.ref('auction/active_session').remove();
+    // 🧹 Tear down the active staging cache concurrently alongside our master updates payload block
+    atomicUpdates['auction/active_session'] = null;
+
+    // Fire everything down to Firebase in a single synchronized network pass
+    await db.ref().update(atomicUpdates);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });

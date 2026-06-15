@@ -107,11 +107,16 @@ export function getGateStatusDetails() {
   const month = parseInt(timeObj.month, 10) - 1; // 0-indexed adjustment for JavaScript months
   const day = parseInt(timeObj.day, 10);
   const trueHours = parseInt(timeObj.hour, 10) % 24;
-  const trueMinutes = parseInt(timeObj.minute, 10);
 
   // Construct a localized snapshot instance to extract the true day of week integer cleanly
-  const localSnap = new Date(year, month, day);
-  const dayOfWeek = localSnap.getDay();
+  const trueMinutes = parseInt(timeObj.minute, 10);
+
+  // 🛡️ ENVIRONMENT SHIELD: Extract weekday string straight from the designated timezone frame
+  const weekdayFormat = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' });
+  const weekdayStr = weekdayFormat.format(now); // Output matches: "Sun", "Mon", "Tue", etc.
+  
+  // Cross-reference against your existing short name array to pull the exact 0-6 index
+  const dayOfWeek = DAYS_SHORT_NAMES.indexOf(weekdayStr) >= 0 ? DAYS_SHORT_NAMES.indexOf(weekdayStr) : 0;
 
   const currentMinutesOffset = trueHours * 60 + trueMinutes;
   const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
@@ -121,7 +126,7 @@ export function getGateStatusDetails() {
     return {
       isGateOpen: false,
       currentSessionLabel: "Forced Operational Lockdown",
-      nextStatusChangeMessage: "🔒 Bidding channels are forcefully locked by Management Officers.",
+      nextStatusChangeMessage: "Bidding channels are forcefully locked by Management Officers.",
       currentPhase: 2,
       phaseIntervals: { phase1: "Force Locked", phase2: "Force Locked", phase3: "Force Locked" }
     };
@@ -198,15 +203,15 @@ const getModularDistance = (from, to) => (to - from + 10080) % 10080;
     const p1 = selectedEventContext?.phases?.[1];
     const startDayName = p1 ? DAYS_OF_WEEK_NAMES[p1.dayStart] : "Target Day";
     const openTime = p1 ? p1.timeStart : "00:00";
-    nextStatusChangeMessage = `⏳ Cycle Intermission: Preparing next event deck. Registration for ${activeEventTitle} opens on ${startDayName} at ${openTime} (${timezone} Time).`;
+    nextStatusChangeMessage = `No Active Event: Preparing next event. Registration for ${activeEventTitle} opens on ${startDayName} at ${openTime} (${timezone} Time).`;
   } else if (activePhaseConfig) {
     const endDayName = DAYS_OF_WEEK_NAMES[activePhaseConfig.dayEnd] || "Target Day";
     if (currentPhase === 1) {
-      nextStatusChangeMessage = `🟢 Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
+      nextStatusChangeMessage = `Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
     } else if (currentPhase === 2) {
-      nextStatusChangeMessage = `🔒 Submissions for ${activeEventTitle} are locked. Live bidding preparation commences on ${endDayName} at ${activePhaseConfig.timeEnd}.`;
+      nextStatusChangeMessage = `Submissions for ${activeEventTitle} are locked. Live bidding preparation commences on ${endDayName} at ${activePhaseConfig.timeEnd}.`;
     } else {
-      nextStatusChangeMessage = `⚡ ${activeEventTitle} Event Session is currently LIVE inside the auction arena.`;
+      nextStatusChangeMessage = `${activeEventTitle} Event Session is currently LIVE inside the auction arena.`;
     }
   } else {
     nextStatusChangeMessage = isGateOpen 
@@ -275,7 +280,7 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
 
   return {
     isGateOpen,
-    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : currentPhase === 0 ? `${activeEventTitle} Cycle Intermission` : `${activeEventTitle} Registration Closed`,
+    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : currentPhase === 0 ? `${activeEventTitle} No Active Event` : `${activeEventTitle} Registration Closed`,
     nextStatusChangeMessage,
     currentPhase,
     phaseIntervals,
@@ -284,6 +289,8 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
     activeEventId: activeEventId || "", 
     activeEventTitle: activeEventTitle || "Raid Session", 
     helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
+    // 🚀 CACHE EXPOSURE: Expose the synchronized memory timezone to save client network overhead
+    timezone: timezone,
     announcementMinutes: computedAnnouncementMinutes,
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
       phase1: ["07:00", "12:00", "19:00"],

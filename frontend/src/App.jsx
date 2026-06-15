@@ -37,34 +37,46 @@ export default function App() {
         }
       }
 
+      // 🚀 CACHE PRE-LOAD: Instantly parse local storage to eliminate UI loading flicker
       const savedSession = localStorage.getItem('dynasty_raid_session');
+      let initialInMemoryUser = null;
+      
       if (savedSession) {
         try {
-          setAuthUser(JSON.parse(savedSession));
-          setAuthLoading(false);
-          return;
+          initialInMemoryUser = JSON.parse(savedSession);
+          setAuthUser(initialInMemoryUser);
         } catch (e) {
           localStorage.removeItem('dynasty_raid_session');
         }
       }
 
+      // 🛰️ BACKGROUND SIGNATURE VERIFICATION: Verify token integrity with backend cryptographic seals
       try {
         const headers = { 'Content-Type': 'application/json' };
         if (savedSession) {
           headers['x-user-profile'] = encodeURIComponent(savedSession);
         }
+        
         const response = await fetch(`${backendUrl}/auth/me`, {
           credentials: 'include',
           headers: headers
         });
         const result = await response.json();
+        
         if (result.authenticated && result.user) {
+          // Sync state and local storage with fresh information from the server
           setAuthUser(result.user);
+          localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
         } else {
+          // Session expired or revoked: Clean workspace state fields smoothly
           setAuthUser(null);
+          localStorage.removeItem('dynasty_raid_session');
         }
       } catch (err) {
-        setAuthUser(null);
+        // Fallback: If your server is briefly unreachable, trust local cache to prevent offline lockouts
+        if (!initialInMemoryUser) {
+          setAuthUser(null);
+        }
       } finally {
         setAuthLoading(false);
       }

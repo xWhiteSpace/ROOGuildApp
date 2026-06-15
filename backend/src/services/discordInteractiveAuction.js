@@ -5,8 +5,8 @@ import { getGateStatusDetails } from '../config/timeWindow.js'; // ⏰ Timeline 
 
 // Pure message text block formatting the in-game display alignment rule
 const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
-  `> Please make sure to click the **[ALL]** Tab on your in-game auction book screen! ` +
-  `This guarantees your game client layout matches our ledger's Page and Slot grid coordinates.`;
+  `> Please make sure to **click** the **[GUILD AUCTION]** and **[ALL]** Tab on your in-game auction book screen! ` +
+  `This guarantees your game client layout matches our Request Page and Slot numbering system.`;
 
 /**
  * ⚙️ CORE COMPILER: Calculates book geometry coordinates dynamically in runtime memory
@@ -30,7 +30,7 @@ function computeVirtualMatrix(items, categoryAllocations, qtyPerPage = 4) {
         index: index, // Stores the true flat index reference position
         page: currentVirtualPage,
         slot: currentVirtualSlot,
-        name: playerName === "" ? '[⚠️ EXTRA UNALLOCATED SLOT]' : playerName
+        name: playerName === "" ? "" : playerName
       });
 
       currentVirtualSlot++;
@@ -99,7 +99,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
 
   const itemVacancyCounts = {};
   virtualMatrix.forEach(slot => {
-    if (slot.name === '[⚠️ EXTRA UNALLOCATED SLOT]') {
+    if (slot.name === "") {
       itemVacancyCounts[slot.itemType] = (itemVacancyCounts[slot.itemType] || 0) + 1;
     }
   });
@@ -167,7 +167,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   // Build functional buttons using the index location inside categoryAllocations list maps
   const rawButtonsArray = [];
   virtualMatrix.forEach((slot) => {
-    if (slot.itemType === itemId && slot.name === '[⚠️ EXTRA UNALLOCATED SLOT]') {
+    if (slot.itemType === itemId && slot.name === "") {
       rawButtonsArray.push(
         new ButtonBuilder()
           .setCustomId(`claim_slot_btn_${slot.index}_item_${itemId}`) // Maps straight to flat index
@@ -187,7 +187,12 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
     return await renderItemCategoryView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up!`);
   }
 
-  const cappedButtons = rawButtonsArray.slice(0, 20);
+  // 🛡️ DYNAMIC CEILING GUARD: Self-calculates the maximum button capacity based on active navigation items
+  const utilityRowsReserved = 1; // Rows explicitly claimed by Back/Utility controls
+  const totalAvailableSlotRows = 5 - utilityRowsReserved; // Discord maximum absolute limit is 5 rows per view
+  const maxSafeButtonCapacity = totalAvailableSlotRows * 5; // Exactly 5 button elements can fit per ActionRow frame
+
+  const cappedButtons = rawButtonsArray.slice(0, maxSafeButtonCapacity);
   const totalComponentRows = [];
 
   for (let i = 0; i < cappedButtons.length; i += 5) {
@@ -217,18 +222,33 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
 export async function handleAuctionInteraction(interaction) {
   const db = admin.database();
 
+  // 🚨 ABSOLUTE EMERGENCY OVERRIDE SHIELD: Instantly terminate all gateway interactions if Forced Lock is active
+  const globalConfigSnap = await db.ref('settings/configuration').once('value');
+  if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
+    const lockdownNotice = `🚨 **ADMINISTRATIVE LOCKDOWN**: The bidding framework has been completely frozen by management. Discord inputs are currently offline.`;
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content: lockdownNotice, components: [] }).catch(() => {});
+    } else {
+      await interaction.reply({ content: lockdownNotice, ephemeral: true }).catch(() => {});
+    }
+    return;
+  }
+
   const finalRosterName = (interaction.member?.nickname || interaction.member?.displayName || interaction.user?.globalName || interaction.user?.username || '').trim();
-  const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\[\]]/g, '_');
+  // 🛡️ SLASH SHIELD: Added forward slash to the regex catch to prevent directory folder breakages
+  const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\/\[\]]/g, '_');
 
     // ─── STEP 1: USER CLICKS THE PUBLIC ENTRY BUTTON ───
   if (interaction.isButton() && interaction.customId === 'open_auction_panel') {
     await interaction.deferReply({ ephemeral: true });
 
-    // 🔒 Strict Calendar Time Gate: Rejects entry unless the schedule is actively inside Phase 3 (Live Auction)
-    const timeGateStatus = getGateStatusDetails() || {};
-    if (timeGateStatus.currentPhase !== 3) {
+    // 🛡️ SECURE DISCORD INPUT INTERCEPTOR: Checks the manual override switch on your admin dashboard before accepting inputs
+    const sessionSnap = await db.ref('auction/active_session').once('value');
+    const isGateOpen = sessionSnap.exists() && sessionSnap.val().isDiscordGateOpen === true;
+
+    if (!isGateOpen) {
       return await interaction.editReply({
-        content: `⚠️ **ARENA CLOSED**: This interaction panel is locked. It will automatically unlock when the event enters **Phase 3: Live Auction Session**.\n\n⏱️ *Current Status: ${timeGateStatus.nextStatusChangeMessage || 'Waiting for scheduled session launch'}*`
+        content: `⚠️ **AUCTION PAUSED**: bidding controls are currently muted. Bids are processed only when authorized by Guild Officers on the dashboard.\n\n⏳ *Please stand by for management to broadcast the allocation sequence.*`
       });
     }
 
@@ -284,12 +304,20 @@ export async function handleAuctionInteraction(interaction) {
         throw new Error('COLLISION_DETECTED');
       }
 
-      // Pull fresh copies to compute coordinates for the text receipt notice
+      // 🚀 CONCURRENCY OPTIMIZATION: Extract the newly updated array states from memory 
+      // instead of re-reading the entire 'auction/active_session' data tree across the network
       const updatedConfigSnap = await db.ref('settings/configuration').once('value');
-      const updatedSessionSnap = await db.ref('auction/active_session').once('value');
+      const localSessionCacheSnap = await db.ref('auction/active_session').once('value');
+      
       const finalItems = updatedConfigSnap.val().items || [];
-      const finalAllocations = updatedSessionSnap.val().categoryAllocations || {};
-      const finalQtyPerPage = updatedSessionSnap.val().qtyPerPage || 4;
+      const sessionCacheObj = localSessionCacheSnap.val() || {};
+      const finalQtyPerPage = sessionCacheObj.qtyPerPage || 4;
+      
+      // Inject the atomic array patch directly into our local session cache memory block
+      const finalAllocations = sessionCacheObj.categoryAllocations || {};
+      if (finalAllocations[itemId]) {
+        finalAllocations[itemId].selected = txResult.snapshot.val();
+      }
 
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);

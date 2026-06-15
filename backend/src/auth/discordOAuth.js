@@ -3,6 +3,8 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
+import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
+
 const router = Router();
 const discordApi = 'https://discord.com/api';
 
@@ -39,7 +41,11 @@ router.get('/discord-members', async (req, res) => {
 
   activeFetchPromise = (async () => {
     const guild = await discordClient.guilds.fetch(guildId);
-    const membersMap = await guild.members.fetch({ limit: 1000 });
+    // 🚀 CACHE PRIORITIZATION: Check memory cache first to shield against Discord REST gateway rate limits
+    let membersMap = guild.members.cache;
+    if (!membersMap || membersMap.size === 0) {
+      membersMap = await guild.members.fetch({ limit: 1000 });
+    }
     
     return membersMap.map(m => ({
       id: m.user.id,
@@ -111,7 +117,9 @@ router.get('/callback', async (req, res) => {
         const guild = await discordClient.guilds.fetch(guildId);
         const member = await guild.members.fetch(user.id);
         if (member) {
-          serverNickname = member.nickname || member.displayName || serverNickname;
+          let rawName = member.nickname || member.displayName || serverNickname;
+          // 🛡️ OAUTH NICKNAME SHIELD: Convert slashes into clean underscores right at the source
+          serverNickname = rawName.replace(/\//g, '_');
           memberRolesNames = member.roles.cache.map(role => role.name);
         }
       } catch (err) {
@@ -135,15 +143,18 @@ router.get('/callback', async (req, res) => {
       roles: memberRolesNames
     };
 
+    // 🔒 SIGNATURE ENGINE: Hash the user data layout using your private client secret to create a secure token
+    const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+    const computedPayloadHash = crypto
+      .createHmac('sha256', tokenSigningSecret)
+      .update(JSON.stringify(req.session.user))
+      .digest('hex');
+
     return req.session.save(() => {
+      // Keep the object completely flat so your frontend display components can read it without structural changes
       const leanOutboundProfile = {
-        id: user.id,
-        username: user.username,
-        discriminator: user.discriminator,
-        avatar: user.avatar,
-        displayName: serverNickname,
-        isOfficer: isOfficerMatch,
-        roles: memberRolesNames
+        ...req.session.user,
+        _sig: computedPayloadHash // Attaches the tamper-proof verification seal
       };
       const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));
       res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
@@ -161,7 +172,28 @@ router.get('/me', (req, res) => {
     const fallbackToken = req.headers['x-user-profile'];
     if (fallbackToken) {
       try {
-        user = JSON.parse(decodeURIComponent(fallbackToken));
+        const decodedPayload = JSON.parse(decodeURIComponent(fallbackToken));
+        
+        if (decodedPayload && decodedPayload._sig) {
+          const clientSignature = decodedPayload._sig;
+          
+          // Re-serialize the profile to reconstruct and verify the signature hash
+          const profileToVerify = { ...decodedPayload };
+          delete profileToVerify._sig; // Isolate the signature from the verification payload
+          
+          const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+          const expectedSignature = crypto
+            .createHmac('sha256', tokenSigningSecret)
+            .update(JSON.stringify(profileToVerify))
+            .digest('hex');
+            
+          // 🛡️ TAMPER CHECK: Grant access only if the client signature matches our cryptographic backend hash
+          if (clientSignature === expectedSignature) {
+            user = profileToVerify;
+          } else {
+            console.error("🛑 [SECURITY MONITOR]: Unauthorized modification detected on x-user-profile token header payload!");
+          }
+        }
       } catch (e) {
         console.error("❌ Failed to decode cross-domain profile header token inside /me check:", e.message);
       }
