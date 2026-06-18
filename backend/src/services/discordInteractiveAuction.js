@@ -132,16 +132,26 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     });
   }
 
-  const itemSelectMenu = new StringSelectMenuBuilder()
-    .setCustomId('auction_select_item_type')
-    .setPlaceholder('Select a Loot Category...')
-    .addOptions(menuOptions);
+  const isGateOpen = sessionSnap.val().isDiscordGateOpen === true;
+  
+  const baseContent = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${
+    !isGateOpen 
+      ? "🚫 **AUCTION PAUSED**: Bidding controls are currently muted. Please stand by for management to broadcast the allocation sequence." 
+      : "Please choose an Item category below to view open & available slots:"
+  }`;
 
-  const baseContent = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nPlease choose an Item category below to view open & available slots:`;
+  const components = isGateOpen ? [
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('auction_select_item_type')
+        .setPlaceholder('Select a Loot Category...')
+        .addOptions(menuOptions)
+    )
+  ] : [];
 
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
-    components: [new ActionRowBuilder().addComponents(itemSelectMenu)]
+    components: components
   });
 }
 
@@ -246,11 +256,8 @@ export async function handleAuctionInteraction(interaction) {
     const sessionSnap = await db.ref('auction/active_session').once('value');
     const isGateOpen = sessionSnap.exists() && sessionSnap.val().isDiscordGateOpen === true;
 
-    if (!isGateOpen) {
-      return await interaction.editReply({
-        content: `⚠️ **AUCTION PAUSED**: bidding controls are currently muted. Bids are processed only when authorized by Guild Officers on the dashboard.\n\n⏳ *Please stand by for management to broadcast the allocation sequence.*`
-      });
-    }
+    // Removed the hard-block check here so that renderItemCategoryView 
+    // can display the persistent view even when isGateOpen is false.
 
     const memberCheckSnap = await db.ref(`auction/members/${sanitizedFirebaseKey}`).once('value');
     if (!memberCheckSnap.exists()) {
