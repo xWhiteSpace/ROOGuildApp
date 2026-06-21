@@ -10,22 +10,27 @@ let cachedConfig = {
   timezone: "Asia/Manila",
   isForceLocked: false,
   adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
-  helpEmbedUrl: "",
+helpEmbedUrl: "",
   items: [
-    { id: "item_001", name: "Puppet Scroll", limitQty: 1 },
-    { id: "item_002", name: "Illusion Scroll", limitQty: 1 },
-    { id: "item_003", name: "Light & Dark Scroll", limitQty: 3 },
-    { id: "item_004", name: "Time & Space Scroll", limitQty: 5 }
+    { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
+    { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
+    { id: "item_003", name: "Light & Dark Scroll", colorTheme: "slate" },
+    { id: "item_004", name: "Time & Space Scroll", colorTheme: "red" }
   ],
   events: {
     "ev_001": {
       title: "GuildLeague",
-      phases: [
-        null,
-        { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
-        { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
-        { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-      ],
+      phases: {
+        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
+        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
+        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
+      },
+      loots: {
+        "item_001": 1,
+        "item_002": 1,
+        "item_003": 3,
+        "item_004": 5
+      },
       announcements: {
         phase1: ["07:00", "12:00", "19:00"],
         phase2: "22:15",
@@ -84,12 +89,36 @@ export function getGateStatusDetails() {
 
   const { timezone, isForceLocked, events } = cachedConfig;
 
-  // Enforce system clock normalization to your adjustable timezone configuration profile
-  const targetTimeStr = new Date().toLocaleString("en-US", { timeZone: timezone });
-  const localClock = new Date(targetTimeStr);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour12: false,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric'
+  }).formatToParts(now);
 
-  const dayOfWeek = localClock.getDay();
-  const currentMinutesOffset = localClock.getHours() * 60 + localClock.getMinutes();
+  const timeObj = {};
+  parts.forEach(p => { timeObj[p.type] = p.value; });
+
+  const year = parseInt(timeObj.year, 10);
+  const month = parseInt(timeObj.month, 10) - 1; // 0-indexed adjustment for JavaScript months
+  const day = parseInt(timeObj.day, 10);
+  const trueHours = parseInt(timeObj.hour, 10) % 24;
+
+  // Construct a localized snapshot instance to extract the true day of week integer cleanly
+  const trueMinutes = parseInt(timeObj.minute, 10);
+
+  // 🛡️ ENVIRONMENT SHIELD: Extract weekday string straight from the designated timezone frame
+  const weekdayFormat = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' });
+  const weekdayStr = weekdayFormat.format(now); // Output matches: "Sun", "Mon", "Tue", etc.
+  
+  // Cross-reference against your existing short name array to pull the exact 0-6 index
+  const dayOfWeek = DAYS_SHORT_NAMES.indexOf(weekdayStr) >= 0 ? DAYS_SHORT_NAMES.indexOf(weekdayStr) : 0;
+
+  const currentMinutesOffset = trueHours * 60 + trueMinutes;
   const currentAbs = dayOfWeek * 1440 + currentMinutesOffset;
 
   // 🔒 Manual administrative override lockdown check
@@ -97,7 +126,7 @@ export function getGateStatusDetails() {
     return {
       isGateOpen: false,
       currentSessionLabel: "Forced Operational Lockdown",
-      nextStatusChangeMessage: "🔒 Bidding channels are forcefully locked by Management Officers.",
+      nextStatusChangeMessage: "Bidding channels are forcefully locked by Management Officers.",
       currentPhase: 2,
       phaseIntervals: { phase1: "Force Locked", phase2: "Force Locked", phase3: "Force Locked" }
     };
@@ -109,92 +138,59 @@ export function getGateStatusDetails() {
     return day * 1440 + h * 60 + m;
   }
 
-  let currentPhase = 2; // Fallback default to Phase 2 (Request Locked) if no windows trigger
+const getModularDistance = (from, to) => (to - from + 10080) % 10080;
+
+  // ⏳ Phase 0 Blueprint: Fallback defaults strictly to Phase 0 (Intermission) if right now is outside of active cycle hours
+  let currentPhase = 0;
   let activePhaseConfig = null;
   let selectedEventContext = null;
   let activeEventId = "";
   let activeEventTitle = "Raid Session";
 
-  if (events && typeof events === 'object') {
-    const eventIds = Object.keys(events);
+  const validEventIds = Object.keys(events || {}).filter(id => events[id]);
 
-    if (eventIds.length > 0) {
-      // 1️⃣ STEP 1: Scan for any currently live active Phase 3 windows
-      for (const evId of eventIds) {
-        const ev = events[evId];
-        const p3 = ev?.phases?.[3];
-        if (!p3) continue;
+  if (validEventIds.length > 0) {
+    let minP3EndDistance = Infinity;
+    let targetEventId = "";
 
-        const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
-        const endAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
+    // 1. Determine active event utilizing the min(P3 End) distance metric
+    validEventIds.forEach(evId => {
+      const ev = events[evId];
+      const p3 = ev?.phases?.[3];
+      if (!p3) return;
 
-        let isLiveNow = false;
-        if (endAbs < startAbs) {
-          if (currentAbs >= startAbs || currentAbs < endAbs) isLiveNow = true;
-        } else {
-          if (currentAbs >= startAbs && currentAbs < endAbs) isLiveNow = true;
-        }
+      const p3EndAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
+      const distanceToP3End = getModularDistance(currentAbs, p3EndAbs);
 
-        if (isLiveNow) {
-          activeEventId = evId;
-          break;
-        }
+      if (distanceToP3End < minP3EndDistance) {
+        minP3EndDistance = distanceToP3End;
+        targetEventId = evId;
       }
+    });
 
-      // 2️⃣ STEP 2: If no event is currently live, look ahead for the closest upcoming Phase 3 anchor
-      if (!activeEventId) {
-        let minDistance = Infinity;
-        let closestEvId = eventIds[0];
+    if (targetEventId) {
+      activeEventId = targetEventId;
+      selectedEventContext = events[activeEventId];
+      activeEventTitle = selectedEventContext.title || "Raid Session";
 
-        for (const evId of eventIds) {
-          const ev = events[evId];
-          const p3 = ev?.phases?.[3];
-          if (!p3) continue;
+      // 2. Evaluate active sub-phase using wrap-around circular duration rules
+      if (selectedEventContext.phases) {
+        // 🚀 BOUNDARY ISOLATION GUARD: Evaluate windows via absolute boundary checks to isolate inverted clock entries from expanding
+        for (const phaseKey of [1, 2, 3]) {
+          const p = selectedEventContext.phases[phaseKey];
+          if (!p) continue;
 
-          const startAbs = getAbsoluteMinutes(p3.dayStart, p3.timeStart);
-          
-          // Calculate look-ahead distance inside the 10080-minute weekly loop boundary
-          let distance = 0;
-          if (startAbs >= currentAbs) {
-            distance = startAbs - currentAbs;
-          } else {
-            distance = (10080 - currentAbs) + startAbs;
-          }
+          const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
+          const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
 
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestEvId = evId;
-          }
-        }
-        activeEventId = closestEvId;
-      }
+          const isPhaseActive = startAbs <= endAbs
+            ? (currentAbs >= startAbs && currentAbs <= endAbs)
+            : (currentAbs >= startAbs || currentAbs <= endAbs);
 
-      // 3️⃣ STEP 3: Evaluate target phase state constraints exclusively for the resolved event context
-      const ev = events[activeEventId];
-      if (ev) {
-        activeEventTitle = ev.title || "Raid Session";
-        selectedEventContext = ev;
-
-        if (ev.phases) {
-          for (const phaseKey of [1, 2, 3]) {
-            const p = ev.phases[phaseKey];
-            if (!p) continue;
-
-            const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
-            const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
-
-            let isInsideWindow = false;
-            if (endAbs < startAbs) {
-              if (currentAbs >= startAbs || currentAbs < endAbs) isInsideWindow = true;
-            } else {
-              if (currentAbs >= startAbs && currentAbs < endAbs) isInsideWindow = true;
-            }
-
-            if (isInsideWindow) {
-              currentPhase = Number(phaseKey);
-              activePhaseConfig = p;
-              break;
-            }
+          if (isPhaseActive) {
+            currentPhase = Number(phaseKey);
+            activePhaseConfig = p;
+            break; // 🛡️ FIRST-MATCH SHORT CIRCUIT: Stop evaluation immediately once the current time matches an active phase
           }
         }
       }
@@ -204,14 +200,20 @@ export function getGateStatusDetails() {
   const isGateOpen = (currentPhase === 1);
   let nextStatusChangeMessage = "";
 
-  if (activePhaseConfig) {
+  if (currentPhase === 0) {
+    // Look ahead directly at Phase 1 parameters to show exactly when the gates open up next
+    const p1 = selectedEventContext?.phases?.[1];
+    const startDayName = p1 ? DAYS_OF_WEEK_NAMES[p1.dayStart] : "Target Day";
+    const openTime = p1 ? p1.timeStart : "00:00";
+    nextStatusChangeMessage = `No Active Event: Preparing next event. Registration for ${activeEventTitle} opens on ${startDayName} at ${openTime} (${timezone} Time).`;
+  } else if (activePhaseConfig) {
     const endDayName = DAYS_OF_WEEK_NAMES[activePhaseConfig.dayEnd] || "Target Day";
     if (currentPhase === 1) {
-      nextStatusChangeMessage = `🟢 Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
+      nextStatusChangeMessage = `Registration is OPEN for ${activeEventTitle}. Submissions close on ${endDayName} at ${activePhaseConfig.timeEnd} (${timezone} Time).`;
     } else if (currentPhase === 2) {
-      nextStatusChangeMessage = `🔒 Submissions for ${activeEventTitle} are locked. Live bidding preparation commences on ${endDayName} at ${activePhaseConfig.timeEnd}.`;
+      nextStatusChangeMessage = `Submissions for ${activeEventTitle} are locked. Live bidding preparation commences on ${endDayName} at ${activePhaseConfig.timeEnd}.`;
     } else {
-      nextStatusChangeMessage = `⚡ ${activeEventTitle} Event Session is currently LIVE inside the auction arena.`;
+      nextStatusChangeMessage = `${activeEventTitle} Event Session is currently LIVE inside the auction arena.`;
     }
   } else {
     nextStatusChangeMessage = isGateOpen 
@@ -231,7 +233,7 @@ export function getGateStatusDetails() {
   }
 
   const phaseIntervals = { phase1: "Unconfigured", phase2: "Unconfigured", phase3: "Unconfigured" };
-  const displayTargetEvent = selectedEventContext || (events && typeof events === 'object' ? Object.values(events)[0] : null);
+  const displayTargetEvent = selectedEventContext || (validEventIds.length > 0 ? events[validEventIds[0]] : null);
 
   if (displayTargetEvent && displayTargetEvent.phases) {
     for (const pk of [1, 2, 3]) {
@@ -242,16 +244,56 @@ export function getGateStatusDetails() {
     }
   }
 
+const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
+
+  if (selectedEventContext && selectedEventContext.phases) {
+    const evAnn = selectedEventContext.announcements || {};
+    
+    // Phase 1 alerts: Evaluated as daily repeating variations constrained inside the Phase 1 window
+    const p1 = selectedEventContext.phases[1];
+    if (p1 && evAnn.phase1) {
+      const p1Start = (p1.dayStart * 1440) + parseInt(p1.timeStart.split(':')[0], 10) * 60 + parseInt(p1.timeStart.split(':')[1], 10);
+      const p1End = (p1.dayEnd * 1440) + parseInt(p1.timeEnd.split(':')[0], 10) * 60 + parseInt(p1.timeEnd.split(':')[1], 10);
+      const p1Duration = (p1End - p1Start + 10080) % 10080;
+
+      evAnn.phase1.forEach(timeStr => {
+        for (let d = 0; d <= 6; d++) {
+          const annAbs = (d * 1440) + parseInt(timeStr.split(':')[0], 10) * 60 + parseInt(timeStr.split(':')[1], 10);
+          if (((annAbs - p1Start + 10080) % 10080) <= p1Duration) {
+            computedAnnouncementMinutes.phase1.push(annAbs);
+          }
+        }
+      });
+      computedAnnouncementMinutes.phase1.sort((a, b) => a - b);
+    }
+
+    // Phase 2 alerts: Milestone anchored explicitly to P2 Day Start
+    const p2 = selectedEventContext.phases[2];
+    if (p2 && evAnn.phase2) {
+      computedAnnouncementMinutes.phase2 = (p2.dayStart * 1440) + parseInt(evAnn.phase2.split(':')[0], 10) * 60 + parseInt(evAnn.phase2.split(':')[1], 10);
+    }
+
+    // Phase 3 alerts: Milestone anchored explicitly to P3 Day Start
+    const p3 = selectedEventContext.phases[3];
+    if (p3 && evAnn.phase3) {
+      computedAnnouncementMinutes.phase3 = (p3.dayStart * 1440) + parseInt(evAnn.phase3.split(':')[0], 10) * 60 + parseInt(evAnn.phase3.split(':')[1], 10);
+    }
+  }
+
   return {
     isGateOpen,
-    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : `${activeEventTitle} Registration Closed`,
+    currentSessionLabel: currentPhase === 1 ? `${activeEventTitle} Registration Open` : currentPhase === 3 ? `${activeEventTitle} Live Event Active` : currentPhase === 0 ? `${activeEventTitle} No Active Event` : `${activeEventTitle} Registration Closed`,
     nextStatusChangeMessage,
     currentPhase,
     phaseIntervals,
-    activeEventId: activeEventId || "", // 🛡️ Explicit property injection ensures downstream route endpoints can map IDs natively
-    activeEventTitle: activeEventTitle || "Raid Session", // 🛡️ Explicit property injection ensures descriptive matching text
+    eventId: activeEventId || "",
+    eventName: activeEventTitle || "Raid Session",
+    activeEventId: activeEventId || "", 
+    activeEventTitle: activeEventTitle || "Raid Session", 
     helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
-    // Contextual lookup extracts notification schedules belonging exclusively to the matched event context
+    // 🚀 CACHE EXPOSURE: Expose the synchronized memory timezone to save client network overhead
+    timezone: timezone,
+    announcementMinutes: computedAnnouncementMinutes,
     announcements: selectedEventContext?.announcements || (events && typeof events === 'object' ? Object.values(events)[0]?.announcements : null) || {
       phase1: ["07:00", "12:00", "19:00"],
       phase2: "22:15",

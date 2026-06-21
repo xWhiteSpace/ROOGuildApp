@@ -1,6 +1,7 @@
 // backend/src/services/discordSnapshot.js
 import admin from 'firebase-admin';
 import { discordClient } from '../discord-bot/client.js';
+import { getGateStatusDetails } from '../config/timeWindow.js';
 
 /**
  * 📣 REQ024 & REQ025: Live Automated Snapshots Controller
@@ -19,7 +20,7 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
     const requestsSnap = await db.ref('auction/web_requests').once('value');
     if (!requestsSnap.exists()) {
-      console.log("⚠️ [SNAPSHOT SKIPPED]: No active auction records logged in database folder.");
+      console.log("⚠️ [NO ANNOUNCEMENT]: No active auction records logged in database folder.");
       return;
     }
 
@@ -45,31 +46,102 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
       if (!userCalculationsMap[reqItemId][player]) {
-        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore };
+        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
       }
 
-      if (appStatus === 'requested') userCalculationsMap[reqItemId][player].netQty += qty;
-      if (appStatus === 'canceled')  userCalculationsMap[reqItemId][player].netQty -= qty;
+      if (appStatus === 'requested') {
+        userCalculationsMap[reqItemId][player].netQty += qty;
+        userCalculationsMap[reqItemId][player].latestKey = req.id; // Pinpoints the newest request submission time
+      }
+      if (appStatus === 'canceled') {
+        userCalculationsMap[reqItemId][player].netQty -= qty;
+      }
     });
 
     // Establish the text template header layout
-    let messagePayload = isFinalThreshold
-      ? `🔒 === BID REQUEST REGISTRATION CLOSED (FINAL LIST) ===\n`
-      : `📊 === CURRENT BID REQUEST LIST ===\n`;
+    const gateDetails = getGateStatusDetails() || {};
+    const activeEventObj = dynamicConfig.events?.[gateDetails.activeEventId];
+    const resolvedEventTitle = gateDetails.activeEventTitle || "Raid Session";
+    const targetTimezone = dynamicConfig.timezone || "Asia/Manila";
 
-    // Parse the aggregated live parameters directly into the markdown snapshot string
-    itemsList.forEach(item => {
-      const activeApplicants = Object.values(userCalculationsMap[item.id] || {}).filter(u => u.netQty > 0);
-      activeApplicants.sort((a, b) => b.priority - a.priority);
-
-      if (activeApplicants.length > 0) {
-        messagePayload += `\n🏷️ Item Name: ${item.name.toUpperCase()}\n`;
-        activeApplicants.forEach((entry, index) => {
-          messagePayload += `   [Rank ${index + 1}] ${entry.name} - Qty: ${entry.netQty} (Priority Score: ${entry.priority})\n`;
-        });
-      }
+    const timestampString = new Date().toLocaleString("en-US", { 
+      timeZone: targetTimezone,
+      dateStyle: "short",
+      timeStyle: "short"
     });
 
+    const embedsPayload = [];
+
+    // 🎨 CHROMATIC CONSOLE SYNC: Converts hex strings or theme keywords into Discord decimal integers
+    const resolveColorThemeToInteger = (colorTheme) => {
+      if (colorTheme && colorTheme.startsWith('#')) {
+        return parseInt(colorTheme.replace('#', ''), 16);
+      }
+      const PRESET_MAP = {
+        purple: 0x8b5cf6,
+        yellow: 0xeab308,
+        slate: 0x64748b,
+        red: 0xef4444,
+        orange: 0xf97316,
+        emerald: 0x10b981,
+        blue: 0x3b82f6
+      };
+      return PRESET_MAP[colorTheme] || 0x64748b;
+    };
+
+    const currentUnixTimestamp = Math.floor(Date.now() / 1000);
+    // ✨ RE-VALUED TYPOGRAPHY: Stripped out debug symbols to form clean, high-contrast dashboard notification status headers
+    let broadcastHeadlineText = isFinalThreshold
+      ? `🔒 **LOCKED • ${resolvedEventTitle.toUpperCase()} FINALIZED ALLOCATION SHEET**\n`
+      : `📊 **CURRENT LIST • ${resolvedEventTitle.toUpperCase()} ONGOING BID REGISTER**\n`;
+    
+    // 🕒 TIMELINE STREAMLINING: Dropped the custom relative timestamp row to clean up the card header space
+    broadcastHeadlineText += `🕒 **Time:** \`${timestampString}\` (${targetTimezone})`;
+    // Process aggregated data into separate stylized embed blocks
+    itemsList.forEach(item => {
+      // 🔇 NOISE SUPPRESSION: Completely skip item cards that are not declared in tonight's auction drop pool
+      if (activeEventObj?.loots?.[item.id] === undefined) return;
+
+      const embedColorInteger = resolveColorThemeToInteger(item.colorTheme);
+      let contentSummaryString = '';
+      const activeApplicants = Object.values(userCalculationsMap[item.id] || {}).filter(u => u.netQty > 0);
+      
+      activeApplicants.sort((a, b) => {
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority;
+        }
+        return a.latestKey.localeCompare(b.latestKey);
+      });
+
+      if (activeApplicants.length > 0) {
+        // 📊 MONOSPACED TABLE ARCHITECTURE: Open an integrated block to align layout pillars perfectly
+        contentSummaryString += "```wl\n";
+        
+        activeApplicants.forEach((entry, index) => {
+          const linePositionLabel = `#${String(index + 1).padStart(2, '0')}`;
+          
+          // Pad names out to 25 fixed columns to absorb variable string lengths smoothly
+          const paddedName = entry.name.padEnd(27, ' ');
+          const paddedQty = `Qty: ${entry.netQty}`.padEnd(6, ' ');
+          
+          contentSummaryString += `${linePositionLabel}  ${paddedName}  ${paddedQty}  [P: ${entry.priority}]\n`;
+        });
+        
+        contentSummaryString += "```";
+      } else {
+        // Clearer aesthetic representation of empty drop buckets
+        contentSummaryString = `🍃 *Request List Clear • Standing by for next session...*`;
+      }
+
+      embedsPayload.push({
+        title: `🏷️ ${item.name.toUpperCase()}`,
+        description: contentSummaryString,
+        color: embedColorInteger,
+        footer: { 
+          text: `⏱️ Timestamp: ${timestampString} | Item ID: ${item.id}` 
+        }
+      });
+    });
     // Locate the target Discord channel profile securely from environment
     const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;
     if (!auctionChannelId) {
@@ -79,12 +151,40 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
     const targetChannel = await discordClient.channels.fetch(auctionChannelId);
     if (targetChannel && typeof targetChannel.send === 'function') {
-      await targetChannel.send(`\`\`\`text\n${messagePayload}\`\`\``);
-      console.log(`✅ [SNAPSHOT BROADCAST]: Matrix successfully posted to Discord channel.`);
+      
+      // Handle fallback case where zero items are dropping tonight
+      if (embedsPayload.length === 0) {
+        await targetChannel.send({ 
+          content: `${broadcastHeadlineText}\n\n⚠️ *No active items or active bid registrations are mapped for tonight's auction pool cycle.*` 
+        });
+        console.log(`✅ [SNAPSHOT BROADCAST]: Empty state posted to Discord channel.`);
+        return;
+      }
+
+      const EMBED_CHUNK_SIZE = 8; // 🛡️ Safe size buffer (Discord max absolute limit is 10 embeds per single text post)
+      
+      for (let i = 0; i < embedsPayload.length; i += EMBED_CHUNK_SIZE) {
+        const structuralChunk = embedsPayload.slice(i, i + EMBED_CHUNK_SIZE);
+        
+        if (i === 0) {
+          // Send the headline banner strictly inside the first payload frame message
+          await targetChannel.send({ 
+            content: broadcastHeadlineText, 
+            embeds: structuralChunk 
+          });
+        } else {
+          // Stream subsequent item blocks cleanly down the tracking feed channel
+          await targetChannel.send({ 
+            embeds: structuralChunk 
+          });
+        }
+      }
+      
+      console.log(`✅ [BROADCAST]: List is successfully sent to Discord.`);
     } else {
-      console.error("❌ [SNAPSHOT ERROR]: Target destination is not a valid text guild channel context.");
+      console.error("❌ [BROADCAST ERROR]: Target destination is not a valid text guild channel context.");
     }
   } catch (error) {
-    console.error("❌ [SNAPSHOT EXCEPTION]: Internal routine failure:", error.message);
+    console.error("❌ [BROADCAST EXCEPTION]: Internal routine failure:", error.message);
   }
 }

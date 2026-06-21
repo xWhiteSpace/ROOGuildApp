@@ -4,6 +4,21 @@ import { useNavigate } from 'react-router-dom';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
+// --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
+const IconSearch = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+const IconGlobal = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>;
+const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IconDownload = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v4M7 10l5 5 5-5M12 15V3"/></svg>;
+const IconUndo = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>;
+const IconAward = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>;
+const IconLayers = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>;
+const IconSortArrows = ({ active, direction }) => {
+  if (!active) return <svg className="w-3 h-3 text-slate-600 inline ml-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg>;
+  return direction === 'asc' 
+    ? <svg className="w-3 h-3 text-indigo-400 inline ml-1.5 animate-fadeIn" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    : <svg className="w-3 h-3 text-indigo-400 inline ml-1.5 animate-fadeIn" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>;
+};
+
 export default function RequestHistoryTab() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -16,7 +31,15 @@ export default function RequestHistoryTab() {
   const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'mine'
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
+  const [rowLimit, setRowLimit] = useState(20); // 📊 Dynamic capacity limit selector (20, 60, 100)
   
+  const [historyPage, setHistoryPage] = useState(1); // 🧭 Current navigation page track
+
+  // 🔄 Sync Reset Hook: Prevents index overflows by resetting page marker when filter arrays mutate
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [viewFilter, searchQuery, outcomeFilter, rowLimit]);
+
   // Sorting controls
   const [sortKey, setSortKey] = useState('date'); // 'date', 'member', 'item', or 'priority'
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
@@ -96,7 +119,7 @@ export default function RequestHistoryTab() {
     return sortDirection === 'asc' ? '▲' : '▼';
   };
 
-  const getItemStyleProfile = (itemType, itemId) => {
+ const getItemStyleProfile = (itemType, itemId) => {
     const THEME_MAP = {
       purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
       yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
@@ -104,24 +127,31 @@ export default function RequestHistoryTab() {
       red:    'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600'
     };
 
-    // Match config based on current Relational ID or description strings
     const matchedItem = configItems.find(i => 
       (itemId && i.id.toLowerCase() === itemId.toLowerCase()) || 
       (itemType && i.name.toLowerCase() === itemType.toLowerCase())
     );
 
-    if (matchedItem && matchedItem.colorTheme) {
-      return THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
+    // If it's a dynamic Hex Color from the system color wheel
+    if (matchedItem?.colorTheme?.startsWith('#')) {
+      return {
+        className: 'px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold',
+        style: {
+          color: matchedItem.colorTheme,
+          borderColor: `${matchedItem.colorTheme}40`,
+          backgroundColor: `${matchedItem.colorTheme}15`,
+          boxShadow: `0 0 15px ${matchedItem.colorTheme}20`
+        }
+      };
     }
 
-    // Direct fallback for legacy data records transparency
-    const legacyLabel = (itemType || '').toLowerCase();
-    if (legacyLabel.includes('puppet')) return THEME_MAP.purple;
-    if (legacyLabel.includes('illu')) return THEME_MAP.yellow;
-    if (legacyLabel.includes('light')) return THEME_MAP.slate;
-    if (legacyLabel.includes('time') || legacyLabel.includes('space')) return THEME_MAP.red;
+    // Fallback to presets or standard slate base
+    const baseClass = matchedItem && matchedItem.colorTheme ? (THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate) : THEME_MAP.slate;
 
-    return 'text-slate-400 border-slate-800 bg-slate-900/50';
+    return {
+      className: `px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold ${baseClass}`,
+      style: {}
+    };
   };
 
   // 📋 Apply Filtering Matrix Logic
@@ -171,6 +201,8 @@ export default function RequestHistoryTab() {
 
     return sortDirection === 'asc' ? comparison : comparison * -1;
   });
+
+  const historyTotalPages = Math.ceil(sortedRecords.length / rowLimit) || 1;
 
   /**
    * 📥 BROWSER-NATIVE CSV EXPORT MODULE
@@ -228,60 +260,81 @@ export default function RequestHistoryTab() {
     <div className="mx-auto max-w-6xl p-4 sm:p-6 text-white pb-32 relative font-sans space-y-4">
       
       {/* HEADER CONTROLS PLACEMENT */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-6 sm:flex-row sm:items-center shadow-xl">
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:flex-row sm:items-center shadow-md select-none">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-100 uppercase">Request History Ledger</h1>
-          <div className="text-xs text-slate-400 mt-1 space-x-4">
-            <span>User: <strong className="text-indigo-400">{currentUserName || 'Unassigned'}</strong></span>
-            <span>History Count: <strong className="text-slate-300">{sortedRecords.length} Rows</strong></span>
+          <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Request History Ledger</h1>
+          <div className="text-[11px] font-mono text-slate-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            <span>USER: <strong className="text-indigo-400 font-sans font-semibold">{currentUserName || 'Unassigned'}</strong></span>
+            <span>TOTAL ROWS: <strong className="text-slate-300">{sortedRecords.length} ROWS</strong></span>
           </div>
         </div>
 
-        <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto shrink-0">
+        <div className="flex bg-slate-950 p-0.5 rounded-xl border border-slate-800 shrink-0 gap-0.5 shadow-inner">
           <button
+            type="button"
             onClick={() => setViewFilter('all')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition uppercase ${
-              viewFilter === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+              viewFilter === 'all' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            🌐 All Records
+            <IconGlobal /> All Records
           </button>
           <button
+            type="button"
             onClick={() => setViewFilter('mine')}
-            className={`rounded-lg px-4 py-1.5 text-xs font-black tracking-tight transition uppercase ${
-              viewFilter === 'mine' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:bg-slate-800/60'
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
+              viewFilter === 'mine' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            👤 My History
+            <IconUser /> My Record
           </button>
         </div>
       </div>
 
       {/* --- 🔍 STREAMLINED LIVE FILTER CONTROL CONSOLE PANEL --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-md">
         <div className="space-y-1">
-          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Name / Item Search</label>
+          <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 select-none">
+            <IconSearch /> Name / Item Search
+          </label>
           <input 
             type="text"
-            placeholder="🔍 Search member name or item category..."
+            placeholder="Filter by keyword..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 outline-none focus:border-slate-700 transition font-sans"
+            className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 placeholder-slate-650 outline-none focus:border-slate-700 transition shadow-inner font-sans"
           />
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Filter By Final Outcome</label>
+          <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 select-none">
+            <IconAward /> Filter
+          </label>
           <select
             value={outcomeFilter}
             onChange={(e) => setOutcomeFilter(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-slate-700 transition font-sans font-medium"
+            className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-300 outline-none focus:border-slate-700 transition shadow-inner font-sans font-medium cursor-pointer"
           >
-            <option value="all">🏆 Show All Outcomes</option>
-            <option value="pending">⏳ Pending Status</option>
-            <option value="selected">✨ Selected Allocation</option>
-            <option value="notselected">💤 NotSelected Bypass</option>
-            <option value="absent">🚨 Absent Log</option>
+            <option value="all" className="bg-slate-950 text-slate-300">All Status</option>
+            <option value="pending" className="bg-slate-950 text-slate-300">Pending</option>
+            <option value="selected" className="bg-slate-950 text-slate-300">Selected</option>
+            <option value="notselected" className="bg-slate-950 text-slate-300">NotSelected</option>
+            <option value="absent" className="bg-slate-950 text-slate-300">Absent</option>
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 select-none">
+            <IconLayers /> Show Record
+          </label>
+          <select
+            value={rowLimit}
+            onChange={(e) => setRowLimit(parseInt(e.target.value, 10))}
+            className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-300 outline-none focus:border-slate-700 transition shadow-inner font-sans font-medium cursor-pointer"
+          >
+            <option value={20} className="bg-slate-950 text-slate-300">Display 20 Rows</option>
+            <option value={60} className="bg-slate-950 text-slate-300">Display 60 Rows</option>
+            <option value={100} className="bg-slate-950 text-slate-300">Display 100 Rows</option>
           </select>
         </div>
       </div>
@@ -289,121 +342,151 @@ export default function RequestHistoryTab() {
       {/* GLOBAL VIEW-ONLY REQUISITION GRID MATRIX */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-2xl">
         <div className="overflow-x-auto overflow-y-auto max-h-[60vh] scrollbar-thin">
-          <table className="w-full text-left border-collapse min-w-max text-xs font-mono">
+          <table className="w-full text-left border-collapse table-fixed min-w-[950px] text-xs font-mono">
             <thead>
-              <tr className="bg-slate-950 text-slate-400 font-black uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[10px] select-none">
+              <tr className="bg-slate-950 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-800 sticky top-0 z-10 text-[9px] select-none">
                 
                 {/* INTERACTIVE COLUMN HEADERS */}
                 <th 
                   onClick={() => handleSortToggle('date')}
-                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                  className="p-3.5 cursor-pointer hover:bg-slate-900/60 hover:text-slate-200 transition-colors group w-[14%]"
                 >
-                  Timestamp <span className={`ml-1 text-[9px] font-sans ${sortKey === 'date' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('date')}</span>
+                  Timestamp <IconSortArrows active={sortKey === 'date'} direction={sortDirection} />
                 </th>
                 
                 <th 
                   onClick={() => handleSortToggle('member')}
-                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                  className="p-3.5 cursor-pointer hover:bg-slate-900/60 hover:text-slate-200 transition-colors group w-[18%]"
                 >
-                  Member <span className={`ml-1 text-[9px] font-sans ${sortKey === 'member' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('member')}</span>
+                  Member <IconSortArrows active={sortKey === 'member'} direction={sortDirection} />
                 </th>
                 
                 <th 
                   onClick={() => handleSortToggle('item')}
-                  className="p-3.5 border-r border-slate-800/60 cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                  className="p-3.5 cursor-pointer hover:bg-slate-900/60 hover:text-slate-200 transition-colors group w-[18%]"
                 >
-                  Item <span className={`ml-1 text-[9px] font-sans ${sortKey === 'item' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('item')}</span>
+                  Item Variant <IconSortArrows active={sortKey === 'item'} direction={sortDirection} />
                 </th>
                 
-                <th className="p-3.5 border-r border-slate-800/60 text-center text-slate-500 font-medium">Qty</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">BidRequestStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">SelectionStatus</th>
-                <th className="p-3.5 border-r border-slate-800/60 text-slate-500 font-medium">LiveStatus</th>
+                <th className="p-3.5 text-center font-semibold w-[5%]">Qty</th>
+                <th className="p-3.5 font-semibold w-[11%]">Request Status</th>
+                <th className="p-3.5 font-semibold w-[15%]">Bid Status</th>
+                <th className="p-3.5 font-semibold w-[11%]">Live Status</th>
                 
                 <th 
                   onClick={() => handleSortToggle('priority')}
-                  className="p-3.5 border-r border-slate-800/60 text-center cursor-pointer hover:bg-slate-900/60 hover:text-white transition-colors group"
+                  className="p-3.5 text-center cursor-pointer hover:bg-slate-900/60 hover:text-slate-200 transition-colors group w-[8%]"
                 >
-                  Priority <span className={`ml-1 text-[9px] font-sans ${sortKey === 'priority' ? 'text-indigo-400 font-bold' : 'text-slate-600 group-hover:text-slate-400'}`}>{getSortIconIndicator('priority')}</span>
+                  Priority <IconSortArrows active={sortKey === 'priority'} direction={sortDirection} />
                 </th>
                 
-                <th className="p-3.5 text-slate-500 font-medium">EventDate</th>
+                <th className="p-3.5 font-semibold text-right pr-5 w-[10%]">Event Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 bg-slate-900/40 text-slate-300">
               {sortedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-8 text-center text-slate-500 italic font-sans text-sm">
-                    No corresponding transaction entries logged under this specific filter or query layout context.
+                  <td colSpan="9" className="p-8 text-center text-slate-600 italic font-sans text-xs select-none">
+                    No transaction entries matching this specific filter matrix query layout criteria.
                   </td>
                 </tr>
               ) : (
-                sortedRecords.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-950/40 transition-colors">
-                    <td className="p-3 text-slate-400 whitespace-nowrap">{row.date}</td>
-                    <td className="p-3 font-sans font-bold text-slate-100 whitespace-nowrap">{row.member}</td>
-                        <td className="p-3 font-sans whitespace-nowrap">
-                          <span className={`px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold ${getItemStyleProfile(row.item, row.itemId)}`}>
-                            {row.item || row.itemId}
-                          </span>
-                        </td>
-                    <td className="p-3 font-bold text-center text-slate-100">{row.quantity}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-tight border ${
-                        (row.applicationStatus || '').toLowerCase() === 'requested'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : (row.applicationStatus || '').toLowerCase() === 'forcedadd'
-                          ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                      }`}>
+                sortedRecords.slice((historyPage - 1) * rowLimit, historyPage * rowLimit).map((row) => {
+                  const selStatus = (row.selectionStatus || '').toLowerCase();
+                  const appStatus = (row.applicationStatus || '').toLowerCase();
+                  const isSelected = selStatus === 'selected';
+                  const isPending = selStatus === 'pending';
+                  const isVoided = appStatus === 'canceled'; // 🎯 Target the intent state directly
+
+                  return (
+                    <tr 
+                      key={row.id} 
+                      className={`group border-b border-slate-900/30 transition-all duration-75 ${
+                        isVoided ? 'opacity-35 text-slate-500 bg-slate-950/5' : 'text-slate-450'
+                      }`}
+                    >
+                      <td className="p-3 whitespace-nowrap text-[11px] select-none text-slate-500">{row.date}</td>
+                      <td className={`p-3 font-sans font-normal truncate whitespace-nowrap group-hover:text-white transition-colors ${isVoided ? 'line-through text-slate-500' : 'text-slate-400'}`}>{row.member}</td>
+                      <td className="p-3 font-sans whitespace-nowrap">
+                        {(() => {
+                          const profile = getItemStyleProfile(row.item, row.itemId);
+                          return (
+                            <span className={profile.className} style={profile.style}>
+                              {row.item || row.itemId}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="p-3 font-normal text-center group-hover:text-slate-200 transition-colors">{row.quantity}</td>
+                      <td className={`p-3 font-sans text-[11px] uppercase tracking-wide ${isVoided ? 'line-through text-slate-500' : ''}`}>
                         {row.applicationStatus}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-tight border ${
-                        (row.selectionStatus || '').toLowerCase() === 'pending'
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          : (row.selectionStatus || '').toLowerCase() === 'selected'
-                          ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-                          : (row.selectionStatus || '').toLowerCase() === 'absent'
-                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                          : 'bg-slate-800 text-slate-500 border-slate-700'
-                      }`}>
-                        {row.selectionStatus}
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-400 whitespace-nowrap text-[11px] font-sans uppercase font-semibold">
-                      {row.liveStatus ? `⚡ ${row.liveStatus}` : '---'}
-                    </td>
-                    <td className="p-3 font-bold text-center text-cyan-400">{row.priority}</td>
-                    <td className="p-3 text-slate-400 font-bold whitespace-nowrap">
-                      {row.eventDate === "" ? '""' : row.eventDate}
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="p-3 truncate">
+                        <span className="inline-flex items-center gap-1.5 font-sans text-[11px] uppercase tracking-wide max-w-full truncate">
+                          <span className={`w-1 h-1 rounded-full shrink-0 ${
+                            isSelected ? 'bg-emerald-400 shadow shadow-emerald-400/50' : isPending ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'
+                          }`} />
+                          <span className={`truncate ${isVoided ? 'line-through text-slate-500' : ''}`}>{row.selectionStatus}</span>
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-500 group-hover:text-slate-400 transition-colors whitespace-nowrap text-[10px] font-sans uppercase font-bold tracking-wide truncate">
+                        <span className="block truncate">{row.liveStatus ? row.liveStatus : '---'}</span>
+                      </td>
+                      <td className="p-3 font-normal text-center text-cyan-600/90 group-hover:text-cyan-400 transition-colors">{row.priority}</td>
+                      <td className="p-3 text-slate-500 group-hover:text-slate-400 transition-colors font-semibold whitespace-nowrap text-right pr-5">
+                        {row.eventDate === "" ? "---" : row.eventDate}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+        
+        {/* INTERACTIVE LEDGER PAGINATION CONTROL BAR */}
+        <div className="flex items-center justify-between p-3 px-4 bg-slate-950 border-t border-slate-800 text-xs font-mono select-none rounded-b-2xl">
+          <button 
+            type="button"
+            onClick={() => setHistoryPage(Math.max(1, historyPage - 1))} 
+            disabled={historyPage === 1} 
+            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold disabled:opacity-10 transition cursor-pointer shadow-sm"
+          >
+            ◀ PREV
+          </button>
+          <div className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+            PAGE <span className="text-white bg-slate-900 px-1.5 py-0.5 border border-slate-800 rounded mx-0.5 font-sans">{historyPage}</span> OF {historyTotalPages}
+          </div>
+          <button 
+            type="button"
+            onClick={() => setHistoryPage(Math.min(historyTotalPages, historyPage + 1))} 
+            disabled={historyPage === historyTotalPages} 
+            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold disabled:opacity-10 transition cursor-pointer shadow-sm"
+          >
+            NEXT ▶
+          </button>
+        </div>
       </div>
 
-      {/* STICKY BOTTOM INTERACTION FOOTER ANCHOR */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md p-4 z-40">
-        <div className="mx-auto max-w-6xl flex items-center justify-between">
+      {/* IN-FLOW LEDGER ACTION PLATFORM FOOTER CONTAINER */}
+      <div className="w-full select-none pt-2 animate-fadeIn">
+        <div className="w-full flex items-center justify-between bg-slate-900/40 border border-slate-800/80 p-3 px-5 rounded-2xl shadow-md">
           
           <button
+            type="button"
             onClick={handleDownloadCSVExport}
             disabled={sortedRecords.length === 0}
-            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 shadow-lg tracking-wide"
+            className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition py-2 px-4 shadow cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
           >
-            📥 Export CSV Spreadsheet
+            <IconDownload /> Export to CSV
           </button>
           
           <button
+            type="button"
             onClick={() => navigate('/')}
-            className="rounded-xl border border-slate-700 bg-slate-900 px-6 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white shadow-lg tracking-wide"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition py-2 px-4 shadow cursor-pointer"
           >
-            ↩️ Return to Lobby
+            <IconUndo /> Return to Request
           </button>
           
         </div>

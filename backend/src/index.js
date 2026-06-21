@@ -25,14 +25,8 @@ initializeEnv();
 initializeFirebase();
 initializeDiscordBot(); 
 
-// 🛰️ DISCORD INTERACTIVE COMPONENT INTERCEPT ROUTER
-discordClient.on('interactionCreate', async (interaction) => {
-  try {
-    await handleAuctionInteraction(interaction);
-  } catch (err) {
-    console.error("❌ Root Discord interaction event handler exception:", err.message);
-  }
-});
+// ✅ REFACTORED: Duplicate gateway interceptor completely removed. 
+// Routing controls are now handled directly within the initialization scope of client.js.
 
 const app = express();
 
@@ -120,50 +114,6 @@ app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
   console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
 
-  // ⏰ Isolated schedule evaluator helper can be cleanly called on demand
-  function evaluateAnnouncementSchedules() {
-    try {
-      const gateDataContext = getGateStatusDetails() || {};
-      const activeAnnounceLimits = gateDataContext.announcements || {
-        phase1: ["07:00", "12:00", "19:00"],
-        phase2: "22:15",
-        phase3: "20:55"
-      };
-
-      const localizedString = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-      const localizedDate = new Date(localizedString);
-
-      const true24HourInt = localizedDate.getHours();
-      const trueMinuteInt = localizedDate.getMinutes();
-      const timeTokenString = `${String(true24HourInt).padStart(2, '0')}:${String(trueMinuteInt).padStart(2, '0')}`;
-
-      console.log(`[DEBUG] Clock Ticker Active | True Phase: ${gateDataContext.currentPhase} | Extracted Time Token: "${timeTokenString}"`);
-
-      if (gateDataContext.currentPhase === 1) {
-        const matchFound = (activeAnnounceLimits.phase1 || ["07:00", "12:00", "19:00"]).includes(timeTokenString);
-        if (matchFound) {
-          console.log(`⏰ [PHASE 1 TRIGGER] Milestone schedule matched (${timeTokenString}). Dispensing live demand matrix...`);
-          processAndPostDiscordSnapshot(false);
-        }
-      } else if (gateDataContext.currentPhase === 2) {
-        if ((activeAnnounceLimits.phase2 || "22:15") === timeTokenString) {
-          console.log(`🔒 [PHASE 2 TRIGGER] Cutoff schedule matched (${timeTokenString}). Transmitting closed snapshot ledger...`);
-          processAndPostDiscordSnapshot(true);
-        }
-      } else if (gateDataContext.currentPhase === 3) {
-        if ((activeAnnounceLimits.phase3 || "20:55") === timeTokenString) {
-          console.log(`⚔️ [PHASE 3 TRIGGER] Live auction schedule matched (${timeTokenString}). Initializing arena countdown notice...`);
-          processAndPostDiscordSnapshot(false);
-        }
-      }
-    } catch (loopErr) {
-      console.error("⚠️ Background announcement interval ticker exception caught:", loopErr.message);
-    }
-  }
-
-  // 🚀 Execution Step 1: Fire an evaluation immediately right now on server boot
-  evaluateAnnouncementSchedules();
-
-  // 🔄 Execution Step 2: Queue the function to run continuously every 60 seconds thereafter
-  setInterval(evaluateAnnouncementSchedules, 60 * 1000);
+  // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
+  // Execution tracking has been centralized into the drift-proof engine in client.js.
 });
