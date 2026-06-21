@@ -104,15 +104,21 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     }
   });
 
+  // 🚀 ALIGNMENT OVERRIDE Pass: If the dashboard switch is manually turned ON, bypass strict calendar clock constraints
+  const isDashboardOverrideActive = sessionSnap.exists() && sessionSnap.val().isDiscordGateOpen === true;
+  
   const gateDetails = getGateStatusDetails() || {};
-  const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId];
+  const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId || Object.keys(configSnap.val().events || {})[0]];
   const activeLoots = activeEventObj?.loots || {};
 
   const menuOptions = items
-    .filter(item => activeLoots[item.id] !== undefined && (itemVacancyCounts[item.id] || 0) > 0)
+    .filter(item => {
+      const isItemActiveInDropPool = isDashboardOverrideActive || (activeLoots[item.id] !== undefined);
+      return isItemActiveInDropPool && (itemVacancyCounts[item.id] || 0) > 0;
+    })
     .map(item => ({
       label: item.name,
-      description: `${itemVacancyCounts[item.id]} empty layout slots available.`,
+      description: `${itemVacancyCounts[item.id] || 0} empty layout slots available.`,
       value: `select_item_${item.id}`
     }));
 
@@ -293,17 +299,43 @@ export async function handleAuctionInteraction(interaction) {
     const itemId = valueParts[1];
 
     try {
-        // 🛰️ ATOMIC ALLOCATION INTERSECTOR: Mutates the true nested Phase 2 index field directly
-      const txResult = await db.ref(`auction/active_session/categoryAllocations/${itemId}/selected`).transaction((currentSelected) => {
-        if (!currentSelected) return currentSelected;
+        // 🚀 UNIFIED MULTI-WRITER ALIGNMENT: Elevate transaction to the root node to update coordinates and increment master version simultaneously
+      const txResult = await db.ref('auction/active_session').transaction((currentSession) => {
+        if (!currentSession) return currentSession;
 
-        // Anti-collision guard: Check if someone beat them to it
-        if (currentSelected[targetIndex] !== "") {
-          return; // 🛑 Return undefined to abort transaction safely without breaking internal Firebase engine loops
+        if (!currentSession.categoryAllocations) {
+          currentSession.categoryAllocations = {};
+        }
+        if (!currentSession.categoryAllocations[itemId]) {
+          currentSession.categoryAllocations[itemId] = { selected: [] };
         }
 
-        currentSelected[targetIndex] = finalRosterName;
-        return currentSelected;
+        let selectedList = currentSession.categoryAllocations[itemId].selected;
+        if (!selectedList) {
+          selectedList = [];
+        } else if (!Array.isArray(selectedList)) {
+          selectedList = Object.values(selectedList);
+        }
+
+        // Force fill empty spaces up to target index to prevent sparse array skips
+        while (selectedList.length <= targetIndex) {
+          selectedList.push("");
+        }
+
+        // Anti-collision guard: Check if another thread claimed it first
+        if (selectedList[targetIndex] !== "") {
+          return; // 🛑 Abort transaction safely if slot is occupied
+        }
+
+        selectedList[targetIndex] = finalRosterName;
+        currentSession.categoryAllocations[itemId].selected = selectedList;
+
+        // Atomically advance the master sequence number to clear the dashboard fence
+        const activeVersion = parseInt(currentSession.version, 10) || 0;
+        currentSession.version = activeVersion + 1;
+        currentSession.lastUpdated = Date.now();
+
+        return currentSession;
       });
 
       // If the transaction aborted because another thread claimed it first, trigger collision handler
@@ -320,10 +352,14 @@ export async function handleAuctionInteraction(interaction) {
       const sessionCacheObj = localSessionCacheSnap.val() || {};
       const finalQtyPerPage = sessionCacheObj.qtyPerPage || 4;
       
-      // Inject the atomic array patch directly into our local session cache memory block
+      // Inject the atomic array patch directly into our local session cache memory block from the hoisted root snapshot
       const finalAllocations = sessionCacheObj.categoryAllocations || {};
       if (finalAllocations[itemId]) {
-        finalAllocations[itemId].selected = txResult.snapshot.val();
+        const committedSession = txResult.snapshot.val();
+        const committedSelected = committedSession?.categoryAllocations?.[itemId]?.selected;
+        finalAllocations[itemId].selected = Array.isArray(committedSelected)
+          ? committedSelected
+          : Object.values(committedSelected || {});
       }
 
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);

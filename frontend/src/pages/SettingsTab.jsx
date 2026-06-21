@@ -190,8 +190,19 @@ export default function SettingsTab() {
   };
 
   const handleAddEventNode = () => {
-    const finalEventTitle = newEventName.trim() || `New Raid Session ${Object.keys(config.events || {}).length + 1}`;
-    const nextEventIndex = Object.keys(config.events || {}).length + 1;
+    // 🚀 HIGH-WATER MARK RESOLVER: Parse numeric components of active keys to prevent index collisions caused by historical gaps
+    const currentEventKeys = Object.keys(config.events || {});
+    let nextEventIndex = 1;
+
+    if (currentEventKeys.length > 0) {
+      const numericIndices = currentEventKeys.map(key => {
+        const matchResult = key.match(/^ev_(\d+)$/);
+        return matchResult ? parseInt(matchResult[1], 10) : 0;
+      });
+      nextEventIndex = Math.max(...numericIndices) + 1;
+    }
+
+    const finalEventTitle = newEventName.trim() || `New Raid Session ${nextEventIndex}`;
     const paddingStr = String(nextEventIndex).padStart(3, '0');
     const newEventKey = `ev_${paddingStr}`;
     

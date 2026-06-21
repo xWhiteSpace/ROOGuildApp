@@ -15,22 +15,26 @@ const DEFAULT_SESSION_STRUCTURE = {
   lootSummary: {},
   categoryAllocations: {},
   initialWinnersByItem: {},
-  activeMatrixFilter: '',
-  sidebarTab: 'standby',
   isDiscordGateOpen: false 
 };
 
 function getGMT8DateString() {
-  // 🌐 CLOCK SYNC: Extract active timezone directly from our synchronous timeWindow memory cache
+  // 🚀 DYNAMIC TIMEZONE PIPELINE: Authoritatively bind date string resolutions straight to the user-configured settings tab parameters
   const timeGateStatus = getGateStatusDetails() || {};
-  const targetTimezone = timeGateStatus.timezone || "Asia/Manila";
+  const targetTimezone = timeGateStatus.timezone; 
 
-  const localString = new Date().toLocaleString("en-US", { timeZone: targetTimezone });
-  const tzDate = new Date(localString);
-  const month = tzDate.getMonth() + 1;
-  const day = tzDate.getDate();
-  const year = tzDate.getFullYear();
-  return `${month}/${day}/${year}`;
+  try {
+    const localString = new Date().toLocaleString("en-US", { timeZone: targetTimezone });
+    const tzDate = new Date(localString);
+    const month = tzDate.getMonth() + 1;
+    const day = tzDate.getDate();
+    const year = tzDate.getFullYear();
+    return `${month}/${day}/${year}`;
+  } catch (e) {
+    // Structural runtime environmental fallback if the database parameters are completely empty during application boot
+    const d = new Date();
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  }
 }
 
 function parseCSVToRawArrays(csvText, headerMatchKeyword) {
@@ -288,9 +292,9 @@ router.get('/active-session', async (req, res) => {
       const activeLoots = dynamicConfig.events?.[gateDetails.activeEventId]?.loots || {};
       const firstItemId = itemsList.length > 0 ? itemsList[0].id : '';
 
+      // 🛡️ SEPARATION COMPLETE: The server seeds transactional variables without cluttering cloud nodes with visual metadata
       const freshReset = {
         ...DEFAULT_SESSION_STRUCTURE,
-        activeMatrixFilter: firstItemId,
         lootRows: firstItemId ? [{ id: 1, itemType: firstItemId, startPage: 1, startPos: 1, endPage: 1, endPos: 4, limit: activeLoots[firstItemId] || 1 }] : [],
         lastUpdated: Date.now()
       };
@@ -317,10 +321,6 @@ router.get('/active-session', async (req, res) => {
         });
     }
 
-    if (currentSessionData.activeMatrixFilter && !itemsList.some(i => i.id === currentSessionData.activeMatrixFilter)) {
-      currentSessionData.activeMatrixFilter = itemsList.length > 0 ? itemsList[0].id : '';
-    }
-
     // 🛡️ Ensure default geometric layout parameter maps are never undefined
     if (currentSessionData.qtyPerPage === undefined) {
       currentSessionData.qtyPerPage = 4;
@@ -345,16 +345,31 @@ router.post('/update-session', async (req, res) => {
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
 
     if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+      console.error(`🛑 [SECURITY OVERRIDE REJECTION]: User "${user.displayName || user.username}" lacks authorized management roles. Write blocked.`);
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
     }
 
+    console.log(`📡 [SERVER SESSION UPDATE]: Writing payload data. Gate Override Status: ${req.body.session?.isDiscordGateOpen}`);
     const incomingWorkspacePayload = req.body.session;
     if (!incomingWorkspacePayload) {
       return res.status(400).json({ success: false, error: 'Payload configuration parameters missing.' });
     }
 
-    incomingWorkspacePayload.lastUpdated = Date.now();
-    await db.ref('auction/active_session').set(incomingWorkspacePayload);
+    // Run an atomic transaction to ensure out-of-order network packets can never degrade the state version
+    const activeSessionNodeRef = db.ref('auction/active_session');
+    await activeSessionNodeRef.transaction((currentDatabaseState) => {
+      if (currentDatabaseState) {
+        // Abort write smoothly if the incoming packet version is less than what is already committed in the database
+        if (incomingWorkspacePayload.version !== undefined && currentDatabaseState.version !== undefined) {
+          if (incomingWorkspacePayload.version < currentDatabaseState.version) {
+            return; 
+          }
+        }
+      }
+      incomingWorkspacePayload.lastUpdated = Date.now();
+      return incomingWorkspacePayload;
+    });
+
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });

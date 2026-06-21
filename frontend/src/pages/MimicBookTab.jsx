@@ -1,5 +1,6 @@
 // frontend/src/pages/MimicBookTab.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
+import { MimicBookContext } from '../App';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -28,65 +29,25 @@ export default function MimicBookTab({ user }) {
   // 🏛️ CENTRALIZED USER INTENT PERMISSION RESOLVER
   const isOfficer = user?.isOfficer === true;
 
-  const [isAdminMode, setIsAdminMode] = useState(isOfficer); 
-  const [activeStep, setActiveStep] = useState(1); 
-  const [loadingPool, setLoadingPool] = useState(false);
+  const {
+    isAdminMode, setIsAdminMode, activeStep, setActiveStep, loadingPool, setLoadingPool,
+    isLootHistoryOpen, setIsLootHistoryOpen, loadingLootHistory, setLoadingLootHistory,
+    lootHistoryData, setLootHistoryData, expandedGroups, setExpandedGroups,
+    commitEvent, setCommitEvent, availableEvents, setAvailableEvents, commitDate, setCommitDate,
+    committing, setCommittingSetting, syncingRoster, setSyncingRoster, items, setItems,
+    rankingsByItem, setRankingsByItem, requestsByItemDetails, setRequestsByItemDetails,
+    masterGuildRoster, setMasterGuildRoster, qtyPerPage, setQtyPerPage, lootRows, setLootRows,
+    lootSummary, setLootSummary, validationError, setValidationError, liveGapsWarning, setLiveGapsWarning,
+    activeMatrixFilter, setActiveMatrixFilter, categoryAllocations, setCategoryAllocations,
+    initialWinnersByItem, setInitialWinnersByItem, isDiscordGateOpen, setIsDiscordGateOpen,
+    sidebarTab, setSidebarTab, sidebarSearch, setSidebarSearch, viewLens, setViewLens,
+    searchQuery, setSearchQuery, bookCurrentPage, setBookCurrentPage, generatedSlots, setGeneratedSlots,
+    lastLocalWriteTimeRef, clientVersionRef
+  } = useContext(MimicBookContext);
 
-  // --- 📜 LOOT HISTORY MODAL STATE ---
-  const [isLootHistoryOpen, setIsLootHistoryOpen] = useState(false);
-  const [loadingLootHistory, setLoadingLootHistory] = useState(false);
-  const [lootHistoryData, setLootHistoryData] = useState([]);
-  const [expandedGroups, setExpandedGroups] = useState({}); 
-
-  // --- 🔒 DATA ARCHIVER COMMIT FIELDS ---
-  const [commitEvent, setCommitEvent] = useState('GuildLeague');
-  const [availableEvents, setAvailableEvents] = useState({}); // 🛡️ Dynamic Directory Hook: Tracks configuration titles added via SettingsTab
-  const [commitDate, setCommitDate] = useState(() => {
-    const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-    const gmt8Date = new Date(gmt8String);
-    return `${gmt8Date.getFullYear()}-${String(gmt8Date.getMonth() + 1).padStart(2, '0')}-${String(gmt8Date.getDate()).padStart(2, '0')}`;
-  });
-  const [committing, setCommittingSetting] = useState(false);
-
-  // --- 🔄 DISCORD SYNC LOADING TRACKER ---
-  const [syncingRoster, setSyncingRoster] = useState(false);
-
-  // --- 📋 MASTER TARGET POOLS ---
-  const [items, setItems] = useState([]); 
-  const [rankingsByItem, setRankingsByItem] = useState({});
-  const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
-  const [masterGuildRoster, setMasterGuildRoster] = useState([]); 
-
-  // --- PHASE 1 STATE: DYNAMIC LOOT REGISTRY ---
-  const [qtyPerPage, setQtyPerPage] = useState(4);
-  const [lootRows, setLootRows] = useState([]);
-  
-  const [lootSummary, setLootSummary] = useState({});
-  const [validationError, setValidationError] = useState('');
-  const [liveGapsWarning, setLiveGapsWarning] = useState('');
-
-  // --- PHASE 2 STATE: SLOT GRID CONTROLLERS ---
-  const [activeMatrixFilter, setActiveMatrixFilter] = useState('');
-  const [categoryAllocations, setCategoryAllocations] = useState({});
-  const [initialWinnersByItem, setInitialWinnersByItem] = useState({});
-
-  // 🛰️ DISCORD INPUT TRACKER: Added manual broadcast gate tracking flags
-  const [isDiscordGateOpen, setIsDiscordGateOpen] = useState(false);
-
-  // --- 🔍 SIDEBAR TAB NAVIGATION CONTROLS ---
-  const [sidebarTab, setSidebarTab] = useState('standby'); 
-  const [sidebarSearch, setSidebarSearch] = useState('');
   const popoverAnchorRef = useRef(null);
-
-  // --- Drag and Drop State Holders ---
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
-  const isUserDraggingRef = useRef(false); 
-
-  // --- PHASE 3 STATE: DISPLAY LENS CONSTRAINTS ---
-  const [viewLens, setViewLens] = useState('MINE'); 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [bookCurrentPage, setBookCurrentPage] = useState(1);
-  const [generatedSlots, setGeneratedSlots] = useState([]);
+  const isUserDraggingRef = useRef(false);
 
   useEffect(() => {
     setIsAdminMode(isOfficer);
@@ -232,37 +193,45 @@ export default function MimicBookTab({ user }) {
   const fetchActiveSessionFromBackend = async (isInitialMount = false) => {
     if (isUserDraggingRef.current) return; 
     try {
+    // 🛡️ CIRCUIT BREAKER: Mute background poll snapshots if user performed a local write within 4 seconds
+      if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
+
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-      const res = await fetch(`${backendUrl}/api/requests/active-session`, { method: 'GET', headers: customHeaders, credentials: 'include' });
-      const data = await res.json();
-      if (data.success && data.session) {
-        const s = data.session;
-        // 🛡️ POLLER LOOP GUARD: Read current live state functionally to stop asynchronous race-conditions
-        if (s.activeStep !== undefined) {
-          setActiveStep(prevStep => {
-            // If the officer intentionally stepped back to Step 1 locally, drop incoming stale Step 2/3 frames
-            if (prevStep === 1 && s.activeStep !== 1) {
-              return prevStep; 
-            }
-            return s.activeStep;
-          });
-        }
-        if (s.lootRows) setLootRows(s.lootRows);
-        if (s.lootSummary) setLootSummary(s.lootSummary);
-        if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
-        if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
-        if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
-        if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
-        if (s.sidebarTab) setSidebarTab(s.sidebarTab);
-        // Synchronize manual communication gate variables cleanly across backend streams
-        if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
-      } else if (isInitialMount) {
-        setActiveStep(1);
-        setSidebarTab('standby');
+
+      const res = await fetch(`${backendUrl}/api/requests/active-session`, { 
+        method: 'GET', 
+        headers: {
+          ...customHeaders,
+          ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {})
+        }, 
+        credentials: 'include' 
+      });
+    const data = await res.json();
+    if (data.success && data.session) {
+      const s = data.session;
+
+      // 🔒 OPTIMISTIC FENCE: Stale background frames are dropped, but initial mounts bypass checking to restore database variables authoritatively
+        if (!isInitialMount && s.version !== undefined && s.version <= clientVersionRef.current) return;
+        clientVersionRef.current = s.version || 0;
+
+      if (s.activeStep !== undefined) {
+        setActiveStep(s.activeStep);
+      }
+      if (s.lootRows) setLootRows(s.lootRows);
+      if (s.lootSummary) setLootSummary(s.lootSummary);
+      if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
+      if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
+      if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
+      if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
+      if (s.sidebarTab) setSidebarTab(s.sidebarTab);
+      if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
+    } else if (isInitialMount) {
+        // Defensive Initialization Guard: Network dropouts or temporary auth latency must never destructively wipe progress fields back to zero
+        console.warn("⚠️ [INITIAL SYNC PENDING]: Handshake latency detected; waiting for subsequent background poller stream to clear the gate.");
       }
     } catch (err) {
       if (isInitialMount) console.error(err);
@@ -290,10 +259,11 @@ export default function MimicBookTab({ user }) {
 
   const saveWorkspaceState = (updatedStateFields) => {
     if (!isOfficer) return;
-    const fullSnapshot = {
-      activeStep, lootRows, lootSummary, categoryAllocations, initialWinnersByItem,
-      generatedSlots, activeMatrixFilter, sidebarTab, isDiscordGateOpen, ...updatedStateFields
-    };
+      // Increment sequencing boundaries and pin mutation timestamp to trigger circuit breaker
+    clientVersionRef.current += 1;
+    lastLocalWriteTimeRef.current = Date.now();
+
+    // 1. Instantly resolve local state hook handlers to ensure seamless browser rendering response
     if (updatedStateFields.activeStep !== undefined) setActiveStep(updatedStateFields.activeStep);
     if (updatedStateFields.lootRows) setLootRows(updatedStateFields.lootRows);
     if (updatedStateFields.lootSummary) setLootSummary(updatedStateFields.lootSummary);
@@ -303,7 +273,19 @@ export default function MimicBookTab({ user }) {
     if (updatedStateFields.activeMatrixFilter) setActiveMatrixFilter(updatedStateFields.activeMatrixFilter);
     if (updatedStateFields.sidebarTab) setSidebarTab(updatedStateFields.sidebarTab);
     if (updatedStateFields.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(updatedStateFields.isDiscordGateOpen);
-    pushActiveSessionToBackend(fullSnapshot);
+
+    // 2. Build a sanitized transactional data map to send to Firebase, leaving visual states local
+    const transactionalSnapshot = {
+      activeStep: updatedStateFields.activeStep !== undefined ? updatedStateFields.activeStep : activeStep,
+      lootRows: updatedStateFields.lootRows || lootRows,
+      lootSummary: updatedStateFields.lootSummary || lootSummary,
+      categoryAllocations: updatedStateFields.categoryAllocations || categoryAllocations,
+      initialWinnersByItem: updatedStateFields.initialWinnersByItem || initialWinnersByItem,
+      isDiscordGateOpen: updatedStateFields.isDiscordGateOpen !== undefined ? updatedStateFields.isDiscordGateOpen : isDiscordGateOpen,
+      version: clientVersionRef.current
+    };
+
+    pushActiveSessionToBackend(transactionalSnapshot);
   };
 
   useEffect(() => {
@@ -364,8 +346,13 @@ export default function MimicBookTab({ user }) {
       initialWinnersByItem: {},
       activeMatrixFilter: defaultFirstItem,
       sidebarTab: 'standby',
-      isDiscordGateOpen: false 
+      isDiscordGateOpen: false,
+      version: 0
     };
+
+    // Reset fencing parameters and activate circuit breaker for the manual session purge
+    clientVersionRef.current = 0;
+    lastLocalWriteTimeRef.current = Date.now();
 
     // Force an instantaneous update pass across the network to secure sync state positioning
     await pushActiveSessionToBackend(clearSessionBlueprint);
@@ -916,7 +903,8 @@ export default function MimicBookTab({ user }) {
                   return (
                     <div 
                       key={item.id} 
-                      onClick={() => { saveWorkspaceState({ activeMatrixFilter: item.id }); }}
+                      // 🛡️ LOCAL VISUAL TOGGLE: Swapping matrix column views alters browser rendering without firing any database updates
+                      onClick={() => { setActiveMatrixFilter(item.id); }}
                       className={`p-2.5 rounded-lg border cursor-pointer flex-1 min-w-[150px] transition-all duration-200 ${
                         isActiveCategory 
                           ? 'bg-indigo-600 border-transparent text-white shadow-md font-bold' 

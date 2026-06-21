@@ -175,6 +175,7 @@ const getModularDistance = (from, to) => (to - from + 10080) % 10080;
 
       // 2. Evaluate active sub-phase using wrap-around circular duration rules
       if (selectedEventContext.phases) {
+        // 🚀 BOUNDARY ISOLATION GUARD: Evaluate windows via absolute boundary checks to isolate inverted clock entries from expanding
         for (const phaseKey of [1, 2, 3]) {
           const p = selectedEventContext.phases[phaseKey];
           if (!p) continue;
@@ -182,13 +183,14 @@ const getModularDistance = (from, to) => (to - from + 10080) % 10080;
           const startAbs = getAbsoluteMinutes(p.dayStart, p.timeStart);
           const endAbs = getAbsoluteMinutes(p.dayEnd, p.timeEnd);
 
-          const totalDuration = getModularDistance(startAbs, endAbs);
-          const distanceFromStart = getModularDistance(startAbs, currentAbs);
+          const isPhaseActive = startAbs <= endAbs
+            ? (currentAbs >= startAbs && currentAbs <= endAbs)
+            : (currentAbs >= startAbs || currentAbs <= endAbs);
 
-          if (distanceFromStart <= totalDuration) {
+          if (isPhaseActive) {
             currentPhase = Number(phaseKey);
             activePhaseConfig = p;
-            if (currentPhase === 3) break;
+            break; // 🛡️ FIRST-MATCH SHORT CIRCUIT: Stop evaluation immediately once the current time matches an active phase
           }
         }
       }

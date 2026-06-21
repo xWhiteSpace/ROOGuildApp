@@ -59,6 +59,33 @@ export default function PastAuctionTab() {
     fetchPastAuctionsLog();
   }, []);
 
+  // 📊 SPREADSHEET EXTRACTION ENGINE: Serializes filtered historical matrix datasets directly into a standard text/csv layout
+  const handleDownloadPastAuctionsCSV = () => {
+    if (filteredAuctions.length === 0) return;
+    
+    const csvHeaders = ["Date", "Event Category", "Member Name", "Item Distributed", "Item ID", "Quantity Ordered"];
+    const csvRows = filteredAuctions.map(row => [
+      `"${row.date || ''}"`,
+      `"${row.event || ''}"`,
+      `"${row.mem || ''}"`,
+      `"${row.item || ''}"`,
+      `"${row.itemId || ''}"`,
+      row.quantity || 0
+    ]);
+
+    const csvContent = [csvHeaders.join(","), ...csvRows.map(e => e.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `PastAuctions_DistributionLedger_${new Date().toISOString().slice(0, 10)}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
     const getItemStyleProfile = (itemType, itemId) => {
     const THEME_MAP = {
       purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
@@ -123,9 +150,19 @@ export default function PastAuctionTab() {
     <div className="space-y-4 text-slate-200 select-none font-sans max-w-6xl mx-auto p-4 sm:p-1">
       
       {/* BRANDING PANEL */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md">
-        <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Past Auction Distributions</h1>
-        <p className="text-[11px] font-mono text-slate-500 mt-1">PAST AUCTION HISTORY & FINAL ENTRY ARCHIVES</p>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Past Auction Distributions</h1>
+          <p className="text-[11px] font-mono text-slate-500 mt-1">PAST AUCTION HISTORY & FINAL ENTRY ARCHIVES</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownloadPastAuctionsCSV}
+          disabled={filteredAuctions.length === 0}
+          className="flex items-center gap-1.5 px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-[10px] uppercase font-bold tracking-wider rounded-xl text-slate-400 hover:text-white transition cursor-pointer shadow-sm disabled:opacity-20 select-none shrink-0"
+        >
+          Export Ledger (CSV)
+        </button>
       </div>
 
       {/* LIVE DISCOVERY SEARCH BAR */}

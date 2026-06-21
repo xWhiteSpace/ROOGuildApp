@@ -33,7 +33,11 @@ export default function LeftNavBar() {
     const fetchHelpUrl = async () => {
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
-        const res = await fetch(`${backendUrl}/api/requests/settings/get`);
+        const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
+          headers: {
+            ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {})
+          }
+        });
         const data = await res.json();
         if (data.success && data.config?.helpEmbedUrl) {
           setHelpUrl(data.config.helpEmbedUrl);
