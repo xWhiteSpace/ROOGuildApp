@@ -1,5 +1,4 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import { writeChatMessage } from '../services/chatService.js';
 import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
 
@@ -147,42 +146,6 @@ export async function initializeDiscordBot() {
     }, 60000);
   });
 
-  discordClient.on('messageCreate', async (message) => {
-    const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;
-    if (!auctionChannelId || message.channel.id !== auctionChannelId) {
-      return;
-    }
-
-    if (message.author.bot) {
-      return;
-    }
-
-    let serverDisplayName = message.author.username;
-    try {
-      const member = message.member || await message.guild?.members.fetch(message.author.id);
-      if (member) {
-        serverDisplayName = member.displayName || member.nickname || message.author.username;
-      }
-    } catch (err) {
-      serverDisplayName = message.author.displayName || message.author.username;
-    }
-
-    console.log(`📥 Intercepted Discord Message: [${serverDisplayName}]: ${message.content}`);
-
-    // 🛡️ UNPROTECTED PATH SHIELD: Wrap external database writes to isolate network dropouts from crashing the process
-    try {
-      await writeChatMessage({
-        id: message.id,
-        author: serverDisplayName, 
-        content: message.content,
-        timestamp: message.createdTimestamp,
-        source: 'discord',
-        channelId: message.channel.id,
-      });
-    } catch (dbErr) {
-      console.error("❌ [DATABASE CHAT LOG LOGIC ERROR]: Failed to record message entry row safely:", dbErr.message);
-    }
-  });
-
+  
   await discordClient.login(token);
 }

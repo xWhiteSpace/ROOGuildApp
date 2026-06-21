@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import RequestTab from './pages/RequestTab';
-import LiveBiddingTab from './pages/LiveBiddingTab';
 import MimicBookTab from './pages/MimicBookTab';
 import RequestHistoryTab from './pages/RequestHistoryTab';
 import PastAuctionTab from './pages/PastAuctionTab';
@@ -167,7 +166,6 @@ export default function App() {
         <MainLayout user={authUser} onLogout={handleLogout}>
           <Routes>
             <Route path="/" element={<RequestTab user={authUser} />} />
-            <Route path="/live-bidding" element={<LiveBiddingTab user={authUser} />} />
             <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
             <Route path="/request-history" element={<RequestHistoryTab />} />
             <Route path="/past-auction" element={<PastAuctionTab />} />
