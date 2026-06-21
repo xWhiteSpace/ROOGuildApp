@@ -12,7 +12,6 @@ import cors from 'cors';
 import session from 'express-session';
 import { initializeEnv } from './config/env.js';
 import authRoutes from './auth/discordOAuth.js';
-import chatRoutes from './api/chat.routes.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
@@ -78,7 +77,6 @@ app.use(
 );
 
 app.use('/auth', authRoutes);
-app.use('/api/chat', chatRoutes);
 app.use('/api/requests', requestRoutes);
 
 app.get('/', (req, res) => {

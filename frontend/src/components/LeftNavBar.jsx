@@ -17,7 +17,6 @@ const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" s
 
 const navItems = [
   { label: 'Request', path: '/', icon: IconRequest },
-  { label: 'Live Bidding', path: '/live-bidding', icon: IconLive },
   { label: 'Mimic Book', path: '/mimic-book', icon: IconBook },
   { label: 'Request History', path: '/request-history', icon: IconHistory },
   { label: 'Past Auction', path: '/past-auction', icon: IconPast },

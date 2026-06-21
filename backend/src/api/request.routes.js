@@ -510,7 +510,8 @@ router.get('/init', async (req, res) => {
         }
         const tokenA = a.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
         const tokenB = b.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
-        return tokenA.localeCompare(tokenB);
+        if (tokenA === tokenB) return 0;
+        return tokenA < tokenB ? -1 : 1;
       });
       
       rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.name);
