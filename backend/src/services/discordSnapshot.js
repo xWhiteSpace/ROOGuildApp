@@ -19,6 +19,9 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     const itemsList = dynamicConfig.items || [];
 
     const requestsSnap = await db.ref('auction/web_requests').once('value');
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersData = membersSnap.exists() ? membersSnap.val() : {};
+
     if (!requestsSnap.exists()) {
       console.log("⚠️ [NO ANNOUNCEMENT]: No active auction records logged in database folder.");
       return;
@@ -45,16 +48,20 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
-      if (!userCalculationsMap[reqItemId][player]) {
-        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
+      // Use userId as the absolute tracking key, falling back to name for older unmigrated data
+      const playerTrackingKey = req.userId || player;
+      if (!playerTrackingKey) return;
+
+      if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
+        userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
       }
 
       if (appStatus === 'requested') {
-        userCalculationsMap[reqItemId][player].netQty += qty;
-        userCalculationsMap[reqItemId][player].latestKey = req.id; // Pinpoints the newest request submission time
+        userCalculationsMap[reqItemId][playerTrackingKey].netQty += qty;
+        userCalculationsMap[reqItemId][playerTrackingKey].latestKey = req.id; 
       }
       if (appStatus === 'canceled') {
-        userCalculationsMap[reqItemId][player].netQty -= qty;
+        userCalculationsMap[reqItemId][playerTrackingKey].netQty -= qty;
       }
     });
 
@@ -120,8 +127,13 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
         activeApplicants.forEach((entry, index) => {
           const linePositionLabel = `#${String(index + 1).padStart(2, '0')}`;
           
+          // Resolve name dynamically via the pure numerical user account ID
+          const resolvedDisplayName = (/^\d+$/.test(entry.userId))
+            ? (membersData[entry.userId]?.displayName || entry.name)
+            : entry.name;
+
           // Pad names out to 25 fixed columns to absorb variable string lengths smoothly
-          const paddedName = entry.name.padEnd(27, ' ');
+          const paddedName = resolvedDisplayName.padEnd(27, ' ');
           const paddedQty = `Qty: ${entry.netQty}`.padEnd(6, ' ');
           
           contentSummaryString += `${linePositionLabel}  ${paddedName}  ${paddedQty}  [P: ${entry.priority}]\n`;

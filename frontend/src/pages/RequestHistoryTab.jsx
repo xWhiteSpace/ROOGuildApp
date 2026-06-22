@@ -27,6 +27,8 @@ export default function RequestHistoryTab() {
   const [configItems, setConfigItems] = useState([]); // Dynamic setting collection matrix
   const [authError, setAuthError] = useState(false);
   
+  const [currentUserId, setCurrentUserId] = useState('');
+  
   // --- 🔍 ADVANCED FILTER, SEARCH, AND SORT STATES ---
   const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'mine'
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +58,7 @@ export default function RequestHistoryTab() {
         try {
           const parsedUser = JSON.parse(savedUserSession);
           setCurrentUserName(parsedUser.displayName || parsedUser.username || '');
+          setCurrentUserId(parsedUser.id || '');
           customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
         } catch (e) {
           console.error("Failed to extract cached session criteria:", e.message);
@@ -156,8 +159,10 @@ export default function RequestHistoryTab() {
 
   // 📋 Apply Filtering Matrix Logic
   const filteredRecords = historyData.filter(row => {
-    if (viewFilter === 'mine' && (row.member || '').trim().toLowerCase() !== currentUserName.trim().toLowerCase()) {
-      return false;
+    if (viewFilter === 'mine') {
+      const isMatch = (row.userId && row.userId === currentUserId) || 
+                      ((row.member || '').trim().toLowerCase() === currentUserName.trim().toLowerCase());
+      if (!isMatch) return false;
     }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
