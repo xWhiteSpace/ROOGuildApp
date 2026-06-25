@@ -105,10 +105,10 @@ function verifyDiscordOfficerRole(user, allowedRoles = []) {
  * ⚡ RELATIONAL PRIORITY SCORE ENGINE
  * Tracks historical targets strictly using unchanging relational sequence identifiers (item_001)
  */
-async function calculatePriorityScore(db, playerDisplayName, itemId, itemNameFallback) {
+async function calculatePriorityScore(db, userId, itemId, itemNameFallback) {
   const playerHistorySnap = await db.ref('auction/web_requests')
-    .orderByChild('member')
-    .equalTo(playerDisplayName)
+    .orderByChild('userId')
+    .equalTo(userId)
     .once('value');
 
   if (!playerHistorySnap.exists()) return 0;
@@ -429,7 +429,7 @@ router.get('/init', async (req, res) => {
     });
 
     firebaseRequests.forEach(req => {
-      if ((req.member || '').trim().toLowerCase() === playerLower) {
+      if (req.userId === user.id) {
         const selStatus = (req.selectionStatus || 'pending').toLowerCase();
         const appStatus = (req.applicationStatus || '').toLowerCase();
         
@@ -439,7 +439,6 @@ router.get('/init', async (req, res) => {
           if (found) targetItemId = found.id;
         }
 
-        // ✅ FIXED: Stripped out unauthorized date window filters to adhere strictly to global master pending status policies
         if (selStatus === 'pending' && targetItemId && liveCounts[targetItemId] !== undefined) {
           if (appStatus === 'requested') liveCounts[targetItemId] += req.quantity;
           if (appStatus === 'canceled')  liveCounts[targetItemId] -= req.quantity;
@@ -460,9 +459,11 @@ router.get('/init', async (req, res) => {
     const userCalculationsMap = {};
     itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 
-   // Aggregate user net quantities and handle queue placement states chronologically
+   const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+
+    // Aggregate user net quantities and handle queue placement states chronologically
     firebaseRequests.forEach(req => {
-      if (req.selectionStatus !== 'Pending') return; // ✅ FIXED: Relying exclusively on pending status verification as requested
+      if (req.selectionStatus !== 'Pending') return; 
       
       const player = (req.member || '').trim();
       const qty = parseInt(req.quantity, 10) || 0;
@@ -477,24 +478,26 @@ router.get('/init', async (req, res) => {
 
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
-      if (!userCalculationsMap[reqItemId][player]) {
-        userCalculationsMap[reqItemId][player] = { name: player, netQty: 0, priority: priorityScore, firstKey: null };
+      const playerTrackingKey = req.userId;
+      if (!playerTrackingKey) return;
+
+      const resolvedName = membersData[req.userId]?.displayName || player;
+
+      if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
+        userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: resolvedName, netQty: 0, priority: priorityScore, firstKey: null };
       }
 
       if (appStatus === 'requested') {
-        userCalculationsMap[reqItemId][player].netQty += qty;
-        // 🎟️ TICKET LOCK: Secure original position token permanently on first request entry
-        if (!userCalculationsMap[reqItemId][player].firstKey) {
-          userCalculationsMap[reqItemId][player].firstKey = req.id;
+        userCalculationsMap[reqItemId][playerTrackingKey].netQty += qty;
+        if (!userCalculationsMap[reqItemId][playerTrackingKey].firstKey) {
+          userCalculationsMap[reqItemId][playerTrackingKey].firstKey = req.id;
         }
       }
       if (appStatus === 'canceled') {
-        userCalculationsMap[reqItemId][player].netQty -= qty;
-        
-        // 🚨 TICKET FORFEITURE RULE: If user completely drops to 0, wipe their ticket stub out of memory
-        if (userCalculationsMap[reqItemId][player].netQty <= 0) {
-          userCalculationsMap[reqItemId][player].netQty = 0;
-          userCalculationsMap[reqItemId][player].firstKey = null;
+        userCalculationsMap[reqItemId][playerTrackingKey].netQty -= qty;
+        if (userCalculationsMap[reqItemId][playerTrackingKey].netQty <= 0) {
+          userCalculationsMap[reqItemId][playerTrackingKey].netQty = 0;
+          userCalculationsMap[reqItemId][playerTrackingKey].firstKey = null;
         }
       }
     });
@@ -514,11 +517,11 @@ router.get('/init', async (req, res) => {
         return tokenA < tokenB ? -1 : 1;
       });
       
-      rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.name);
-      
-      activeApplicants.forEach(u => {
-        requestsByItemDetails[item.id][u.name] = { quantity: u.netQty, priority: u.priority };
-      });
+      rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.userId);
+        
+        activeApplicants.forEach(u => {
+          requestsByItemDetails[item.id][u.userId] = { quantity: u.netQty, priority: u.priority };
+        });
     });
 
     return res.json({
@@ -539,7 +542,8 @@ router.get('/init', async (req, res) => {
       events: dynamicConfig.events || {}, // 🛡️ Dynamic Directory Injection: Transmits custom user event configuration definitions
       rankingsByItem,
       requestsByItemDetails,
-      fullRoster: fullRosterArray.sort()
+      fullRoster: fullRosterArray.sort(),
+      members: membersListSnap.exists() ? membersListSnap.val() : {}
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -586,10 +590,9 @@ router.post('/sync-roster', async (req, res) => {
     discordMembers.forEach(member => {
       const finalRosterName = (member.nick || member.user?.global_name || member.user?.username || '').trim();
       
-      if (finalRosterName && finalRosterName !== '???') {
-        const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\[\]]/g, '_');
-        rosterUpdates[`auction/members/${sanitizedFirebaseKey}`] = {
-          displayName: finalRosterName,
+      if (member.user?.id) {
+        rosterUpdates[`auction/members/${member.user.id}`] = {
+          displayName: finalRosterName || member.user.username || 'Unknown Member',
           syncedAt: currentTimestampDate
         };
       }
@@ -638,8 +641,8 @@ router.post('/submit', async (req, res) => {
     const chosenItemIds = Object.keys(selections);
     // 🚀 INDEXED MEMORY OPTIMIZATION: Query only this specific raider's history to minimize processing latency
     const snapshot = await db.ref('auction/web_requests')
-      .orderByChild('member')
-      .equalTo(playerDisplayName)
+      .orderByChild('userId')
+      .equalTo(user.id)
       .once('value');
     const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
     
@@ -647,7 +650,7 @@ router.post('/submit', async (req, res) => {
     itemsList.forEach(item => { currentNetCounts[item.id] = 0; });
 
     firebaseRequests.forEach(req => {
-      if ((req.member || '').trim().toLowerCase() === playerLower && (req.selectionStatus || 'Pending') === 'Pending') {
+      if (req.userId === user.id && (req.selectionStatus || 'Pending') === 'Pending') {
         let targetItemId = req.itemId;
         if (!targetItemId && req.item) {
           const found = itemsList.find(i => i.name === req.item);
@@ -677,13 +680,14 @@ router.post('/submit', async (req, res) => {
         return res.status(422).json({ success: false, error: `Submission rejected: Requested volume for ${resolvedItemObj.name} exceeds the allowed event cap.` });
       }
 
-      const dynamicPriority = await calculatePriorityScore(db, playerDisplayName, itemId, resolvedItemObj.name);
+      const dynamicPriority = await calculatePriorityScore(db, user.id, itemId, resolvedItemObj.name);
       const newRequestRef = db.ref('auction/web_requests').push();
 
       if (delta > 0) {
         // Log an incremental addition transaction record
         await newRequestRef.set({
           id: newRequestRef.key,
+          userId: user.id,
           date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
           member: playerDisplayName,
           item: resolvedItemObj.name, 
@@ -699,6 +703,7 @@ router.post('/submit', async (req, res) => {
         // Log an incremental reduction transaction record
         await newRequestRef.set({
           id: newRequestRef.key,
+          userId: user.id,
           date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
           member: playerDisplayName,
           item: resolvedItemObj.name, 
@@ -744,7 +749,7 @@ router.post('/cancel', async (req, res) => {
     
     let activeNetQty = 0;
     firebaseRequests.forEach(req => {
-      if ((req.member || '').trim().toLowerCase() === playerLower && (req.selectionStatus || 'Pending') === 'Pending') {
+      if (req.userId === user.id && (req.selectionStatus || 'Pending') === 'Pending') {
         let targetItemId = req.itemId;
         if (!targetItemId && req.item) {
           const found = itemsList.find(i => i.name === req.item);
@@ -766,6 +771,7 @@ router.post('/cancel', async (req, res) => {
     const newCancelRef = db.ref('auction/web_requests').push();
     await newCancelRef.set({
       id: newCancelRef.key,
+      userId: user.id,
       date: new Date().toLocaleDateString("en-US", { timeZone: timezone }), 
       member: playerDisplayName,
       item: itemName || itemId,
@@ -789,11 +795,10 @@ router.post('/cancel', async (req, res) => {
         const initialLength = selectedList.length;
         let reclaimedSlotsCount = 0;
 
-        // Strip the player object matching our user out of the allocation array
+        // Strip the slots matching our user's unique ID from the allocation array
         selectedList = selectedList.filter(winner => {
-          const winnerName = typeof winner === 'string' ? winner : (winner?.name || '');
-          if (winnerName.trim().toLowerCase() === playerLower) {
-            reclaimedSlotsCount += typeof winner === 'object' ? (parseInt(winner.slots, 10) || 0) : 0;
+          if (winner === user.id) {
+            reclaimedSlotsCount += 1;
             return false;
           }
           return true;
@@ -851,10 +856,30 @@ router.post('/commit-session', async (req, res) => {
     const firebaseRequests = snapshot.exists() ? snapshot.val() : {};
 
     const itemIds = Object.keys(allocations);
-    const timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
+        let timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
+        
+        // Normalize the frontend's raw HTML5 YYYY-MM-DD picker values down to standard MM/DD/YYYY slashes
+        if (timestampDate && timestampDate.includes('-')) {
+          const dParts = timestampDate.split('-');
+          if (dParts.length === 3 && dParts[0].length === 4) {
+            timestampDate = `${parseInt(dParts[1], 10)}/${parseInt(dParts[2], 10)}/${dParts[0]}`;
+          }
+        }
     
     // 🛡️ ATOMIC TRANSACTION BUNDLE: Consolidate all database actions into a single operational pass
     const atomicUpdates = {};
+
+    const membersListSnap = await db.ref('auction/members').once('value');
+    const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+    const nameToUidMap = {};
+    Object.entries(membersData).forEach(([uid, m]) => {
+      if (m?.displayName) {
+        // Strict Guard: Only map pure numeric Discord Snowflake UIDs
+        if (/^\d+$/.test(uid)) {
+          nameToUidMap[m.displayName.trim().toLowerCase()] = uid;
+        }
+      }
+    });
 
     if (summary) {
       for (const itemKeyId of Object.keys(summary)) {
@@ -881,7 +906,7 @@ router.post('/commit-session', async (req, res) => {
       const { selected = [], absent = [], notSelected = [] } = allocations[targetItemId];
       const resolvedItem = itemsList.find(i => i.id === targetItemId) || { name: targetItemId };
 
-      const keysByMember = {};
+      const keysByTrackingKey = {};
       Object.keys(firebaseRequests).forEach(key => {
         const r = firebaseRequests[key];
         let reqItemId = r.itemId;
@@ -891,28 +916,36 @@ router.post('/commit-session', async (req, res) => {
         }
 
         if (reqItemId === targetItemId && (r.selectionStatus || 'pending').toLowerCase() === 'pending') {
-          if (!keysByMember[r.member]) keysByMember[r.member] = [];
-          keysByMember[r.member].push(key);
+          const tKey = r.userId;
+          if (tKey) {
+            if (!keysByTrackingKey[tKey]) keysByTrackingKey[tKey] = [];
+            keysByTrackingKey[tKey].push(key);
+          }
         }
       });
 
-      for (const name of absent) {
-        const keyList = keysByMember[name] || [];
+      const getKeysForUid = (uid) => {
+        return keysByTrackingKey[uid] || [];
+      };
+
+      for (const uid of absent) {
+        const keyList = getKeysForUid(uid);
         for (const key of keyList) {
           atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'Absent';
         }
       }
 
-      for (const name of notSelected) {
-        const keyList = keysByMember[name] || [];
+      for (const uid of notSelected) {
+        const keyList = getKeysForUid(uid);
         for (const key of keyList) {
           atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'NotSelected';
         }
       }
 
       for (const winner of selected) {
-        const { name, slots } = winner;
-        const keyList = keysByMember[name] || [];
+        const { userId, name, slots } = winner;
+        const keyList = getKeysForUid(userId);
+        const resolvedName = name || membersData[userId]?.displayName || 'Unknown Member';
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];
@@ -930,8 +963,9 @@ router.post('/commit-session', async (req, res) => {
           const newRequestKey = db.ref('auction/web_requests').push().key;
           atomicUpdates[`auction/web_requests/${newRequestKey}`] = {
             id: newRequestKey,
+            userId: userId,
             date: timestampDate,
-            member: name,
+            member: resolvedName,
             item: resolvedItem.name,
             itemId: targetItemId,
             quantity: slots,
@@ -950,7 +984,8 @@ router.post('/commit-session', async (req, res) => {
           item: resolvedItem.name,
           itemId: targetItemId,
           quantity: slots,
-          mem: name
+          userId: userId,
+          mem: resolvedName
         };
       }
     }
@@ -1007,7 +1042,10 @@ router.get('/past-auctions', async (req, res) => {
   try {
     const db = getDatabase();
     const pastAuctionsSnap = await db.ref('auction/past_auctions').once('value');
-    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [] });
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+
+    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [], members: membersMap });
 
     const rawData = pastAuctionsSnap.val();
     const sortedKeys = Object.keys(rawData).sort();
@@ -1018,10 +1056,12 @@ router.get('/past-auctions', async (req, res) => {
       item: rawData[key].item || "", 
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
-      mem: rawData[key].mem || ""
+      userId: rawData[key].userId || "",
+      // Read the historical member name directly from the row's 'mem' attribute fallback
+      mem: rawData[key].mem || "Unknown Member"
     }));
 
-    return res.json({ success: true, history: pastAuctionsArray.reverse() });
+    return res.json({ success: true, history: pastAuctionsArray.reverse(), members: membersMap });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -1039,12 +1079,17 @@ router.get('/request-history', async (req, res) => {
     const historySnap = await db.ref('auction/web_requests').once('value');
     if (!historySnap.exists()) return res.json({ success: true, history: [] });
 
+    // Grab the live presentation directory to resolve past names dynamically
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+
     const rawData = historySnap.val();
     const sortedKeys = Object.keys(rawData).sort();
     const historyArray = sortedKeys.map(key => ({
       id: rawData[key].id || key,
+      userId: rawData[key].userId || "",
       date: rawData[key].date || "",
-      member: rawData[key].member || "",
+      member: rawData[key].member || "Unknown Member",
       item: rawData[key].item || "",
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,

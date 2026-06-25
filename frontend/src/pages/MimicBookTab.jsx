@@ -53,6 +53,25 @@ export default function MimicBookTab({ user }) {
     setIsAdminMode(isOfficer);
   }, [user, isOfficer]);
 
+const [rawMembers, setRawMembers] = useState({});
+
+  // Builds an internal lowercase lookup map for dragging text name assignments safely
+  const nameToUidMap = {};
+  Object.entries(rawMembers).forEach(([uid, m]) => {
+    if (m?.displayName) {
+      nameToUidMap[m.displayName.trim().toLowerCase()] = uid;
+    }
+  });
+
+  const resolveDisplayName = (value) => {
+    if (!value) return '';
+    // If the database value is a pure numeric UID string, pull its live display name from the map
+    if (/^\d+$/.test(value)) {
+      return rawMembers[value]?.displayName || value;
+    }
+    return value;
+  };
+
 // 🔄 REAL-TIME GEOMETRIC CALCULATION ENGINE: Derives book layout positions from the Single Source of Truth
   useEffect(() => {
     if (!items || items.length === 0) return;
@@ -129,6 +148,7 @@ export default function MimicBookTab({ user }) {
         setRankingsByItem(data.rankingsByItem || {});
         setRequestsByItemDetails(data.requestsByItemDetails || {});
         setMasterGuildRoster(data.fullRoster || []);
+        setRawMembers(data.members || {});
         // 🛡️ Payload Alignment Pass: Cache dynamic custom event titles natively to unlock modular dropdown loops
       if (data.events) {
         setAvailableEvents(data.events);
@@ -497,7 +517,11 @@ export default function MimicBookTab({ user }) {
     if (!isAdminMode || !isOfficer) return;
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
-    updatedSelected[slotIndex] = playerName;
+    
+    // Since Standby lists now pass pure UIDs directly, map to UID only if coming from Full Roster tab
+  const targetUid = sidebarTab === 'standby' ? playerName : (nameToUidMap[playerName.trim().toLowerCase()] || playerName);
+  updatedSelected[slotIndex] = targetUid;
+    
     saveWorkspaceState({ categoryAllocations: { ...categoryAllocations, [activeMatrixFilter]: { selected: updatedSelected } } });
   };
 
@@ -540,19 +564,19 @@ export default function MimicBookTab({ user }) {
 
       const processedAllocations = {};
       Object.keys(categoryAllocations).forEach(cat => {
-        const boxEntries = categoryAllocations[cat].selected || [];
-        const verifiedWinnersList = boxEntries.filter(name => name !== "");
+        const boxEntries = (categoryAllocations[cat].selected || []).filter(val => val !== "");
         
         const initialWinnersList = initialWinnersByItem[cat] || [];
-        const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
+        const absentList = initialWinnersList.filter(uid => !boxEntries.includes(uid));
 
         const masterList = rankingsByItem[cat] || [];
-        const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n) && !absentList.includes(n));
+        const nonWinners = masterList.filter(uid => !boxEntries.includes(uid) && !absentList.includes(uid));
         
-        const uniqueWinners = [...new Set(verifiedWinnersList)];
-        const selectedPayload = uniqueWinners.map(name => ({
-          name,
-          slots: verifiedWinnersList.filter(n => n === name).length
+        const uniqueWinners = [...new Set(boxEntries)];
+        const selectedPayload = uniqueWinners.map(uid => ({
+          userId: uid,
+          name: resolveDisplayName(uid),
+          slots: boxEntries.filter(n => n === uid).length
         }));
 
         processedAllocations[cat] = {
@@ -675,16 +699,16 @@ export default function MimicBookTab({ user }) {
   const activeSelectedList = Array.isArray(currentActiveSelections.selected)
     ? currentActiveSelections.selected
     : Object.values(currentActiveSelections.selected || {});
-  const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
-    const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === name).length;
+  const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(uid => {
+    const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[uid]?.quantity || 1;
+    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === uid).length;
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
   const sidebarFilteredRosterList = masterGuildRoster.filter(name => {
     const currentItemObj = items.find(i => i.id === activeMatrixFilter);
     const maxRowLimit = currentItemObj ? (currentItemObj.limitQty || 1) : 1;
-    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === name).length;
+    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => resolveDisplayName(n) === name).length;
     return name.toLowerCase().includes(sidebarSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
   });
 
@@ -973,7 +997,7 @@ export default function MimicBookTab({ user }) {
                             </span>
                             <div className="truncate text-slate-400 select-none font-sans font-semibold flex items-center gap-2">
                               <span className="text-slate-700 font-mono font-normal">☰</span> 
-                              <span className="text-slate-200 truncate">{name}</span>
+                              <span className="text-slate-200 truncate">{resolveDisplayName(name)}</span>
                             </div>
                           </div>
                           <button 
@@ -1033,7 +1057,9 @@ export default function MimicBookTab({ user }) {
                         onDragEnd={() => { isUserDraggingRef.current = false; }} 
                         className="flex items-center justify-between p-2.5 px-3.5 rounded-xl border border-slate-800/80 bg-slate-900/20 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/40 transition-colors"
                       >
-                        <span className="truncate text-slate-300 font-sans font-semibold text-xs select-none">{name}</span>
+                        <span className="truncate text-slate-300 font-sans font-semibold text-xs select-none">
+                          {sidebarTab === 'standby' ? resolveDisplayName(name) : name}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1207,7 +1233,8 @@ export default function MimicBookTab({ user }) {
                 }
 
                 const profile = getItemStyleProfile(slot.itemType);
-                const isTargetOwner = user && slot.name.toLowerCase() === currentUserName.toLowerCase();
+                const slotDisplayName = resolveDisplayName(slot.name);
+                const isTargetOwner = user && (slot.name === user?.id || slotDisplayName.toLowerCase() === currentUserName.toLowerCase());
                 const spotlightActive = viewLens === 'MINE' && isTargetOwner;
 
                 return (
@@ -1230,10 +1257,10 @@ export default function MimicBookTab({ user }) {
                       {slot.name === "" ? (
                         <span className="inline-flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider font-mono font-semibold text-slate-500 select-none w-full">
                           <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" strokeDasharray="3 3"/></svg>
-                          Unassigned
+                          Available
                         </span>
                       ) : (
-                        <span className="text-slate-300">{slot.name}</span>
+                        <span className="text-slate-300">{slotDisplayName}</span>
                       )}
                     </div>
                   </div>
@@ -1289,21 +1316,25 @@ export default function MimicBookTab({ user }) {
                     if (viewLens === 'ALL') {
                       items.forEach(item => {
                         const standbyList = rankingsByItem[item.id] || [];
-                        const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "");
+                        const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "").map(uid => resolveDisplayName(uid));
                         
-                        standbyList.forEach(name => {
-                          if (!winnersInCat.includes(name)) {
-                            rowsToDisplay.push({ name, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
+                        standbyList.forEach(uid => {
+                          const resolvedName = resolveDisplayName(uid);
+                          if (!winnersInCat.includes(resolvedName)) {
+                            rowsToDisplay.push({ name: uid, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
                           }
                         });
                       });
                     }
 
                     if (viewLens === 'MINE') {
-                      rowsToDisplay = rowsToDisplay.filter(r => r.name.toLowerCase() === currentUserName.toLowerCase());
+                      rowsToDisplay = rowsToDisplay.filter(r => {
+                        const rName = resolveDisplayName(r.name);
+                        return r.name === user?.id || rName.toLowerCase() === currentUserName.toLowerCase();
+                      });
                       if (rowsToDisplay.length === 0) {
                         items.forEach(item => {
-                          const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "");
+                          const winnersInCat = (categoryAllocations[item.id]?.selected || []).map(n => resolveDisplayName(n));
                           if (!winnersInCat.includes(currentUserName) && (rankingsByItem[item.id] || []).includes(currentUserName)) {
                             rowsToDisplay.push({ name: currentUserName, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
                           }
@@ -1313,12 +1344,16 @@ export default function MimicBookTab({ user }) {
 
                     if (searchQuery) {
                       const q = searchQuery.toLowerCase();
-                      rowsToDisplay = rowsToDisplay.filter(r => r.name.toLowerCase().includes(q) || r.itemName.toLowerCase().includes(q));
+                      rowsToDisplay = rowsToDisplay.filter(r => {
+                        const dispName = resolveDisplayName(r.name);
+                        return dispName.toLowerCase().includes(q) || r.itemName.toLowerCase().includes(q);
+                      });
                     }
                     if (rowsToDisplay.length === 0) return <tr><td colSpan="3" className="p-8 text-center text-slate-500 font-sans italic text-xs select-none">No entries match your spotlight filters.</td></tr>;
 
                     return rowsToDisplay.map((row, index) => {
-                      const isSelf = user && row.name.toLowerCase() === currentUserName.toLowerCase();
+                      const rowDisplayName = resolveDisplayName(row.name);
+                      const isSelf = user && (row.name === user?.id || rowDisplayName.toLowerCase() === currentUserName.toLowerCase());
                       const isSelected = row.status === 'Selected';
                       return (
                         <tr key={index} onClick={() => { if (typeof row.page === 'number') setBookCurrentPage(row.page); }} className={`group hover:bg-slate-900/40 transition-all cursor-pointer ${isSelf ? 'bg-indigo-950/10 font-bold' : ''} ${!isSelected ? 'opacity-30 text-slate-500' : ''}`} >
@@ -1334,7 +1369,7 @@ export default function MimicBookTab({ user }) {
                                   Available
                                 </span>
                               ) : (
-                                row.name
+                                rowDisplayName
                               )}
                             </span>
                           </td>
