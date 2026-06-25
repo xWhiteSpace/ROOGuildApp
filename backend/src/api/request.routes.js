@@ -478,13 +478,13 @@ router.get('/init', async (req, res) => {
 
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
-      const playerTrackingKey = req.userId || player;
+      const playerTrackingKey = req.userId;
       if (!playerTrackingKey) return;
 
       const resolvedName = membersData[req.userId]?.displayName || player;
 
       if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
-        userCalculationsMap[reqItemId][playerTrackingKey] = { name: resolvedName, netQty: 0, priority: priorityScore, firstKey: null };
+        userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: resolvedName, netQty: 0, priority: priorityScore, firstKey: null };
       }
 
       if (appStatus === 'requested') {
@@ -517,11 +517,11 @@ router.get('/init', async (req, res) => {
         return tokenA < tokenB ? -1 : 1;
       });
       
-      rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.name);
-      
-      activeApplicants.forEach(u => {
-        requestsByItemDetails[item.id][u.name] = { quantity: u.netQty, priority: u.priority };
-      });
+      rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.userId);
+        
+        activeApplicants.forEach(u => {
+          requestsByItemDetails[item.id][u.userId] = { quantity: u.netQty, priority: u.priority };
+        });
     });
 
     return res.json({
@@ -856,7 +856,15 @@ router.post('/commit-session', async (req, res) => {
     const firebaseRequests = snapshot.exists() ? snapshot.val() : {};
 
     const itemIds = Object.keys(allocations);
-    const timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
+        let timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
+        
+        // Normalize the frontend's raw HTML5 YYYY-MM-DD picker values down to standard MM/DD/YYYY slashes
+        if (timestampDate && timestampDate.includes('-')) {
+          const dParts = timestampDate.split('-');
+          if (dParts.length === 3 && dParts[0].length === 4) {
+            timestampDate = `${parseInt(dParts[1], 10)}/${parseInt(dParts[2], 10)}/${dParts[0]}`;
+          }
+        }
     
     // 🛡️ ATOMIC TRANSACTION BUNDLE: Consolidate all database actions into a single operational pass
     const atomicUpdates = {};
@@ -908,7 +916,7 @@ router.post('/commit-session', async (req, res) => {
         }
 
         if (reqItemId === targetItemId && (r.selectionStatus || 'pending').toLowerCase() === 'pending') {
-          const tKey = r.userId || (r.member ? r.member.trim().toLowerCase() : null);
+          const tKey = r.userId;
           if (tKey) {
             if (!keysByTrackingKey[tKey]) keysByTrackingKey[tKey] = [];
             keysByTrackingKey[tKey].push(key);
@@ -916,33 +924,28 @@ router.post('/commit-session', async (req, res) => {
         }
       });
 
-      const getKeysForName = (inputName) => {
-        if (!inputName) return [];
-        const normalized = inputName.trim().toLowerCase();
-        const mappedUid = nameToUidMap[normalized];
-        if (mappedUid && keysByTrackingKey[mappedUid]) {
-          return keysByTrackingKey[mappedUid];
-        }
-        return keysByTrackingKey[normalized] || [];
+      const getKeysForUid = (uid) => {
+        return keysByTrackingKey[uid] || [];
       };
 
-      for (const name of absent) {
-        const keyList = getKeysForName(name);
+      for (const uid of absent) {
+        const keyList = getKeysForUid(uid);
         for (const key of keyList) {
           atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'Absent';
         }
       }
 
-      for (const name of notSelected) {
-        const keyList = getKeysForName(name);
+      for (const uid of notSelected) {
+        const keyList = getKeysForUid(uid);
         for (const key of keyList) {
           atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'NotSelected';
         }
       }
 
       for (const winner of selected) {
-        const { name, slots } = winner;
-        const keyList = getKeysForName(name);
+        const { userId, name, slots } = winner;
+        const keyList = getKeysForUid(userId);
+        const resolvedName = name || membersData[userId]?.displayName || 'Unknown Member';
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];
@@ -958,12 +961,11 @@ router.post('/commit-session', async (req, res) => {
           }
         } else {
           const newRequestKey = db.ref('auction/web_requests').push().key;
-          const mappedUid = nameToUidMap[name.trim().toLowerCase()] || null;
           atomicUpdates[`auction/web_requests/${newRequestKey}`] = {
             id: newRequestKey,
-            userId: mappedUid, // Relational lookup mapping link secured
+            userId: userId,
             date: timestampDate,
-            member: name,
+            member: resolvedName,
             item: resolvedItem.name,
             itemId: targetItemId,
             quantity: slots,
@@ -982,7 +984,8 @@ router.post('/commit-session', async (req, res) => {
           item: resolvedItem.name,
           itemId: targetItemId,
           quantity: slots,
-          mem: name
+          userId: userId,
+          mem: resolvedName
         };
       }
     }
@@ -1039,7 +1042,10 @@ router.get('/past-auctions', async (req, res) => {
   try {
     const db = getDatabase();
     const pastAuctionsSnap = await db.ref('auction/past_auctions').once('value');
-    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [] });
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+
+    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [], members: membersMap });
 
     const rawData = pastAuctionsSnap.val();
     const sortedKeys = Object.keys(rawData).sort();
@@ -1050,10 +1056,12 @@ router.get('/past-auctions', async (req, res) => {
       item: rawData[key].item || "", 
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,
-      mem: rawData[key].mem || ""
+      userId: rawData[key].userId || "",
+      // Read the historical member name directly from the row's 'mem' attribute fallback
+      mem: rawData[key].mem || "Unknown Member"
     }));
 
-    return res.json({ success: true, history: pastAuctionsArray.reverse() });
+    return res.json({ success: true, history: pastAuctionsArray.reverse(), members: membersMap });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -1071,12 +1079,17 @@ router.get('/request-history', async (req, res) => {
     const historySnap = await db.ref('auction/web_requests').once('value');
     if (!historySnap.exists()) return res.json({ success: true, history: [] });
 
+    // Grab the live presentation directory to resolve past names dynamically
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+
     const rawData = historySnap.val();
     const sortedKeys = Object.keys(rawData).sort();
     const historyArray = sortedKeys.map(key => ({
       id: rawData[key].id || key,
+      userId: rawData[key].userId || "",
       date: rawData[key].date || "",
-      member: rawData[key].member || "",
+      member: rawData[key].member || "Unknown Member",
       item: rawData[key].item || "",
       itemId: rawData[key].itemId || "",
       quantity: parseInt(rawData[key].quantity, 10) || 0,

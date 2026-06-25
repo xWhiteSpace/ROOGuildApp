@@ -160,8 +160,7 @@ export default function RequestHistoryTab() {
   // 📋 Apply Filtering Matrix Logic
   const filteredRecords = historyData.filter(row => {
     if (viewFilter === 'mine') {
-      const isMatch = (row.userId && row.userId === currentUserId) || 
-                      ((row.member || '').trim().toLowerCase() === currentUserName.trim().toLowerCase());
+      const isMatch = row.userId === currentUserId;
       if (!isMatch) return false;
     }
     if (searchQuery.trim()) {

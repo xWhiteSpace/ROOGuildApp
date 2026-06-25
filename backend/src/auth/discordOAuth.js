@@ -143,6 +143,13 @@ router.get('/callback', async (req, res) => {
       roles: memberRolesNames
     };
 
+    const systemTimezone = configSnap.exists() ? (configSnap.val().timezone || "Asia/Manila") : "Asia/Manila";
+
+    await db.ref(`auction/members/${user.id}`).set({
+      displayName: serverNickname,
+      syncedAt: new Date().toLocaleDateString("en-US", { timeZone: systemTimezone })
+    });
+
     // 🔒 SIGNATURE ENGINE: Hash the user data layout using your private client secret to create a secure token
     const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
     const computedPayloadHash = crypto

@@ -518,9 +518,9 @@ const [rawMembers, setRawMembers] = useState({});
     const currentData = categoryAllocations[activeMatrixFilter] || { selected: [] };
     const updatedSelected = [...currentData.selected];
     
-    // Convert human name text parameters to pure numeric Discord UIDs internally
-    const targetUid = nameToUidMap[playerName.trim().toLowerCase()] || playerName;
-    updatedSelected[slotIndex] = targetUid;
+    // Since Standby lists now pass pure UIDs directly, map to UID only if coming from Full Roster tab
+  const targetUid = sidebarTab === 'standby' ? playerName : (nameToUidMap[playerName.trim().toLowerCase()] || playerName);
+  updatedSelected[slotIndex] = targetUid;
     
     saveWorkspaceState({ categoryAllocations: { ...categoryAllocations, [activeMatrixFilter]: { selected: updatedSelected } } });
   };
@@ -564,19 +564,19 @@ const [rawMembers, setRawMembers] = useState({});
 
       const processedAllocations = {};
       Object.keys(categoryAllocations).forEach(cat => {
-        const boxEntries = categoryAllocations[cat].selected || [];
-        const verifiedWinnersList = boxEntries.filter(val => val !== "").map(uid => resolveDisplayName(uid));
+        const boxEntries = (categoryAllocations[cat].selected || []).filter(val => val !== "");
         
         const initialWinnersList = initialWinnersByItem[cat] || [];
-        const absentList = initialWinnersList.filter(name => !verifiedWinnersList.includes(name));
+        const absentList = initialWinnersList.filter(uid => !boxEntries.includes(uid));
 
         const masterList = rankingsByItem[cat] || [];
-        const nonWinners = masterList.filter(n => !verifiedWinnersList.includes(n) && !absentList.includes(n));
+        const nonWinners = masterList.filter(uid => !boxEntries.includes(uid) && !absentList.includes(uid));
         
-        const uniqueWinners = [...new Set(verifiedWinnersList)];
-        const selectedPayload = uniqueWinners.map(name => ({
-          name,
-          slots: verifiedWinnersList.filter(n => n === name).length
+        const uniqueWinners = [...new Set(boxEntries)];
+        const selectedPayload = uniqueWinners.map(uid => ({
+          userId: uid,
+          name: resolveDisplayName(uid),
+          slots: boxEntries.filter(n => n === uid).length
         }));
 
         processedAllocations[cat] = {
@@ -699,9 +699,9 @@ const [rawMembers, setRawMembers] = useState({});
   const activeSelectedList = Array.isArray(currentActiveSelections.selected)
     ? currentActiveSelections.selected
     : Object.values(currentActiveSelections.selected || {});
-  const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(name => {
-    const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[name]?.quantity || 1;
-    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => resolveDisplayName(n) === name).length;
+  const activeStandbyPoolList = (rankingsByItem[activeMatrixFilter] || []).filter(uid => {
+    const totalUserRequestedVolume = requestsByItemDetails[activeMatrixFilter]?.[uid]?.quantity || 1;
+    const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => n === uid).length;
     return currentAllocatedVolumeAcrossGrid < totalUserRequestedVolume; 
   });
 
@@ -1057,7 +1057,9 @@ const [rawMembers, setRawMembers] = useState({});
                         onDragEnd={() => { isUserDraggingRef.current = false; }} 
                         className="flex items-center justify-between p-2.5 px-3.5 rounded-xl border border-slate-800/80 bg-slate-900/20 text-xs font-mono cursor-grab active:cursor-grabbing hover:border-slate-700 hover:bg-slate-900/40 transition-colors"
                       >
-                        <span className="truncate text-slate-300 font-sans font-semibold text-xs select-none">{name}</span>
+                        <span className="truncate text-slate-300 font-sans font-semibold text-xs select-none">
+                          {sidebarTab === 'standby' ? resolveDisplayName(name) : name}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1316,9 +1318,10 @@ const [rawMembers, setRawMembers] = useState({});
                         const standbyList = rankingsByItem[item.id] || [];
                         const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "").map(uid => resolveDisplayName(uid));
                         
-                        standbyList.forEach(name => {
-                          if (!winnersInCat.includes(name)) {
-                            rowsToDisplay.push({ name, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
+                        standbyList.forEach(uid => {
+                          const resolvedName = resolveDisplayName(uid);
+                          if (!winnersInCat.includes(resolvedName)) {
+                            rowsToDisplay.push({ name: uid, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
                           }
                         });
                       });

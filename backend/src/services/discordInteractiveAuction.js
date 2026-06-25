@@ -50,7 +50,7 @@ function computeVirtualMatrix(items, categoryAllocations, qtyPerPage = 4, member
  * 🛰️ HELPER: Dynamically generates the real-time personal ledger claim summary text block
  */
 function compileUserClaimsSummary(virtualMatrix, userId, finalRosterName) {
-  const matchingClaims = virtualMatrix.filter(slot => slot.uid === userId || (slot.name && slot.name.toLowerCase() === finalRosterName.toLowerCase()));
+  const matchingClaims = virtualMatrix.filter(slot => slot.uid === userId );
 
   if (matchingClaims.length === 0) {
     return `📦 **YOUR REQUEST LIST SUMMARY**:\n*• No item slot coordinates secured yet during this session.*`;
@@ -187,7 +187,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const membersMap = membersSnap.exists() ? membersSnap.val() : {};
 
   const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage, membersMap);
-  const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && (s.uid === interaction.user.id || s.name.toLowerCase() === finalRosterName.toLowerCase())).length;
+  const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
 
   // Build functional buttons using the index location inside categoryAllocations list maps
   const rawButtonsArray = [];
@@ -377,7 +377,7 @@ export async function handleAuctionInteraction(interaction) {
       const gateDetails = getGateStatusDetails() || {};
       const activeEventObj = updatedConfigSnap.val().events?.[gateDetails.activeEventId];
       const maxAllowedLimit = activeEventObj?.loots && activeEventObj.loots[itemId] !== undefined ? activeEventObj.loots[itemId] : 0;
-      const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && (s.uid === interaction.user.id || s.name.toLowerCase() === finalRosterName.toLowerCase())).length;
+      const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
 
       if (userClaimedCount >= maxAllowedLimit) {
         // 🚪 LIMIT EXHAUSTED KICKBACK: Auto-transfer them back to categories menu with a comprehensive notice

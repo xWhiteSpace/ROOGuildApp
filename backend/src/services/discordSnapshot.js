@@ -48,13 +48,13 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
       if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
 
-      // Use userId as the absolute tracking key, falling back to name for older unmigrated data
-      const playerTrackingKey = req.userId || player;
-      if (!playerTrackingKey) return;
+      // Enforce absolute tracking exclusively via the unfailing platform userId
+          const playerTrackingKey = req.userId;
+          if (!playerTrackingKey) return;
 
-      if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
-        userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
-      }
+          if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
+            userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
+          }
 
       if (appStatus === 'requested') {
         userCalculationsMap[reqItemId][playerTrackingKey].netQty += qty;

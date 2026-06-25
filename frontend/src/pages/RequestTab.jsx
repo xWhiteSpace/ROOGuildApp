@@ -33,6 +33,8 @@ export default function RequestTab() {
   const [phaseIntervals, setPhaseIntervals] = useState({ phase1: '', phase2: '', phase3: '' });
   const [activeListTab, setActiveListTab] = useState('');
 
+  const [members, setMembers] = useState({});
+
   const initLobbyDashboard = async () => {
     try {
       setLoading(true);
@@ -73,6 +75,8 @@ export default function RequestTab() {
         if (data.currentPhase !== undefined) setCurrentPhase(data.currentPhase);
         if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
         if (data.phaseIntervals) setPhaseIntervals(data.phaseIntervals);
+
+        if (data.members) setMembers(data.members);
 
         // Dynamically initialize selection baskets and tabs based on database IDs
         const blankInputs = {};
@@ -335,11 +339,12 @@ export default function RequestTab() {
               ) : (
                 currentRosterList.map((playerName, index) => {
                   const positionLabel = String(index + 1).padStart(2, '0');
+                  const resolvedDisplayName = members[playerName]?.displayName || playerName;
                   return (
                     <div key={playerName} className="flex items-center justify-between bg-slate-950/30 border border-slate-900/40 px-3 py-2 rounded-xl text-xs hover:border-slate-800 hover:bg-slate-950/80 transition-colors">
                       <span className="text-slate-300 font-sans font-medium flex items-center gap-2.5">
                         <span className="text-slate-600 font-mono font-bold text-[11px]">#{positionLabel}</span>
-                        {playerName}
+                        {resolvedDisplayName}
                       </span>
                     </div>
                   );
