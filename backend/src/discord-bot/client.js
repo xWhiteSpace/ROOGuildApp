@@ -149,5 +149,12 @@ export async function initializeDiscordBot() {
   });
 
   
-  await discordClient.login(token);
+  try {
+    console.log("⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...");
+    await discordClient.login(token);
+  } catch (loginErr) {
+    console.error("🛑 [DISCORD BOT GATEWAY EXCEPTION]:");
+    console.error(`   Error Message: ${loginErr.message}`);
+    console.error(`   Error Code: ${loginErr.code || 'N/A'}`);
+  }
 }
