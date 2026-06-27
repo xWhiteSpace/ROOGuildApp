@@ -31,11 +31,15 @@ const app = express();
 
 app.set('trust proxy', 1);
 
+const rawFrontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+const sanitizedFrontendUrl = rawFrontendUrl.replace(/\/$/, '');
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL, 
+  sanitizedFrontendUrl,
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://dynasty-guild-frontend-staging.vercel.app'
+  'https://dynasty-guild-frontend-staging.vercel.app',
+  'https://dynasty-guild-frontend.vercel.app'
 ];
 
 // 📡 PRODUCTION HARDENED EXPLICIT CORS WHITELIST FOR MULTI-HOST HANDSHAKES

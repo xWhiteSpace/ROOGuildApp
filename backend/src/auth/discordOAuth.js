@@ -98,7 +98,11 @@ router.get('/callback', async (req, res) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
-    if (!tokenResponse.ok) throw new Error('Token exchange failed');
+    if (!tokenResponse.ok) {
+      const errorPayload = await tokenResponse.json().catch(() => ({}));
+      console.error("🛑 [DISCORD OAUTH EXCEPTION DETAILS]:", JSON.stringify(errorPayload, null, 2));
+      throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || tokenResponse.statusText}`);
+    }
 
     const tokenData = await tokenResponse.json();
     const userResponse = await fetch(`${discordApi}/users/@me`, {
