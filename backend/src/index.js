@@ -96,6 +96,9 @@ app.get('/api/deploy-auction-card', async (req, res) => {
       return res.status(400).send("❌ Failure: System missing the structural DISCORD_AUCREQ_CHANNEL_ID environment setup.");
     }
 
+    if (!discordClient || !discordClient.isReady()) {
+      return res.status(503).send("❌ Failure: Discord bot client is currently offline or rate-limited. Wait for gateway initialization to finish before running this route.");
+    }
     const targetChannel = await discordClient.channels.fetch(channelId);
     if (!targetChannel) {
       return res.status(404).send("❌ Failure: Discord gateway client failed to locate matching server channel pointer.");
