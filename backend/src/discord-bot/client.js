@@ -74,7 +74,9 @@ export async function initializeDiscordBot() {
         const trueHours = parseInt(timeObj.hour, 10) % 24;
         const trueMinutes = parseInt(timeObj.minute, 10);
 
-        const dayOfWeek = new Date(year, month, day).getDay();
+        const weekdayStr = new Intl.DateTimeFormat('en-US', { timeZone: targetTimezone, weekday: 'short' }).format(now);
+        const shortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const dayOfWeek = shortNames.indexOf(weekdayStr) >= 0 ? shortNames.indexOf(weekdayStr) : 0;
         const currentAbs = (dayOfWeek * 1440) + (trueHours * 60) + trueMinutes;
 
         // 🛰️ SECURE CHANNEL SEPARATION: Pull distinct channel pointers from environment files
@@ -85,7 +87,7 @@ export async function initializeDiscordBot() {
 
         // 🛡️ DRIFT-PROOF TRACKING MATRIX: Initialize tracker or scan historical intervals to protect against skipped ticks
         if (typeof global.lastProcessedAbs === 'undefined') {
-          global.lastProcessedAbs = currentAbs;
+          global.lastProcessedAbs = (currentAbs - 1 + 10080) % 10080;
         }
 
         const minutesToCheck = [];
@@ -101,8 +103,8 @@ export async function initializeDiscordBot() {
         // Evaluate the sequential backfill timeline step-by-step
         for (const minuteCode of minutesToCheck) {
           if (phase1.includes(minuteCode)) {
-            if (aucreqChannelId) {
-              const reqChannel = await discordClient.channels.fetch(aucreqChannelId).catch(() => null);
+            if (auctionChannelId) {
+              const reqChannel = await discordClient.channels.fetch(auctionChannelId).catch(() => null);
               if (reqChannel && reqChannel.isTextBased()) {
                 await reqChannel.send(`📢 **${status.eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`);
               }
@@ -113,8 +115,8 @@ export async function initializeDiscordBot() {
             await processAndPostDiscordSnapshot(false).catch(() => {});
           }
           if (minuteCode === phase2) {
-            if (aucreqChannelId) {
-              const reqChannel = await discordClient.channels.fetch(aucreqChannelId).catch(() => null);
+            if (auctionChannelId) {
+              const reqChannel = await discordClient.channels.fetch(auctionChannelId).catch(() => null);
               if (reqChannel && reqChannel.isTextBased()) {
                 await reqChannel.send(`🔒 **${status.eventName} Registration Locked**:\nSubmissions are now closed! Bidding selections are frozen for list allocation processing by Management Officers.`);
               }
