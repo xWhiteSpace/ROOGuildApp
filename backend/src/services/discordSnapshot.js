@@ -22,12 +22,8 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     const membersSnap = await db.ref('auction/members').once('value');
     const membersData = membersSnap.exists() ? membersSnap.val() : {};
 
-    if (!requestsSnap.exists()) {
-      console.log("⚠️ [NO ANNOUNCEMENT]: No active auction records logged in database folder.");
-      return;
-    }
-
-    const firebaseRequests = Object.values(requestsSnap.val());
+    console.log(`📊 [SNAPSHOT ENGINE]: Compiling active scoreboard layouts for target event.`);
+    const firebaseRequests = requestsSnap.exists() ? Object.values(requestsSnap.val()) : [];
     const userCalculationsMap = {};
     itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 

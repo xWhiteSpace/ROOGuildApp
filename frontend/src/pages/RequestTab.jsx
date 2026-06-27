@@ -15,7 +15,7 @@ const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" s
 const IconCycle = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67"/></svg>;
 const IconTarget = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>;
 
-export default function RequestTab() {
+export default function RequestTab({ user }) {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState({ name: '', date: '', eventId: '', eventName: '' });
   const [items, setItems] = useState([]);
@@ -93,7 +93,7 @@ export default function RequestTab() {
 
   useEffect(() => {
     initLobbyDashboard();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (items.length > 0) {

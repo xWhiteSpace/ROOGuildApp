@@ -8,7 +8,9 @@ export function initializeEnv() {
     'FIREBASE_PROJECT_ID',
     'FIREBASE_CLIENT_EMAIL',
     'FIREBASE_PRIVATE_KEY',
-    'FIREBASE_DATABASE_URL'
+    'FIREBASE_DATABASE_URL',
+    'DISCORD_AUCREQ_CHANNEL_ID',
+    'DISCORD_AUCTION_CHANNEL_ID'
   ];
 
   const missing = required.filter((key) => !process.env[key]);
