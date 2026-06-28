@@ -2,6 +2,15 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
 
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
+
+// 📡 GLOBAL NETWORK TUNNEL OVERRIDE — IMMUNE TO DATACENTER IP BLOCKS
+if (process.env.PROXY_URL) {
+  console.log("🔒 [NETWORKING]: Routing global HTTP/HTTPS engines through secure proxy tunnel...");
+  const proxyAgent = new ProxyAgent({ uri: process.env.PROXY_URL });
+  setGlobalDispatcher(proxyAgent);
+}
+
 export const discordClient = new Client({
   intents: [
     GatewayIntentBits.Guilds, 
