@@ -149,6 +149,26 @@ export async function initializeDiscordBot() {
   });
 
   
+  // 📡 DYNAMIC PRE-FLIGHT ROUTE TELEMETRY PROBE
+  try {
+    console.log("🔍 [DISCORD PROBE]: Testing raw network path visibility to Discord edge routers...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // Strict 6-second hard socket cutoff
+
+    const probeResponse = await fetch("https://discord.com/api/v10/gateway", {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+
+    console.log(`📡 [DISCORD PROBE RAW RESULT]: HTTP Status ${probeResponse.status} (${probeResponse.statusText})`);
+    const bodyText = await probeResponse.text();
+    console.log(`📄 [DISCORD PROBE BODY SNIPPET]: ${bodyText.slice(0, 250)}`);
+  } catch (probeErr) {
+    console.error("🛑 [DISCORD PROBE CRITICAL FAULT]: Raw network route is heavily rate-limited or tarpitted.");
+    console.error(`   Error Reason: ${probeErr.message}`);
+  }
+
   try {
     console.log("⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...");
     await discordClient.login(token);
