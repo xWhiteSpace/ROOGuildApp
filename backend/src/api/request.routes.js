@@ -158,10 +158,16 @@ let isMatch = false;
   }
 
   let priorityPoints = 0;
+  const countedDates = new Set();
   const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
   for (let i = searchStart; i < combinedItemTimeline.length; i++) {
-    if (combinedItemTimeline[i] === 'notselected') {
+    const recordKey = sortedKeys[i];
+    const rawRecord = records[recordKey];
+    const uniqueNightKey = rawRecord.date || rawRecord.eventDate;
+
+    if (combinedItemTimeline[i] === 'notselected' && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
       priorityPoints++;
+      countedDates.add(uniqueNightKey);
     }
   }
 
@@ -455,74 +461,12 @@ router.get('/init', async (req, res) => {
         if (m?.displayName) fullRosterArray.push(m.displayName);
       });
     }
-
-    const userCalculationsMap = {};
-    itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
-
-   const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
-
-    // Aggregate user net quantities and handle queue placement states chronologically
-    firebaseRequests.forEach(req => {
-      if (req.selectionStatus !== 'Pending') return; 
-      
-      const player = (req.member || '').trim();
-      const qty = parseInt(req.quantity, 10) || 0;
-      const appStatus = (req.applicationStatus || 'requested').toLowerCase();
-      const priorityScore = parseInt(req.priority, 10) || 0;
-
-      let reqItemId = req.itemId;
-      if (!reqItemId && req.item) {
-        const found = itemsList.find(i => i.name === req.item);
-        if (found) reqItemId = found.id;
-      }
-
-      if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
-
-      const playerTrackingKey = req.userId;
-      if (!playerTrackingKey) return;
-
-      const resolvedName = membersData[req.userId]?.displayName || player;
-
-      if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
-        userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: resolvedName, netQty: 0, priority: priorityScore, firstKey: null };
-      }
-
-      if (appStatus === 'requested') {
-        userCalculationsMap[reqItemId][playerTrackingKey].netQty += qty;
-        if (!userCalculationsMap[reqItemId][playerTrackingKey].firstKey) {
-          userCalculationsMap[reqItemId][playerTrackingKey].firstKey = req.id;
-        }
-      }
-      if (appStatus === 'canceled') {
-        userCalculationsMap[reqItemId][playerTrackingKey].netQty -= qty;
-        if (userCalculationsMap[reqItemId][playerTrackingKey].netQty <= 0) {
-          userCalculationsMap[reqItemId][playerTrackingKey].netQty = 0;
-          userCalculationsMap[reqItemId][playerTrackingKey].firstKey = null;
-        }
-      }
-    });
-
-    // Compile clean, synchronized leaderboards using stable ticket tokens
-    itemsList.forEach(item => {
-      const activeApplicants = Object.values(userCalculationsMap[item.id]).filter(u => u.netQty > 0);
-
-      // ✅ DETERMINISTIC SORT: Resolves ties strictly by original entry token time, tracking line exits
-      activeApplicants.sort((a, b) => {
-        if (b.priority !== a.priority) {
-          return b.priority - a.priority;
-        }
-        const tokenA = a.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
-        const tokenB = b.firstKey || 'ZZZZZZZZZZZZZZZZZZZZ';
-        if (tokenA === tokenB) return 0;
-        return tokenA < tokenB ? -1 : 1;
-      });
-      
-      rankingsByItem[item.id] = activeApplicants.slice(0, 100).map(u => u.userId);
-        
-        activeApplicants.forEach(u => {
-          requestsByItemDetails[item.id][u.userId] = { quantity: u.netQty, priority: u.priority };
-        });
-    });
+const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+    const { compileLeaderboard } = await import('../utils/sortingEngine.js');
+    const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
+    
+    Object.assign(rankingsByItem, computedLists.rankingsByItem);
+    Object.assign(requestsByItemDetails, computedLists.requestsByItemDetails);
 
     return res.json({
       success: true,
@@ -684,11 +628,12 @@ router.post('/submit', async (req, res) => {
       const newRequestRef = db.ref('auction/web_requests').push();
 
       if (delta > 0) {
-        // Log an incremental addition transaction record
+       // Log an incremental addition transaction record
         await newRequestRef.set({
           id: newRequestRef.key,
           userId: user.id,
           date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
+          time: new Date().toLocaleTimeString("en-US", { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false }),
           member: playerDisplayName,
           item: resolvedItemObj.name, 
           itemId: itemId,             
@@ -705,6 +650,7 @@ router.post('/submit', async (req, res) => {
           id: newRequestRef.key,
           userId: user.id,
           date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),          
+          time: new Date().toLocaleTimeString("en-US", { timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false }),
           member: playerDisplayName,
           item: resolvedItemObj.name, 
           itemId: itemId,             
@@ -930,15 +876,21 @@ router.post('/commit-session', async (req, res) => {
 
       for (const uid of absent) {
         const keyList = getKeysForUid(uid);
-        for (const key of keyList) {
-          atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'Absent';
+        if (keyList.length > 0) {
+          const finalKey = keyList[keyList.length - 1];
+          atomicUpdates[`auction/web_requests/${finalKey}/selectionStatus`] = 'Absent';
+          const redundant = keyList.slice(0, keyList.length - 1);
+          for (const k of redundant) atomicUpdates[`auction/web_requests/${k}/selectionStatus`] = 'Superseded';
         }
       }
 
       for (const uid of notSelected) {
         const keyList = getKeysForUid(uid);
-        for (const key of keyList) {
-          atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = 'NotSelected';
+        if (keyList.length > 0) {
+          const finalKey = keyList[keyList.length - 1];
+          atomicUpdates[`auction/web_requests/${finalKey}/selectionStatus`] = 'NotSelected';
+          const redundant = keyList.slice(0, keyList.length - 1);
+          for (const k of redundant) atomicUpdates[`auction/web_requests/${k}/selectionStatus`] = 'Superseded';
         }
       }
 
@@ -955,9 +907,7 @@ router.post('/commit-session', async (req, res) => {
 
           const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
           for (const duplicateKey of intermediateRedundantLines) {
-            const currentLine = firebaseRequests[duplicateKey];
-            const fallbackStatus = (currentLine?.applicationStatus === 'Canceled') ? 'Canceled' : 'NotSelected';
-            atomicUpdates[`auction/web_requests/${duplicateKey}/selectionStatus`] = fallbackStatus;
+            atomicUpdates[`auction/web_requests/${duplicateKey}/selectionStatus`] = 'Superseded';
           }
         } else {
           const newRequestKey = db.ref('auction/web_requests').push().key;

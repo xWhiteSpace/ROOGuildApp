@@ -35,6 +35,8 @@ export default function RequestTab({ user }) {
 
   const [members, setMembers] = useState({});
 
+const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
+
   const initLobbyDashboard = async () => {
     try {
       setLoading(true);
@@ -77,6 +79,7 @@ export default function RequestTab({ user }) {
         if (data.phaseIntervals) setPhaseIntervals(data.phaseIntervals);
 
         if (data.members) setMembers(data.members);
+        if (data.requestsByItemDetails) setRequestsByItemDetails(data.requestsByItemDetails);
 
         // Dynamically initialize selection baskets and tabs based on database IDs
         const blankInputs = {};
@@ -332,20 +335,48 @@ export default function RequestTab({ user }) {
               </select>
             </div>
 
+            {/* Column Header Metadata Labels */}
+            <div className="flex justify-between items-center text-[9px] font-sans font-bold text-slate-500 uppercase tracking-widest px-3 pt-2 select-none border-b border-slate-900 pb-1">
+              <div className="flex items-center gap-2">
+                <span>#</span>
+                <span className="pl-4">Member Name</span>
+              </div>
+              <div className="flex items-center gap-6 text-right pr-2">
+                <span className="w-12 text-center">Prio</span>
+                <span className="w-10 text-center">Time</span>
+              </div>
+            </div>
+
             {/* Strict height wrapper scroll context list box */}
-            <div className="h-[220px] overflow-y-auto pr-0.5 text-xs font-mono font-medium space-y-1.5 scrollbar-thin">
+            <div className="h-[210px] overflow-y-auto pr-0.5 text-xs font-mono font-medium space-y-1.5 scrollbar-thin">
               {currentRosterList.length === 0 ? (
                 <div className="text-center py-12 text-[11px] text-slate-500 font-mono italic">No registrations filed for this entry.</div>
               ) : (
                 currentRosterList.map((playerName, index) => {
                   const positionLabel = String(index + 1).padStart(2, '0');
                   const resolvedDisplayName = members[playerName]?.displayName || playerName;
+                  const itemDetails = requestsByItemDetails[activeListTab]?.[playerName];
+                  
+                  const priorityScoreInt = itemDetails?.priority ?? 0;
+                  const timestampTimeStr = itemDetails?.time || '';
                   return (
                     <div key={playerName} className="flex items-center justify-between bg-slate-950/30 border border-slate-900/40 px-3 py-2 rounded-xl text-xs hover:border-slate-800 hover:bg-slate-950/80 transition-colors">
-                      <span className="text-slate-300 font-sans font-medium flex items-center gap-2.5">
-                        <span className="text-slate-600 font-mono font-bold text-[11px]">#{positionLabel}</span>
-                        {resolvedDisplayName}
+                      <span className="text-slate-300 font-sans font-medium flex items-center gap-2.5 min-w-0 truncate flex-1">
+                        <span className="text-slate-600 font-mono font-bold text-[11px] shrink-0">#{positionLabel}</span>
+                        <span className="truncate">{resolvedDisplayName}</span>
                       </span>
+                      <div className="flex items-center gap-4 shrink-0 font-mono text-[11px]">
+                        <span className="text-cyan-400 font-bold w-12 text-center bg-cyan-950/30 border border-cyan-900/30 py-0.5 rounded-md text-[10px]">
+                          {priorityScoreInt}
+                        </span>
+                        {timestampTimeStr ? (
+                          <span className="text-slate-400 font-bold tracking-tight bg-slate-950 px-2 py-0.5 border border-slate-900 rounded-md shadow-inner select-none w-10 text-center text-[10px]">
+                            {timestampTimeStr}
+                          </span>
+                        ) : (
+                          <span className="text-slate-700 w-10 text-center text-[10px]">—:—</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })

@@ -27,39 +27,8 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
     const userCalculationsMap = {};
     itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 
-    // Aggregate user net quantities and filter for pending entries sequentially
-    firebaseRequests.forEach(req => {
-      if ((req.selectionStatus || 'Pending').toLowerCase() !== 'pending') return;
-      
-      const player = (req.member || '').trim();
-      const qty = parseInt(req.quantity, 10) || 0;
-      const appStatus = (req.applicationStatus || 'requested').toLowerCase();
-      const priorityScore = parseInt(req.priority, 10) || 0;
-
-      let reqItemId = req.itemId;
-      if (!reqItemId && req.item) {
-        const found = itemsList.find(i => i.name.toLowerCase() === req.item.toLowerCase());
-        if (found) reqItemId = found.id;
-      }
-
-      if (!reqItemId || userCalculationsMap[reqItemId] === undefined) return;
-
-      // Enforce absolute tracking exclusively via the unfailing platform userId
-          const playerTrackingKey = req.userId;
-          if (!playerTrackingKey) return;
-
-          if (!userCalculationsMap[reqItemId][playerTrackingKey]) {
-            userCalculationsMap[reqItemId][playerTrackingKey] = { userId: playerTrackingKey, name: player, netQty: 0, priority: priorityScore, latestKey: req.id };
-          }
-
-      if (appStatus === 'requested') {
-        userCalculationsMap[reqItemId][playerTrackingKey].netQty += qty;
-        userCalculationsMap[reqItemId][playerTrackingKey].latestKey = req.id; 
-      }
-      if (appStatus === 'canceled') {
-        userCalculationsMap[reqItemId][playerTrackingKey].netQty -= qty;
-      }
-    });
+    const { compileLeaderboard } = await import('../utils/sortingEngine.js');
+    const globalStandings = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
     // Establish the text template header layout
     const gateDetails = getGateStatusDetails() || {};
@@ -107,32 +76,27 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
 
       const embedColorInteger = resolveColorThemeToInteger(item.colorTheme);
       let contentSummaryString = '';
-      const activeApplicants = Object.values(userCalculationsMap[item.id] || {}).filter(u => u.netQty > 0);
-      
-      activeApplicants.sort((a, b) => {
-        if (b.priority !== a.priority) {
-          return b.priority - a.priority;
-        }
-        return a.latestKey.localeCompare(b.latestKey);
-      });
+      const targetUserIds = globalStandings.rankingsByItem[item.id] || [];
 
-      if (activeApplicants.length > 0) {
+      if (targetUserIds.length > 0) {
         // 📊 MONOSPACED TABLE ARCHITECTURE: Open an integrated block to align layout pillars perfectly
         contentSummaryString += "```wl\n";
         
-        activeApplicants.forEach((entry, index) => {
+        targetUserIds.forEach((userId, index) => {
           const linePositionLabel = `#${String(index + 1).padStart(2, '0')}`;
+          const entry = globalStandings.requestsByItemDetails[item.id][userId];
           
           // Resolve name dynamically via the pure numerical user account ID
-          const resolvedDisplayName = (/^\d+$/.test(entry.userId))
-            ? (membersData[entry.userId]?.displayName || entry.name)
-            : entry.name;
+          const resolvedDisplayName = (/^\d+$/.test(userId))
+            ? (membersData[userId]?.displayName || entry?.name || userId)
+            : (entry?.name || userId);
 
           // Pad names out to 25 fixed columns to absorb variable string lengths smoothly
           const paddedName = resolvedDisplayName.padEnd(27, ' ');
-          const paddedQty = `Qty: ${entry.netQty}`.padEnd(6, ' ');
+          const paddedQty = `Qty: ${entry?.quantity || 0}`.padEnd(6, ' ');
+          const paddedTime = `[T: ${entry?.time || '—:—'}]`;
           
-          contentSummaryString += `${linePositionLabel}  ${paddedName}  ${paddedQty}  [P: ${entry.priority}]\n`;
+          contentSummaryString += `${linePositionLabel}  ${paddedName}  ${paddedQty}  [P: ${entry?.priority ?? 0}]  ${paddedTime}\n`;
         });
         
         contentSummaryString += "```";
