@@ -342,6 +342,12 @@ export default function SettingsTab() {
         >
           <IconPackage /> Item Catalog ({config.items?.length || 0})
         </button>
+        <button 
+          onClick={() => setActiveNavTab('jobs')} 
+          className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'jobs' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <IconShield /> Job Registry ({Object.keys(config.jobs || {}).length})
+        </button>
       </div>
 
       {/* PANEL 1: SYSTEM PROPERTIES */}
@@ -833,10 +839,101 @@ export default function SettingsTab() {
         </div>
       )}
 
+      {/* PANEL 5: DYNAMIC CHROMATIC JOB REGISTRY DESK */}
+      {activeNavTab === 'jobs' && (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-md animate-fadeIn">
+          <div className="flex justify-between items-center border-b border-slate-800/60 pb-3.5">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconShield /> Character Job Registry</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">The absolute master list defining player classes available across roster updates.</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => {
+                const updatedJobs = { ...config.jobs };
+                const nextIndex = Object.keys(updatedJobs).length + 1;
+                const jobCode = `job_${String(nextIndex).padStart(3, '0')}`;
+                updatedJobs[jobCode] = { name: `Custom Specialization ${nextIndex}`, colorTheme: '#3b82f6' };
+                setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+              }}
+              className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md text-white"
+            >
+              <IconPlus /> Add Job Assignment
+            </button>
+          </div>
+
+          <div className="space-y-2 max-w-4xl">
+            {config.jobs && Object.keys(config.jobs).length > 0 ? (
+              Object.entries(config.jobs).map(([code, jobObj], index) => (
+                <div 
+                  key={code} 
+                  className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-1.5 rounded-xl font-mono shadow-sm group hover:border-slate-800 hover:bg-slate-950/80 transition-all duration-150"
+                >
+                  <span className="col-span-1 text-slate-600 font-bold text-center text-xs select-none">#{String(index + 1).padStart(2, '0')}</span>
+                  <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">{code}</span>
+                  
+                  <input 
+                    type="text"
+                    value={jobObj.name || ''}
+                    onChange={(e) => {
+                      const updatedJobs = { ...config.jobs };
+                      updatedJobs[code].name = e.target.value;
+                      setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                    }}
+                    className="col-span-4 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                    placeholder="Job Title (e.g. Bard)..."
+                  />
+
+                  <div className="col-span-4 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 max-w-[240px] shrink-0">
+                    <div 
+                      className="relative w-5 h-5 rounded-md border border-slate-700/80 shadow-md transition transform hover:scale-105 cursor-pointer overflow-hidden shrink-0" 
+                      style={{ backgroundColor: jobObj.colorTheme || '#64748b' }}
+                    >
+                      <input 
+                        type="color" 
+                        value={jobObj.colorTheme || '#3b82f6'} 
+                        onChange={(e) => {
+                          const updatedJobs = { ...config.jobs };
+                          updatedJobs[code].colorTheme = e.target.value;
+                          setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                        }}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer scale-150"
+                        title="Choose Custom Job Color Mapping"
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-widest select-all">
+                      {jobObj.colorTheme || '#DEFAULT'}
+                    </span>
+                  </div>
+
+                  <div className="col-span-1 flex items-center justify-end pr-2">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const updatedJobs = { ...config.jobs };
+                        delete updatedJobs[code];
+                        setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                      }}
+                      className="text-slate-700 hover:text-rose-400 p-1 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                      title="Purge job assignment profile"
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom classes active.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* PERSISTENT RUNTIME ACTION DECK PILL FOOTER */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
         <div className="mx-auto max-w-5xl flex items-center justify-end gap-4">
           <button 
+            type="button"
             onClick={handleSaveWorkspaceChanges} 
             className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition shadow-xl cursor-pointer"
           >
@@ -844,7 +941,6 @@ export default function SettingsTab() {
           </button>
         </div>
       </div>
-
     </div>
   );
 }

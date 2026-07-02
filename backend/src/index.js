@@ -20,6 +20,8 @@ import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
 import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
 
+import attendanceRoutes from './api/attendance.routes.js';
+
 initializeEnv();
 initializeFirebase();
 initializeDiscordBot(); 
@@ -82,6 +84,8 @@ app.use(
 
 app.use('/auth', authRoutes);
 app.use('/api/requests', requestRoutes);
+
+app.use('/api/attendance', attendanceRoutes);
 
 app.get('/', (req, res) => {
   res.send('DynastyGuild backend is online.');

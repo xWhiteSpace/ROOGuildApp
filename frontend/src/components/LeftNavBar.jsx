@@ -15,7 +15,7 @@ const IconSettings = () => <svg className="w-4 h-4" fill="none" stroke="currentC
 const IconChevron = ({ collapsed }) => <svg className={`w-3.5 h-3.5 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>;
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>;
 
-const navItems = [
+const auctionItems = [
   { label: 'Request', path: '/', icon: IconRequest },
   { label: 'Mimic Book', path: '/mimic-book', icon: IconBook },
   { label: 'Request History', path: '/request-history', icon: IconHistory },
@@ -23,7 +23,13 @@ const navItems = [
   { label: 'Submit Evidence', path: '/submit-evidence', icon: IconEvidence }
 ];
 
-export default function LeftNavBar() {
+const raidItems = [
+  { label: 'MasterList', path: '/attendance/masterlist', icon: IconRequest },
+  { label: 'Raid Party', path: '/attendance/raidparty', icon: IconBook },
+  { label: 'Statistics', path: '/attendance/statistics', icon: IconHistory }
+];
+
+export default function LeftNavBar({ macroTab }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [helpUrl, setHelpUrl] = useState('');
@@ -48,6 +54,8 @@ export default function LeftNavBar() {
     fetchHelpUrl();
   }, []);
 
+const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
+
   return (
     <aside className={`min-h-screen border-r border-slate-900 bg-slate-950 p-4 transition-all duration-300 relative shrink-0 shadow-2xl select-none ${
       isCollapsed ? 'w-20' : 'w-64'
@@ -67,13 +75,17 @@ export default function LeftNavBar() {
       <div className={`mb-6 px-2 py-3 transition-all duration-200 overflow-hidden font-sans ${
         isCollapsed ? 'h-0 opacity-0 mb-0 py-0' : 'opacity-100'
       }`}>
-        <div className="text-sm font-bold uppercase tracking-wider text-slate-200">Auction Dashboard</div>
-        <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">Request Item, View Bid, Review History.</div>
+        <div className="text-sm font-bold uppercase tracking-wider text-slate-200">
+          {macroTab === 'raid' ? 'Raid Governance' : 'Auction Dashboard'}
+        </div>
+        <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">
+          {macroTab === 'raid' ? 'Roster Management, Parties, Stats' : 'Request Item, View Bid, Review History.'}
+        </div>
       </div>
 
       {/* UNIFIED CORE LIST ELEMENT ANCHORS DECK */}
       <nav className="space-y-1">
-        {navItems.map((item) => (
+        {activeNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
