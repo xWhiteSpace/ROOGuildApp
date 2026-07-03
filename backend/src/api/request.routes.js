@@ -461,6 +461,10 @@ router.get('/init', async (req, res) => {
         if (m?.displayName) fullRosterArray.push(m.displayName);
       });
     }
+
+    // Query global commitments node tree to ensure state persistence across interface loads
+    const commitmentsSnap = await db.ref('attendance/commitments').once('value');
+    const commitmentsData = commitmentsSnap.exists() ? commitmentsSnap.val() : {};
 const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
     const { compileLeaderboard } = await import('../utils/sortingEngine.js');
     const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
@@ -483,7 +487,8 @@ const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
       eventName: timeGateStatus.activeEventTitle || "Raid Session", 
       helpEmbedUrl: timeGateStatus.helpEmbedUrl || "",
       announcementMinutes: timeGateStatus.announcementMinutes || { phase1: [], phase2: null, phase3: null },
-      events: dynamicConfig.events || {}, // 🛡️ Dynamic Directory Injection: Transmits custom user event configuration definitions
+      events: dynamicConfig.events || {}, 
+      commitments: commitmentsData, // Transmit the tracking map downstream to protect state cache values
       rankingsByItem,
       requestsByItemDetails,
       fullRoster: fullRosterArray.sort(),
@@ -535,9 +540,13 @@ router.post('/sync-roster', async (req, res) => {
       const finalRosterName = (member.nick || member.user?.global_name || member.user?.username || '').trim();
       
       if (member.user?.id) {
+        // Extract raw Discord server registration timestamp and slice down to standard YYYY-MM-DD format
+        const rawJoinedAt = member.joined_at ? new Date(member.joined_at).toISOString().slice(0, 10) : currentTimestampDate;
+        
         rosterUpdates[`auction/members/${member.user.id}`] = {
           displayName: finalRosterName || member.user.username || 'Unknown Member',
-          syncedAt: currentTimestampDate
+          syncedAt: currentTimestampDate,
+          joinedAt: rawJoinedAt
         };
       }
     });

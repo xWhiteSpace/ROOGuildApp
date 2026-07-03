@@ -36,6 +36,66 @@ function verifyOfficerPrivileges(user, allowedRoles = []) {
 // Alias the name so it safely matches your existing dashboard checks across systems
 const verifyDiscordOfficerRole = verifyOfficerPrivileges;
 
+// 🚪 POST /api/attendance/vanish -> Bot-Driven Server Eviction Gate
+router.post('/vanish', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { targetUid } = req.body;
+    if (!targetUid) return res.status(400).json({ success: false, error: 'Missing user ID parameter.' });
+
+    // 1. Kick member straight off the active Discord Server Guild
+    if (discordClient && discordClient.isReady()) {
+      const guild = await discordClient.guilds.fetch(process.env.DISCORD_GUILD_ID).catch(() => null);
+      if (guild) {
+        const member = await guild.members.fetch(targetUid).catch(() => null);
+        if (member) {
+          await member.kick('Vanished from guild via administrative dashboard web request');
+        }
+      }
+    }
+
+    // 2. Clear out identity document variables from cloud nodes
+    await db.ref(`auction/members/${targetUid}`).remove();
+    return res.json({ success: true, message: 'Server kick completed and database profile record purged.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ✍️ POST /api/attendance/update-roster-status -> Atomic Property Updates
+router.post('/update-roster-status', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const { targetUid, updates } = req.body;
+    if (!targetUid || !updates) return res.status(400).json({ success: false, error: 'Missing tracking payloads.' });
+
+    await db.ref(`auction/members/${targetUid}`).update(updates);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 🟢 GET /api/attendance/active-session
 router.get('/active-session', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -211,6 +271,65 @@ router.post('/end-raid', async (req, res) => {
 
     await db.ref().update(atomicUpdates);
     return res.json({ success: true, message: 'Raid session successfully finalized and archived to Firebase.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📊 POST /api/attendance/update-job-target -> Save Recruitment Goals
+router.post('/update-job-target', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { jobCode, desiredCount } = req.body;
+    if (!jobCode) return res.status(400).json({ success: false, error: 'Missing required jobCode parameter.' });
+
+    // Commit the parameter straight into the global SSOT settings tree
+    await db.ref(`settings/configuration/jobs/${jobCode}/desiredCount`).set(parseInt(desiredCount, 10) || 0);
+    return res.json({ success: true, message: 'Recruitment benchmark updated successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📅 POST /api/attendance/commit-availability -> Log Raider Presence/Leave
+router.post('/commit-availability', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const { dateStr, eventId, status } = req.body;
+    if (!dateStr || !eventId || !status) {
+      return res.status(400).json({ success: false, error: 'Missing scheduling configuration vectors.' });
+    }
+
+    const db = getDatabase();
+    const compositeKey = `${dateStr}_${eventId}`;
+
+    // Toggle-Off Safeguard: If status targets None, completely wipe the user record node from the tree
+    if (status === 'None') {
+      await db.ref(`attendance/commitments/${compositeKey}/${user.id}`).remove();
+      return res.json({ success: true, message: 'Schedule commitment removed successfully.' });
+    }
+
+    const commitmentPayload = {
+      displayName: user.displayName || user.username || 'Unknown Raider',
+      status: status,
+      declaredAt: Date.now()
+    };
+
+    // Atomic set directly under the targeted composite tracking node
+    await db.ref(`attendance/commitments/${compositeKey}/${user.id}`).set(commitmentPayload);
+    return res.json({ success: true, message: 'Schedule commitment logged.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

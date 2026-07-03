@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
+// --- 🎨 PROFESSIONAL FLAT VECTOR MICRO-ICONS CONSOLE ---
 const IconCalendar = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconLayers = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>;
+const IconSliders = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></svg>;
 
 export default function StatisticsTab({ user }) {
   const [loading, setLoading] = useState(true);
@@ -43,10 +45,35 @@ export default function StatisticsTab({ user }) {
     loadAnalyticsMetrics();
   }, [user]);
 
-  // Calculate dynamic volume parameters per job signature for visual metrics
+  const handleUpdateDesiredTarget = async (jobCode, val) => {
+    const parsedCount = Math.max(0, parseInt(val, 10) || 0);
+
+    // Optimistic Update: Refresh UI matrix cache immediately at 0ms
+    setJobsCatalog(prev => ({
+      ...prev,
+      [jobCode]: { ...prev[jobCode], desiredCount: parsedCount }
+    }));
+
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const headers = { 'Content-Type': 'application/json' };
+      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+
+      await fetch(`${backendUrl}/api/attendance/update-job-target`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ jobCode, desiredCount: parsedCount }),
+        credentials: 'include'
+      });
+    } catch (err) {
+      console.error("Failed to commit recruitment goals:", err);
+    }
+  };
+
+  // Automated Tally: Counts active guild profiles strictly where isRaidRoster evaluates to true
   const jobDistributionTally = {};
   Object.values(members).forEach(m => {
-    if (m.jobCode) {
+    if (m.isRaidRoster === true && m.jobCode) {
       jobDistributionTally[m.jobCode] = (jobDistributionTally[m.jobCode] || 0) + 1;
     }
   });
@@ -60,7 +87,7 @@ export default function StatisticsTab({ user }) {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto p-2 font-sans animate-fadeIn">
+    <div className="space-y-6 max-w-[98vw] mx-auto p-2 font-sans animate-fadeIn">
       
       {/* HEADER SECTION */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md select-none">
@@ -68,101 +95,95 @@ export default function StatisticsTab({ user }) {
         <p className="text-[11px] font-mono text-slate-500 mt-1">CLASS DENSITY RATIOS AND ADVANCED LEAVE MANAGEMENT</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+      <div className="w-full">
         
-        {/* LEFT COLUMN: CLASS BALANCE BREAKDOWN VISUAL METRICS (5 SPAN) */}
-        <div className="md:col-span-5 bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none">
-            <IconLayers /> Job Class Balance Matrix
+        {/* FULL-WIDTH WORKSPACE: COMPOSITION BALANCING PANEL */}
+        <div className="w-full bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none pb-2 border-b border-slate-900">
+            <IconSliders /> Roster Composition Balancing Workspace
           </div>
           
-          <div className="space-y-3 pt-2">
-            {Object.keys(jobsCatalog).length > 0 ? (
-              Object.entries(jobsCatalog).map(([code, jobObj]) => {
-                const activeCount = jobDistributionTally[code] || 0;
-                const totalRosterCount = Object.keys(members).length || 1;
-                const calculatedPercentage = Math.round((activeCount / totalRosterCount) * 100);
+          <div className="border border-slate-800 bg-slate-950/40 rounded-xl overflow-hidden overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs font-mono min-w-[550px]">
+              <thead>
+                <tr className="bg-slate-950 text-slate-500 uppercase tracking-wider text-[9px] border-b border-slate-800 select-none">
+                  <th className="p-3 pl-4 w-[30%]">Job Class</th>
+                  <th className="p-3 text-center w-[20%]">Desired Target</th>
+                  <th className="p-3 text-center w-[15%]">Active</th>
+                  <th className="p-3 pl-4 w-[35%]">Distribution Balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-900/60 font-sans font-semibold">
+                {Object.keys(jobsCatalog).length > 0 ? (
+                  Object.entries(jobsCatalog).map(([code, jobObj]) => {
+                    const activeCount = jobDistributionTally[code] || 0;
+                    const desiredTarget = jobObj.desiredCount || 0;
+                    const isOverCapacity = activeCount > desiredTarget;
 
-                return (
-                  <div key={code} className="space-y-1.5 font-mono text-xs">
-                    <div className="flex justify-between items-center text-slate-300">
-                      <span className="font-sans font-semibold flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-sm shrink-0 shadow-sm" style={{ backgroundColor: jobObj.colorTheme }} />
-                        {jobObj.name}
-                      </span>
-                      <span className="text-slate-500 font-bold">{activeCount} Profiles ({calculatedPercentage}%)</span>
-                    </div>
-                    {/* Visual Bar Indicator Meter */}
-                    <div className="w-full bg-slate-950 rounded-full h-2 border border-slate-800/80 overflow-hidden shadow-inner">
-                      <div 
-                        className="h-full rounded-full transition-all duration-500" 
-                        style={{ 
-                          backgroundColor: jobObj.colorTheme,
-                          width: `${Math.max(3, calculatedPercentage)}%`
-                        }} 
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">No custom specializations defined inside SettingsTab catalogs.</div>
-            )}
+                    // Calculate progress thresholds dynamically
+                    let fillPercentage = 0;
+                    if (desiredTarget > 0) {
+                      fillPercentage = Math.min(100, Math.round((activeCount / desiredTarget) * 100));
+                    } else if (activeCount > 0) {
+                      fillPercentage = 100;
+                    }
+
+                    const meterColorToken = isOverCapacity ? 'bg-rose-500' : 'bg-emerald-500';
+
+                    return (
+                      <tr key={code} className="hover:bg-slate-900/10 transition-colors">
+                        <td className="p-3 pl-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-sm shrink-0 shadow-sm" style={{ backgroundColor: jobObj.colorTheme }} />
+                            <span className="text-slate-200 font-bold text-xs">{jobObj.name}</span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center">
+                          <input 
+                            type="number"
+                            min="0"
+                            value={jobObj.desiredCount ?? 0}
+                            disabled={!user?.isOfficer}
+                            onChange={(e) => handleUpdateDesiredTarget(code, e.target.value)}
+                            className="w-14 bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2 py-1 font-mono font-bold text-center text-xs outline-none focus:border-slate-700 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        </td>
+                        <td className="p-3 text-center font-mono text-slate-400 font-bold text-xs select-none">
+                          {activeCount}
+                        </td>
+                        <td className="p-3 pr-4 select-none">
+                          {/* Segmented Increment Meter Bar Frame */}
+                          <div className="w-full bg-slate-800 rounded-lg h-4 relative overflow-hidden border border-slate-900/60 shadow-inner">
+                            <div 
+                              className={`h-full transition-all duration-500 ease-out ${meterColorToken}`}
+                              style={{ width: `${fillPercentage}%` }}
+                            />
+                            {/* Overlayed 10% high-contrast layout grid lines */}
+                            <div className="absolute inset-0 flex pointer-events-none">
+                              {Array.from({ length: 9 }).map((_, lineIdx) => (
+                                <div 
+                                  key={lineIdx} 
+                                  className="h-full border-r border-slate-950/25" 
+                                  style={{ width: '10%' }} 
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="text-center py-12 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">No custom specializations defined inside SettingsTab catalogs.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: OFFICE-STYLE ADVANCED LEAVE COMMITMENT CALENDAR (7 SPAN) */}
-        <div className="md:col-span-7 bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl select-none">
-          <div className="flex justify-between items-center border-b border-slate-800/60 pb-3">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <IconCalendar /> Office Commitment Scheduler
-            </div>
-            
-            {/* Dynamic Selector allowing players to log availability status parameters */}
-            <div className="flex bg-slate-950 border border-slate-800 p-0.5 rounded-xl gap-0.5 shadow-inner text-[10px] font-bold uppercase tracking-wide">
-              <button onClick={() => setUserAvailability('join')} className={`px-3 py-1 rounded-lg transition-all ${userAvailability === 'join' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500'}`}>Can Join</button>
-              <button onClick={() => setUserAvailability('excused')} className={`px-3 py-1 rounded-lg transition-all ${userAvailability === 'excused' ? 'bg-amber-600 text-white shadow' : 'text-slate-500'}`}>Apply Leave</button>
-            </div>
-          </div>
-
-          {/* Clean Monthly 35-Day Grid Skeleton Layout Wrapper */}
-          <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-3 font-mono">
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 border-b border-slate-900 pb-1.5">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-            </div>
-            
-            <div className="grid grid-cols-7 gap-1.5 text-xs font-bold text-center">
-              {Array.from({ length: 31 }).map((_, idx) => {
-                const dayNumber = idx + 1;
-                // Highlight explicit sample dates to illustrate upcoming Phase 3 targets
-                const isRaidTargetEventDate = dayNumber === 5 || dayNumber === 12 || dayNumber === 19 || dayNumber === 26;
-
-                return (
-                  <div 
-                    key={idx}
-                    className={`p-2.5 rounded-xl border flex flex-col items-center justify-between min-h-[50px] transition transform active:scale-95 cursor-pointer ${
-                      isRaidTargetEventDate 
-                        ? 'border-indigo-500/40 bg-indigo-950/20 text-indigo-400 font-black shadow-[0_0_12px_rgba(99,102,241,0.1)]' 
-                        : 'border-slate-900 bg-slate-900/20 text-slate-400 hover:border-slate-800'
-                    }`}
-                  >
-                    <span>{dayNumber}</span>
-                    {isRaidTargetEventDate && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse mt-1" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <p className="text-[10px] text-slate-500 leading-relaxed font-mono">
-            📌 <strong className="text-slate-400 uppercase tracking-wider text-[9px] mr-1">Workflow Rule:</strong> Click any upcoming highlighted event block on your scheduler coordinate to log or adjust your advance attendance status declarations prior to the lock closing.
-          </p>
         </div>
-
-      </div>
-
     </div>
   );
 }

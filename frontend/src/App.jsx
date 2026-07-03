@@ -15,6 +15,8 @@ import MasterListTab from './pages/MasterListTab';
 import RaidPartyTab from './pages/RaidPartyTab';
 import StatisticsTab from './pages/StatisticsTab';
 
+import Scheduler from './pages/Scheduler';
+
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
 import { createContext, useRef } from 'react';
@@ -185,7 +187,8 @@ export default function App() {
             <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
             <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
             <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
-            </Routes>
+            <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
+          </Routes>
         </MainLayout>
       </MimicBookProvider>
     </BrowserRouter>
