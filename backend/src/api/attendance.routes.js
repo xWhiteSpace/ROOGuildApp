@@ -11,14 +11,14 @@ function resolveUserIdentity(req) {
   const token = req.headers['x-user-profile'];
   if (token) {
     try {
-      const decoded = JSON.parse(decodeURIComponent(mobileHeaderToken));
+      const decoded = JSON.parse(decodeURIComponent(token));
       if (decoded && decoded._sig) {
         const clientSig = decoded._sig;
         const profile = { ...decoded };
         delete profile._sig;
         const secret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
         const expected = crypto.createHmac('sha256', secret).update(JSON.stringify(profile)).digest('hex');
-        if (clientSignature === expectedSignature) return profile;
+        if (clientSig === expected) return profile;
       }
     } catch (e) {}
   }
@@ -360,7 +360,7 @@ router.post('/special-events/add', async (req, res) => {
     if (!verifyDiscordOfficerRole(user, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
-    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked, daysOfWeek, allDay } = req.body;
     if (!title || !date || !dateEnd || !timeStart || !timeEnd) {
       return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
     }
@@ -376,6 +376,8 @@ router.post('/special-events/add', async (req, res) => {
       timeEnd,
       type: type || 'Raid',
       isAttendanceTracked: !!isAttendanceTracked,
+      daysOfWeek: daysOfWeek || null,
+      allDay: !!allDay,
       createdBy: user.displayName || user.username || 'Authorized Officer',
       createdAt: Date.now()
     };
@@ -439,7 +441,7 @@ router.put('/special-events/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { id } = req.params;
-    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked, daysOfWeek, allDay } = req.body;
     if (!title || !date || !dateEnd || !timeStart || !timeEnd) {
       return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
     }
@@ -453,6 +455,8 @@ router.put('/special-events/:id', async (req, res) => {
       timeEnd,
       type: type || 'Raid',
       isAttendanceTracked: !!isAttendanceTracked,
+      daysOfWeek: daysOfWeek || null,
+      allDay: !!allDay,
       updatedBy: user.displayName || user.username || 'Authorized Officer',
       updatedAt: Date.now()
     });

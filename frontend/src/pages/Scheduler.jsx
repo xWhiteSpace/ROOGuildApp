@@ -210,7 +210,7 @@ export default function Scheduler({ user }) {
         setSelectedDayContext(null);
         loadSchedulerEcosystem();
       } else {
-        alert(data.message || "Database synchronization failed. Check entry schema fields.");
+        alert(data.error || data.message || "Database synchronization failed. Check entry schema fields.");
       }
     } catch (err) {
       console.error(err);
@@ -639,10 +639,10 @@ export default function Scheduler({ user }) {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1"><AlertCircle size={12}/> Scope Tracker</label>
+                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1"><AlertCircle size={12}/> Attendance</label>
                   <select value={formTracked ? "yes" : "no"} onChange={(e) => setFormTracked(e.target.value === "yes")} className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-300 outline-none cursor-pointer">
-                    <option value="yes">Log Group Attendance</option>
-                    <option value="no">Casual Sandbox Instance</option>
+                    <option value="yes">Strict Monitored Attendance</option>
+                    <option value="no">Untracked Event</option>
                   </select>
                 </div>
               </div>
