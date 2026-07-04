@@ -360,8 +360,8 @@ router.post('/special-events/add', async (req, res) => {
     if (!verifyDiscordOfficerRole(user, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
-    const { title, description, date, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
-    if (!title || !date || !timeStart || !timeEnd) {
+    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    if (!title || !date || !dateEnd || !timeStart || !timeEnd) {
       return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
     }
     
@@ -370,7 +370,8 @@ router.post('/special-events/add', async (req, res) => {
       id: newEventRef.key,
       title,
       description: description || '',
-      date, // Format: YYYY-MM-DD
+      date, 
+      dateEnd,
       timeStart,
       timeEnd,
       type: type || 'Raid',
@@ -438,8 +439,8 @@ router.put('/special-events/:id', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { id } = req.params;
-    const { title, description, date, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
-    if (!title || !date || !timeStart || !timeEnd) {
+    const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    if (!title || !date || !dateEnd || !timeStart || !timeEnd) {
       return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
     }
 
@@ -447,6 +448,7 @@ router.put('/special-events/:id', async (req, res) => {
       title,
       description: description || '',
       date,
+      dateEnd,
       timeStart,
       timeEnd,
       type: type || 'Raid',
