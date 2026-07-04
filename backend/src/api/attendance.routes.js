@@ -335,4 +335,130 @@ router.post('/commit-availability', async (req, res) => {
   }
 });
 
+// 📅 GET /api/attendance/special-events -> Retrieve Ad-Hoc Special Instances
+router.get('/special-events', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const snap = await db.ref('scheduler/special_events').once('value');
+    return res.json({ success: true, specialEvents: snap.exists() ? snap.val() : {} });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ➕ POST /api/attendance/special-events/add -> Authorize & Save Ad-Hoc Instances
+router.post('/special-events/add', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { title, description, date, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    if (!title || !date || !timeStart || !timeEnd) {
+      return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
+    }
+    
+    const newEventRef = db.ref('scheduler/special_events').push();
+    const eventPayload = {
+      id: newEventRef.key,
+      title,
+      description: description || '',
+      date, // Format: YYYY-MM-DD
+      timeStart,
+      timeEnd,
+      type: type || 'Raid',
+      isAttendanceTracked: !!isAttendanceTracked,
+      createdBy: user.displayName || user.username || 'Authorized Officer',
+      createdAt: Date.now()
+    };
+    
+    await newEventRef.set(eventPayload);
+    return res.json({ success: true, event: eventPayload });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ❌ DELETE /api/attendance/special-events/:id -> Purge Ad-Hoc Special Instance & Signs
+router.delete('/special-events/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, error: 'Missing event ID.' });
+
+    // 1. Remove the core special event node
+    await db.ref(`scheduler/special_events/${id}`).remove();
+    
+    // 2. Perform a targeted cleanup on commitments matching this event ID
+    const commitmentsSnap = await db.ref('attendance/commitments').once('value');
+    if (commitmentsSnap.exists()) {
+      const commitments = commitmentsSnap.val();
+      const updates = {};
+      Object.keys(commitments).forEach(key => {
+        if (key.endsWith(`_${id}`)) {
+          updates[`attendance/commitments/${key}`] = null;
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        await db.ref().update(updates);
+      }
+    }
+
+    return res.json({ success: true, message: 'Special event and localized sign-ups purged successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📝 PUT /api/attendance/special-events/:id -> Authorize & Modify Existing Ad-Hoc Instances
+router.put('/special-events/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { id } = req.params;
+    const { title, description, date, timeStart, timeEnd, type, isAttendanceTracked } = req.body;
+    if (!title || !date || !timeStart || !timeEnd) {
+      return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
+    }
+
+    await db.ref(`scheduler/special_events/${id}`).update({
+      title,
+      description: description || '',
+      date,
+      timeStart,
+      timeEnd,
+      type: type || 'Raid',
+      isAttendanceTracked: !!isAttendanceTracked,
+      updatedBy: user.displayName || user.username || 'Authorized Officer',
+      updatedAt: Date.now()
+    });
+
+    return res.json({ success: true, message: 'Special event configuration modified successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;

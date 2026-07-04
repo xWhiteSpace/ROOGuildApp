@@ -1,49 +1,68 @@
 // frontend/src/pages/Scheduler.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Check, 
+  X, 
+  Clock, 
+  Tag, 
+  Trash2, 
+  Edit3, 
+  AlertCircle 
+} from 'lucide-react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
-// --- 🎨 HIGHEST QUALITY PRODUCTION SVG VECTOR PLATES ---
-const IconLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>;
-const IconRight = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>;
-const IconRaidFlash = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>;
-const IconCheck = () => <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>;
-const IconLeave = () => <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>;
-const IconClock = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>;
-
 export default function Scheduler({ user }) {
+  const calendarRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [eventsCatalog, setEventsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
+  const [specialEvents, setSpecialEvents] = useState({});
   
-  // Navigation State Calendar Context Framework
-  const [viewDate, setViewDate] = useState(new Date(2026, 6, 1)); // Default focused inside July 2026
+  const [specialCategoriesList, setSpecialCategoriesList] = useState(["Raid", "Meeting", "PVP", "Casual"]);
   const [selectedDayContext, setSelectedDayContext] = useState(null);
+  const [activeNavView, setActiveNavView] = useState('month');
+  const [calendarTitle, setCalendarTitle] = useState('July 2026');
+  
+  // Modal States
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editEventId, setEditEventId] = useState(null);
+  const [formTitle, setFormTitle] = useState('');
+  const [formDate, setFormDate] = useState('');
+  const [formTimeStart, setFormTimeStart] = useState('21:30');
+  const [formTimeEnd, setFormTimeEnd] = useState('23:00');
+  const [formType, setFormType] = useState('Raid');
+  const [formDesc, setFormDesc] = useState('');
+  const [formTracked, setFormTracked] = useState(true);
 
   const loadSchedulerEcosystem = async () => {
     try {
       setLoading(true);
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
+      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      // Fetch global SSOT event configurations 
       const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
       const configData = await configRes.json();
-      if (configData.success && configData.config?.events) {
-        setEventsCatalog(configData.config.events);
-      }
+      if (configData.success && configData.config?.events) setEventsCatalog(configData.config.events);
+      if (configData.success && configData.config?.specialEventCategories) setSpecialCategoriesList(configData.config.specialEventCategories);
 
-      // Fetch live user commitments maps
       const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
       const initData = await initRes.json();
-      if (initData.success) {
-        setCommitments(initData.commitments || {});
-      }
+      if (initData.success) setCommitments(initData.commitments || {});
+      
+      const specialRes = await fetch(`${backendUrl}/api/attendance/special-events`, { method: 'GET', headers, credentials: 'include' });
+      const specialData = await specialRes.json();
+      if (specialData.success) setSpecialEvents(specialData.specialEvents || {});
     } catch (err) {
-      console.error("Scheduler loading sequence error:", err);
+      console.error("Scheduler load failure:", err);
     } finally {
       setLoading(false);
     }
@@ -53,30 +72,124 @@ export default function Scheduler({ user }) {
     loadSchedulerEcosystem();
   }, [user]);
 
+  // Update Custom Header Text when calendar switches months/views
+  const updateHeaderTitle = () => {
+    if (calendarRef.current) {
+      setCalendarTitle(calendarRef.current.getApi().view.title);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading) setTimeout(updateHeaderTitle, 50);
+  }, [loading, activeNavView]);
+
+  // View Switcher Trigger mapping to standard views
+  const handleViewChange = (viewType) => {
+    setActiveNavView(viewType);
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      api.changeView(viewType === 'month' ? 'dayGridMonth' : 'timeGridWeek');
+      updateHeaderTitle();
+    }
+  };
+
+  const handlePrev = () => {
+    calendarRef.current?.getApi().prev();
+    updateHeaderTitle();
+  };
+
+  const handleNext = () => {
+    calendarRef.current?.getApi().next();
+    updateHeaderTitle();
+  };
+
+  // 🛡️ TIMEZONE-SAFE LOCAL DATE EXTRACTOR: Prevents UTC conversions from shifting date strings
+  const formatDateToLocalString = (dateObj) => {
+    if (!dateObj) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+  };
+
+  // ─── TRANSLATE FIREBASE DATA STREAM INTO CALENDAR DATA CONTRACT ───
+  const getFormattedEvents = () => {
+    const list = [];
+
+    // 1. Weekly Template Events (FullCalendar handles daysOfWeek repetition natively)
+    Object.entries(eventsCatalog).forEach(([id, ev]) => {
+      const p3 = ev.phases?.[3];
+      if (p3) {
+        list.push({
+          id,
+          title: ev.title,
+          startTime: p3.timeStart || "20:55",
+          endTime: p3.timeEnd || "22:15",
+          daysOfWeek: [parseInt(p3.dayStart, 10)],
+          className: 'fc-event-template',
+          extendedProps: { isSpecial: false, config: ev }
+        });
+      }
+    });
+
+    // 2. Absolute Ad-Hoc Special Events
+    Object.entries(specialEvents).forEach(([id, ev]) => {
+      list.push({
+        id,
+        title: ev.title,
+        start: `${ev.date}T${ev.timeStart}`,
+        end: `${ev.date}T${ev.timeEnd}`,
+        className: 'fc-event-special',
+        extendedProps: { isSpecial: true, config: { title: ev.title, phases: { 3: { timeStart: ev.timeStart, timeEnd: ev.timeEnd } } }, details: ev, dateStr: ev.date }
+      });
+    });
+
+    return list;
+  };
+
+  const handleAddSpecialEvent = async () => {
+    if (!formTitle.trim() || !formDate) return alert("Fill required inputs.");
+    try {
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const headers = { 'Content-Type': 'application/json' };
+      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+
+      const isEdit = !!editEventId;
+      const url = isEdit ? `${backendUrl}/api/attendance/special-events/${editEventId}` : `${backendUrl}/api/attendance/special-events/add`;
+
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers,
+        body: JSON.stringify({ title: formTitle, description: formDesc, date: formDate, timeStart: formTimeStart, timeEnd: formTimeEnd, type: formType, isAttendanceTracked: formTracked }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddModal(false);
+        setFormTitle('');
+        setFormDesc('');
+        setEditEventId(null);
+        setSelectedDayContext(null);
+        loadSchedulerEcosystem();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleLogCommitment = async (dateStr, eventId, statusTarget) => {
     try {
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      // Optimistic Local State Update for instantaneous 0ms visual transformation
       const compositeKey = `${dateStr}_${eventId}`;
       setCommitments(prev => {
         const updated = { ...prev };
         if (statusTarget === 'None') {
-          if (updated[compositeKey]) {
-            const userGroupClone = { ...updated[compositeKey] };
-            delete userGroupClone[user.id];
-            updated[compositeKey] = userGroupClone;
-          }
+          if (updated[compositeKey]) delete updated[compositeKey][user.id];
         } else {
           updated[compositeKey] = {
             ...updated[compositeKey],
-            [user.id]: {
-              displayName: user.displayName || user.username || 'Active Raider',
-              status: statusTarget,
-              declaredAt: Date.now()
-            }
+            [user.id]: { displayName: user.displayName || user.username || 'Raider', status: statusTarget, declaredAt: Date.now() }
           };
         }
         return updated;
@@ -89,249 +202,228 @@ export default function Scheduler({ user }) {
         credentials: 'include'
       });
     } catch (err) {
-      console.error("Failed to commit player alignment window:", err);
+      console.error(err);
       loadSchedulerEcosystem();
     }
   };
 
-  // --- 📅 DETERMINISTIC CALENDAR NATIVE MATH ENGINE ---
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-
-  const firstDayIndex = new Date(year, month, 1).getDay();
-  const totalMonthDays = new Date(year, month + 1, 0).getDate();
-
-  const calendarGridCells = [];
-  // Pad out matching blank buffer cells for offset days of preceding week tracks
-  for (let i = 0; i < firstDayIndex; i++) {
-    calendarGridCells.push(null);
-  }
-  // Populate true calculated calendar days
-  for (let day = 1; day <= totalMonthDays; day++) {
-    calendarGridCells.push(day);
-  }
-
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-  const handlePrevMonth = () => setViewDate(new Date(year, month - 1, 1));
-  const handleNextMonth = () => setViewDate(new Date(year, month + 1, 1));
-
-  // Auto-Match Helper: Scans phase 3 configs to discover matching raid items for a given calendar day
-  const getEventForDay = (dayNum) => {
-    if (!dayNum) return null;
-    const dateObj = new Date(year, month, dayNum);
-    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 2 = Tuesday, 4 = Thursday etc.
-
-    // Evaluate against global SSOT catalog configurations
-    const match = Object.entries(eventsCatalog).find(([_, ev]) => {
-      const phase3 = ev.phases?.[3];
-      return phase3 && parseInt(phase3.dayStart, 10) === dayOfWeek;
-    });
-
-    if (!match) return null;
-    
-    // Construct formatting string components YYYY-MM-DD
-    const pad = (n) => String(n).padStart(2, '0');
-    const computedDateStr = `${year}-${pad(month + 1)}-${pad(dayNum)}`;
-
-    return {
-      eventId: match[0],
-      config: match[1],
-      dateStr: computedDateStr,
-      dayNum
-    };
-  };
-
-  // Instantiate active context selection default fallback logic
-  const activeDayFocus = selectedDayContext || getEventForDay(new Date().getDate()) || getEventForDay(5);
+  const activeDayFocus = selectedDayContext;
   const userCurrentStatus = activeDayFocus ? commitments[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.[user?.id]?.status : null;
 
   if (loading) {
-    return <div className="p-6 text-xs font-mono uppercase text-slate-500 animate-pulse tracking-widest">Compiling Operational Leave Calendars...</div>;
+    return <div className="p-6 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">Calling Pre-Built API Pipelines...</div>;
   }
 
   return (
-    <div className="grid grid-cols-12 gap-5 max-w-[98vw] mx-auto p-1 font-sans animate-fadeIn">
+    <div className="grid grid-cols-12 gap-5 max-w-[98vw] mx-auto p-1 font-sans text-slate-200">
       
-      {/* LEFT PANEL: PURE NATIVE VIEWPORT CALENDAR CANVAS (75% OVERRIDE) */}
+      {/* 🎨 CLEAN ECOSYSTEM OVERRIDES: Differentiate standard templates from special operations */}
+      <style>{`
+        .fc-event-template { background-color: rgba(30, 41, 59, 0.45) !important; border-color: rgb(51, 65, 85) !important; cursor: pointer; }
+        .fc-event-special { background-color: rgba(109, 40, 217, 0.25) !important; border-color: rgba(139, 92, 246, 0.5) !important; cursor: pointer; }
+        .fc .fc-event-title { font-size: 10px !important; text-transform: uppercase !important; font-weight: 700 !important; tracking: wide; padding: 2px 4px; color: #f8fafc !important; }
+        .fc-timegrid-event { border-radius: 8px !important; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+      `}</style>
+      
+      {/* LEFT COMPONENT: CORE FULLCALENDAR EMBED ENGINE */}
       <div className="col-span-12 lg:col-span-9 space-y-4">
-        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md flex justify-between items-center select-none">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">🗓️ {monthNames[month]} {year}</h2>
+        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl flex justify-between items-center select-none">
+          <div className="flex items-center gap-4 flex-wrap">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">🗓️ {calendarTitle}</h2>
+            {user?.isOfficer && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFormTitle(''); setFormDesc(''); setFormDate(new Date().toISOString().split('T')[0]); setEditEventId(null); setShowAddModal(true);
+                }}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] uppercase font-bold text-white transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <Plus size={14} strokeWidth={2.5} /> Add Special Event
+              </button>
+            )}
+
+            <div className="flex bg-slate-950 p-0.5 rounded-xl border border-slate-800/80 gap-0.5 shadow-inner">
+              <button type="button" onClick={() => handleViewChange('month')} className={`px-3 py-1 rounded-lg text-[9px] uppercase font-bold tracking-wider transition ${activeNavView === 'month' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>Month</button>
+              <button type="button" onClick={() => handleViewChange('week')} className={`px-3 py-1 rounded-lg text-[9px] uppercase font-bold tracking-wider transition ${activeNavView === 'week' ? 'bg-slate-800 text-white shadow' : 'text-slate-500'}`}>Week</button>
+            </div>
           </div>
           <div className="flex gap-1.5">
-            <button onClick={handlePrevMonth} className="p-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 rounded-xl transition text-slate-400 hover:text-white cursor-pointer"><IconLeft /></button>
-            <button onClick={handleNextMonth} className="p-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 rounded-xl transition text-slate-400 hover:text-white cursor-pointer"><IconRight /></button>
+            <button onClick={handlePrev} className="p-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-white cursor-pointer"><ChevronLeft size={16} strokeWidth={2.5} /></button>
+            <button onClick={handleNext} className="p-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-white cursor-pointer"><ChevronRight size={16} strokeWidth={2.5} /></button>
           </div>
         </div>
 
-        <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-4 shadow-xl">
-          {/* Day Header Strips */}
-          <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono mb-3 select-none pb-2 border-b border-slate-900">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-          </div>
-
-          {/* Core Layout Grid Cells Matrix */}
-          <div className="grid grid-cols-7 gap-2.5">
-            {calendarGridCells.map((day, idx) => {
-              if (day === null) {
-                return <div key={`empty-${idx}`} className="bg-slate-950/10 border border-transparent rounded-2xl min-h-[5.5rem]" />;
-              }
-
-              const eventMatch = getEventForDay(day);
-              const isCurrentlySelected = activeDayFocus && activeDayFocus.dayNum === day;
-              
-              // Resolve active counters for matching event nodes
-              let liveConfirmedCount = 0;
-              let liveLeaveCount = 0;
-              let userPersonalStatus = null;
-
-              if (eventMatch) {
-                const dayCommitmentNode = commitments[`${eventMatch.dateStr}_${eventMatch.eventId}`] || {};
-                
-                // Track your personal logged status signature for immediate grid display
-                if (dayCommitmentNode[user?.id]) {
-                  userPersonalStatus = dayCommitmentNode[user.id].status;
-                }
-
-                Object.values(dayCommitmentNode).forEach(c => {
-                  if (c.status === 'Confirmed') liveConfirmedCount++;
-                  if (c.status === 'Leave') liveLeaveCount++;
-                });
-              }
-
-              // Compute structural indicators dynamically to eliminate loose floating markers/dots
-              const statusClasses = userPersonalStatus === 'Confirmed'
-                ? 'border-l-2 border-l-emerald-500 bg-emerald-500/5 shadow-[inset_1px_0_0_rgba(16,185,129,0.2)]'
-                : userPersonalStatus === 'Leave'
-                  ? 'border-l-2 border-l-slate-700 opacity-40 bg-slate-950/10'
-                  : '';
-
-              // Apply symmetrical left-border color accents to maximize real-time status scannability
-              const stateStyles = userPersonalStatus === 'Confirmed'
-                ? 'border-l-2 border-l-emerald-500 bg-emerald-500/[0.02] shadow-[inset_1px_0_0_rgba(16,185,129,0.1)]'
-                : userPersonalStatus === 'Leave'
-                  ? 'border-l-2 border-l-amber-500 bg-amber-500/[0.02] shadow-[inset_1px_0_0_rgba(245,158,11,0.1)]'
-                  : '';
-
-              return (
-                <div
-                  key={`day-${day}`}
-                  onClick={() => eventMatch && setSelectedDayContext(eventMatch)}
-                  className={`p-3 rounded-2xl border min-h-[6rem] transition-all relative flex flex-col justify-between ${
-                    eventMatch 
-                      ? `${isCurrentlySelected ? 'border-indigo-500 bg-indigo-950/30 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'border-slate-800/80 bg-slate-900/20 hover:border-slate-700'} ${stateStyles} cursor-pointer group`
-                      : 'border-slate-900/40 bg-slate-950/10 text-slate-600 select-none'
-                  }`}
-                >
-                  {/* Top Day Number Row */}
-                  <div className="flex justify-between items-center select-none w-full">
-                    <span className={`text-xs font-bold font-mono ${eventMatch ? 'text-slate-400' : 'text-slate-700'}`}>{day}</span>
-                  </div>
-
-                  {/* Operational Event Highlights Container */}
-                  {eventMatch && (
-                    <div className="space-y-2 mt-2">
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-400/90 font-sans truncate">
-                        <span className="p-0.5 rounded bg-indigo-500/10 text-indigo-400 shrink-0"><IconRaidFlash /></span>
-                        <span className="truncate uppercase tracking-tight">{eventMatch.config.title}</span>
-                      </div>
-                      
-                      {/* Clean Typographic Minimalist Counters */}
-                      <div className="flex justify-end items-center gap-2 font-mono text-[10px] font-bold select-none opacity-40 group-hover:opacity-100 transition-opacity">
-                        <span className="text-emerald-500">P:{liveConfirmedCount}</span>
-                        <span className="text-amber-500">L:{liveLeaveCount}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        {/* CALENDAR API MOUNT CONTAINER */}
+        <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-4 shadow-xl contextual-calendar-provider">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="dayGridMonth"
+            headerToolbar={false}
+            dayMaxEvents={3}
+            events={getFormattedEvents()}
+            slotMinTime="18:00:00"
+            slotMaxTime="24:00:00"
+            allDaySlot={false}
+            slotEventOverlap={true} // ⚔️ INDUSTRY STANDARD CONFLICT SLICER: Split overlaps side-by-side perfectly
+            height="auto"
+            eventClick={(info) => {
+              const props = info.event.extendedProps;
+              const dateStr = props.isSpecial ? props.dateStr : formatDateToLocalString(info.event.start);
+              setSelectedDayContext({
+                eventId: info.event.id,
+                config: props.config,
+                dateStr,
+                dayNum: info.event.start.getDate(),
+                isSpecial: props.isSpecial,
+                details: props.details || null
+              });
+            }}
+          />
         </div>
       </div>
 
-      {/* RIGHT PANEL: INTERACTIVE RAIDER COMMITMENT HUB (25% OVERRIDE) */}
+      {/* RIGHT COMPONENT: RAIDER AVAILABILITY DESK SIDEBAR */}
       <div className="col-span-12 lg:col-span-3 space-y-4">
-        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md select-none">
+        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">⚡ Raider Commitment Desk</h3>
         </div>
 
         {activeDayFocus ? (
-          <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-5 space-y-5 shadow-xl">
-            {/* Selected Date Context Headers */}
+          <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-5 space-y-5 shadow-xl animate-fadeIn">
             <div className="space-y-1 select-none">
               <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Selected Operation</span>
-              <h4 className="text-sm font-black text-slate-200 tracking-wide font-sans mt-0.5">⚔️ {activeDayFocus.config.title}</h4>
-              <div className="text-xs font-mono text-indigo-400 font-bold mt-1 bg-indigo-950/20 border border-indigo-900/40 rounded-xl px-3 py-1.5 flex items-center justify-between">
+              <h4 className="text-sm font-black text-slate-200 tracking-wide font-sans mt-0.5">
+                {activeDayFocus.isSpecial ? '🔮' : '⚔️'} {activeDayFocus.config.title}
+              </h4>
+              <div className="text-xs font-mono text-indigo-400 font-bold mt-1 bg-indigo-950/20 border border-indigo-900/40 rounded-xl px-3 py-1.5">
                 <span>{activeDayFocus.dateStr}</span>
               </div>
             </div>
 
-            {/* Local Time Frame Coordinates Block */}
-            <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-3.5 space-y-2 select-none">
+            <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-3.5 space-y-2">
               <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                <IconClock /> Phase 3 Action Window
+                <Clock size={14} className="text-slate-500" /> Action Window
               </div>
               <div className="text-xs font-mono font-bold text-slate-300 pl-5">
-                {activeDayFocus.config.phases?.[3]?.timeStart || '20:55'} ~ {activeDayFocus.config.phases?.[3]?.timeEnd || '22:15'}
+                {activeDayFocus.config.phases?.[3]?.timeStart || '21:30'} ~ {activeDayFocus.config.phases?.[3]?.timeEnd || '23:00'}
               </div>
             </div>
 
-            {/* Interactive Functional Trigger Button Toggles */}
             <div className="space-y-2 pt-1">
-              <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest select-none block mb-1">Declare Your Availability Profile:</span>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  const nextStatus = userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed';
-                  handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, nextStatus);
-                }}
-                className={`w-full p-3 rounded-2xl border text-xs font-bold font-sans uppercase tracking-wide flex items-center justify-between transition-all transform active:scale-98 cursor-pointer ${
-                  userCurrentStatus === 'Confirmed'
-                    ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.1)]'
-                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <span>Confirm Present</span>
-                {userCurrentStatus === 'Confirmed' && <IconCheck />}
+              <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest block mb-1">Declare Your Availability Profile:</span>
+              <button type="button" onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer ${userCurrentStatus === 'Confirmed' ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+                <span>Confirm Present</span> {userCurrentStatus === 'Confirmed' && <Check size={16} />}
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const nextStatus = userCurrentStatus === 'Leave' ? 'None' : 'Leave';
-                  handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, nextStatus);
-                }}
-                className={`w-full p-3 rounded-2xl border text-xs font-bold font-sans uppercase tracking-wide flex items-center justify-between transition-all transform active:scale-98 cursor-pointer ${
-                  userCurrentStatus === 'Leave'
-                    ? 'border-amber-500 bg-amber-950/20 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.1)]'
-                    : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <span>Request Leave / Absence</span>
-                {userCurrentStatus === 'Leave' && <IconLeave />}
+              <button type="button" onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Leave' ? 'None' : 'Leave')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer ${userCurrentStatus === 'Leave' ? 'border-amber-500 bg-amber-950/20 text-amber-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+                <span>Request Leave</span> {userCurrentStatus === 'Leave' && <X size={16} />}
               </button>
             </div>
 
-            {/* Real-time Confirmation Badge Status Footnote */}
-            <div className="border-t border-slate-900 pt-3 select-none">
-              <div className="bg-slate-950 rounded-xl p-3 text-[10px] font-mono text-slate-500 leading-relaxed text-center">
-                {userCurrentStatus ? (
-                  <span>Status locked as <strong className={`${userCurrentStatus === 'Confirmed' ? 'text-emerald-400' : 'text-amber-400'} uppercase font-sans`}>[{userCurrentStatus}]</strong>. Officers can view this instantly on the party canvas page.</span>
-                ) : (
-                  <span>⚠️ You have not declared status updates for this upcoming operation night.</span>
-                )}
+            <div className="border-t border-slate-900 pt-3 text-[10px] font-mono text-slate-500 text-center">
+              {userCurrentStatus ? (
+                <span>Status: <strong className={userCurrentStatus === 'Confirmed' ? 'text-emerald-400' : 'text-amber-400'}>[{userCurrentStatus}]</strong> synced to live canvas.</span>
+              ) : (
+                <span>⚠️ Unscheduled deployment node. Please submit sign-up state.</span>
+              )}
+            </div>
+
+            {/* MANAGEMENT CONTROLS POSITIONED PERFECTLY AT BOTTOM OF HUB CARD */}
+            {activeDayFocus.isSpecial && user?.isOfficer && (
+              <div className="pt-3 border-t border-slate-900/60 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const det = activeDayFocus.details || {};
+                    setFormTitle(det.title || activeDayFocus.config.title || '');
+                    setFormDesc(det.description || '');
+                    setFormDate(det.date || activeDayFocus.dateStr || '');
+                    setFormTimeStart(det.timeStart || '21:30');
+                    setFormTimeEnd(det.timeEnd || '23:00');
+                    setFormType(det.type || 'Raid');
+                    setFormTracked(det.isAttendanceTracked !== undefined ? det.isAttendanceTracked : true);
+                    setEditEventId(activeDayFocus.eventId);
+                    setShowAddModal(true);
+                  }}
+                  className="w-full p-2 rounded-xl border border-indigo-950 bg-indigo-950/20 hover:bg-indigo-600 text-indigo-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Edit3 size={13} /> Edit Event Details
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("Permanently wipe this special ad-hoc deployment block?")) return;
+                    try {
+                      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+                      const headers = { 'Content-Type': 'application/json' };
+                      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+                      const res = await fetch(`${backendUrl}/api/attendance/special-events/${activeDayFocus.eventId}`, { method: 'DELETE', headers, credentials: 'include' });
+                      const data = await res.json();
+                      if (data.success) { setSelectedDayContext(null); loadSchedulerEcosystem(); }
+                    } catch (err) { console.error(err); }
+                  }}
+                  className="w-full p-2 rounded-xl border border-rose-950 bg-rose-950/20 hover:bg-rose-600 text-rose-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Trash2 size={13} /> Delete Special Event
+                </button>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           <div className="border border-dashed border-slate-800 bg-slate-950/10 rounded-3xl p-8 text-center text-xs font-mono italic text-slate-600 select-none">
-            Select any active operational event slot on the calendar grid coordinates to declare profile availability parameters.
+            Select an active event box on the calendar to log profile availability.
           </div>
         )}
       </div>
+
+      {/* MODAL CONFIGURATION HUB OVERLAY */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="fixed inset-0 z-0" onClick={() => setShowAddModal(false)} />
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl relative z-10 space-y-4 font-sans text-xs text-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h2 className="text-sm font-bold uppercase tracking-wide">{editEventId ? 'Modify Event Data' : 'Schedule Special Instance'}</h2>
+              <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={16} /></button>
+            </div>
+            <div className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Event Title</label>
+                <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-700" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1"><Tag size={12}/> Category</label>
+                  <select value={formType} onChange={(e) => setFormType(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none cursor-pointer">
+                    {specialCategoriesList.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Target Date</label>
+                  <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Start Time</label>
+                  <input type="text" maxLength="5" value={formTimeStart} onChange={(e) => setFormTimeStart(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-center font-mono text-amber-500 font-bold outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">End Time</label>
+                  <input type="text" maxLength="5" value={formTimeEnd} onChange={(e) => setFormTimeEnd(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-center font-mono text-amber-400 font-bold outline-none" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1"><AlertCircle size={12}/> Notes</label>
+                <textarea rows="2" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2 font-mono">
+              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-slate-800 bg-slate-950 text-slate-400 hover:text-white rounded-xl transition cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleAddSpecialEvent} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold uppercase rounded-xl shadow-lg transition cursor-pointer">{editEventId ? 'Save Changes' : 'Push to Cloud'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

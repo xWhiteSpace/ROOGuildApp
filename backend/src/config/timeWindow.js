@@ -11,6 +11,7 @@ let cachedConfig = {
   isForceLocked: false,
   adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
 helpEmbedUrl: "",
+specialEventCategories: ["Raid", "Meeting", "PVP", "Casual"],
   items: [
     { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
     { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
@@ -64,6 +65,7 @@ function initConfigListener() {
           isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
           adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
           helpEmbedUrl: data.helpEmbedUrl || "",
+          specialEventCategories: data.specialEventCategories || ["Raid", "Meeting", "PVP", "Casual"],
           items: data.items || cachedConfig.items,
           events: data.events || cachedConfig.events
         };
