@@ -171,6 +171,39 @@ export default function Scheduler({ user }) {
     }));
   }, [eventsCatalog]);
 
+  const weeklyUpcomingInstances = useMemo(() => {
+    const list = [];
+    const today = new Date();
+    const currentDay = today.getDay();
+    // Calculate distance to the current week's Monday (0 = Sunday, 1 = Monday...)
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date();
+    monday.setDate(today.getDate() + distanceToMonday);
+    
+    for (let i = 0; i < 7; i++) {
+      const current = new Date(monday);
+      current.setDate(monday.getDate() + i);
+      const dStr = formatDateToLocalString(current);
+      const dayOfWeek = current.getDay();
+      
+      Object.entries(eventsCatalog).forEach(([id, ev]) => {
+        const p3 = ev.phases?.[3];
+        if (p3 && parseInt(p3.dayStart, 10) === dayOfWeek) {
+          list.push({
+            id,
+            title: ev.title,
+            dateStr: dStr,
+            isSpecial: false,
+            timeStart: p3.timeStart || "20:55",
+            timeEnd: p3.timeEnd || "22:15"
+          });
+        }
+      });
+      
+      }
+          return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.timeStart.localeCompare(b.timeStart));
+        }, [eventsCatalog]);
+
   const handleAddSpecialEvent = async () => {
     if (!formTitle.trim() || !formDateStart || !formDateEnd) return alert("Fill required inputs.");
     try {
@@ -275,7 +308,16 @@ export default function Scheduler({ user }) {
     }
   };
 
-  const activeDayFocus = selectedDayContext;
+  const handleConfirmAllWeeks = async () => {
+        const targets = weeklyUpcomingInstances.filter(item => {
+          const compositeKey = `${item.dateStr}_${item.id}`;
+          return commitments[compositeKey]?.[user?.id]?.status !== 'Confirmed';
+        });
+        if (targets.length === 0) return;
+        await Promise.all(targets.map(item => handleLogCommitment(item.dateStr, item.id, 'Confirmed')));
+      };
+
+      const activeDayFocus = selectedDayContext;
   const userCurrentStatus = activeDayFocus ? commitments[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.[user?.id]?.status : null;
 
   if (loading) {
@@ -283,7 +325,10 @@ export default function Scheduler({ user }) {
   }
 
   return (
-    <div className="grid grid-cols-12 gap-5 max-w-[98vw] mx-auto p-1 font-sans text-slate-200">
+    <div 
+      className="grid grid-cols-12 gap-5 max-w-[98vw] mx-auto p-1 font-sans text-slate-200"
+      onClick={() => setSelectedDayContext(null)}
+    >
       
       {/* 🏛️ REFACTORED STYLE SYSTEM: Audited, streamlined, and structured to prevent layout rendering collision */}
       <style>{`
@@ -329,7 +374,7 @@ export default function Scheduler({ user }) {
       {/* LEFT COMPONENT: CORE FULLCALENDAR ENGINE */}
       <div className="col-span-12 lg:col-span-9 space-y-4">
         {user?.isOfficer && (
-          <div className="bg-slate-900/40 border border-slate-800 p-3.5 px-5 rounded-2xl flex justify-between items-center select-none">
+          <div className="bg-slate-900/40 border border-slate-800 h-[52px] px-5 rounded-2xl flex justify-between items-center select-none">
             <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">Officer Tools:</span>
             <button
               type="button"
@@ -468,15 +513,23 @@ export default function Scheduler({ user }) {
             }}
 
             eventClick={(info) => {
+              info.jsEvent.stopPropagation(); // 🛡️ Blocks click from bubbling up to background containers
               const props = info.event.extendedProps;
               const dateStr = props.isSpecial ? props.dateStr : formatDateToLocalString(info.event.start);
-              setSelectedDayContext({
-                eventId: info.event.id,
-                config: props.config,
-                dateStr,
-                dayNum: info.event.start.getDate(),
-                isSpecial: props.isSpecial,
-                details: props.details || null
+              
+              setSelectedDayContext((prev) => {
+                // Functional verification: Detach panel cleanly if active instance matches target click
+                if (prev?.eventId === info.event.id && prev?.dateStr === dateStr) {
+                  return null;
+                }
+                return {
+                  eventId: info.event.id,
+                  config: props.config,
+                  dateStr,
+                  dayNum: info.event.start.getDate(),
+                  isSpecial: props.isSpecial,
+                  details: props.details || null
+                };
               });
             }}
           />
@@ -484,16 +537,23 @@ export default function Scheduler({ user }) {
       </div>
 
       {/* RIGHT COMPONENT: SIDEBAR ROSTER DESK */}
-      <div className="col-span-12 lg:col-span-3 space-y-4">
-        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl flex items-center gap-2">
+      <div className="col-span-12 lg:col-span-3 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-slate-900/40 border border-slate-800 h-[52px] px-5 rounded-2xl flex items-center gap-2 select-none">
           <Zap size={14} className="text-amber-400 shrink-0" />
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Guild Scheduler</h3>
         </div>
 
         {activeDayFocus ? (
           <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-5 space-y-5 shadow-xl animate-fadeIn">
-            <div className="space-y-1 select-none">
-              <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Event Details</span>
+            <button
+                type="button"
+                onClick={() => setSelectedDayContext(null)}
+                className="mb-1 text-[10px] font-mono font-bold text-slate-400 hover:text-indigo-400 uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                ← Back to Quick View
+              </button>
+              <div className="space-y-1 select-none">
+                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Event Details</span>
               <h4 className="text-sm font-black text-slate-200 tracking-wide font-sans mt-0.5 flex items-center gap-2">
                 {activeDayFocus.isSpecial ? (
                   <Sparkles size={15} className="text-violet-400 shrink-0" />
@@ -606,11 +666,85 @@ export default function Scheduler({ user }) {
               </div>
             )}
           </div>
-        ) : (
-          <div className="border border-dashed border-slate-800 bg-slate-950/10 rounded-3xl p-8 text-center text-xs font-mono italic text-slate-600 select-none">
-            Select an active event box on the calendar to log profile availability.
-          </div>
-        )}
+            ) : (
+              <div className="border border-slate-800 bg-slate-950/40 rounded-3xl p-4 space-y-4 shadow-xl animate-fadeIn flex flex-col">
+                <div className="select-none border-b border-slate-900 pb-2.5">
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Quick Actions</span>
+                  <h4 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mt-0.5">
+                    <Calendar size={13} className="text-indigo-400" /> Upcoming Week Sign-Up
+                  </h4>
+                </div>
+                
+                <div className="space-y-2 max-h-[24rem] overflow-y-auto pr-1 scrollbar-thin pt-1 flex-1">
+                  {weeklyUpcomingInstances.length === 0 ? (
+                    <div className="text-center py-8 text-[11px] text-slate-600 font-mono italic">No events scheduled for the next 7 days.</div>
+                  ) : (
+                    weeklyUpcomingInstances.map((item, idx) => {
+                      const compositeKey = `${item.dateStr}_${item.id}`;
+                      const currentStatus = commitments[compositeKey]?.[user?.id]?.status;
+                      
+                      const dateObj = new Date(item.dateStr + 'T00:00:00');
+                      const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                      const monthDayLabel = dateObj.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' });
+
+                      return (
+                        <div key={idx} className="p-2.5 rounded-xl border border-slate-800/60 bg-slate-900/20 flex flex-col space-y-2 hover:border-slate-800 transition-colors">
+                          <div className="flex justify-between items-start gap-2 min-w-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11px] font-bold text-slate-200 truncate uppercase tracking-wide flex items-center gap-1">
+                                {item.isSpecial ? <Sparkles size={11} className="text-violet-400 shrink-0" /> : <Sword size={11} className="text-slate-500 shrink-0" />}
+                                <span className="truncate">{item.title}</span>
+                              </div>
+                              <div className="text-[9px] font-mono text-slate-500 mt-0.5">
+                                {item.timeStart} - {item.timeEnd}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 font-mono text-[10px] bg-slate-950 px-2 py-0.5 border border-slate-900 rounded-md text-slate-400 font-bold">
+                              {dayLabel} {monthDayLabel}
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-1.5 pt-0.5 font-sans">
+                            <button
+                              type="button"
+                              onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Confirmed' ? 'None' : 'Confirmed')}
+                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer ${
+                                currentStatus === 'Confirmed'
+                                  ? 'border-emerald-500 bg-emerald-950/30 text-emerald-400 font-black'
+                                  : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              Confirm {currentStatus === 'Confirmed' && <Check size={11} strokeWidth={3} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Leave' ? 'None' : 'Leave')}
+                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer ${
+                                currentStatus === 'Leave'
+                                  ? 'border-amber-500 bg-amber-950/30 text-amber-400 font-black'
+                                  : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              Leave {currentStatus === 'Leave' && <X size={11} strokeWidth={3} />}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {weeklyUpcomingInstances.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleConfirmAllWeeks}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold uppercase tracking-wider text-white rounded-xl transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 shadow-md mt-2 shrink-0"
+                  >
+                    <Check size={13} strokeWidth={3} /> Confirm this week
+                  </button>
+                )}
+              </div>
+            )}
       </div>
 
       {/* INPUT FORM MODAL CONTAINER */}
