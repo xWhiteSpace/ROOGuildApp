@@ -199,11 +199,14 @@ router.get('/me', (req, res) => {
             .digest('hex');
             
           // 🛡️ TAMPER CHECK: Grant access only if the client signature matches our cryptographic backend hash
-          if (clientSignature === expectedSignature) {
-            user = profileToVerify;
-          } else {
-            console.error("🛑 [SECURITY MONITOR]: Unauthorized modification detected on x-user-profile token header payload!");
-          }
+                  if (clientSignature === expectedSignature) {
+                    user = {
+                      ...profileToVerify,
+                      _sig: clientSignature
+                    };
+                  } else {
+                    console.error("🛑 [SECURITY MONITOR]: Unauthorized modification detected on x-user-profile token header payload!");
+                  }
         }
       } catch (e) {
         console.error("❌ Failed to decode cross-domain profile header token inside /me check:", e.message);

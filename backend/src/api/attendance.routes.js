@@ -466,5 +466,164 @@ router.put('/special-events/:id', async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
+// 📁 GET /api/attendance/compositions -> Read Compositions via Admin SDK (Bypasses rules)
+router.get('/compositions', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const snap = await db.ref('attendance/compositions').once('value');
+    return res.json({ success: true, compositions: snap.exists() ? snap.val() : {} });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📁 POST /api/attendance/compositions/create -> Create Blank Configuration via Admin SDK (Bypasses rules)
+router.post('/compositions/create', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const compsSnap = await db.ref('attendance/compositions').once('value');
+    let nextIndex = 1;
+    if (compsSnap.exists()) {
+      const existingKeys = Object.keys(compsSnap.val());
+      const numericIds = existingKeys.map(k => {
+        const match = k.match(/^party_(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      nextIndex = Math.max(...numericIds, 0) + 1;
+    }
+
+    const sequentialConfigId = `party_${String(nextIndex).padStart(3, '0')}`;
+    const targetConfigRef = db.ref(`attendance/compositions/${sequentialConfigId}`);
+    
+    const blankPayload = {
+      id: sequentialConfigId,
+      title: `Raid Setup Configuration ${nextIndex}`,
+      lastUpdated: Date.now(),
+      updatedBy: user.displayName || user.username || 'Officer',
+      gridTopology: { columns: 8, rows: 5 },
+      slots_allocation: {}
+    };
+
+    await targetConfigRef.set(blankPayload);
+    return res.json({ success: true, id: sequentialConfigId });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 💾 POST /api/attendance/compositions/save -> Save Configuration Matrix via Admin SDK (Bypasses rules)
+router.post('/compositions/save', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const { configId, title, gridMatrix } = req.body;
+    if (!configId) return res.status(400).json({ success: false, error: 'Missing configId parameter.' });
+
+    await db.ref(`attendance/compositions/${configId}`).update({
+      title: title,
+      lastUpdated: Date.now(),
+      updatedBy: user.displayName || user.username || 'Officer',
+      slots_allocation: gridMatrix
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 🖨️ POST /api/attendance/compositions/duplicate -> Duplicate Matrix via Admin SDK (Bypasses rules)
+router.post('/compositions/duplicate', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const { sourceId, cleanAllocationPayload } = req.body;
+    if (!sourceId) return res.status(400).json({ success: false, error: 'Missing sourceId parameter.' });
+
+    const sourceSnap = await db.ref(`attendance/compositions/${sourceId}`).once('value');
+    if (!sourceSnap.exists()) return res.status(404).json({ success: false, error: 'Source config not found' });
+
+    const sourceConfig = sourceSnap.val();
+    const compsSnap = await db.ref('attendance/compositions').once('value');
+    let nextIndex = 1;
+    if (compsSnap.exists()) {
+      const existingKeys = Object.keys(compsSnap.val());
+      const numericIds = existingKeys.map(k => {
+        const match = k.match(/^party_(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      nextIndex = Math.max(...numericIds, 0) + 1;
+    }
+
+    const sequentialConfigId = `party_${String(nextIndex).padStart(3, '0')}`;
+    const duplicatePayload = {
+      id: sequentialConfigId,
+      title: `${sourceConfig.title || 'Untitled'} (Copy)`,
+      lastUpdated: Date.now(),
+      updatedBy: user.displayName || user.username || 'Officer',
+      gridTopology: { columns: 8, rows: 5 },
+      slots_allocation: cleanAllocationPayload || {}
+    };
+
+    await db.ref(`attendance/compositions/${sequentialConfigId}`).set(duplicatePayload);
+    return res.json({ success: true, id: sequentialConfigId });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 🗑️ DELETE /api/attendance/compositions/delete/:id -> Delete Configuration via Admin SDK (Bypasses rules)
+router.delete('/compositions/delete/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, error: 'Missing configuration ID.' });
+
+    await db.ref(`attendance/compositions/${id}`).remove();
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 export default router;
