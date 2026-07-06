@@ -15,7 +15,11 @@ To support ongoing system stabilization, data modernization, and architectural d
 | **`Task003`** | **Dynamic Application Parameterization** | Extract hardcoded limits, schedules, and variables into configurable parameters managed via a central application setting tree. |
 | **`Task004`** | **Legacy Google Sheets Pipeline Retirement** | Deprecate all modules mapping parameters, fetching historical columns, or parsing grid matrix rows from external Google Sheets. |
 | **`Task005`** | **5S Security & Token Standardization** | Standardize header-driven identification strings and session profile key names to match uniform global tokens. |
-
+Milestone ID	Core Technical Objective	Scope of Impact
+Task006	Contextual Multi-Hub Core Routing	Introduce a macro layout splitter separating full-stack web applications into independent context layers (Auction vs Attendance).
+Task007	Gateway Voice State Telemetry Loop	Bind background bot gateway clients to real-time Discord voice sockets to track automated war room entry/exit milestones.
+Task008	Dynamic Matrix Geometry Engine	Architect a frontend grid canvas that dynamically scales party slot columns and rows based on cloud configuration trees.
+Task009	Job Classification Catalog Matrix	Establish a rigid database enum lookup tree matching player profiles to specific role attributes modified via slash commands.
 ---
 
 ## 🖥️ Part 1: Backend Server Architecture
@@ -122,9 +126,12 @@ This configuration module holds the structural schedule parameters, cutoff calen
 * **REQ042 (Absolute GMT+8 Time Zone Enforcement):** The scheduling evaluation engine must programmatically normalize all system date strings and server runtime clock assessments strictly to the **Asia/Manila GMT+8** timezone. This ensures deadline thresholds execute perfectly on schedule regardless of the timezone configuration of the cloud provider hosting the code.
     * > ⚠️ **Developer Review Alert (`Task003`):** This hardcoded timezone conversion routine must transition into an adjustable setting node within the centralized Firebase system properties dashboard.
 * **REQ043 (Raid Registration Timeline Matrix):** The system manages signup boundaries, lock phases, and target operations based on a rigid weekly loop structure:
-    * **Tuesday Raid Operation:** Registration opens Sunday evening at **10:15 PM** $ightarrow$ absolute hard lockdown locks on Monday evening at **10:15 PM (22:15) GMT+8**.
-    * **Thursday Raid Operation:** Registration opens Tuesday evening at **10:15 PM** $ightarrow$ absolute hard lockdown locks on Wednesday evening at **10:15 PM (22:15) GMT+8**.
-    * **Sunday Raid Operation:** Registration opens Thursday evening at **10:15 PM** $ightarrow$ absolute hard lockdown locks on Saturday evening at **10:15 PM (22:15) GMT+8**.
+    * **Tuesday Raid Operation:** Registration opens Sunday evening at **10:15 PM** $
+ightarrow$ absolute hard lockdown locks on Monday evening at **10:15 PM (22:15) GMT+8**.
+    * **Thursday Raid Operation:** Registration opens Tuesday evening at **10:15 PM** $
+ightarrow$ absolute hard lockdown locks on Wednesday evening at **10:15 PM (22:15) GMT+8**.
+    * **Sunday Raid Operation:** Registration opens Thursday evening at **10:15 PM** $
+ightarrow$ absolute hard lockdown locks on Saturday evening at **10:15 PM (22:15) GMT+8**.
     * > ⚠️ **Developer Review Alert (`Task003`):** The weekly scheduling calendar array must be extracted from hardcoded files and migrated into configurable database parameter lists.
 * **REQ044 (Automated 3-Phase State Processor):** The core configuration script must continuously evaluate the active system clock against schedule metrics to automatically drop the full-stack system layout into one of three unique operational states:
     * **Phase 1 (Bid Request Open):** Registration paths are fully accessible; members can open dashboards and modify scroll selection values.
@@ -260,7 +267,9 @@ This file implements the interactive signup dashboard layout, allowing users to 
 ### 👑 Administrative Allocation Center: `frontend/src/pages/MimicBookTab.jsx`
 This file implements the secure administrative interface layer used by guild officers to configure active drop tallies, examine candidate prioritization scores, and control phase shifts.
 
-* **REQ079 (Sequential Multi-Step Officer Wizard Workflow):** The interface must enforce a strict multi-step execution layout wizard to guide administrative users chronologically through operation steps: `Step 1: Loot Input` $ightarrow$ `Step 2: Evaluation Matrix` $ightarrow$ `Step 3: Live Session Controls`.
+* **REQ079 (Sequential Multi-Step Officer Wizard Workflow):** The interface must enforce a strict multi-step execution layout wizard to guide administrative users chronologically through operation steps: `Step 1: Loot Input` $
+ightarrow$ `Step 2: Evaluation Matrix` $
+ightarrow$ `Step 3: Live Session Controls`.
 * **REQ080 (Drop Quantity & Capacity Matrix Form Inputs):** Within the Step 1 view container, the interface must render editable form lines allowing officers to input exact scroll volume drops recorded during the raid (`Puppet`, `Illu`, `Light & Dark`, `Time & Space`), alongside fields defining baseline transaction parameters, session caps, and active player selection counts.
     * > ⚠️ **Developer Review Alert (`Task001` / `Task003`):** Introduce an explicit Date Selection Picker component inside the Step 1 layout wrapper that directly updates the parameter key at `auction/active_session/date` within the core database, allowing item settings to be predefined before raid initialization.
 * **REQ081 (Active Registration List Aggregation):** The configuration dashboard must automatically query all active participant selections from the system, linking item demand numbers right beside historical priority scores to organize clean profiles for officer evaluation.
@@ -281,8 +290,10 @@ This file implements the secure administrative interface layer used by guild off
 * **REQ086 (Automated Scroll-to-Bottom Layout Anchor):** The viewport scroll element container must watch data length variables. When a message appends or the component initializes, the system must trigger an automated transition script to force the scroll boundary down to the absolute bottom margin line.
     * > ✅ *Resolved Bug Task:* Successfully implements the scrolling layout fix addressing logged issues: `"di nag aauto scroll yung live feed"`.
 * **REQ087 (Visual Transmission Source Color Formatting):** Incoming message panels must execute conditional styling checks to apply distinctive color formats based on the message origin network channel:
-    * `source: "app"` $ightarrow$ Applies clean, custom dashboard panel frame theme boundaries.
-    * `source: "discord"` $ightarrow$ Applies a stylized border layout themed around Discord's branding palette.
+    * `source: "app"` $
+ightarrow$ Applies clean, custom dashboard panel frame theme boundaries.
+    * `source: "discord"` $
+ightarrow$ Applies a stylized border layout themed around Discord's branding palette.
 * **REQ088 (Interactive Form Submission Dispatcher):** The container provides a text entry bar element and an interactive `"Send"` delivery icon button. Pressing the Enter key or clicking the icon launches network delivery scripts and handles cleaning the input field.
 * **REQ089 (Unauthenticated Component Typing Lockdown):** If an unauthenticated user mounts the view, the text entry area must freeze via hardcoded disabled elements, and present an announcement block reading: `"Please login to participate in the chat."`
 
@@ -315,9 +326,12 @@ This file implements the primary network connection routines for the registratio
 These modules layout the foundational template frameworks for upcoming portal dashboards, maintaining sidebar alignment while tracking future features.
 
 * **REQ096 / REQ098 / REQ100 (Static Core Text Information Indicators):** The view wrappers must render clean, basic layout blocks presenting explicit development indicator strings:
-    * `RequestHistoryTab.jsx` $ightarrow$ `"History entries will appear here..."`
-    * `PastAuctionTab.jsx` $ightarrow$ `"Past auction summaries will display here."`
-    * `SubmitEvidenceTab.jsx` $ightarrow$ `"Evidence submission form will be placed here."`
+    * `RequestHistoryTab.jsx` $
+ightarrow$ `"History entries will appear here..."`
+    * `PastAuctionTab.jsx` $
+ightarrow$ `"Past auction summaries will display here."`
+    * `SubmitEvidenceTab.jsx` $
+ightarrow$ `"Evidence submission form will be placed here."`
     * > 📝 *Implementation Timeline:* These panels are structurally locked as empty frameworks for the current release. Following the deprecation of legacy spreadsheet code blocks, they can connect directly to dedicated historical arrays inside Firebase (e.g., `auction/history/[memberName]`).
 * **REQ097 / REQ099 / REQ101 (Persistent Sidebar Navigation Mounting):** The component endpoints must remain properly registered and mounted inside the parent sidebar routing tree, allowing standard application visitors to navigate to the tabs without generating application breaks or view rendering exceptions.
     * > 📝 *Task Alignment Check:* All visual placeholders are confirmed safe and correctly aligned; if any feature segment touches the live bidding module layer, it will be cleaned up under the `Task002` feature pass.
@@ -375,7 +389,49 @@ This central project configuration manifest outlines metadata profiles, automate
     * **`cookie-session`:** Encrypts user tracking keys inside client browser cookies.
     * > 🧼 **Dependency Matrix Decoupling Passed (`Task004`):** The legacy `googleapis` data library is completely scheduled for uninstallation from this configuration file, reducing production package weight and removing all references to old spreadsheet platforms.
 * **REQ115 (Frontend Component Architecture Locking):** The dependency definitions must explicitly lock down version levels for the visual workspace elements, anchoring **`react`**, **`react-dom`**, and matching compilation engines to fully compatible version paths to guarantee dashboard layouts render smoothly across all mobile, tablet, and desktop devices.
-
+🖥️ Part 1: Extended Backend Server Architecture
+🌐 Core Application Module Extensions
+REQ116 (Multi-Hub Splitter Handshake): The server instance must intercept network traffic and distinguish endpoints routing under the /api/requests auction path from all new queries targeting the new /api/attendance data pipelines. Both structures must remain structurally decoupled to isolate latency.
+REQ117 (Voice War Room Configuration Environment Whitelist): The host runtime engine must expose up to 5 dedicated server configuration environment strings (DISCORD_WARROOM_ID_1 through DISCORD_WARROOM_ID_5). These variables must match active numeric Discord Snowflake voice room indexes to define the automated tracking canvas.
+REQ118 (Gateway Voice State Telemetry Interceptor): The core background bot framework must attach a persistent socket listener mapping to Discord's native voiceStateUpdate event stream. This listener must monitor user movement across the whitelisted War Room Snowflake IDs in real-time.
+REQ119 (Automated Attendance Clock-In Metric): When a guild profile crosses the boundary into an active voice War Room ID, the parser must read their Discord Snowflake user ID, match it against the global cache, capture the localized system clock timestamp, and append a transaction record under a new Firebase path attendance/live_sessions/[userId] with an initial tracking status string of "ClockedIn".
+REQ120 (Automated Attendance Clock-Out Reconciliation): When a user drops from a whitelisted voice room or disconnects from the voice gateway, the interceptor must execute a callback function to patch the active session document, write a millisecond-level epoch clock duration, evaluate the total active presence session minutes, and archive the concluded session record under attendance/historical_ledger/.
+🗃️ Master Roster & Job Class API Routers
+REQ121 (Roster Identity Sync Locking): The master attendance list layer must strictly enforce a relational mapping rule prohibiting the manual creation of arbitrary character profiles. All participants must map uniquely to a verified numeric Discord Snowflake identity key matching your native auction/members collection pool.
+REQ122 (Job Class Definition Lookup Enums): The server must parse a new administrative collection tree under settings/job_catalog that holds verified game role signatures (e.g., specific class definitions and specializations) to prevent data corruption during mutations.
+REQ123 (Bot Slash Command Mutation Gateways): The background Discord execution client must register two public application slash commands: /job and /jobchange.
+REQ124 (Atomic Job Assignment Processing): Upon parsing a valid role mutation from a player via a slash command, the bot engine must validate that the requested class name exists within the settings/job_catalog enum pool. Upon confirmation, it must run an atomic transaction updating the user's flat profile mapping at attendance/roster_profiles/[userId]/job across all interconnected visual interfaces.
+REQ125 (Administrative Member Lifecycle Mutations): The API must expose restricted endpoints (/api/attendance/roster/modify) that assert explicit Discord Officer role verifications. Authorized guild leaders can append new manual data keys (such as dateJoin string arrays) or purge profiles from active attendance grids.
+REQ126 (Deterministic Attendance Frequency Scoring): The router compiler must dynamically calculate an individual's active performance quotient by dividing their total recorded raid hour logs against the total master event hours declared by officers across a rolling 30-day index window. This numerical score is returned to the frontend to drive conditional accent styles.
+🎨 Part 2: Extended Frontend Client Architecture
+🎛️ Application Top-Level Context Splitter
+REQ127 (Macro Hub Top Selector Navigation Bar): The application root frame must render an unalterable horizontal context navigation switcher positioned at the absolute top margin boundary of the viewport window. This bar must display two high-visibility interactive options: [⚔️ Guild Auction Core] and [🛡️ Attendance & Raid Compositions].
+REQ128 (Sidebar Context Metamorphosis Engine): When a user clicks between the top-level macro tabs, the underlying page rendering engine must seamlessly hot-swap the layout structures:
+Selecting Auction Core: Mounts the traditional left nav-bar container links matrix (Request, Mimic Book, Request History, Past Auction, Submit Evidence).
+Selecting Attendance Core: Completely unmounts the auction sidebar, replacing it with an exclusive, custom navigational tree mapping to the independent attendance dashboards.
+REQ129 (Cross-Domain Context Leak Isolation): Global UI application workspace context matrices (MimicBookContext) must wrap and execute inside isolated layout scopes. Shifting between the main top context tabs must flush ephemeral visual selections to prevent cross-contamination of cache components.
+👥 MasterList Tab Layer (MasterListTab.jsx)
+REQ130 (Administrative CRUD Governance Console): If an officer logs into the portal, this view layout must unlock administrative action controls allowing the user to click custom input modifiers to append profile metadata parameters directly into the database.
+REQ131 (Data Grid Structural Layout Pillars): The table grid container must arrange historical participant rows across three precise structural columns: Member Identity (resolving global nickname parameters from the SSOT) | Current Assigned Job | Date Join Record.
+REQ132 (Morale-Preserving Neon Participation Indication Rule): The name label cells within the data rows must utilize a dynamic CSS theme engine driven by the calculated frequency scores from the server:
+High-Participation Threshold: Applies a high-visibility, distinct neon-emerald green pulsing halo border around the text layer, signaling constant, dependable attendance.
+Lower-Participation Threshold: Gradually degrades to a faded, low-opacity translucent mint green pulse.
+🛑 Absolute Visual Morale Ban Rule: The user interface is strictly forbidden from compiling or rendering hostile red, crimson, or warning-themed accent colors against low-attendance entries to prevent toxic call-outs and bad impressions within the community group.
+🎮 Expandable Raid Party Grid Component (RaidPartyTab.jsx)
+REQ133 (Raid Party Canvas Blueprint Initial Geometry): The visual configuration layout space must instantiate a structured, twin-axis composition matrix initializing strictly with a default geometric boundary layout containing exactly 8 vertical columns (representing separate battle groups) and 5 horizontal rows (representing distinct slot configurations within each group).
+REQ134 (Central Parameter Desk Matrix Scaling): The row and column boundaries must be completely fluid, decoupled from hardcoded frontend code structures. The component layout engine must query the cloud parameter path settings/attendance_configuration/ to dynamically upscale or downscale total allowable columns and rows on the fly to support macro structural changes.
+REQ135 (Multi-Composition Configuration Tabs): The top margin of the party builder workspace must embed interactive layout tabs allowing organizers to generate and save multiple unique raid team arrangements (e.g., "Main Optimization Team", "Speed Clear Group", "Reserve Team"). The absolute maximum limit of saved compositions must be fully adjustable via settings variables.
+REQ136 (Member Card Layout Typography Vectors): Each distinct player allocation coordinate within the active grid spaces must compile and render a self-contained, responsive capsule tracking:
+┌────────────────────────────────────────┐
+│  [Circle Avatar]  Nickname Handle     │
+│                   Job Role Text        │
+│  id: 1506618826857517187               │ <-- Rendered in micro-sized fonts
+└────────────────────────────────────────┘
+REQ137 (standby drag-and-drop mapping): The party builder canvas must track asynchronous input event dragging hooks. Organizers click and grab member cards out of the standby tracking pools or active roster arrays and hover over vacant cell coordinates on the raid grid to execute atomic position updates.
+📊 Attendance Analytics & Commitment Scheduler Pipelines
+REQ138 (Chronological Trend Line Charts): The Statistics Viewport must read compressed epoch tracking lines out of the real-time database nodes and pass them down into vector graphs, plotting overall guild daily attendance percentages right next to user-specific profile query field searches.
+REQ139 (Job Balance Distribution Chart Matrix): The component must implement a visual pie chart layout mapping out the aggregate volumes of registered players across each specific role classification to let officers analyze group structural dependencies.
+REQ140 (Dynamic Commitment Scheduler Grid): The timeline dashboard must expose an interactive calendar interface where general raiders log forward availability parameters (e.g., indicating Can Join vs Absent/Busy on specific future raid calendar slots), while management officers retain absolute control over setting dynamic event dates, hour timelines, and target session rules.
 ---
 
 ## 📊 Requirements Inventory Validation Checklist

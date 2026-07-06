@@ -10,7 +10,13 @@ export function initializeEnv() {
     'FIREBASE_PRIVATE_KEY',
     'FIREBASE_DATABASE_URL',
     'DISCORD_AUCREQ_CHANNEL_ID',
-    'DISCORD_AUCTION_CHANNEL_ID'
+    'DISCORD_AUCTION_CHANNEL_ID',
+    'DISCORD_GENROOM_ID_1',
+    'DISCORD_WARROOM_ID_1',
+    'DISCORD_WARROOM_ID_2',
+    'DISCORD_WARROOM_ID_3',
+    'DISCORD_WARROOM_ID_4',
+    'DISCORD_WARROOM_ID_5'
   ];
 
   const missing = required.filter((key) => !process.env[key]);

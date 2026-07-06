@@ -16,7 +16,8 @@ export const discordClient = new Client({
     GatewayIntentBits.Guilds, 
     GatewayIntentBits.GuildMessages, 
     GatewayIntentBits.MessageContent, 
-    GatewayIntentBits.GuildMembers 
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates
   ],
   partials: [Partials.Channel, Partials.Message],
 });
@@ -43,6 +44,53 @@ export async function initializeDiscordBot() {
             ephemeral: true 
           }).catch(() => {});
         }
+      }
+    });
+
+    // 🛡️ Foundational Job Assignment Message Interceptor
+    discordClient.on('messageCreate', async (message) => {
+      try {
+        if (message.author.bot) return;
+        if (message.channelId !== process.env.DISCORD_GENROOM_ID_1) return;
+
+        const content = message.content.trim();
+        if (content.startsWith('/job ') || content.startsWith('/jobchange ')) {
+          const parts = content.split(' ');
+          const inputJobName = parts.slice(1).join(' ').trim();
+          
+          if (!inputJobName) {
+            return await message.reply("❌ Please provide a job name. Example: `/job High Priest`").catch(() => {});
+          }
+
+          const db = admin.database();
+          const configSnap = await db.ref('settings/configuration/jobs').once('value');
+          let matchedJobCode = null;
+          let matchedJobName = "";
+
+          if (configSnap.exists()) {
+            const jobsData = configSnap.val();
+            for (const [code, jobObj] of Object.entries(jobsData)) {
+              if (jobObj?.name?.toLowerCase() === inputJobName.toLowerCase()) {
+                matchedJobCode = code;
+                matchedJobName = jobObj.name;
+                break;
+              }
+            }
+          }
+
+          if (!matchedJobCode) {
+            return await message.reply(`❌ Job \`${inputJobName}\` is not registered in the system settings catalog by officers.`).catch(() => {});
+          }
+
+          // Atomically append property straight into the core global profile SSOT row
+          await db.ref(`auction/members/${message.author.id}`).update({
+            jobCode: matchedJobCode
+          });
+
+          await message.reply(`✅ Success! Your job specialization has been successfully updated to **${matchedJobName}** (\`${matchedJobCode}\`).`).catch(() => {});
+        }
+      } catch (err) {
+        console.error("⚠️ Error handling job text command trigger:", err.message);
       }
     });
 

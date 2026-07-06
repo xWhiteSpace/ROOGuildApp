@@ -10,6 +10,12 @@ import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
 import LoginPage from './pages/LoginPage';
 import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
 import { fetchCurrentUser, logoutUser } from './services/authService';
+import MasterListTab from './pages/MasterListTab';
+
+import RaidPartyTab from './pages/RaidPartyTab';
+import StatisticsTab from './pages/StatisticsTab';
+
+import Scheduler from './pages/Scheduler';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -79,6 +85,8 @@ export function MimicBookProvider({ children }) {
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  const [macroTab, setMacroTab] = useState('auction');
 
   useEffect(() => {
     async function loadUser() {
@@ -163,7 +171,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <MimicBookProvider>
-        <MainLayout user={authUser} onLogout={handleLogout}>
+        <MainLayout user={authUser} onLogout={handleLogout} macroTab={macroTab} setMacroTab={setMacroTab}>
           <Routes>
             <Route path="/" element={<RequestTab user={authUser} />} />
             <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
@@ -174,6 +182,12 @@ export default function App() {
             
             {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
             <Route path="/settings-configuration" element={<SettingsTab />} />
+            
+            {/* 🛡️ Foundational Raid Governance Routes Mapping */}
+            <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
+            <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+            <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
+            <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
           </Routes>
         </MainLayout>
       </MimicBookProvider>
