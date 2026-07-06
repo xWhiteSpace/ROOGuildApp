@@ -1,5 +1,5 @@
 // frontend/src/pages/RaidPartyTab.jsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Copy, 
@@ -8,12 +8,14 @@ import {
   MoreVertical, 
   Search, 
   Calendar, 
-  AlertCircle, 
   Check, 
   X, 
   UserPlus, 
   ShieldAlert, 
-  Save 
+  Save,
+  Grid,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -35,23 +37,26 @@ export default function RaidPartyTab({ user }) {
     return today.toISOString().split('T')[0];
   });
 
-  // --- Local Staging Mirror States (Prevents Constant DB Commits) ---
+  // --- Local Staging Mirror States ---
   const [localTitle, setLocalTitle] = useState('');
-  const [localGridMatrix, setLocalGridMatrix] = useState({}); // Key: "col-row" => { userId, roleLock }
+  const [localGridMatrix, setLocalGridMatrix] = useState({}); 
   const [isDirty, setIsDirty] = useState(false);
+
+  // --- Dynamic Grid Dimensions (Stateful, max 10x10) ---
+  const [columnsCount, setColumnsCount] = useState(8);
+  const [rowsCount, setRowsCount] = useState(5);
 
   // --- UI Layout Presentation States ---
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuConfigId, setActiveMenuConfigId] = useState(null);
   const [activePopover, setActivePopover] = useState(null); // Tracks { coordKey, type: 'assign' | 'gear' }
   const [selectedPopoverJob, setSelectedPopoverJob] = useState('');
+  const [dragHoveredCoord, setDragHoveredCoord] = useState(null); 
+
+  const gridRef = useRef(null);
 
   // --- Accordion Sidebar Selection Toggle States ---
   const [openAccordion, setOpenAccordion] = useState({ standby: true, uncommitted: true, leave: false });
-
-  // Core Static Geometry Grid Layout Dimensions (Rigid 8 Columns x 5 Rows In-game Mirror)
-  const columnsCount = 8;
-  const rowsCount = 5;
 
   // --- Collapsible Layout Drawer Toggles ---
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -64,7 +69,7 @@ export default function RaidPartyTab({ user }) {
     return 'col-span-12 xl:col-span-7';
   }, [leftPanelCollapsed, rightPanelCollapsed]);
 
-  // --- 1. Unified Backend API Sync Pipeline (Matches MasterList / Scheduler logic) ---
+  // --- 1. Unified Backend API Sync Pipeline ---
   const loadRaidPartyWorkspace = async () => {
     try {
       setLoading(true);
@@ -72,7 +77,6 @@ export default function RaidPartyTab({ user }) {
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      // Fetch master lists using your existing working backend endpoints
       const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
       const initData = await initRes.json();
       if (initData.success) {
@@ -86,7 +90,6 @@ export default function RaidPartyTab({ user }) {
         setJobsCatalog(configData.config.jobs);
       }
 
-      // Fetch saved matrix configurations out of your backend endpoint
       const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
@@ -119,6 +122,40 @@ export default function RaidPartyTab({ user }) {
     }
   };
 
+  const handleCopyRosterImage = async () => {
+    if (!gridRef.current) return;
+    try {
+      // Wrap the image generator inside a Promise to pass to ClipboardItem natively, keeping user gesture alive
+      const imagePromise = (async () => {
+        const { toBlob } = await import('html-to-image');
+        const node = gridRef.current;
+        return await toBlob(node, {
+          backgroundColor: '#020617',
+          width: node.scrollWidth + 8,
+          height: node.scrollHeight + 8,
+          style: {
+            overflow: 'visible',
+            transform: 'scale(1)',
+            webkitTransform: 'scale(1)',
+            width: (node.scrollWidth + 8) + 'px',
+            height: (node.scrollHeight + 8) + 'px',
+            margin: '0',
+            padding: '8px'
+          }
+        });
+      })();
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": imagePromise })
+      ]);
+      alert("📋 SUCCESS: Raid roster matrix snapshot copied straight to your clipboard!");
+    } catch (err) {
+      console.error("Clipboard copy exception:", err);
+      alert(`❌ ERROR: Copy failed.\nReason: ${err.name || 'Error'}: ${err.message || err}`);
+    }
+  };
+
+  // Cache continuous real-time calendar values for matching grid dot lookups
   useEffect(() => {
     loadRaidPartyWorkspace();
   }, [user]);
@@ -129,18 +166,30 @@ export default function RaidPartyTab({ user }) {
   useEffect(() => {
     if (selectedConfigId && compositions[selectedConfigId]) {
       const activeConfig = compositions[selectedConfigId];
+      const rawAllocation = activeConfig.slots_allocation || {};
       
       if (selectedConfigId !== prevConfigId) {
         setLocalTitle(activeConfig.title || '');
         setPrevConfigId(selectedConfigId);
       }
+
+      // Extract fluid grid dimension limits dynamically from stored metadata
+      const loadedCols = parseInt(rawAllocation["meta_columnsCount"], 10) || 8;
+      const loadedRows = parseInt(rawAllocation["meta_rowsCount"], 10) || 5;
+      setColumnsCount(loadedCols);
+      setRowsCount(loadedRows);
       
-      // Normalize layout parameters cleanly
       const normalizedMatrix = {};
-      for (let c = 1; c <= columnsCount; c++) {
-        for (let r = 1; r <= rowsCount; r++) {
+      // Preserve layout metadata parameters securely
+      normalizedMatrix["meta_columnsCount"] = loadedCols;
+      normalizedMatrix["meta_rowsCount"] = loadedRows;
+
+      for (let c = 1; c <= 10; c++) {
+        const partyNameKey = `party_name_${c}`;
+        normalizedMatrix[partyNameKey] = rawAllocation[partyNameKey] || `Party ${c}`;
+        for (let r = 1; r <= 10; r++) {
           const coordKey = `${c}-${r}`;
-          const loadedSlot = activeConfig.slots_allocation?.[coordKey];
+          const loadedSlot = rawAllocation[coordKey];
           normalizedMatrix[coordKey] = {
             userId: loadedSlot?.userId || '',
             roleLock: loadedSlot?.roleLock || ''
@@ -152,26 +201,26 @@ export default function RaidPartyTab({ user }) {
     } else {
       setLocalTitle('');
       setLocalGridMatrix({});
+      setColumnsCount(8);
+      setRowsCount(5);
       setIsDirty(false);
     }
     setActivePopover(null);
   }, [selectedConfigId, compositions]);
 
-  // --- 3. Compute Roster Status Groups via Simulation Date ---
+  // --- 3. Compute Roster Status Pools via Simulation Date ---
   const categorizedRosterPools = useMemo(() => {
     const standby = [];
     const uncommitted = [];
     const leave = [];
 
-    // Collect user maps presently assigned in the layout to display location indicators
     const assignedUserLocationsMap = {};
     Object.entries(localGridMatrix).forEach(([coord, slot]) => {
-      if (slot.userId) {
+      if (slot && slot.userId) {
         assignedUserLocationsMap[slot.userId] = coord;
       }
     });
 
-    // Extract raw schedule parameters for the chosen target date
     const dateSignaturesMap = {};
     Object.entries(commitments).forEach(([compositeKey, signsSubNode]) => {
       if (compositeKey.startsWith(simulationDate)) {
@@ -182,7 +231,6 @@ export default function RaidPartyTab({ user }) {
     });
 
     Object.entries(members).forEach(([uid, profile]) => {
-      // ⚠️ CRITICAL RULES ENFORCEMENT: A profile must be explicitly vetted as true roster inside MasterList Tab to populate lists
       if (profile.isRaidRoster !== true) return; 
 
       const nameMatch = profile.displayName || 'Unknown';
@@ -196,23 +244,24 @@ export default function RaidPartyTab({ user }) {
       let locationBadge = '';
       if (assignedCellCoord) {
         const [col, row] = assignedCellCoord.split('-');
-        locationBadge = `P${col}-S${row}`;
+        const customPartyTitle = localGridMatrix[`party_name_${col}`] || `P${col}`;
+        locationBadge = `${customPartyTitle} - S${row}`;
       }
 
       const enrichedRow = {
         uid,
         displayName: profile.displayName || 'Raid Member',
         jobCode: profile.jobCode || '',
-        assignedLocation: locationBadge
+        assignedLocation: locationBadge,
+        attendanceStatus: calendarStatus || 'None'
       };
 
       if (calendarStatus === 'Leave') {
         leave.push(enrichedRow);
       } else if (calendarStatus === 'Confirmed') {
-        standby.push(enrichedRow);
+        if (!assignedCellCoord) standby.push(enrichedRow);
       } else {
-        // No logged entry matching simulation date parameters -> group into Rule Break Tracker pool
-        uncommitted.push(enrichedRow);
+        if (!assignedCellCoord) uncommitted.push(enrichedRow);
       }
     });
 
@@ -224,7 +273,7 @@ export default function RaidPartyTab({ user }) {
     };
   }, [members, commitments, simulationDate, localGridMatrix, searchQuery]);
 
-  // --- 4. Administrative Configuration Command Handlers (Express API driven) ---
+  // --- 4. Administrative Configuration Command Handlers ---
   const handleCreateBlankConfig = async () => {
     if (!isOfficer) return;
     try {
@@ -245,7 +294,7 @@ export default function RaidPartyTab({ user }) {
         alert(data.error || "Failed to generate blank configuration tree.");
       }
     } catch (err) {
-      console.error("Failed to generate blank configuration tree:", err);
+      console.error(err);
     }
   };
 
@@ -258,6 +307,10 @@ export default function RaidPartyTab({ user }) {
 
       if (sourceConfig.slots_allocation) {
         Object.entries(sourceConfig.slots_allocation).forEach(([coord, slot]) => {
+          if (coord.startsWith("meta_") || coord.startsWith("party_name_")) {
+            cleanAllocationPayload[coord] = slot;
+            return;
+          }
           const targetUid = slot?.userId || '';
           const isUserOnLeave = blacklistedLeaveUids.has(targetUid);
           cleanAllocationPayload[coord] = {
@@ -286,7 +339,7 @@ export default function RaidPartyTab({ user }) {
         alert(data.error || "Failed to duplicate configuration matrix.");
       }
     } catch (err) {
-      console.error("Failed to duplicate configuration matrix:", err);
+      console.error(err);
     }
   };
 
@@ -314,7 +367,7 @@ export default function RaidPartyTab({ user }) {
         alert(data.error || "Failed to delete configuration node.");
       }
     } catch (err) {
-      console.error("Failed to delete configuration node:", err);
+      console.error(err);
     }
   };
 
@@ -325,13 +378,19 @@ export default function RaidPartyTab({ user }) {
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
+      const finalizedMatrix = {
+        ...localGridMatrix,
+        "meta_columnsCount": columnsCount,
+        "meta_rowsCount": rowsCount
+      };
+
       const res = await fetch(`${backendUrl}/api/attendance/compositions/save`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           configId: selectedConfigId,
           title: localTitle,
-          gridMatrix: localGridMatrix
+          gridMatrix: finalizedMatrix
         }),
         credentials: 'include'
       });
@@ -344,11 +403,31 @@ export default function RaidPartyTab({ user }) {
         alert(data.error || "Batch save transaction failed.");
       }
     } catch (err) {
-      console.error("Batch save transaction failed:", err);
+      console.error(err);
     }
   };
 
-  // --- 5. Interactive Cell Grid Allocations Modifier Actions ---
+  // --- 5. Custom Party and Grid Dimension Modifiers ---
+  const handleUpdatePartyName = (colIdx, value) => {
+    setLocalGridMatrix(prev => ({
+      ...prev,
+      [`party_name_${colIdx}`]: value
+    }));
+    setIsDirty(true);
+  };
+
+  const handleResizeGridTopology = (dimension, action) => {
+    if (!isOfficer) return;
+    if (dimension === 'cols') {
+      const nextCols = action === 'add' ? Math.min(10, columnsCount + 1) : Math.max(1, columnsCount - 1);
+      setColumnsCount(nextCols);
+    } else {
+      const nextRows = action === 'add' ? Math.min(10, rowsCount + 1) : Math.max(1, rowsCount - 1);
+      setRowsCount(nextRows);
+    }
+    setIsDirty(true);
+  };
+
   const handleToggleCellRoleLock = (coordKey, jobCode) => {
     setLocalGridMatrix(prev => ({
       ...prev,
@@ -364,16 +443,13 @@ export default function RaidPartyTab({ user }) {
   const handleBindMemberToCell = (coordKey, uid) => {
     setLocalGridMatrix(prev => {
       const updated = { ...prev };
-      
-      // Strict Anti-Cloning Guard: Erase player out of old positions if already allocated elsewhere on the matrix
       if (uid) {
         Object.keys(updated).forEach(k => {
-          if (updated[k].userId === uid) {
+          if (updated[k] && updated[k].userId === uid) {
             updated[k] = { ...updated[k], userId: '' };
           }
         });
       }
-
       updated[coordKey] = {
         ...updated[coordKey],
         userId: uid
@@ -383,6 +459,68 @@ export default function RaidPartyTab({ user }) {
     setIsDirty(true);
     setActivePopover(null);
   };
+
+  // --- 6. Bi-Directional HTML5 Drag & Drop Sub-System ---
+  const handleCellDragStart = (e, coordKey, userId) => {
+    if (!isOfficer || !userId) return;
+    e.dataTransfer.setData("text/plain", JSON.stringify({ source: 'cell', coordKey, userId }));
+  };
+
+  const handleCellDropIntercept = (e, destCoordKey) => {
+    e.preventDefault();
+    if (!isOfficer) return;
+    try {
+      const rawData = e.dataTransfer.getData("text/plain");
+      if (!rawData) return;
+      
+      if (rawData.trim().startsWith('{')) {
+        const parsed = JSON.parse(rawData);
+        if (parsed.source === 'cell') {
+          const srcCoord = parsed.coordKey;
+          const srcUid = parsed.userId;
+          const destUid = localGridMatrix[destCoordKey]?.userId || '';
+
+          setLocalGridMatrix(prev => ({
+            ...prev,
+            [srcCoord]: { ...prev[srcCoord], userId: destUid },
+            [destCoordKey]: { ...prev[destCoordKey], userId: srcUid }
+          }));
+          setIsDirty(true);
+        }
+      } else {
+        handleBindMemberToCell(destCoordKey, rawData);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleFeederPoolDropIntercept = (e) => {
+    e.preventDefault();
+    setDragHoveredCoord(null);
+    if (!isOfficer) return;
+    try {
+      const rawData = e.dataTransfer.getData("text/plain");
+      if (rawData && rawData.trim().startsWith('{')) {
+        const parsed = JSON.parse(rawData);
+        if (parsed.source === 'cell') {
+          handleBindMemberToCell(parsed.coordKey, '');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Cache continuous real-time calendar values for matching grid dot lookups
+  const cellAttendanceMap = {};
+  Object.entries(commitments).forEach(([compositeKey, subNode]) => {
+    if (compositeKey.startsWith(simulationDate)) {
+      Object.entries(subNode).forEach(([uid, payload]) => {
+        cellAttendanceMap[uid] = payload.status;
+      });
+    }
+  });
 
   return (
     <div className="space-y-4 max-w-[98vw] mx-auto p-1 font-sans text-slate-200 overflow-visible relative">
@@ -406,6 +544,22 @@ export default function RaidPartyTab({ user }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
+          {/* STATEFUL TOPOLOGY MATRIX CONTROLLERS */}
+          {selectedConfigId && isOfficer && (
+            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/80 rounded-xl p-1 px-2.5 shadow-inner text-slate-400 font-mono text-[10px] font-bold">
+              <Grid size={13} className="text-slate-500 shrink-0" />
+              <span>COLUMNS:</span>
+              <button onClick={() => handleResizeGridTopology('cols', 'sub')} disabled={columnsCount <= 1} className="w-5 h-5 bg-slate-900 border border-slate-800 rounded flex items-center justify-center font-bold text-slate-300 disabled:opacity-20">-</button>
+              <span className="text-slate-100 w-4 text-center">{columnsCount}</span>
+              <button onClick={() => handleResizeGridTopology('cols', 'add')} disabled={columnsCount >= 10} className="w-5 h-5 bg-slate-900 border border-slate-800 rounded flex items-center justify-center font-bold text-slate-300 disabled:opacity-20">+</button>
+              <span className="border-l border-slate-800 h-4 mx-1" />
+              <span>ROWS:</span>
+              <button onClick={() => handleResizeGridTopology('rows', 'sub')} disabled={rowsCount <= 1} className="w-5 h-5 bg-slate-900 border border-slate-800 rounded flex items-center justify-center font-bold text-slate-300 disabled:opacity-20">-</button>
+              <span className="text-slate-100 w-4 text-center">{rowsCount}</span>
+              <button onClick={() => handleResizeGridTopology('rows', 'add')} disabled={rowsCount >= 10} className="w-5 h-5 bg-slate-900 border border-slate-800 rounded flex items-center justify-center font-bold text-slate-300 disabled:opacity-20">+</button>
+            </div>
+          )}
+
           {/* SIMULATION DATE TRACKER */}
           <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/80 rounded-xl p-2 px-3 shadow-inner">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5"><Calendar size={13} /> Target Simulation Date:</span>
@@ -416,6 +570,15 @@ export default function RaidPartyTab({ user }) {
               className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-xs text-center text-indigo-400 font-bold font-mono outline-none cursor-pointer"
             />
           </div>
+          {selectedConfigId && (
+              <button
+                type="button"
+                onClick={handleCopyRosterImage}
+                className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 p-2 px-3 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-white transition cursor-pointer select-none"
+              >
+                <Copy size={13} /> Copy Roster Image
+              </button>
+            )}
         </div>
       </div>
 
@@ -431,7 +594,7 @@ export default function RaidPartyTab({ user }) {
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-indigo-400 hover:text-white transition cursor-pointer font-bold text-xs"
               title="Expand Configurations Menu"
             >
-              📁
+              <ChevronRight size={14} />
             </button>
             <div className="text-[9px] uppercase font-mono font-bold tracking-widest text-slate-600 mt-8 [writing-mode:vertical-lr]">CONFIGS</div>
           </div>
@@ -442,10 +605,10 @@ export default function RaidPartyTab({ user }) {
                 <button
                   type="button"
                   onClick={() => setLeftPanelCollapsed(true)}
-                  className="p-0.5 rounded text-slate-500 hover:text-slate-300 font-bold transition-colors cursor-pointer text-[10px]"
+                  className="p-0.5 rounded text-slate-500 hover:text-slate-300 font-bold transition-colors cursor-pointer"
                   title="Collapse Panel"
                 >
-                  ◀
+                  <ChevronLeft size={14} />
                 </button>
                 <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Configurations</span>
               </div>
@@ -536,15 +699,39 @@ export default function RaidPartyTab({ user }) {
           <div className="overflow-x-auto overflow-visible scrollbar-thin pr-1 flex-1">
             {selectedConfigId ? (
               <div 
-                className="grid gap-2 min-w-[850px] pb-12 overflow-visible"
-                style={{ gridTemplateColumns: `repeat(${columnsCount}, minmax(0, 1fr))` }}
+                ref={gridRef}
+                className="grid gap-2 pb-12 overflow-visible p-2"
+                style={{ gridTemplateColumns: `repeat(${columnsCount}, minmax(130px, 1fr))` }}
               >
-                {/* Header Row: Party 1 to 8 */}
-                {Array.from({ length: columnsCount }).map((_, cIdx) => (
-                  <div key={cIdx} className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest text-center py-1 select-none border-b border-slate-900 pb-2">
-                    Party {cIdx + 1}
+                {/* Overarching Raid Title Banner Card (Spans across all active columns for image capture) */}
+                <div 
+                  className="col-span-full bg-slate-950/80 border border-slate-900 rounded-xl p-3 mb-2 flex items-center justify-center select-none shadow-sm"
+                  style={{ gridColumn: '1 / -1' }}
+                >
+                  <div className="text-center">
+                    <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase block">Raid Composition Lineup</span>
+                    <h2 className="text-sm font-black tracking-wide text-indigo-400 font-sans mt-0.5 uppercase">
+                      {localTitle || 'Untitled Configuration'}
+                    </h2>
                   </div>
-                ))}
+                </div>
+
+                {/* Header Row: Customizable Party Titles */}
+                {Array.from({ length: columnsCount }).map((_, cIdx) => {
+                  const colNum = cIdx + 1;
+                  const currentCustomName = localGridMatrix[`party_name_${colNum}`] || `Party ${colNum}`;
+                  return (
+                    <div key={cIdx} className="px-1 py-1 border-b border-slate-900 pb-2 flex items-center justify-center">
+                      <input
+                        type="text"
+                        value={currentCustomName}
+                        disabled={!isOfficer}
+                        onChange={(e) => handleUpdatePartyName(colNum, e.target.value)}
+                        className="w-full text-center bg-transparent text-[10px] font-mono font-black uppercase text-slate-400 tracking-wider outline-none border-b border-transparent focus:border-slate-800 focus:text-indigo-400 py-0.5"
+                      />
+                    </div>
+                  );
+                })}
 
                 {/* Grid Matrix Renderer */}
                 {Array.from({ length: rowsCount }).map((_, rIdx) => {
@@ -552,14 +739,13 @@ export default function RaidPartyTab({ user }) {
                     const coordKey = `${cIdx + 1}-${rIdx + 1}`;
                     const slotData = localGridMatrix[coordKey] || { userId: '', roleLock: '' };
 
-                    // Two-axis boundary alignment guard: prevents boundary popover edge clipping entirely
                     const popoverAlignClass = cIdx === 0 
                       ? "left-0 text-left" 
                       : cIdx === columnsCount - 1 
                         ? "right-0 text-right" 
                         : "left-1/2 -translate-x-1/2 text-left";
                     
-                    const popoverVAlignClass = rIdx >= 3 ? "bottom-full mb-2" : "top-full mt-2";
+                    const popoverVAlignClass = rIdx >= Math.max(1, rowsCount - 2) ? "bottom-full mb-2" : "top-full mt-2";
 
                     const allocatedUserObj = slotData.userId ? members[slotData.userId] : null;
                     const lockedJobObj = slotData.roleLock ? jobsCatalog[slotData.roleLock] : null;
@@ -569,25 +755,48 @@ export default function RaidPartyTab({ user }) {
 
                     const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                     const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
+                    const isDragHovered = dragHoveredCoord === coordKey;
 
                     return (
-                      <div
-                        key={coordKey}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const droppedUid = e.dataTransfer.getData("text/plain");
-                          if (droppedUid) handleBindMemberToCell(coordKey, droppedUid);
-                        }}
-                        className={`rounded-xl border p-2 min-h-[90px] flex flex-col justify-between transition-all font-mono text-xs shadow-inner relative group select-none bg-slate-950/50 border-slate-900 hover:border-slate-800 overflow-visible ${
-                          isAssignPopoverOpen || isGearPopoverOpen ? 'z-40 ring-2 ring-indigo-500/50 shadow-lg' : 'z-0'
-                        }`}
-                        style={{
-                          backgroundColor: isCellRoleLocked ? `${cellColorTheme}12` : undefined,
-                          borderColor: isCellRoleLocked ? `${cellColorTheme}40` : undefined,
-                          boxShadow: isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined
-                        }}
-                      >
+                        <div
+                          key={coordKey}
+                          draggable={isOfficer && !!slotData.userId}
+                          onDragStart={(e) => handleCellDragStart(e, coordKey, slotData.userId)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDragEnter={(e) => { e.preventDefault(); if (isOfficer) setDragHoveredCoord(coordKey); }}
+                          onDragLeave={() => { if (dragHoveredCoord === coordKey) setDragHoveredCoord(null); }}
+                          onDrop={(e) => {
+                            setDragHoveredCoord(null);
+                            handleCellDropIntercept(e, coordKey);
+                          }}
+                          className={`rounded-xl border p-2 min-h-[90px] flex flex-col justify-between transition-all font-mono text-xs shadow-inner relative group select-none bg-slate-950/50 overflow-visible duration-150 ${
+                            isDragHovered
+                              ? 'border-indigo-500 ring-2 ring-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.35)] bg-slate-900/40 z-30'
+                              : (isAssignPopoverOpen || isGearPopoverOpen ? 'z-40 ring-2 ring-indigo-500/50 shadow-lg border-slate-800' : 'border-slate-900 hover:border-slate-800 z-0')
+                          } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          style={{
+                            backgroundColor: isCellRoleLocked ? `${cellColorTheme}12` : undefined,
+                            borderColor: isCellRoleLocked ? `${cellColorTheme}40` : undefined,
+                            boxShadow: isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined
+                          }}
+                        >
+                        {/* Subtle, micro-sized text identifier positioned absolutely in the upper left corner */}
+                        <div className="absolute top-1 left-1.5 text-[8px] font-mono font-bold tracking-tight text-slate-600/60 select-none pointer-events-none z-0">
+                          P{cIdx + 1}-S{rIdx + 1}
+                        </div>
+
+                        {slotData.userId && (() => {
+                          const currentStatus = cellAttendanceMap[slotData.userId];
+                          const dotColorClass = currentStatus === 'Confirmed' 
+                            ? 'bg-emerald-500 shadow-emerald-500/50' 
+                            : currentStatus === 'Leave' 
+                              ? 'bg-rose-500 shadow-rose-500/50' 
+                              : 'bg-slate-600';
+                          return (
+                            <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${dotColorClass} z-10 pointer-events-none shadow-sm`} />
+                          );
+                        })()}
+
                         {/* THE GEAR ROLE LOCK POPUP ICON */}
                         {isOfficer && (
                           <button
@@ -596,17 +805,17 @@ export default function RaidPartyTab({ user }) {
                               e.stopPropagation();
                               setActivePopover(isGearPopoverOpen ? null : { coordKey, type: 'gear' });
                             }}
-                            className={`absolute top-1 right-1 p-1 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer ${
+                            className={`absolute top-1 right-5 p-1 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer ${
                               isGearPopoverOpen ? 'opacity-100 bg-slate-800 text-amber-400' : 'text-slate-600 hover:text-slate-300'
                             }`}
                           >
-                            <Settings size={11} />
+                            <Settings size={15} />
                           </button>
                         )}
 
                         {/* CELL SELECTION WORKFLOW ACTION HANDLER */}
                         <div 
-                          className="flex-1 flex flex-col justify-between cursor-pointer pt-1"
+                          className="flex-1 flex flex-col justify-between cursor-pointer pt-3"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!isOfficer) return;
@@ -637,15 +846,15 @@ export default function RaidPartyTab({ user }) {
                                 </>
                               ) : (
                                 <>
-                                  <UserPlus size={13} strokeWidth={2.5} />
-                                  <span className="text-[8px] font-bold tracking-widest text-slate-800 font-sans uppercase">Vacant</span>
+                                  <UserPlus size={16} strokeWidth={2.2} />
+                                  <span className="text-[8px] font-bold tracking-widest text-slate-400 font-sans uppercase">Vacant</span>
                                 </>
                               )}
                             </div>
                           )}
                         </div>
 
-                        {/* ================= IN-GRID CELL OVERLAY POPUPS (ZERO OUT-OF-BOUND CLIPPING) ================= */}
+                        {/* ================= IN-GRID CELL OVERLAY POPUPS ================= */}
                         {isGearPopoverOpen && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setActivePopover(null)} />
@@ -679,9 +888,8 @@ export default function RaidPartyTab({ user }) {
                         {isAssignPopoverOpen && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setActivePopover(null)} />
-                            <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-50 w-52 font-sans space-y-2 animate-fadeIn text-left`}>
+                            <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-50 w-64 font-sans space-y-2 animate-fadeIn text-left`}>
                               
-                              {/* Workflow Step 1: Filter Selection (Hidden if hard role-locked) */}
                               {!slotData.roleLock ? (
                                 <div className="space-y-1 border-b border-slate-800 pb-1.5 text-left">
                                   <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1">Filter Class Profile:</div>
@@ -695,14 +903,13 @@ export default function RaidPartyTab({ user }) {
                                       <option key={code} value={code} className="bg-slate-950" style={{ color: j.colorTheme }}>{j.name}</option>
                                     ))}
                                   </select>
-                               </div>
+                                </div>
                               ) : (
                                 <div className="text-[9px] font-mono font-bold uppercase tracking-wider select-none px-1 border-b border-slate-800 pb-1 flex items-center justify-between" style={{ color: cellColorTheme }}>
                                   <span>🔒 Role Lock: {lockedJobObj?.name}</span>
                                 </div>
                               )}
 
-                              {/* Workflow Step 2: Candidates List */}
                               <div className="space-y-1 text-left">
                                 <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1">Select Candidate:</div>
                                 <div className="max-h-48 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">
@@ -740,9 +947,9 @@ export default function RaidPartyTab({ user }) {
                                             isCurrentlySlottedInCell ? 'bg-indigo-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                                           }`}
                                         >
-                                          <span className="truncate max-w-[140px]">{player.displayName}</span>
+                                          <span className="truncate max-w-[180px]">{player.displayName}</span>
                                           {player.assignedLocation && (
-                                            <span className="text-[8px] bg-slate-950 border border-slate-800 px-1 py-0.5 rounded text-slate-400 font-mono font-bold shrink-0 ml-1">
+                                            <span className="text-[8px] bg-slate-950 border border-slate-800 px-1 py-0.5 rounded text-[9px] font-bold text-slate-400 font-mono shrink-0 ml-1">
                                               {player.assignedLocation}
                                             </span>
                                           )}
@@ -788,7 +995,7 @@ export default function RaidPartyTab({ user }) {
           )}
         </div>
 
-        {/* ================= COLUMN 3: RIGHT ROSTER PANEL (25% WIDTH) ================= */}
+        {/* ================= COLUMN 3: RIGHT ROSTER PANEL ================= */}
         {rightPanelCollapsed ? (
           <div className="col-span-12 xl:col-span-1 border border-slate-900 bg-slate-950/60 rounded-2xl p-2 flex flex-col items-center shadow-md min-h-[45rem] h-auto justify-start select-none py-4">
             <button
@@ -797,171 +1004,161 @@ export default function RaidPartyTab({ user }) {
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-indigo-400 hover:text-white transition cursor-pointer font-bold text-xs"
               title="Expand Roster Lists"
             >
-              👥
+              <ChevronLeft size={14} />
             </button>
             <div className="text-[9px] uppercase font-mono font-bold tracking-widest text-slate-600 mt-8 [writing-mode:vertical-lr]">ROSTER REGISTRIES</div>
           </div>
         ) : (
-          <div className="col-span-12 xl:col-span-3 border border-slate-800 bg-slate-950/40 rounded-2xl p-3.5 flex flex-col space-y-4 shadow-md min-h-[45rem] h-auto pb-8">
+          <div 
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleFeederPoolDropIntercept}
+            className="col-span-12 xl:col-span-3 border border-slate-800 bg-slate-950/40 rounded-2xl p-3.5 flex flex-col space-y-4 shadow-md min-h-[45rem] h-auto pb-8"
+          >
             <div className="space-y-2 select-none shrink-0 border-b border-slate-900 pb-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest block">Roster Registries</span>
                 <button
                   type="button"
                   onClick={() => setRightPanelCollapsed(true)}
-                  className="p-0.5 rounded text-slate-500 hover:text-slate-300 font-bold transition-colors cursor-pointer text-[10px]"
+                  className="p-0.5 rounded text-slate-500 hover:text-slate-300 font-bold transition-colors cursor-pointer"
                   title="Collapse Panel"
                 >
-                  ▶
+                  <ChevronRight size={14} />
                 </button>
               </div>
-            <div className="relative w-full mt-1.5">
-              <input 
-                type="text" 
-                placeholder="Search Active Roster..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-[11px] text-slate-200 font-medium placeholder-slate-650 outline-none focus:border-slate-700 font-sans transition-all shadow-inner" 
-              />
-              <div className="absolute left-2.5 top-2.5 text-slate-500"><Search size={14} /></div>
-              {searchQuery && (
-                <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200 font-sans text-xs cursor-pointer">✖</button>
-              )}
-            </div>
-            
-            {/* ⚠️ HIGH-VISIBILITY COMPLIANCE EXPLANATION CARD (Addresses why schedule signups don't show up right away) */}
-            <div className="mt-2 p-2 bg-slate-900/60 border border-slate-800 rounded-xl text-[10px] text-slate-400 leading-normal font-sans">
-              <span className="text-amber-500 font-bold uppercase font-mono text-[9px] block">Roster Sync Note:</span>
-              Members must be marked as <strong className="text-slate-200 font-semibold">True Roster</strong> inside the <strong className="text-indigo-400 font-semibold">MasterList Tab</strong> to synchronize their active schedule preferences into these planning arrays.
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pr-0.5 space-y-3 scrollbar-thin">
-            
-            {/* BUCKET A: THE STANDBY POOL */}
-            <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
-              <div 
-                onClick={() => setOpenAccordion(prev => ({ ...prev, standby: !prev.standby }))}
-                className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
-              >
-                <span className="text-emerald-400 flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-emerald-400 fill-emerald-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  Standby Pool ({categorizedRosterPools.standby.length})
-                </span>
-                <span className="text-slate-600 font-mono text-[10px]">{openAccordion.standby ? '▲' : '▼'}</span>
+              <div className="relative w-full mt-1.5">
+                <input 
+                  type="text" 
+                  placeholder="Search Active Roster..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-[11px] text-slate-200 font-medium placeholder-slate-650 outline-none focus:border-slate-700 font-sans transition-all shadow-inner" 
+                />
+                <div className="absolute left-2.5 top-2.5 text-slate-500"><Search size={14} /></div>
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200 font-sans text-xs cursor-pointer">✖</button>
+                )}
               </div>
-              {openAccordion.standby && (
-                <div className="p-2 space-y-1.5 max-h-64 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
-                  {categorizedRosterPools.standby.length === 0 ? (
-                    <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No standby entries mapped.</div>
-                  ) : (
-                    categorizedRosterPools.standby.map(player => {
-                      const isSlotted = !!player.assignedLocation;
-                      const roleColorTheme = jobsCatalog[player.jobCode]?.colorTheme || '#475569';
-                      return (
-                        <div 
-                          key={player.uid}
-                          draggable={!isSlotted}
-                          onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
-                          className={`p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all ${
-                            isSlotted 
-                              ? 'bg-slate-950/50 border-slate-900 opacity-40 select-none cursor-not-allowed' 
-                              : 'bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing'
-                          }`}
-                        >
-                          <div className="truncate pr-2">
-                            <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
-                              {player.displayName}
-                            </div>
-                            <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
-                              {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
-                            </span>
-                          </div>
-                          {isSlotted && (
-                            <span className="bg-indigo-950/40 border border-indigo-900/40 text-indigo-400 px-2 py-0.5 rounded text-[9px] font-bold tracking-wide shrink-0">
-                              {player.assignedLocation}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
+              
+              <div className="mt-2 p-2 bg-slate-900/60 border border-slate-800 rounded-xl text-[10px] text-slate-400 leading-normal font-sans">
+                <span className="text-indigo-400 font-bold uppercase font-mono text-[9px] block">Drag to Unassign:</span>
+                Dragging an allocated member card from the grid boxes and dropping them anywhere inside this sidebar column automatically frees up their cell coordinate position.
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-0.5 space-y-3 scrollbar-thin">
+              
+              {/* BUCKET A: THE STANDBY POOL */}
+              <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
+                <div 
+                  onClick={() => setOpenAccordion(prev => ({ ...prev, standby: !prev.standby }))}
+                  className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
+                >
+                  <span className="text-emerald-400 flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-emerald-400 fill-emerald-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Standby Pool ({categorizedRosterPools.standby.length})
+                  </span>
+                  <span className="text-slate-600 font-mono text-[10px]">{openAccordion.standby ? '▲' : '▼'}</span>
                 </div>
-              )}
-            </div>
-
-            {/* BUCKET B: THE UNCOMMITTED POOL */}
-            <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
-              <div 
-                onClick={() => setOpenAccordion(prev => ({ ...prev, uncommitted: !prev.uncommitted }))}
-                className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
-              >
-                <span className="text-slate-200 flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-slate-400 fill-slate-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  Uncommitted Pool ({categorizedRosterPools.uncommitted.length})
-                </span>
-                <span className="text-slate-600 font-mono text-[10px]">{openAccordion.uncommitted ? '▲' : '▼'}</span>
-              </div>
-              {openAccordion.uncommitted && (
-                <div className="p-2 space-y-1.5 max-h-64 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
-                  {categorizedRosterPools.uncommitted.length === 0 ? (
-                    <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No compliance omissions caught.</div>
-                  ) : (
-                    categorizedRosterPools.uncommitted.map(player => {
-                      const isSlotted = !!player.assignedLocation;
-                      const roleColorTheme = jobsCatalog[player.jobCode]?.colorTheme || '#475569';
-                      return (
-                        <div 
-                          key={player.uid}
-                          draggable={!isSlotted}
-                          onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
-                          className={`p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all ${
-                            isSlotted 
-                              ? 'bg-slate-950/50 border-slate-900 opacity-40 select-none cursor-not-allowed' 
-                              : 'bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing'
-                          }`}
-                        >
-                          <div className="truncate pr-2">
-                            <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
-                              {player.displayName}
+                {openAccordion.standby && (
+                  <div className="p-2 space-y-1.5 max-h-64 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
+                    {categorizedRosterPools.standby.length === 0 ? (
+                      <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No standby entries mapped.</div>
+                    ) : (
+                      categorizedRosterPools.standby.map(player => {
+                        const isSlotted = !!player.assignedLocation;
+                        const roleColorTheme = jobsCatalog[player.jobCode]?.colorTheme || '#475569';
+                        return (
+                          <div 
+                            key={player.uid}
+                            draggable={isOfficer}
+                            onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
+                            className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing"
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
+                                {player.displayName}
+                              </div>
+                              <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
+                                {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
+                              </span>
                             </div>
-                            <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
-                              {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
-                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" title="Present" />
                           </div>
-                          {isSlotted ? (
-                            <span className="bg-indigo-950/40 border border-indigo-900/40 text-indigo-400 px-2 py-0.5 rounded text-[9px] font-bold tracking-wide shrink-0">
-                              {player.assignedLocation}
-                            </span>
-                          ) : (
-                            <span className="text-[8px] text-red-400 tracking-tighter uppercase font-bold px-1.5 py-0.5 bg-red-950/40 border border-red-900/40 rounded shrink-0 select-none">No Entry</span>
-                          )}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* BUCKET C: THE ABSENT ON-LEAVE POOL */}
-            <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
-              <div 
-                onClick={() => setOpenAccordion(prev => ({ ...prev, leave: !prev.leave }))}
-                className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
-              >
-                <span className="text-slate-500 flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-rose-400 fill-rose-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  Absent / On Leave ({categorizedRosterPools.leave.length})
-                </span>
-                <span className="text-slate-600 font-mono text-[10px]">{openAccordion.leave ? '▲' : '▼'}</span>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
-              {openAccordion.leave && (
-                <div className="p-2 space-y-1.5 max-h-60 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
-                  {categorizedRosterPools.leave.length === 0 ? (
-                    <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No formal leave requests filed.</div>
-                  ) : (
-                    categorizedRosterPools.leave.map(player => {
+
+              {/* BUCKET B: THE UNCOMMITTED POOL */}
+              <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
+                <div 
+                  onClick={() => setOpenAccordion(prev => ({ ...prev, uncommitted: !prev.uncommitted }))}
+                  className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
+                >
+                  <span className="text-slate-200 flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-slate-400 fill-slate-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Uncommitted Pool ({categorizedRosterPools.uncommitted.length})
+                  </span>
+                  <span className="text-slate-600 font-mono text-[10px]">{openAccordion.uncommitted ? '▲' : '▼'}</span>
+                </div>
+                {openAccordion.uncommitted && (
+                  <div className="p-2 space-y-1.5 max-h-64 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
+                    {categorizedRosterPools.uncommitted.length === 0 ? (
+                      <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No compliance omissions caught.</div>
+                    ) : (
+                      categorizedRosterPools.uncommitted.map(player => {
+                        const isSlotted = !!player.assignedLocation;
+                        const roleColorTheme = jobsCatalog[player.jobCode]?.colorTheme || '#475569';
+                        return (
+                          <div 
+                            key={player.uid}
+                            draggable={isOfficer}
+                            onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
+                            className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing"
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
+                                {player.displayName}
+                              </div>
+                              <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
+                                {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                            <span className="w-2 h-2 rounded-full bg-slate-600 shadow-sm" title="Uncommitted" />
+                          </div>
+                        </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* BUCKET C: THE ABSENT ON-LEAVE POOL */}
+              <div className="border border-slate-900 bg-slate-950/30 rounded-xl overflow-hidden">
+                <div 
+                  onClick={() => setOpenAccordion(prev => ({ ...prev, leave: !prev.leave }))}
+                  className="p-2.5 px-3 bg-slate-900/40 flex items-center justify-between cursor-pointer select-none text-xs font-bold font-sans"
+                >
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-rose-400 fill-rose-500/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Absent / On Leave ({categorizedRosterPools.leave.length})
+                  </span>
+                  <span className="text-slate-600 font-mono text-[10px]">{openAccordion.leave ? '▲' : '▼'}</span>
+                </div>
+                {openAccordion.leave && (
+                  <div className="p-2 space-y-1.5 max-h-60 overflow-y-auto pr-0.5 scrollbar-thin border-t border-slate-900">
+                    {categorizedRosterPools.leave.length === 0 ? (
+                      <div className="text-center py-4 text-[10px] text-slate-600 font-mono italic">No formal leave requests filed.</div>
+                    ) : (
+                      categorizedRosterPools.leave.map(player => {
+                        const isSlotted = !!player.assignedLocation;
                       return (
                         <div 
                           key={player.uid}
@@ -975,20 +1172,25 @@ export default function RaidPartyTab({ user }) {
                               {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
                             </span>
                           </div>
-                          <span className="bg-red-950/60 border border-red-500/30 text-red-400 px-2 py-0.5 rounded text-[8px] font-mono font-bold tracking-wider uppercase shrink-0">
-                            On Leave
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isSlotted && (
+                              <span className="bg-indigo-950/40 border border-indigo-900/40 text-indigo-400 px-2 py-0.5 rounded text-[9px] font-bold tracking-wide max-w-[85px] truncate">
+                                {player.assignedLocation}
+                              </span>
+                            )}
+                            <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" title="Absent" />
+                          </div>
                         </div>
                       );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
 
+            </div>
           </div>
-        </div>
-       )}
+        )}
 
       </div>
 
