@@ -172,7 +172,7 @@ export default function MasterListTab({ user }) {
           />
         </div>
 
-        <div className="border border-slate-800 bg-slate-950/40 rounded-2xl overflow-hidden h-[36rem] overflow-y-auto scrollbar-thin">
+        <div className="border border-slate-800 bg-slate-950/40 rounded-2xl overflow-x-auto h-[36rem] overflow-y-auto scrollbar-thin">
           <table className="w-full text-left border-collapse text-xs font-mono table-fixed min-w-[950px]">
             <thead>
               <tr className="bg-slate-950 text-slate-500 uppercase tracking-wider text-[9px] border-b border-slate-800 select-none">
@@ -186,12 +186,12 @@ export default function MasterListTab({ user }) {
                 >
                   Member Name <span className="text-indigo-400 ml-1 font-sans text-xs">{sortKey === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}</span>
                 </th>
-                <th className="p-3 w-[14%]">SnowflakeID</th>
-                <th className="p-3 w-[20%]">Job Class</th>
-                <th className="p-3 w-[18%]">Role Classification</th>
+                <th className="p-3 w-[16%]">Job Class</th>
+                <th className="p-3 w-[15%]">Role Classification</th>
                 <th className="p-3 w-[13%]">Group Assignment</th>
-                <th className="p-3 w-[10%]">Date Joined</th>
-                <th className="p-3 text-center w-[5%]">Action</th>
+                <th className="p-3 w-[16%]">Date Joined</th>
+                <th className="p-3 w-[14%]">SnowflakeID</th>
+                <th className="p-3 text-center w-[6%]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/60">
@@ -239,7 +239,6 @@ export default function MasterListTab({ user }) {
                         )}
                       </div>
                     </td>
-                    <td className="p-3 text-slate-500 tracking-tight text-[10px] select-all">{uid}</td>
                     <td className="p-3">
                       <select 
                         value={m.jobCode || ''} 
@@ -281,7 +280,7 @@ export default function MasterListTab({ user }) {
                         disabled={!user?.isOfficer}
                         placeholder="e.g. Team A"
                         onChange={(e) => handleStageLocalUpdate(uid, 'groupTag', e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-2.5 py-1 text-xs font-sans outline-none focus:border-slate-700 font-medium"
+                        className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-2.5 py-1 text-xs font-sans outline-none focus:border-slate-700 font-medium placeholder-slate-600/60"
                       />
                     </td>
 
@@ -294,6 +293,8 @@ export default function MasterListTab({ user }) {
                         className="bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-2 py-1 text-center font-sans text-xs outline-none focus:border-slate-700 w-full cursor-pointer"
                       />
                     </td>
+
+                    <td className="p-3 text-slate-500 tracking-tight text-[10px] select-all">{uid}</td>
                     <td className="p-3 text-center">
                       {user?.isOfficer && (
                         <button 

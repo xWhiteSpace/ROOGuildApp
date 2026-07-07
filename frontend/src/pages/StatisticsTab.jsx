@@ -78,6 +78,25 @@ export default function StatisticsTab({ user }) {
     }
   });
 
+  const totalRaiders = Object.values(jobDistributionTally).reduce((sum, val) => sum + val, 0);
+  let accumulatedPercentage = 0;
+  const gradientSegments = [];
+
+  Object.entries(jobsCatalog).forEach(([code, jobObj]) => {
+    const count = jobDistributionTally[code] || 0;
+    if (count > 0 && totalRaiders > 0) {
+      const percentage = (count / totalRaiders) * 100;
+      const nextPercentage = accumulatedPercentage + percentage;
+      const color = jobObj.colorTheme || '#64748b';
+      gradientSegments.push(`${color} ${accumulatedPercentage}% ${nextPercentage}%`);
+      accumulatedPercentage = nextPercentage;
+    }
+  });
+
+  const conicGradientString = gradientSegments.length > 0 
+    ? `conic-gradient(${gradientSegments.join(', ')})` 
+    : 'conic-gradient(#1e293b 0% 100%)';
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse text-xs font-mono uppercase tracking-widest">
@@ -95,10 +114,10 @@ export default function StatisticsTab({ user }) {
         <p className="text-[11px] font-mono text-slate-500 mt-1">CLASS DENSITY RATIOS AND ADVANCED LEAVE MANAGEMENT</p>
       </div>
 
-      <div className="w-full">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start w-full">
         
-        {/* FULL-WIDTH WORKSPACE: COMPOSITION BALANCING PANEL */}
-        <div className="w-full bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+        {/* LEFT WORKSPACE: COMPOSITION BALANCING PANEL (8/12 COLUMNS) */}
+        <div className="xl:col-span-8 bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none pb-2 border-b border-slate-900">
             <IconSliders /> Roster Composition Balancing Workspace
           </div>
@@ -120,7 +139,6 @@ export default function StatisticsTab({ user }) {
                     const desiredTarget = jobObj.desiredCount || 0;
                     const isOverCapacity = activeCount > desiredTarget;
 
-                    // Calculate progress thresholds dynamically
                     let fillPercentage = 0;
                     if (desiredTarget > 0) {
                       fillPercentage = Math.min(100, Math.round((activeCount / desiredTarget) * 100));
@@ -152,13 +170,11 @@ export default function StatisticsTab({ user }) {
                           {activeCount}
                         </td>
                         <td className="p-3 pr-4 select-none">
-                          {/* Segmented Increment Meter Bar Frame */}
                           <div className="w-full bg-slate-800 rounded-lg h-4 relative overflow-hidden border border-slate-900/60 shadow-inner">
                             <div 
                               className={`h-full transition-all duration-500 ease-out ${meterColorToken}`}
                               style={{ width: `${fillPercentage}%` }}
                             />
-                            {/* Overlayed 10% high-contrast layout grid lines */}
                             <div className="absolute inset-0 flex pointer-events-none">
                               {Array.from({ length: 9 }).map((_, lineIdx) => (
                                 <div 
@@ -183,7 +199,44 @@ export default function StatisticsTab({ user }) {
           </div>
         </div>
 
+        {/* RIGHT WORKSPACE: DYNAMIC DONUT CHART CARD (4/12 COLUMNS) */}
+        <div className="xl:col-span-4 bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl flex flex-col items-center">
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none pb-2 border-b border-slate-900 w-full">
+            <IconLayers /> Class Density Breakdown
+          </div>
+
+          {/* Render Vector Ring */}
+          <div 
+            className="w-40 h-40 rounded-full relative flex items-center justify-center shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+            style={{ background: conicGradientString }}
+          >
+            <div className="w-28 h-28 bg-slate-950 rounded-full flex flex-col items-center justify-center border border-slate-900 shadow-inner select-none">
+              <span className="text-2xl font-black text-slate-100 tracking-tight">{totalRaiders}</span>
+              <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest mt-0.5">Raiders</span>
+            </div>
+          </div>
+
+          {/* Macro Distribution Legend Metrics */}
+          <div className="w-full grid grid-cols-2 gap-2 pt-2">
+            {Object.entries(jobsCatalog).map(([code, jobObj]) => {
+              const activeCount = jobDistributionTally[code] || 0;
+              if (activeCount === 0) return null;
+              const ratioPercent = totalRaiders > 0 ? Math.round((activeCount / totalRaiders) * 100) : 0;
+
+              return (
+                <div key={code} className="flex items-center justify-between bg-slate-950/40 border border-slate-900/50 p-2 rounded-xl text-[11px] font-mono shadow-sm">
+                  <div className="flex items-center gap-2 truncate pr-1">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: jobObj.colorTheme }} />
+                    <span className="text-slate-300 font-sans font-semibold truncate">{jobObj.name}</span>
+                  </div>
+                  <span className="text-slate-400 font-bold shrink-0">{ratioPercent}%</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
+
+      </div>
     </div>
   );
 }
