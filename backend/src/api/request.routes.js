@@ -501,6 +501,7 @@ const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
 
 /**
  * POST /api/requests/sync-roster
+ * Industry-standard Leaf-Level Synchronization Pass with Ghost Account Evaluation Rules
  */
 router.post('/sync-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -510,7 +511,7 @@ router.post('/sync-roster', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
 
   if (!botToken || !guildId) {
-    return res.status(500).json({ success: false, error: 'Missing Discord credentials inside backend configurations (.env).' });
+    return res.status(500).json({ success: false, error: 'Missing Discord credentials inside backend configurations.' });
   }
 
   try {
@@ -534,29 +535,46 @@ router.post('/sync-roster', async (req, res) => {
     const timezone = configSnap.exists() ? (configSnap.val().timezone || "Asia/Manila") : "Asia/Manila";
     const currentTimestampDate = new Date().toLocaleDateString("en-US", { timeZone: timezone });
     
-    const rosterUpdates = {};
+    const currentDbMembersSnap = await db.ref('auction/members').once('value');
+    const currentDbMembers = currentDbMembersSnap.exists() ? currentDbMembersSnap.val() : {};
+
+    const structuralLeafPatches = {};
+    const discordActiveSnowflakeIds = new Set();
 
     discordMembers.forEach(member => {
-      const finalRosterName = (member.nick || member.user?.global_name || member.user?.username || '').trim();
-      
       if (member.user?.id) {
-        // Extract raw Discord server registration timestamp and slice down to standard YYYY-MM-DD format
+        const uid = member.user.id;
+        discordActiveSnowflakeIds.add(uid);
+
+        const serverNickname = (member.nick || member.user?.global_name || member.user?.username || '').trim();
+        const resolvedName = serverNickname || member.user.username || 'Unknown Member';
         const rawJoinedAt = member.joined_at ? new Date(member.joined_at).toISOString().slice(0, 10) : currentTimestampDate;
+
+        structuralLeafPatches[`auction/members/${uid}/displayName`] = resolvedName;
+        structuralLeafPatches[`auction/members/${uid}/syncedAt`] = currentTimestampDate;
         
-        rosterUpdates[`auction/members/${member.user.id}`] = {
-          displayName: finalRosterName || member.user.username || 'Unknown Member',
-          syncedAt: currentTimestampDate,
-          joinedAt: rawJoinedAt
-        };
+        if (!currentDbMembers[uid]?.joinedAt) {
+          structuralLeafPatches[`auction/members/${uid}/joinedAt`] = rawJoinedAt;
+        }
+
+        if (currentDbMembers[uid]?.status === 'Ghost') {
+          structuralLeafPatches[`auction/members/${uid}/status`] = "Active";
+        }
       }
     });
 
-    if (Object.keys(rosterUpdates).length === 0) {
+    Object.keys(currentDbMembers).forEach(dbUid => {
+      if (!discordActiveSnowflakeIds.has(dbUid)) {
+        structuralLeafPatches[`auction/members/${dbUid}/status`] = "Ghost";
+      }
+    });
+
+    if (Object.keys(structuralLeafPatches).length === 0) {
       return res.status(422).json({ success: false, error: 'No valid user profiles extracted.' });
     }
 
-    await db.ref().update(rosterUpdates);
-    return res.json({ success: true, count: Object.keys(rosterUpdates).length });
+    await db.ref().update(structuralLeafPatches);
+    return res.json({ success: true, count: Object.keys(structuralLeafPatches).length });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

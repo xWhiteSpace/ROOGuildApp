@@ -8,19 +8,30 @@ const router = Router();
 
 function resolveUserIdentity(req) {
   if (req.session?.user) return req.session.user;
-  const token = req.headers['x-user-profile'];
-  if (token) {
+  const mobileHeaderToken = req.headers['x-user-profile'];
+  if (mobileHeaderToken) {
     try {
-      const decoded = JSON.parse(decodeURIComponent(token));
-      if (decoded && decoded._sig) {
-        const clientSig = decoded._sig;
-        const profile = { ...decoded };
-        delete profile._sig;
-        const secret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
-        const expected = crypto.createHmac('sha256', secret).update(JSON.stringify(profile)).digest('hex');
-        if (clientSig === expected) return profile;
+      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
+      if (decodedPayload && decodedPayload._sig) {
+        const clientSignature = decodedPayload._sig;
+        const profileToVerify = { ...decodedPayload };
+        delete profileToVerify._sig;
+
+        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+        const expectedSignature = crypto
+          .createHmac('sha256', tokenSigningSecret)
+          .update(JSON.stringify(profileToVerify))
+          .digest('hex');
+
+        if (clientSignature === expectedSignature) {
+          return profileToVerify;
+        } else {
+          console.error("🛑 [API ROUTE INTERCEPT]: Detected forged header signature tamper attempt!");
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Failed to parse mobile authorization header token:", e.message);
+    }
   }
   return null;
 }
@@ -621,6 +632,46 @@ router.delete('/compositions/delete/:id', async (req, res) => {
 
     await db.ref(`attendance/compositions/${id}`).remove();
     return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 💾 POST /api/attendance/roster/save-batch -> Bulk Leaf-Level Persistence Optimizer
+router.post('/roster/save-batch', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { stagedMembers } = req.body;
+    if (!stagedMembers) return res.status(400).json({ success: false, error: 'Omitted staged roster dataset.' });
+
+    const batchAtomicUpdates = {};
+    Object.entries(stagedMembers).forEach(([uid, m]) => {
+      batchAtomicUpdates[`auction/members/${uid}/isRaidRoster`] = m.isRaidRoster === true;
+      batchAtomicUpdates[`auction/members/${uid}/jobCode`] = m.jobCode || "";
+      batchAtomicUpdates[`auction/members/${uid}/roleCode`] = m.roleCode || "";
+      batchAtomicUpdates[`auction/members/${uid}/groupTag`] = m.groupTag || "";
+      batchAtomicUpdates[`auction/members/${uid}/joinedAt`] = m.joinedAt || "";
+      
+      if (m.status) {
+        batchAtomicUpdates[`auction/members/${uid}/status`] = m.status;
+      }
+    });
+
+    if (Object.keys(batchAtomicUpdates).length > 0) {
+      await db.ref().update(batchAtomicUpdates);
+    }
+
+    return res.json({ success: true, message: 'Roster directory batch saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

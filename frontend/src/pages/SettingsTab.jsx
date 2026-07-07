@@ -63,6 +63,7 @@ export default function SettingsTab() {
     items: [],
     events: {},
     jobs: {},
+    roles: {},
     specialEventCategories: ["Raid", "Meeting", "PVP", "Casual"],
     announcements: {
       phase1: ["07:00", "12:00", "19:00"],
@@ -103,7 +104,10 @@ export default function SettingsTab() {
       });
       const data = await res.json();
       if (data.success) {
-        setConfig(data.config);
+        setConfig({
+          ...data.config,
+          roles: data.config.roles || {}
+        });
       }
     } catch (err) {
       console.error("Error loading settings from server routing layer:", err);
@@ -1005,6 +1009,72 @@ export default function SettingsTab() {
               <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom classes active.</div>
             )}
           </div>
+        {/* DYNAMIC GAME ROLE TAXONOMY REGISTRY SECTION */}
+          <div className="border-t border-slate-800/60 pt-6 mt-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800/60 pb-3.5">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconTag /> Game Role Registry</div>
+                <p className="text-[10px] text-slate-500 mt-0.5">Define tactical archetypes (e.g. DPS, Tank, Support) manageable under relational IDs.</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  const updatedRoles = { ...config.roles };
+                  const nextIndex = Object.keys(updatedRoles).length + 1;
+                  const roleCode = `role_${String(nextIndex).padStart(3, '0')}`;
+                  updatedRoles[roleCode] = { name: `Custom Archetype ${nextIndex}` };
+                  setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                }}
+                className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md text-white"
+              >
+                <IconPlus /> Add Game Role
+              </button>
+            </div>
+
+            <div className="space-y-2 max-w-4xl">
+              {config.roles && Object.keys(config.roles).length > 0 ? (
+                Object.entries(config.roles).map(([code, roleObj], index) => (
+                  <div 
+                    key={code} 
+                    className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-1.5 rounded-xl font-mono shadow-sm group hover:border-slate-800 hover:bg-slate-950/80 transition-all duration-150"
+                  >
+                    <span className="col-span-1 text-slate-600 font-bold text-center text-xs select-none">#{String(index + 1).padStart(2, '0')}</span>
+                    <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">{code}</span>
+                    
+                    <input 
+                      type="text"
+                      value={roleObj.name || ''}
+                      onChange={(e) => {
+                        const updatedRoles = { ...config.roles };
+                        updatedRoles[code].name = e.target.value;
+                        setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                      }}
+                      className="col-span-8 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                      placeholder="Role Title (e.g. Main Tank)..."
+                    />
+
+                    <div className="col-span-1 flex items-center justify-end pr-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const updatedRoles = { ...config.roles };
+                          delete updatedRoles[code];
+                          setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                        }}
+                        className="text-slate-700 hover:text-rose-400 p-1 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                        title="Purge game role profile"
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom game roles active.</div>
+              )}
+            </div>
+          </div>
+
         </div>
       )}
 
