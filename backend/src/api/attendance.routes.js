@@ -578,14 +578,14 @@ router.post('/compositions/duplicate', async (req, res) => {
     let nextIndex = 1;
     if (compsSnap.exists()) {
       const existingKeys = Object.keys(compsSnap.val());
-      const numericIds = existingKeys.map(k => {
-        const match = k.match(/^party_(\d+)$/);
-        return match ? parseInt(match[1], 10) : 0;
-      });
-      nextIndex = Math.max(...numericIds, 0) + 1;
-    }
+  const numericIds = existingKeys.map(k => {
+    const match = k.match(/^raid_(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
+  });
+  nextIndex = Math.max(...numericIds, 0) + 1;
+}
 
-    const sequentialConfigId = `party_${String(nextIndex).padStart(3, '0')}`;
+const sequentialConfigId = `raid_${String(nextIndex).padStart(3, '0')}`;
     const duplicatePayload = {
       id: sequentialConfigId,
       title: `${sourceConfig.title || 'Untitled'} (Copy)`,
