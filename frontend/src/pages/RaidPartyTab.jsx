@@ -15,7 +15,8 @@ import {
   Save,
   Grid,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Info
 } from 'lucide-react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -257,7 +258,8 @@ export default function RaidPartyTab({ user }) {
       };
 
       if (calendarStatus === 'Leave') {
-        leave.push(enrichedRow);
+        // Only show in the sidebar pool if they haven't been placed on the grid matrix yet
+        if (!assignedCellCoord) leave.push(enrichedRow);
       } else if (calendarStatus === 'Confirmed') {
         if (!assignedCellCoord) standby.push(enrichedRow);
       } else {
@@ -757,6 +759,12 @@ export default function RaidPartyTab({ user }) {
                     const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
                     const isDragHovered = dragHoveredCoord === coordKey;
 
+                    const isSearchHighlighted = !!(searchQuery.trim() && allocatedUserObj && 
+                      allocatedUserObj.displayName.toLowerCase().includes(searchQuery.toLowerCase()));
+
+                    // Track if the placed member is currently on formal leave
+                    const isUserOnLeave = !!(slotData.userId && cellAttendanceMap[slotData.userId] === 'Leave');
+
                     return (
                         <div
                           key={coordKey}
@@ -772,16 +780,27 @@ export default function RaidPartyTab({ user }) {
                           className={`rounded-xl border p-2 min-h-[90px] flex flex-col justify-between transition-all font-mono text-xs shadow-inner relative group select-none bg-slate-950/50 overflow-visible duration-150 ${
                             isDragHovered
                               ? 'border-indigo-500 ring-2 ring-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.35)] bg-slate-900/40 z-30'
-                              : (isAssignPopoverOpen || isGearPopoverOpen ? 'z-40 ring-2 ring-indigo-500/50 shadow-lg border-slate-800' : 'border-slate-900 hover:border-slate-800 z-0')
+                              : (isAssignPopoverOpen || isGearPopoverOpen 
+                                  ? 'z-40 ring-2 ring-indigo-500/50 shadow-lg border-slate-800' 
+                                  : (isSearchHighlighted 
+                                      ? 'border-amber-500 ring-2 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.3)] bg-slate-900/60 z-10 scale-[1.01]' 
+                                      : (isUserOnLeave ? 'z-10 border-2' : 'border-slate-900 hover:border-slate-800 z-0')))
                           } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
                           style={{
-                            backgroundColor: isCellRoleLocked ? `${cellColorTheme}12` : undefined,
-                            borderColor: isCellRoleLocked ? `${cellColorTheme}40` : undefined,
-                            boxShadow: isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined
+                            backgroundColor: isCellRoleLocked && !isUserOnLeave ? `${cellColorTheme}12` : undefined,
+                            // Clear background borders when highlighted or on leave to prioritize warning textures
+                            borderColor: isSearchHighlighted || isUserOnLeave ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}40` : undefined),
+                            boxShadow: isSearchHighlighted || isUserOnLeave ? undefined : (isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined),
+                            // Gold standard dual-layer background pattern mask for perfectly rounded striped borders
+                            backgroundImage: isUserOnLeave && !isSearchHighlighted
+                              ? 'linear-gradient(#020617, #020617), repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #3f0c10 5px, #3f0c10 10px)'
+                              : undefined,
+                            backgroundOrigin: isUserOnLeave && !isSearchHighlighted ? 'border-box' : undefined,
+                            backgroundClip: isUserOnLeave && !isSearchHighlighted ? 'padding-box, border-box' : undefined
                           }}
                         >
-                        {/* Subtle, micro-sized text identifier positioned absolutely in the upper left corner */}
-                        <div className="absolute top-1 left-1.5 text-[8px] font-mono font-bold tracking-tight text-slate-600/60 select-none pointer-events-none z-0">
+                        {/* Subtle, micro-sized text identifier positioned absolutely in the bottom left corner (Linked to hover transition) */}
+                        <div className="absolute bottom-1 left-1.5 text-[5px] font-mono font-light tracking-tight text-slate-500/50 select-none pointer-events-none z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                           P{cIdx + 1}-S{rIdx + 1}
                         </div>
 
@@ -797,25 +816,62 @@ export default function RaidPartyTab({ user }) {
                           );
                         })()}
 
-                        {/* THE GEAR ROLE LOCK POPUP ICON */}
+                        {/* THE LOWER RIGHT INTEGRATED TOOL DECK CONSOLE */}
                         {isOfficer && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActivePopover(isGearPopoverOpen ? null : { coordKey, type: 'gear' });
-                            }}
-                            className={`absolute top-1 right-5 p-1 rounded transition opacity-0 group-hover:opacity-100 cursor-pointer ${
-                              isGearPopoverOpen ? 'opacity-100 bg-slate-800 text-amber-400' : 'text-slate-600 hover:text-slate-300'
-                            }`}
-                          >
-                            <Settings size={15} />
-                          </button>
+                          <div className="absolute bottom-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-20 bg-slate-950/60 backdrop-blur-sm rounded-lg p-0.5 border border-slate-900/60">
+                            {/* Gear Icon: Pre-Assign Role Lock */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActivePopover(isGearPopoverOpen ? null : { coordKey, type: 'gear' });
+                              }}
+                              className={`p-1 rounded hover:bg-slate-800 transition-colors ${
+                                isGearPopoverOpen ? 'text-amber-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                              title="Set Class/Role Lock"
+                            >
+                              <Settings size={13} />
+                            </button>
+
+                            {/* Info Icon: Toggle Roster Member Selector Assignment Popup */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActivePopover(activePopover?.coordKey === coordKey && activePopover?.type === 'assign' ? null : { coordKey, type: 'assign' });
+                                setSelectedPopoverJob(slotData.roleLock || '');
+                              }}
+                              className={`p-1 rounded hover:bg-slate-800 transition-colors ${
+                                activePopover?.coordKey === coordKey && activePopover?.type === 'assign' ? 'text-indigo-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                              title="Assign Roster Candidate"
+                            >
+                              <Info size={13} />
+                            </button>
+
+                            {/* Divider Separator Line */}
+                            <span className="text-slate-800 font-mono text-[10px] mx-0.5 pointer-events-none select-none">|</span>
+
+                            {/* Trash Icon: Fast Unassign Cell Slot Action */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (slotData.userId) handleBindMemberToCell(coordKey, '');
+                              }}
+                              disabled={!slotData.userId}
+                              className="p-1 rounded hover:bg-slate-800 text-slate-600 hover:text-rose-400 transition-colors disabled:opacity-20 disabled:hover:text-slate-600 disabled:cursor-not-allowed"
+                              title="Unassign Position"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         )}
 
-                        {/* CELL SELECTION WORKFLOW ACTION HANDLER */}
+                        {/* CELL SELECTION WORKFLOW ACTION HANDLER (Increased top padding for explicit px breathing room) */}
                         <div 
-                          className="flex-1 flex flex-col justify-between cursor-pointer pt-3"
+                          className="flex-1 flex flex-col justify-between cursor-pointer pt-4.5"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!isOfficer) return;
@@ -825,11 +881,11 @@ export default function RaidPartyTab({ user }) {
                         >
                           {allocatedUserObj ? (
                             <div className="space-y-1">
-                              <div className="font-sans font-bold text-slate-200 text-[11px] truncate max-w-[90px]" title={allocatedUserObj.displayName}>
+                              <div className="font-sans font-bold text-slate-200 text-[17px] truncate max-w-[90px]" title={allocatedUserObj.displayName}>
                                 {allocatedUserObj.displayName}
                               </div>
                               <div 
-                                className="text-[9px] font-sans font-semibold tracking-wide truncate max-w-[90px]"
+                                className="text-[8px] font-sans font-light uppercase tracking-wider truncate max-w-[90px] opacity-80"
                                 style={{ color: jobsCatalog[allocatedUserObj.jobCode]?.colorTheme || '#64748b' }}
                               >
                                 {jobsCatalog[allocatedUserObj.jobCode]?.name || 'No Class'}
@@ -846,8 +902,8 @@ export default function RaidPartyTab({ user }) {
                                 </>
                               ) : (
                                 <>
-                                  <UserPlus size={16} strokeWidth={2.2} />
-                                  <span className="text-[8px] font-bold tracking-widest text-slate-400 font-sans uppercase">Vacant</span>
+                                  <UserPlus size={20} strokeWidth={2.2} />
+                                  <span className="text-[8px] font-bold tracking-widest text-slate-400 font-sans uppercase"></span>
                                 </>
                               )}
                             </div>
@@ -1162,7 +1218,9 @@ export default function RaidPartyTab({ user }) {
                       return (
                         <div 
                           key={player.uid}
-                          className="p-2.5 rounded-xl border border-red-900/30 bg-red-950/10 font-mono text-[11px] shadow-none flex items-center justify-between select-none"
+                          draggable={isOfficer}
+                          onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
+                          className="p-2.5 rounded-xl border border-red-900/30 bg-red-950/10 font-mono text-[11px] shadow-none flex items-center justify-between select-none cursor-grab active:cursor-grabbing hover:border-red-700/50 transition-all duration-150"
                         >
                           <div className="truncate pr-2">
                             <div className="font-sans font-bold text-red-400 text-xs truncate flex items-center gap-1.5">

@@ -149,7 +149,7 @@ router.get('/callback', async (req, res) => {
 
     const systemTimezone = configSnap.exists() ? (configSnap.val().timezone || "Asia/Manila") : "Asia/Manila";
 
-    await db.ref(`auction/members/${user.id}`).set({
+    await db.ref(`auction/members/${user.id}`).update({
       displayName: serverNickname,
       syncedAt: new Date().toLocaleDateString("en-US", { timeZone: systemTimezone })
     });
