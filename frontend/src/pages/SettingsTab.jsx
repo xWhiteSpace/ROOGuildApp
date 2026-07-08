@@ -53,7 +53,6 @@ export default function SettingsTab() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
-  // Dynamic Configuration Template Workspace Core States
   const [config, setConfig] = useState({
     timezone: 'Asia/Manila',
     isForceLocked: false,
@@ -69,6 +68,15 @@ export default function SettingsTab() {
       phase1: ["07:00", "12:00", "19:00"],
       phase2: "22:15",
       phase3: "20:55"
+    },
+    liveRaidMaxConfigs: 5,
+    liveRaidMaxWarRooms: 2,
+    warRooms: {
+      room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
+      room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
+      room_003: { name: 'Guild League Main 3', envKey: 'DISCORD_WARROOM_ID_3' },
+      room_004: { name: 'Guild League Main 4', envKey: 'DISCORD_WARROOM_ID_4' },
+      room_005: { name: 'Guild League Main 5', envKey: 'DISCORD_WARROOM_ID_5' }
     }
   });
 
@@ -106,7 +114,16 @@ export default function SettingsTab() {
       if (data.success) {
         setConfig({
           ...data.config,
-          roles: data.config.roles || {}
+          roles: data.config.roles || {},
+          liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
+          liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
+          warRooms: data.config.warRooms || {
+            room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
+            room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
+            room_003: { name: 'Guild League Main 3', envKey: 'DISCORD_WARROOM_ID_3' },
+            room_004: { name: 'Guild League Main 4', envKey: 'DISCORD_WARROOM_ID_4' },
+            room_005: { name: 'Guild League Main 5', envKey: 'DISCORD_WARROOM_ID_5' }
+          }
         });
       }
     } catch (err) {
@@ -833,6 +850,99 @@ export default function SettingsTab() {
           ) : (
             <div className="text-xs text-slate-500 font-mono py-6 text-center border border-dashed border-slate-800 rounded-xl italic">No explicit bypass vectors mapped. Falling back to platform definitions.</div>
           )}
+
+          <div className="border-t border-slate-800/60 my-6" />
+
+          {/* Live Raid War Settings */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconSliders /> Live Raid War Settings</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Configure live raid restrictions for selected configurations and war rooms.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Raid Max Configs Selectable</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={config.liveRaidMaxConfigs || 5}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 5;
+                      setConfig(prev => ({ ...prev, liveRaidMaxConfigs: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Configurations (Max 10)</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Raid War Room Select Limit</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={config.liveRaidMaxWarRooms || 2}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 2;
+                      setConfig(prev => ({ ...prev, liveRaidMaxWarRooms: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Rooms (Max 5)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800/60 my-6" />
+
+          {/* Voice War Rooms Registry */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconGlobe /> Voice War Rooms Registry</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Map custom display names to the Discord voice room channel IDs configured in backend `.env` file.</p>
+            </div>
+
+            <div className="space-y-2.5 max-w-4xl font-mono text-xs">
+              {['room_001', 'room_002', 'room_003', 'room_004', 'room_005'].map((roomId, idx) => {
+                const roomObj = config.warRooms?.[roomId] || { name: `Guild Voice Channel ${idx + 1}`, envKey: `DISCORD_WARROOM_ID_${idx + 1}` };
+                return (
+                  <div 
+                    key={roomId}
+                    className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-2.5 rounded-xl shadow-sm group hover:border-slate-700 hover:bg-slate-900/10 transition-all duration-150"
+                  >
+                    <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">
+                      {roomId.toUpperCase()}
+                    </span>
+                    <span className="col-span-3 text-[10px] text-indigo-400 font-bold tracking-wider select-none">
+                      {roomObj.envKey}
+                    </span>
+                    <input 
+                      type="text"
+                      value={roomObj.name || ''}
+                      onChange={(e) => {
+                        const updatedWarRooms = {
+                          ...config.warRooms,
+                          [roomId]: {
+                            ...roomObj,
+                            name: e.target.value
+                          }
+                        };
+                        setConfig(prev => ({ ...prev, warRooms: updatedWarRooms }));
+                      }}
+                      className="col-span-7 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-850 hover:border-slate-800 rounded-xl px-3 py-1 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                      placeholder="Display name e.g. Guild League Main..."
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 

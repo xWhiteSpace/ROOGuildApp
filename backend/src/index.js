@@ -15,6 +15,7 @@ import authRoutes from './auth/discordOAuth.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
+import liveRaidRoutes from './api/liveRaid.routes.js';
 
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
@@ -86,6 +87,7 @@ app.use('/auth', authRoutes);
 app.use('/api/requests', requestRoutes);
 
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/live-raid', liveRaidRoutes);
 
 app.get('/', (req, res) => {
   res.send('DynastyGuild backend is online.');
