@@ -128,6 +128,9 @@ export default function LiveRaidTab({ user }) {
       const data = await res.json();
       if (data.success && data.session) {
         setSession(data.session);
+        if (Array.isArray(data.session.lastVoicePoll?.presentUids)) {
+          setLiveVoiceUids(data.session.lastVoicePoll.presentUids);
+        }
         // Sync local grid changes copy if not editing locally or initial load
         if (isInitial || !isDirty) {
           setLocalGrids(data.session.grids || {});
@@ -147,12 +150,15 @@ export default function LiveRaidTab({ user }) {
   };
 
   // Fetch real-time Voice Presence from backend
-  const fetchVoicePresenceList = async () => {
-    if (!session || !session.selectedWarRooms || session.selectedWarRooms.length === 0) return;
+  const fetchVoicePresenceList = async (activeSession = session) => {
+    const warRoomRefs = activeSession?.selectedWarRoomIds?.length
+      ? activeSession.selectedWarRoomIds
+      : activeSession?.selectedWarRooms;
+    if (!activeSession || !warRoomRefs?.length) return;
     try {
       const headers = getRequestHeaders();
-      const channelsParam = session.selectedWarRooms.join(',');
-      const res = await fetch(`${backendUrl}/api/live-raid/voice-presence?channels=${channelsParam}`, {
+      const channelsParam = warRoomRefs.join(',');
+      const res = await fetch(`${backendUrl}/api/live-raid/voice-presence?channels=${encodeURIComponent(channelsParam)}`, {
         method: 'GET',
         headers,
         credentials: 'include'
@@ -174,21 +180,23 @@ export default function LiveRaidTab({ user }) {
 
   // Periodic Polling synchronization (Real-time collaboration)
   useEffect(() => {
+    if (!session) return undefined;
+
     const liveSessionPoller = setInterval(() => {
       fetchActiveLiveSession(false);
     }, 4000);
 
     const voicePoller = setInterval(() => {
-      fetchVoicePresenceList();
+      fetchVoicePresenceList(session);
     }, 10000);
 
-    fetchVoicePresenceList();
+    fetchVoicePresenceList(session);
 
     return () => {
       clearInterval(liveSessionPoller);
       clearInterval(voicePoller);
     };
-  }, [session?.selectedWarRooms]);
+  }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
   // Event Date Picker Options Generator
   const computedEventDates = useMemo(() => {
@@ -375,7 +383,7 @@ export default function LiveRaidTab({ user }) {
         eventDate: selectedEventDate,
         eventTitle: eventsCatalog[selectedEventKey]?.title || 'Raid Session',
         selectedConfigIds,
-        selectedWarRooms: selectedWarRooms.map(roomId => warRoomsCatalog[roomId]?.envKey).filter(Boolean)
+        selectedWarRooms: selectedWarRooms
       };
 
       const res = await fetch(`${backendUrl}/api/live-raid/create`, {
@@ -828,12 +836,12 @@ export default function LiveRaidTab({ user }) {
                   <div className="p-3.5 bg-slate-950 border border-slate-900 rounded-xl space-y-1.5">
                     <span className="text-[9px] font-mono font-bold tracking-wider text-slate-500 uppercase block">Selected War Rooms</span>
                     <div className="space-y-1 select-none">
-                      {session.selectedWarRooms?.map((channelId, idx) => {
-                        const nameObj = Object.values(warRoomsCatalog).find(w => w.envKey === channelId);
+                      {(session.selectedWarRoomIds || []).map((roomId) => {
+                        const room = warRoomsCatalog[roomId];
                         return (
-                          <div key={idx} className="flex items-center gap-1.5 text-slate-300 font-medium">
+                          <div key={roomId} className="flex items-center gap-1.5 text-slate-300 font-medium">
                             <Volume2 size={12} className="text-indigo-400" />
-                            <span className="truncate">{nameObj?.name || 'Voice Channel'}</span>
+                            <span className="truncate">{room?.name || 'Voice Channel'}</span>
                           </div>
                         );
                       })}
@@ -926,8 +934,12 @@ export default function LiveRaidTab({ user }) {
                             allocatedUserObj.displayName.toLowerCase().includes(searchQuery.toLowerCase()));
 
                           // Voice channel status indicators
-                          const isVoiceConnected = allocatedUserObj ? liveVoiceUids.includes(allocatedUserObj.uid) : false;
-                          const hasPlacementsConflict = allocatedUserObj ? allocatedConflictsSet.has(allocatedUserObj.uid) : false;
+                          const isVoiceConnected = slotData.userId
+                            ? liveVoiceUids.includes(slotData.userId)
+                            : false;
+                          const hasPlacementsConflict = slotData.userId
+                            ? allocatedConflictsSet.has(slotData.userId)
+                            : false;
 
                           // Calendar excused absent mapping check
                           const calendarSignKey = `${session.eventDate}_${session.eventKey}`;
@@ -1325,7 +1337,11 @@ export default function LiveRaidTab({ user }) {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" title="Present" />
+                                  <span className={`w-2 h-2 rounded-full shadow-sm ${
+                                    liveVoiceUids.includes(player.uid)
+                                      ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse'
+                                      : 'bg-slate-600'
+                                  }`} title={liveVoiceUids.includes(player.uid) ? 'On Discord' : 'Not on Discord'} />
                                 </div>
                               </div>
                             );
@@ -1370,7 +1386,11 @@ export default function LiveRaidTab({ user }) {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className="w-2 h-2 rounded-full bg-slate-600 shadow-sm" title="Uncommitted" />
+                                  <span className={`w-2 h-2 rounded-full shadow-sm ${
+                                    liveVoiceUids.includes(player.uid)
+                                      ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse'
+                                      : 'bg-slate-600'
+                                  }`} title={liveVoiceUids.includes(player.uid) ? 'On Discord' : 'Not on Discord'} />
                                 </div>
                               </div>
                             );
@@ -1414,7 +1434,11 @@ export default function LiveRaidTab({ user }) {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" title="Absent" />
+                                  <span className={`w-2 h-2 rounded-full shadow-sm ${
+                                    liveVoiceUids.includes(player.uid)
+                                      ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse'
+                                      : 'bg-rose-500 shadow-rose-500/50'
+                                  }`} title={liveVoiceUids.includes(player.uid) ? 'On Discord' : 'Absent'} />
                                 </div>
                               </div>
                             );

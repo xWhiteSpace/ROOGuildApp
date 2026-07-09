@@ -3,6 +3,11 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 import crypto from 'crypto';
+import {
+  resolveWarRoomChannelIds,
+  inferWarRoomRelationalIds,
+  fetchVoiceChannelPresentUids
+} from '../utils/warRoomResolver.js';
 
 const router = Router();
 
@@ -84,6 +89,52 @@ function getPhase3EndTimestamp(eventDate, timezone, phase3) {
     targetMs += dayOffset * 24 * 60 * 60 * 1000;
   }
   return targetMs;
+}
+
+async function loadWarRoomsCatalog(db) {
+  const configSnap = await db.ref('settings/configuration').once('value');
+  return configSnap.exists() ? (configSnap.val().warRooms || {}) : {};
+}
+
+async function normalizeLiveSessionWarRooms(db, session) {
+  if (!session) return session;
+
+  const warRooms = await loadWarRoomsCatalog(db);
+  const sourceIdentifiers = [
+    ...(session.selectedWarRoomIds || []),
+    ...(session.selectedWarRooms || [])
+  ];
+
+  const resolvedChannelIds = resolveWarRoomChannelIds(sourceIdentifiers, warRooms);
+  if (resolvedChannelIds.length === 0) return session;
+
+  const hasLegacyWarRoomRefs = (session.selectedWarRooms || []).some(
+    (id) => !/^\d{17,20}$/.test(String(id))
+  );
+
+  const normalizedSession = {
+    ...session,
+    selectedWarRooms: resolvedChannelIds,
+    selectedWarRoomIds: session.selectedWarRoomIds?.length
+      ? session.selectedWarRoomIds
+      : inferWarRoomRelationalIds(session.selectedWarRooms || [], warRooms)
+  };
+
+  if (hasLegacyWarRoomRefs || !session.selectedWarRoomIds?.length) {
+    await db.ref('attendance/live_session').update({
+      selectedWarRooms: normalizedSession.selectedWarRooms,
+      selectedWarRoomIds: normalizedSession.selectedWarRoomIds
+    });
+  }
+
+  return normalizedSession;
+}
+
+async function pollLiveSessionVoicePresence(session) {
+  const db = getDatabase();
+  const warRooms = await loadWarRoomsCatalog(db);
+  const channelIds = resolveWarRoomChannelIds(session.selectedWarRooms || [], warRooms);
+  return fetchVoiceChannelPresentUids(discordClient, channelIds);
 }
 
 // Internal end live raid handler
@@ -178,6 +229,7 @@ async function endLiveRaidSessionInternal(s) {
     totalPulses: totalPulses,
     grids: s.grids || {},
     selectedWarRooms: s.selectedWarRooms || [],
+    selectedWarRoomIds: s.selectedWarRoomIds || [],
     userTallies: s.userTallies || {},
     endedAt: Date.now()
   };
@@ -205,7 +257,8 @@ router.get('/session', async (req, res) => {
       return res.json({ success: true, session: null });
     }
 
-    return res.json({ success: true, session: s });
+    const normalizedSession = await normalizeLiveSessionWarRooms(db, s);
+    return res.json({ success: true, session: normalizedSession });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -229,9 +282,22 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ success: false, error: 'An active Live Raid session is already running.' });
     }
 
-    const { eventKey, eventDate, eventTitle, selectedConfigIds, selectedWarRooms } = req.body;
-    if (!eventKey || !eventDate || !eventTitle || !selectedConfigIds || !selectedWarRooms) {
+    const { eventKey, eventDate, eventTitle, selectedConfigIds, selectedWarRooms: selectedWarRoomIds } = req.body;
+    if (!eventKey || !eventDate || !eventTitle || !selectedConfigIds || !selectedWarRoomIds?.length) {
       return res.status(400).json({ success: false, error: 'Missing required configuration fields.' });
+    }
+
+    const settingsObj = configSnap.exists() ? configSnap.val() : {};
+    const resolvedWarRoomChannelIds = resolveWarRoomChannelIds(
+      selectedWarRoomIds,
+      settingsObj.warRooms || {}
+    );
+
+    if (resolvedWarRoomChannelIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid Discord war room channels resolved. Verify Settings war room registry and backend DISCORD_WARROOM_ID_* environment variables.'
+      });
     }
 
     // Clone configuration grids
@@ -245,7 +311,6 @@ router.post('/create', async (req, res) => {
 
     // Compute end timestamp
     let endTimestamp = null;
-    const settingsObj = configSnap.exists() ? configSnap.val() : {};
     const eventTemplate = settingsObj.events?.[eventKey];
     if (eventTemplate && eventTemplate.phases?.[3]) {
       const timezone = settingsObj.timezone || "Asia/Manila";
@@ -260,7 +325,8 @@ router.post('/create', async (req, res) => {
       eventDate,
       eventTitle,
       selectedConfigIds,
-      selectedWarRooms,
+      selectedWarRoomIds,
+      selectedWarRooms: resolvedWarRoomChannelIds,
       grids: gridsPayload,
       endTimestamp,
       totalPulses: 0,
@@ -293,21 +359,8 @@ router.post('/create', async (req, res) => {
         }
 
         const nextTotalPulses = (s.totalPulses || 0) + 1;
-        const updatedTallies = s.userTallies || {};
-        const presentUserIds = [];
-
-        if (discordClient && discordClient.isReady()) {
-          for (const channelId of s.selectedWarRooms) {
-            const channel = await discordClient.channels.fetch(channelId).catch(() => null);
-            if (channel && channel.isVoiceBased()) {
-              channel.members.forEach(member => {
-                if (!member.user.bot) {
-                  presentUserIds.push(member.user.id);
-                }
-              });
-            }
-          }
-        }
+        const updatedTallies = { ...(s.userTallies || {}) };
+        const presentUserIds = await pollLiveSessionVoicePresence(s);
 
         presentUserIds.forEach(uid => {
           updatedTallies[uid] = (updatedTallies[uid] || 0) + 1;
@@ -361,21 +414,11 @@ router.get('/voice-presence', async (req, res) => {
 
   try {
     const channelsParam = req.query.channels || '';
-    const channelIds = channelsParam.split(',').filter(Boolean);
-    const presentUserIds = [];
-
-    if (discordClient && discordClient.isReady()) {
-      for (const channelId of channelIds) {
-        const channel = await discordClient.channels.fetch(channelId).catch(() => null);
-        if (channel && channel.isVoiceBased()) {
-          channel.members.forEach(member => {
-            if (!member.user.bot) {
-              presentUserIds.push(member.user.id);
-            }
-          });
-        }
-      }
-    }
+    const channelIdentifiers = channelsParam.split(',').filter(Boolean);
+    const db = getDatabase();
+    const warRooms = await loadWarRoomsCatalog(db);
+    const resolvedChannelIds = resolveWarRoomChannelIds(channelIdentifiers, warRooms);
+    const presentUserIds = await fetchVoiceChannelPresentUids(discordClient, resolvedChannelIds);
 
     return res.json({ success: true, presentUids: presentUserIds });
   } catch (err) {
