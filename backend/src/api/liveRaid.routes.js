@@ -313,6 +313,12 @@ router.post('/create', async (req, res) => {
       endTimestamp = getPhase3EndTimestamp(eventDate, timezone, eventTemplate.phases[3]);
     }
 
+    // Safety check: If the scheduled end time has already passed, give it a 3-hour manual grace window instead of instantly expiring
+    const threeHoursFromNow = Date.now() + (3 * 60 * 60 * 1000);
+    if (!endTimestamp || endTimestamp < Date.now()) {
+      endTimestamp = threeHoursFromNow;
+    }
+    
     const sessionPayload = {
       status: 'Active',
       launchedBy: user.displayName || user.username || 'Officer',
@@ -461,6 +467,31 @@ router.post('/end', async (req, res) => {
     await endLiveRaidSessionInternal(s);
 
     return res.json({ success: true, message: 'Live Raid ended and archived successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/cancel', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    if (global.liveRaidIntervalTicker) {
+      clearInterval(global.liveRaidIntervalTicker);
+      global.liveRaidIntervalTicker = undefined;
+    }
+
+    await db.ref('attendance/live_session').set(null);
+    return res.json({ success: true, message: 'Live Raid session terminated and cleared without archiving.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

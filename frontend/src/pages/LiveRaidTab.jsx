@@ -21,8 +21,11 @@ import {
   ChevronRight,
   Info,
   Volume2,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  RefreshCw
 } from 'lucide-react';
+
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
 
@@ -81,11 +84,9 @@ export default function LiveRaidTab({ user }) {
 
   // Compute Layout spans matching RaidPartyTab
   const centerColSpanClass = useMemo(() => {
-    if (leftPanelCollapsed && rightPanelCollapsed) return 'col-span-12 xl:col-span-10';
-    if (leftPanelCollapsed) return 'col-span-12 xl:col-span-8';
-    if (rightPanelCollapsed) return 'col-span-12 xl:col-span-9';
-    return 'col-span-12 xl:col-span-7';
-  }, [leftPanelCollapsed, rightPanelCollapsed]);
+    if (rightPanelCollapsed) return 'col-span-12 xl:col-span-11';
+    return 'col-span-12 xl:col-span-9';
+  }, [rightPanelCollapsed]);
 
   // Load Setup Master lists
   const loadMasterSetupData = async () => {
@@ -441,6 +442,48 @@ export default function LiveRaidTab({ user }) {
     }
   };
 
+ const handleCancelLiveRaid = async () => {
+    if (!session || !isOfficer) return;
+    if (!window.confirm("⚠️ CRITICAL WARNING:\nWiping this live operation will permanently drop all tracking check-ins without saving an archive entry log.\n\nAre you sure you want to completely exit?")) return;
+    
+    try {
+      const headers = getRequestHeaders();
+      const res = await fetch(`${backendUrl}/api/live-raid/cancel`, { method: 'POST', headers, credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        setSession(null);
+        setLocalGrids({});
+        setIsDirty(false);
+        setLocalStep(1);
+      } else {
+        alert(data.error || "Failed to terminate operation cache.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleBackToSetup = async () => {
+    if (!session || !isOfficer) return;
+    if (!window.confirm("ATTENTION:\nReturning to setup will clear the current real-time operations session dashboard. Do you want to return to configuration configuration panels?")) return;
+
+    try {
+      const headers = getRequestHeaders();
+      const res = await fetch(`${backendUrl}/api/live-raid/cancel`, { method: 'POST', headers, credentials: 'include' });
+      const data = await res.json();
+      if (data.success) {
+        setSession(null);
+        setLocalGrids({});
+        setIsDirty(false);
+        setLocalStep(2);
+      } else {
+        alert(data.error || "Failed to reset session context.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleEndLiveRaid = async () => {
     if (!session || !isOfficer) return;
     if (!window.confirm("ARE YOU ABSOLUTELY CERTAIN YOU WANT TO END THE RAID SESSION?\nThis action will stop background polling, save attendance metrics, and wipe active session datasets.")) {
@@ -758,54 +801,49 @@ export default function LiveRaidTab({ user }) {
         <div className="space-y-4 animate-fadeIn">
           {/* HEADER DECK */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-md flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 select-none">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-widest animate-pulse">
-                  🔴 Live Operations Active
-                </span>
-                <span className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest">
-                  Cycle: {session.eventTitle} ({session.eventDate})
-                </span>
+            <div className="flex items-center gap-3.5">
+              {isOfficer && (
+                <button 
+                  onClick={handleBackToSetup}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-850 hover:border-slate-850 text-slate-400 hover:text-slate-200 transition cursor-pointer flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider font-bold"
+                  title="Return to Config Selection"
+                >
+                  <ArrowLeft size={13} /> Back
+                </button>
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-widest flex items-center gap-1">
+                    <Radio size={10} className="text-emerald-400 animate-pulse shrink-0" /> Live Operations Active
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest">
+                    Cycle: {session.eventTitle} ({session.eventDate})
+                  </span>
+                </div>
+                <h2 className="text-md font-black text-slate-200 uppercase mt-1">
+                  Collab Console (Officer: {session.launchedBy})
+                </h2>
               </div>
-              <h2 className="text-md font-black text-slate-200 uppercase mt-1">
-                Collab Console (Officer: {session.launchedBy})
-              </h2>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Tab Selector */}
-              <div className="flex bg-slate-950 border border-slate-800 p-0.5 rounded-xl">
-                {session.selectedConfigIds?.map(configId => {
-                  const isActive = activeTabConfigId === configId;
-                  const cTitle = compositions[configId]?.title || configId;
-                  return (
-                    <button
-                      key={configId}
-                      type="button"
-                      onClick={() => {
-                        setActiveTabConfigId(configId);
-                        setActivePopover(null);
-                      }}
-                      className={`px-3 py-1.5 text-[9px] font-mono font-black uppercase tracking-wider rounded-lg transition-all ${
-                        isActive 
-                          ? 'bg-indigo-600 text-white shadow' 
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {cTitle}
-                    </button>
-                  );
-                })}
-              </div>
-
+            <div className="flex flex-wrap items-center gap-2">
               {isOfficer && (
-                <button
-                  type="button"
-                  onClick={handleEndLiveRaid}
-                  className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-[10px] uppercase tracking-wider p-2 px-3 rounded-xl transition shadow-lg cursor-pointer"
-                >
-                  <LogOut size={12} /> End Raid
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelLiveRaid}
+                    className="flex items-center gap-1.5 border border-slate-850 bg-slate-950 text-slate-400 hover:text-rose-400 font-mono font-bold text-[10px] uppercase tracking-wider p-2 px-3 rounded-xl transition cursor-pointer"
+                  >
+                    <X size={12} /> Cancel & Exit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEndLiveRaid}
+                    className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-[10px] uppercase tracking-wider p-2 px-3 rounded-xl transition shadow-lg cursor-pointer"
+                  >
+                    <LogOut size={12} /> End Raid
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -814,7 +852,7 @@ export default function LiveRaidTab({ user }) {
           <div className="grid grid-cols-12 gap-4 items-stretch relative overflow-visible">
             
             {/* COLUMN 2: CENTER GRID CANVAS (COLUMN 1 REMOVED FOR COMFORTABLE HORIZONTAL GRID SPACE) */}
-            <div className="col-span-12 xl:col-span-9 border border-slate-800 bg-slate-950 rounded-b-2xl rounded-tr-2xl p-4 shadow-xl flex flex-col justify-between min-h-[42rem] pb-8 overflow-visible relative mt-9">
+            <div className={`${centerColSpanClass} border border-slate-800 bg-slate-950 rounded-b-2xl rounded-tr-2xl p-4 shadow-xl flex flex-col justify-between min-h-[42rem] pb-8 overflow-visible relative mt-9 transition-all duration-300`}>
               
               {/* OneNote Notebook Folder Tabs Left-Aligned Row */}
               <div className="absolute -top-[33px] left-0 flex items-end pl-2 z-10">
