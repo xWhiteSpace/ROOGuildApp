@@ -1073,11 +1073,11 @@ export default function SettingsTab() {
                       updatedJobs[code].name = e.target.value;
                       setConfig(prev => ({ ...prev, jobs: updatedJobs }));
                     }}
-                    className="col-span-4 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                    className="col-span-3 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-2 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
                     placeholder="Job Title (e.g. Bard)..."
                   />
 
-                  <div className="col-span-4 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 max-w-[240px] shrink-0">
+                  <div className="col-span-3 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 shrink-0">
                     <div 
                       className="relative w-5 h-5 rounded-md border border-slate-700/80 shadow-md transition transform hover:scale-105 cursor-pointer overflow-hidden shrink-0" 
                       style={{ backgroundColor: jobObj.colorTheme || '#64748b' }}
@@ -1098,6 +1098,26 @@ export default function SettingsTab() {
                       {jobObj.colorTheme || '#DEFAULT'}
                     </span>
                   </div>
+
+                  <select
+                    value={jobObj.iconFile || ''}
+                    onChange={(e) => {
+                      const updatedJobs = { ...config.jobs };
+                      updatedJobs[code].iconFile = e.target.value;
+                      setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                    }}
+                    className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-[11px] text-slate-300 font-semibold outline-none cursor-pointer focus:border-slate-700 transition-colors"
+                  >
+                    <option value="">-- No Icon --</option>
+                    <option value="acolyte.svg">Acolyte</option>
+                    <option value="archer.svg">Archer</option>
+                    <option value="doram.svg">Doram</option>
+                    <option value="mage.svg">Mage</option>
+                    <option value="merchant.svg">Merchant</option>
+                    <option value="rebellion.svg">Rebellion</option>
+                    <option value="swordsman.svg">Swordsman</option>
+                    <option value="thief.svg">Thief</option>
+                  </select>
 
                   <div className="col-span-1 flex items-center justify-end pr-2">
                     <button 
