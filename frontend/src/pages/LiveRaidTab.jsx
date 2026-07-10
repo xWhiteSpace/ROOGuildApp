@@ -286,8 +286,14 @@ export default function LiveRaidTab({ user }) {
       }
     });
 
-    const targetDate = session?.eventDate || selectedEventDate;
+    const targetRawDate = session?.eventDate || selectedEventDate;
     const targetEventKey = session?.eventKey || selectedEventKey;
+
+    // Format converter normalizing YYYY-MM-DD hyphens over to standard backend M/D/YYYY slashes
+    const targetDate = targetRawDate && targetRawDate.includes('-')
+      ? (() => { const [y, m, d] = targetRawDate.split('-'); return `${parseInt(m, 10)}/${parseInt(d, 10)}/${y}`; })()
+      : targetRawDate;
+
     const compositeKey = `${targetDate}_${targetEventKey}`;
 
     const dateSignaturesMap = {};
@@ -321,7 +327,7 @@ export default function LiveRaidTab({ user }) {
 
       if (calendarStatus === 'Leave') {
         if (!globallyPlacedUids.has(uid)) leave.push(enrichedRow);
-      } else if (calendarStatus === 'Confirmed') {
+      } else if (calendarStatus === 'Confirmed' || calendarStatus === 'Confirm') {
         if (!globallyPlacedUids.has(uid)) standby.push(enrichedRow);
       } else {
         if (!globallyPlacedUids.has(uid)) uncommitted.push(enrichedRow);
@@ -486,33 +492,37 @@ export default function LiveRaidTab({ user }) {
     setIsDirty(true);
   };
 
-  const handleBindMemberToCell = (coordKey, uid) => {
+  const handleBindMemberToCell = async (coordKey, uid) => {
     if (!activeTabConfigId || !localGrids[activeTabConfigId]) return;
+    
+    // Instantly modify state locally for optimal user interaction speed
     setLocalGrids(prev => {
       const updated = { ...prev };
       const configObj = { ...updated[activeTabConfigId] };
       const slotAlloc = { ...configObj.slots_allocation };
-
-      // Ensure user ID is not duplicate across this single composition
       if (uid) {
         Object.keys(slotAlloc).forEach(k => {
-          if (slotAlloc[k] && slotAlloc[k].userId === uid) {
-            slotAlloc[k] = { ...slotAlloc[k], userId: '' };
-          }
+          if (slotAlloc[k] && slotAlloc[k].userId === uid) slotAlloc[k] = { ...slotAlloc[k], userId: '' };
         });
       }
-
-      slotAlloc[coordKey] = {
-        ...slotAlloc[coordKey],
-        userId: uid
-      };
-
+      slotAlloc[coordKey] = { ...slotAlloc[coordKey], userId: uid };
       configObj.slots_allocation = slotAlloc;
       updated[activeTabConfigId] = configObj;
       return updated;
     });
-    setIsDirty(true);
     setActivePopover(null);
+
+    // Stream the atomic path mutation directly down the real-time database pipeline
+    try {
+      await fetch(`${backendUrl}/api/live-raid/cell-update`, {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ configId: activeTabConfigId, coordKey, userId: uid }),
+        credentials: 'include'
+      });
+    } catch (err) {
+      console.error("Granular database write exception caught:", err);
+    }
   };
 
   // HTML5 Drag-Drop hooks
@@ -805,64 +815,33 @@ export default function LiveRaidTab({ user }) {
           {/* MAIN THREE-COLUMN SPLITTER */}
           <div className="grid grid-cols-12 gap-4 items-stretch relative overflow-visible">
             
-            {/* COLUMN 1: LEFT CONFIG INFO TAB */}
-            {leftPanelCollapsed ? (
-              <div className="col-span-12 xl:col-span-1 border border-slate-900 bg-slate-950/60 rounded-2xl p-2 flex flex-col items-center shadow-md min-h-[42rem] justify-start py-4">
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelCollapsed(false)}
-                  className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-indigo-400 hover:text-white transition cursor-pointer font-bold text-xs"
-                >
-                  <ChevronRight size={14} />
-                </button>
-                <div className="text-[9px] uppercase font-mono font-bold tracking-widest text-slate-600 mt-8 [writing-mode:vertical-lr]">INFO</div>
-              </div>
-            ) : (
-              <div className="col-span-12 xl:col-span-2 border border-slate-800 bg-slate-950/40 rounded-2xl p-3 flex flex-col space-y-4 shadow-md min-h-[42rem]">
-                <div className="border-b border-slate-900 pb-2 flex items-center justify-between select-none">
-                  <div className="flex items-center gap-2">
+            {/* COLUMN 2: CENTER GRID CANVAS (COLUMN 1 REMOVED FOR COMFORTABLE HORIZONTAL GRID SPACE) */}
+            <div className="col-span-12 xl:col-span-9 border border-slate-800 bg-slate-950 rounded-b-2xl rounded-tr-2xl p-4 shadow-xl flex flex-col justify-between min-h-[42rem] pb-8 overflow-visible relative mt-9">
+              
+              {/* OneNote Notebook Folder Tabs Left-Aligned Row */}
+              <div className="absolute -top-[33px] left-0 flex items-end pl-2 z-10">
+                {session.selectedConfigIds?.map(configId => {
+                  const isActive = activeTabConfigId === configId;
+                  const cTitle = compositions[configId]?.title || configId;
+                  return (
                     <button
+                      key={configId}
                       type="button"
-                      onClick={() => setLeftPanelCollapsed(true)}
-                      className="p-0.5 rounded text-slate-500 hover:text-slate-350 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setActiveTabConfigId(configId);
+                        setActivePopover(null);
+                      }}
+                      className={`px-4 py-1.5 text-xs font-mono font-black uppercase tracking-wider rounded-t-xl transition-all border-t border-x ${
+                        isActive 
+                          ? 'bg-slate-950 text-indigo-400 border-slate-800 border-b-slate-950 z-20 font-bold translate-y-[1px]' 
+                          : 'bg-slate-950/30 text-slate-500 border-slate-900/60 hover:text-slate-300 hover:bg-slate-950/50 z-0'
+                      }`}
                     >
-                      <ChevronLeft size={14} />
+                      {cTitle}
                     </button>
-                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Active Info</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4 text-xs font-sans">
-                  <div className="p-3.5 bg-slate-950 border border-slate-900 rounded-xl space-y-1.5">
-                    <span className="text-[9px] font-mono font-bold tracking-wider text-slate-500 uppercase block">Selected War Rooms</span>
-                    <div className="space-y-1 select-none">
-                      {(session.selectedWarRoomIds || []).map((roomId) => {
-                        const room = warRoomsCatalog[roomId];
-                        return (
-                          <div key={roomId} className="flex items-center gap-1.5 text-slate-300 font-medium">
-                            <Volume2 size={12} className="text-indigo-400" />
-                            <span className="truncate">{room?.name || 'Voice Channel'}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 bg-slate-950 border border-slate-900 rounded-xl space-y-2 leading-relaxed">
-                    <span className="text-[9px] font-mono font-bold tracking-wider text-indigo-400 uppercase block">Raid Deck Instructions:</span>
-                    <p className="text-[10px] text-slate-400">
-                      • Border glows <strong className="text-emerald-400">GREEN</strong> when Discord presence is verified inside the voice war room.
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      • Member cards marked with a <strong className="text-rose-500">RED Border</strong> indicate conflict errors (assigned in more than 1 composition configuration).
-                    </p>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            )}
-
-            {/* COLUMN 2: CENTER GRID matrices CANVAS */}
-            <div className={`${centerColSpanClass} border border-slate-800 bg-slate-950/60 rounded-2xl p-4 shadow-xl flex flex-col justify-between min-h-[42rem] pb-8 overflow-visible transition-all duration-300`}>
               <div className="overflow-x-auto overflow-visible scrollbar-thin pr-1 flex-1">
                 {activeTabConfigId && localGrids[activeTabConfigId] ? (() => {
                   const activeConfig = localGrids[activeTabConfigId];
@@ -870,6 +849,9 @@ export default function LiveRaidTab({ user }) {
                   
                   const columnsCount = parseInt(slots["meta_columnsCount"], 10) || 8;
                   const rowsCount = parseInt(slots["meta_rowsCount"], 10) || 5;
+
+                  // Clean, direct reference to the native hyphenated calendar storage key signature
+                  const liveRaidCompositeKey = `${session?.eventDate}_${session?.eventKey}`;
 
                   return (
                     <div 
@@ -973,12 +955,14 @@ export default function LiveRaidTab({ user }) {
                                                       : 'border-slate-900 hover:border-slate-800 z-0')))))
                               } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
                               style={{
-                                backgroundColor: isCellRoleLocked && !isUserOnLeave ? `${cellColorTheme}12` : undefined,
-                                borderColor: (isSearchHighlighted || isUserOnLeave || hasPlacementsConflict || isVoiceConnected) ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}40` : undefined),
-                                boxShadow: (isSearchHighlighted || isUserOnLeave || hasPlacementsConflict || isVoiceConnected) ? undefined : (isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined),
+                                backgroundColor: undefined, // Let the background breathe freely behind the gradient mask
+                                borderColor: (isSearchHighlighted || isUserOnLeave || hasPlacementsConflict || isVoiceConnected) ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}30` : undefined),
+                                boxShadow: (isSearchHighlighted || isUserOnLeave || hasPlacementsConflict || isVoiceConnected) ? undefined : (isCellRoleLocked ? `inset 0 -6px 12px ${cellColorTheme}10` : undefined),
                                 backgroundImage: isUserOnLeave && !isSearchHighlighted
                                   ? 'linear-gradient(#020617, #020617), repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #3f0c10 5px, #3f0c10 10px)'
-                                  : undefined,
+                                  : (isCellRoleLocked 
+                                      ? `linear-gradient(to bottom, transparent 50%, ${cellColorTheme}26 100%)` // Smooth vertical transition anchoring color to card floor
+                                      : undefined),
                                 backgroundOrigin: isUserOnLeave && !isSearchHighlighted ? 'border-box' : undefined,
                                 backgroundClip: isUserOnLeave && !isSearchHighlighted ? 'padding-box, border-box' : undefined
                               }}
@@ -994,12 +978,15 @@ export default function LiveRaidTab({ user }) {
                                   {hasPlacementsConflict && (
                                     <div className="w-2 h-2 rounded-full bg-red-500 shadow-sm shadow-red-500/50 animate-bounce" title="Roster Placements Conflict" />
                                   )}
-                                  <div className={`w-2 h-2 rounded-full shadow-sm ${
-                                    isUserOnLeave 
-                                      ? 'bg-rose-500 shadow-rose-500/50' 
-                                      : (isVoiceConnected 
-                                          ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse' 
-                                          : 'bg-slate-600')
+                                  {/* Calendar Commitment Dot (Confirmed = Green, Leave = Gray, Explicit Absent = Red, Uncommitted = Neutral Slate) */}
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    (() => {
+                                      const currentStatus = commitments[liveRaidCompositeKey]?.[slotData.userId]?.status;
+                                      if (currentStatus === 'Confirmed' || currentStatus === 'Confirm') return 'bg-emerald-500';
+                                      if (currentStatus === 'Leave') return 'bg-slate-500';
+                                      if (currentStatus === 'Absent') return 'bg-rose-500';
+                                      return 'bg-slate-600'; // Fall back to a neutral slate color for uncommitted raiders
+                                    })()
                                   }`} />
                                 </div>
                               )}
@@ -1326,22 +1313,19 @@ export default function LiveRaidTab({ user }) {
                                 key={player.uid}
                                 draggable={isOfficer}
                                 onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
-                                className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing"
+                                className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing relative overflow-hidden"
                               >
+                                {/* Dynamic Voice Connection Top-Left Corner Accent Badge */}
+                                {liveVoiceUids.includes(player.uid) && (
+                                  <div className="absolute top-0 left-0 w-3 h-3 bg-emerald-500 [clip-path:polygon(0_0,100%_0,0_100%)]" title="Connected to Voice Channel" />
+                                )}
                                 <div className="truncate pr-2">
-                                  <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
+                                  <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5 pl-1">
                                     {player.displayName}
                                   </div>
-                                  <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
+                                  <span className="text-[9px] font-sans font-medium block mt-0.5 pl-1" style={{ color: roleColorTheme }}>
                                     {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
                                   </span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className={`w-2 h-2 rounded-full shadow-sm ${
-                                    liveVoiceUids.includes(player.uid)
-                                      ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse'
-                                      : 'bg-slate-600'
-                                  }`} title={liveVoiceUids.includes(player.uid) ? 'On Discord' : 'Not on Discord'} />
                                 </div>
                               </div>
                             );
@@ -1375,22 +1359,19 @@ export default function LiveRaidTab({ user }) {
                                 key={player.uid}
                                 draggable={isOfficer}
                                 onDragStart={(e) => { e.dataTransfer.setData("text/plain", player.uid); }}
-                                className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing"
+                                className="p-2.5 rounded-xl border font-mono text-[11px] shadow-sm flex items-center justify-between transition-all bg-slate-900/30 border-slate-800/80 hover:border-slate-700 cursor-grab active:cursor-grabbing relative overflow-hidden"
                               >
+                                {/* Dynamic Voice Connection Top-Left Corner Accent Badge */}
+                                {liveVoiceUids.includes(player.uid) && (
+                                  <div className="absolute top-0 left-0 w-3 h-3 bg-emerald-500 [clip-path:polygon(0_0,100%_0,0_100%)]" title="Connected to Voice Channel" />
+                                )}
                                 <div className="truncate pr-2">
-                                  <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5">
+                                  <div className="font-sans font-semibold text-slate-200 text-xs truncate flex items-center gap-1.5 pl-1">
                                     {player.displayName}
                                   </div>
-                                  <span className="text-[9px] font-sans font-medium block mt-0.5" style={{ color: roleColorTheme }}>
+                                  <span className="text-[9px] font-sans font-medium block mt-0.5 pl-1" style={{ color: roleColorTheme }}>
                                     {jobsCatalog[player.jobCode]?.name || 'Unassigned'}
                                   </span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className={`w-2 h-2 rounded-full shadow-sm ${
-                                    liveVoiceUids.includes(player.uid)
-                                      ? 'bg-emerald-500 shadow-emerald-500/50 animate-pulse'
-                                      : 'bg-slate-600'
-                                  }`} title={liveVoiceUids.includes(player.uid) ? 'On Discord' : 'Not on Discord'} />
                                 </div>
                               </div>
                             );

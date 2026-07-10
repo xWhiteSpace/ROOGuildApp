@@ -787,14 +787,14 @@ export default function RaidPartyTab({ user }) {
                                       : (isUserOnLeave ? 'z-10 border-2' : 'border-slate-900 hover:border-slate-800 z-0')))
                           } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
                           style={{
-                            backgroundColor: isCellRoleLocked && !isUserOnLeave ? `${cellColorTheme}12` : undefined,
-                            // Clear background borders when highlighted or on leave to prioritize warning textures
-                            borderColor: isSearchHighlighted || isUserOnLeave ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}40` : undefined),
-                            boxShadow: isSearchHighlighted || isUserOnLeave ? undefined : (isCellRoleLocked ? `inset 0 0 10px ${cellColorTheme}10` : undefined),
-                            // Gold standard dual-layer background pattern mask for perfectly rounded striped borders
-                            backgroundImage: isUserOnLeave && !isSearchHighlighted
-                              ? 'linear-gradient(#020617, #020617), repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #3f0c10 5px, #3f0c10 10px)'
-                              : undefined,
+                            backgroundColor: undefined, // Clears the solid overlay tile fill
+                                borderColor: isSearchHighlighted || isUserOnLeave ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}30` : undefined),
+                                boxShadow: isSearchHighlighted || isUserOnLeave ? undefined : (isCellRoleLocked ? `inset 0 -6px 12px ${cellColorTheme}10` : undefined),
+                                backgroundImage: isUserOnLeave && !isSearchHighlighted
+                                  ? 'linear-gradient(#020617, #020617), repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #3f0c10 5px, #3f0c10 10px)'
+                                  : (isCellRoleLocked 
+                                      ? `linear-gradient(to bottom, transparent 50%, ${cellColorTheme}26 100%)` // Implements the half-transparent anchor layout
+                                      : undefined),
                             backgroundOrigin: isUserOnLeave && !isSearchHighlighted ? 'border-box' : undefined,
                             backgroundClip: isUserOnLeave && !isSearchHighlighted ? 'padding-box, border-box' : undefined
                           }}

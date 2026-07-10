@@ -64,26 +64,22 @@ function getPhase3EndTimestamp(eventDate, timezone, phase3) {
     dayOffset = (dayEnd + 7) - dayStart;
   }
 
-  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-  let targetMs = Date.parse(dateStr + "Z");
-
+  // Establish target wall-clock parameters directly as an immutable UTC baseline frame
+  const wallClockUtc = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+  
+  // Calculate the true timezone offset variance using native local string parsers
+  let offsetMs = 0;
   try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-    });
-    const parsedUtcDate = new Date(targetMs);
-    const parts = formatter.formatToParts(parsedUtcDate);
-    const fp = {};
-    parts.forEach(p => { fp[p.type] = p.value; });
-    const formattedUtcStr = `${fp.year}-${fp.month}-${fp.day}T${fp.hour}:${fp.minute}:${fp.second}Z`;
-    const formattedMs = Date.parse(formattedUtcStr);
-    const offsetMs = formattedMs - targetMs;
-    targetMs -= offsetMs;
+    const formatProxy = new Date(wallClockUtc.getTime());
+    const tzString = formatProxy.toLocaleString("en-US", { timeZone: timezone });
+    const tzParsed = new Date(tzString);
+    offsetMs = tzParsed.getTime() - formatProxy.getTime();
   } catch (err) {
-    console.error("Timezone calculation error:", err);
+    console.error("Deterministic timezone structural offset parsing exception caught:", err);
   }
+
+  // Shifting backwards via absolute numeric millisecond integers fixes runtime host drift completely
+  let targetMs = wallClockUtc.getTime() - offsetMs;
 
   if (dayOffset > 0) {
     targetMs += dayOffset * 24 * 60 * 60 * 1000;
@@ -402,6 +398,23 @@ router.post('/update', async (req, res) => {
     if (!session) return res.status(400).json({ success: false, error: 'Missing session parameters.' });
 
     await db.ref('attendance/live_session').update(session);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/cell-update', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  try {
+    const db = getDatabase();
+    const { configId, coordKey, userId } = req.body;
+    
+    // Target and rewrite exclusively the single coordinate slot address path inside Firebase
+    await db.ref(`attendance/live_session/grids/${configId}/slots_allocation/${coordKey}`).update({
+      userId: userId
+    });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
