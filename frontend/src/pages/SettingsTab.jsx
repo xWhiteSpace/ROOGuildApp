@@ -71,6 +71,8 @@ export default function SettingsTab() {
     },
     liveRaidMaxConfigs: 5,
     liveRaidMaxWarRooms: 2,
+    attendancePollInterval: 5,
+    attendanceMaxDuration: 40,
     warRooms: {
       room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
       room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
@@ -117,6 +119,8 @@ export default function SettingsTab() {
           roles: data.config.roles || {},
           liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
           liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
+          attendancePollInterval: data.config.attendancePollInterval ?? 5,
+          attendanceMaxDuration: data.config.attendanceMaxDuration ?? 40,
           warRooms: data.config.warRooms || {
             room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
             room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
@@ -894,6 +898,41 @@ export default function SettingsTab() {
                     className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
                   />
                   <span className="text-[10px] text-slate-500 font-medium">Rooms (Max 5)</span>
+                </div>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Voice Channel Poll Interval</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={config.attendancePollInterval || 5}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 5;
+                      setConfig(prev => ({ ...prev, attendancePollInterval: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-indigo-400 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Minutes per pulse check</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Max Headcount Tracking Duration</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="5"
+                    max="240"
+                    value={config.attendanceMaxDuration || 40}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 40;
+                      setConfig(prev => ({ ...prev, attendanceMaxDuration: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-indigo-400 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Minutes total cap limit</span>
                 </div>
               </div>
             </div>

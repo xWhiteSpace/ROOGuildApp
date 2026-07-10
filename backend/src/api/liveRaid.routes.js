@@ -305,20 +305,9 @@ router.post('/create', async (req, res) => {
       }
     }
 
-    // Compute end timestamp
-    let endTimestamp = null;
-    const eventTemplate = settingsObj.events?.[eventKey];
-    if (eventTemplate && eventTemplate.phases?.[3]) {
-      const timezone = settingsObj.timezone || "Asia/Manila";
-      endTimestamp = getPhase3EndTimestamp(eventDate, timezone, eventTemplate.phases[3]);
-    }
-
-    // Safety check: If the scheduled end time has already passed, give it a 3-hour manual grace window instead of instantly expiring
-    const threeHoursFromNow = Date.now() + (3 * 60 * 60 * 1000);
-    if (!endTimestamp || endTimestamp < Date.now()) {
-      endTimestamp = threeHoursFromNow;
-    }
-    
+    // Pull the duration directly from your saved Settings Panel configurations
+    const customMaxMinutes = parseInt(settingsObj.attendanceMaxDuration, 10) || 40;
+    const endTimestamp = Date.now() + (customMaxMinutes * 60 * 1000);
     const sessionPayload = {
       status: 'Active',
       launchedBy: user.displayName || user.username || 'Officer',
