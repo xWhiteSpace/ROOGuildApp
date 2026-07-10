@@ -175,6 +175,9 @@ async function endLiveRaidSessionInternal(s) {
   const atomicUpdates = {};
   const sessionHistoryId = db.ref('attendance/history').push().key;
 
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const systemThreshold = configSnap.exists() ? (parseInt(configSnap.val().attendancePresentThreshold, 10) || 75) : 75;
+
   Object.keys(membersData).forEach(uid => {
     const userTicksCount = s.userTallies?.[uid] || 0;
     const calculatedAttendanceRatio = totalPulses > 0 ? (userTicksCount / totalPulses) * 100 : 0;
@@ -184,9 +187,9 @@ async function endLiveRaidSessionInternal(s) {
     const isAssigned = gridAssignedUids.has(uid);
     const ratioVal = Math.round(calculatedAttendanceRatio);
 
-    if (isAssigned && ratioVal >= 75) {
+    if (isAssigned && ratioVal >= systemThreshold) {
       finalStatusOutcome = "Selected/Present";
-    } else if (isAssigned && ratioVal < 75) {
+    } else if (isAssigned && ratioVal < systemThreshold) {
       finalStatusOutcome = "Selected/Partial Present";
     } else if (isExcused) {
       finalStatusOutcome = "Excused Absence";
@@ -247,12 +250,7 @@ router.get('/session', async (req, res) => {
     }
 
     const s = sessionSnap.val();
-    if (s.endTimestamp && Date.now() > s.endTimestamp) {
-      console.log("⏰ Live Raid end timestamp reached. Closing active session...");
-      await endLiveRaidSessionInternal(s);
-      return res.json({ success: true, session: null });
-    }
-
+    
     const normalizedSession = await normalizeLiveSessionWarRooms(db, s);
     return res.json({ success: true, session: normalizedSession });
   } catch (err) {
@@ -306,7 +304,10 @@ router.post('/create', async (req, res) => {
     }
 
     // Pull the duration directly from your saved Settings Panel configurations
-    const customMaxMinutes = parseInt(settingsObj.attendanceMaxDuration, 10) || 40;
+    const customMaxMinutes = parseInt(settingsObj.attendanceMaxDuration, 10);
+    if (!customMaxMinutes || isNaN(customMaxMinutes)) {
+      return res.status(400).json({ success: false, error: "Missing master attendanceMaxDuration parameter map in Settings." });
+    }
     const endTimestamp = Date.now() + (customMaxMinutes * 60 * 1000);
     const sessionPayload = {
       status: 'Active',
@@ -344,8 +345,18 @@ router.post('/create', async (req, res) => {
 
         const s = activeSnap.val();
         if (s.endTimestamp && Date.now() > s.endTimestamp) {
-          console.log("⏰ Live Raid end timestamp reached inside background poller. Finalizing...");
-          await endLiveRaidSessionInternal(s);
+          console.log("⏰ Headcount tracking duration reached. Disabling background voice polling ticker...");
+          if (global.liveRaidIntervalTicker) {
+            clearInterval(global.liveRaidIntervalTicker);
+            global.liveRaidIntervalTicker = undefined;
+          }
+          return;
+        }
+
+        const now = Date.now();
+        const dynamicPollIntervalMs = (parseInt(settingsObj.attendancePollInterval, 10) || 5) * 60 * 1000;
+        
+        if (s.lastVoicePoll?.timestamp && (now - s.lastVoicePoll.timestamp) < (dynamicPollIntervalMs - 10000)) {
           return;
         }
 
