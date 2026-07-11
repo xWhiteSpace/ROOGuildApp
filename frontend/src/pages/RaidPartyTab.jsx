@@ -21,7 +21,8 @@ import {
 } from 'lucide-react';
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
-import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
+import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
+import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { formatGuildDate, DEFAULT_TZ } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
 
@@ -56,7 +57,7 @@ export default function RaidPartyTab({ user }) {
   // --- UI Layout Presentation States ---
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuConfigId, setActiveMenuConfigId] = useState(null);
-  const [activePopover, setActivePopover] = useState(null); // { coordKey, type: 'assign' | 'gear' | 'trend' }
+  const [activePopover, setActivePopover] = useState(null); // { coordKey, type: 'assign' | 'gear' }
   const [selectedPopoverJob, setSelectedPopoverJob] = useState('');
   const [dragHoveredCoord, setDragHoveredCoord] = useState(null); 
 
@@ -774,7 +775,6 @@ export default function RaidPartyTab({ user }) {
 
                     const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                     const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
-                    const isTrendPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'trend';
                     const trendTimeline = slotData.userId
                       ? buildMemberTrendTimeline(historySessions, historyLedger, slotData.userId, 8)
                       : [];
@@ -843,22 +843,22 @@ export default function RaidPartyTab({ user }) {
                               <Settings size={13} />
                             </button>
 
-                            {/* Info Icon: Member attendance reliability trend */}
-                            <button
-                              type="button"
-                              disabled={!slotData.userId}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!slotData.userId) return;
-                                setActivePopover(isTrendPopoverOpen ? null : { coordKey, type: 'trend' });
-                              }}
-                              className={`p-1 rounded hover:bg-slate-800 transition-colors disabled:opacity-20 disabled:cursor-not-allowed ${
-                                isTrendPopoverOpen ? 'text-indigo-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
-                              }`}
-                              title={slotData.userId ? 'Attendance reliability trend' : 'Assign a member first'}
+                            {/* Info Icon: hover attendance reliability trend */}
+                            <MemberTrendHoverTip
+                              enabled={!!slotData.userId}
+                              displayName={allocatedUserObj?.displayName || 'Raider'}
+                              timeline={trendTimeline}
                             >
-                              <Info size={13} />
-                            </button>
+                              <button
+                                type="button"
+                                disabled={!slotData.userId}
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1 rounded hover:bg-slate-800 transition-colors disabled:opacity-20 disabled:cursor-not-allowed text-slate-500 hover:text-indigo-400"
+                                title={slotData.userId ? 'Hover for attendance trend' : 'Assign a member first'}
+                              >
+                                <Info size={13} />
+                              </button>
+                            </MemberTrendHoverTip>
 
                             {/* Divider Separator Line */}
                             <span className="text-slate-800 font-mono text-[10px] mx-0.5 pointer-events-none select-none">|</span>
@@ -958,25 +958,6 @@ export default function RaidPartyTab({ user }) {
                           </>
                         )}
 
-                        {isTrendPopoverOpen && slotData.userId && (
-                          <>
-                            <div className="fixed inset-0 z-[90] bg-black/40" onClick={() => setActivePopover(null)} />
-                            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl z-[100] w-[min(22rem,92vw)] font-sans space-y-2 animate-fadeIn text-left">
-                              <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1.5 flex items-center justify-between gap-2">
-                                <span className="truncate">{allocatedUserObj?.displayName || 'Raider'} · Reliability Trend</span>
-                                <button type="button" onClick={() => setActivePopover(null)} className="text-slate-500 hover:text-white cursor-pointer">
-                                  <X size={14} />
-                                </button>
-                              </div>
-                              <MemberTrendSparkline
-                                timeline={trendTimeline}
-                                displayName={allocatedUserObj?.displayName || 'Raider'}
-                                compact
-                              />
-                            </div>
-                          </>
-                        )}
-
                         {isAssignPopoverOpen && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setActivePopover(null)} />
@@ -992,7 +973,7 @@ export default function RaidPartyTab({ user }) {
                                   >
                                     <option value="">-- Display All Classes --</option>
                                     {Object.entries(jobsCatalog).map(([code, j]) => (
-                                      <option key={code} value={code} className="bg-slate-950" style={{ color: j.colorTheme }}>{j.name}</option>
+                                      <option key={code} value={code} className="bg-slate-950">{j.name}</option>
                                     ))}
                                   </select>
                                 </div>

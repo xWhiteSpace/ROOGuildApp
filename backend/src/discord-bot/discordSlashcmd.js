@@ -147,25 +147,23 @@ export async function handleSlashCommand(interaction) {
     }
 
     const liveData = liveSessionSnap.val();
-    let assignedRaidName = liveData.eventName || "Live Raid Operation"; //[cite: 2]
 
     // Phase 3 Mitigation: Assert cross-reference checks against explicit instance cancellations
     const currentActiveDateStr = new Date().toISOString().split('T')[0];
-    const activeEventIdField = liveData.eventId || "unknown";
+    const activeEventIdField = liveData.eventId || liveData.eventKey || "unknown";
     const activeInstanceKey = `${currentActiveDateStr}_${activeEventIdField}`;
-    const activeInstanceCheck = await db.ref(`scheduler/active_instances/${activeInstanceKey}`).once('value');
+    const activeInstanceCheck = await db.ref(`scheduler/instances/${activeInstanceKey}`).once('value');
     if (activeInstanceCheck.exists() && activeInstanceCheck.val().isCancelled === true) {
       return await interaction.editReply({ content: '🛑 Notice: The scheduled raid operation assigned for tonight has been marked as officially CANCELLED by guild officers.' });
     }
     let locatedSlot = null;
+    let raidConfigName = null;
 
-    if (liveData.grids) { //[cite: 2]
-      for (const [gridId, gridObj] of Object.entries(liveData.grids)) { //[cite: 2]
-        if (gridObj.slots_allocation) { //[cite: 2]
-          for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) { //[cite: 2]
-            // Safe checking parameter to protect against unallocated null grid cells
+    if (liveData.grids) {
+      for (const [gridId, gridObj] of Object.entries(liveData.grids)) {
+        if (gridObj.slots_allocation) {
+          for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) {
             if (slotData?.userId === snowflakeId) {
-              // Grid keys are 1-indexed "party-slot" (e.g. "3-1" = P3-S1)
               const parts = coordKey.split(/[-_]/);
               const partyNum = parseInt(parts[0], 10);
               const slotNum = parseInt(parts[1], 10);
@@ -174,6 +172,8 @@ export async function handleSlashCommand(interaction) {
               } else {
                 locatedSlot = coordKey;
               }
+              // Prefer the Raid Party composition title (config name), not the calendar event title
+              raidConfigName = gridObj.title || gridObj.name || gridId;
               break;
             }
           }
@@ -190,7 +190,7 @@ export async function handleSlashCommand(interaction) {
       .setTitle('🛡️ Active Live Deployment Slot Matrix')
       .setColor('#9333ea')
       .addFields([
-        { name: 'Raid Instance Target', value: `\`${assignedRaidName}\``, inline: true },
+        { name: 'Raid Name', value: `\`${raidConfigName || 'Untitled Config'}\``, inline: true },
         { name: 'Roster Placement Slot', value: `**${locatedSlot}**`, inline: true }
       ])
       .setTimestamp();
