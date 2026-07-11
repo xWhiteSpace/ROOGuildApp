@@ -239,9 +239,22 @@ export default function Scheduler({ user }) {
           });
         }
       });
+
+      Object.entries(specialEvents).forEach(([id, ev]) => {
+        if (ev.title && ev.date === dStr) {
+          list.push({
+            id,
+            title: ev.title,
+            dateStr: dStr,
+            isSpecial: true,
+            timeStart: ev.timeStart || "21:30",
+            timeEnd: ev.timeEnd || "23:00"
+          });
+        }
+      });
     }
     return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.timeStart.localeCompare(b.timeStart));
-  }, [eventsCatalog, timezone]);
+  }, [eventsCatalog, specialEvents, timezone]);
 
   const handleAddSpecialEvent = async () => {
     if (!formTitle.trim() || !formDateStart || !formDateEnd) return alert("Fill required inputs.");
