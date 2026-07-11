@@ -29,7 +29,8 @@ import {
 
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
-import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
+import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
+import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { upcomingDatesForWeekday, DEFAULT_TZ } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
 
@@ -945,7 +946,6 @@ export default function LiveRaidTab({ user }) {
 
                           const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                           const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
-                          const isTrendPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'trend';
                           const trendTimeline = slotData.userId
                             ? buildMemberTrendTimeline(historySessions, historyLedger, slotData.userId, 8)
                             : [];
@@ -1033,21 +1033,21 @@ export default function LiveRaidTab({ user }) {
                                     <Settings size={13} />
                                   </button>
 
-                                  <button
-                                    type="button"
-                                    disabled={!slotData.userId}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!slotData.userId) return;
-                                      setActivePopover(isTrendPopoverOpen ? null : { coordKey, type: 'trend' });
-                                    }}
-                                    className={`p-1 rounded hover:bg-slate-800 transition-colors disabled:opacity-20 disabled:cursor-not-allowed ${
-                                      isTrendPopoverOpen ? 'text-indigo-400 bg-slate-800' : 'text-slate-500 hover:text-slate-350'
-                                    }`}
-                                    title={slotData.userId ? 'Attendance reliability trend' : 'Assign a member first'}
+                                  <MemberTrendHoverTip
+                                    enabled={!!slotData.userId}
+                                    displayName={allocatedUserObj?.displayName || 'Raider'}
+                                    timeline={trendTimeline}
                                   >
-                                    <Info size={13} />
-                                  </button>
+                                    <button
+                                      type="button"
+                                      disabled={!slotData.userId}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1 rounded hover:bg-slate-800 transition-colors disabled:opacity-20 disabled:cursor-not-allowed text-slate-500 hover:text-indigo-400"
+                                      title={slotData.userId ? 'Hover for attendance trend' : 'Assign a member first'}
+                                    >
+                                      <Info size={13} />
+                                    </button>
+                                  </MemberTrendHoverTip>
 
                                   <span className="text-slate-800 font-mono text-[10px] mx-0.5 pointer-events-none select-none">|</span>
 
@@ -1201,12 +1201,12 @@ export default function LiveRaidTab({ user }) {
                                         >
                                           <option value="">-- Display All Classes --</option>
                                           {Object.entries(jobsCatalog).map(([code, j]) => (
-                                            <option key={code} value={code} className="bg-slate-950" style={{ color: j.colorTheme }}>{j.name}</option>
+                                            <option key={code} value={code} className="bg-slate-950">{j.name}</option>
                                           ))}
                                         </select>
                                       </div>
                                     ) : (
-                                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider select-none px-1 border-b border-slate-800 pb-1 flex items-center justify-between" style={{ color: cellColorTheme }}>
+                                      <div className="text-[9px] font-mono font-bold uppercase tracking-wider select-none px-1 border-b border-slate-800 pb-1 flex items-center justify-between text-slate-300">
                                         <span className="flex items-center gap-1.5 text-slate-300">
                                           <Lock size={11} className="shrink-0 text-amber-400" />
                                           Role Lock: {lockedJobObj?.name}

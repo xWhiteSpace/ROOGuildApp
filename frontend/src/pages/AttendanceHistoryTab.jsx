@@ -140,6 +140,11 @@ export default function AttendanceHistoryTab({ user }) {
     return rows.sort((a, b) => b.points.total - a.points.total || a.displayName.localeCompare(b.displayName));
   }, [selectedSessionId, sessions, members, ledger]);
 
+  const sessionPlayerTally = useMemo(() => {
+    const total = sessionRosterTableRows.length;
+    const played = sessionRosterTableRows.filter((row) => row.presentTicks > 0).length;
+    return { played, total };
+  }, [sessionRosterTableRows]);
 
   // --- VIEW B: MEMBER TRENDS TRACKER ---
   const filteredMembersList = useMemo(() => {
@@ -289,6 +294,13 @@ export default function AttendanceHistoryTab({ user }) {
                         </h3>
                         <span className="text-[9px] font-mono text-indigo-400">Committed By: {sessions[selectedSessionId]?.committedBy || 'System'}</span>
                       </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-black font-mono text-slate-100 tracking-tight">
+                        {sessionPlayerTally.played}
+                        <span className="text-slate-500 font-bold">/{sessionPlayerTally.total}</span>
+                      </div>
+                      <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-500">Players</div>
                     </div>
                   </div>
 

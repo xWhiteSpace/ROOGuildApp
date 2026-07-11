@@ -151,24 +151,24 @@ export default function MasterListTab({ user }) {
 
         <div className="border border-slate-800 bg-slate-950/40 rounded-2xl overflow-x-auto h-[36rem] overflow-y-auto scrollbar-thin">
           <table className="w-full text-left border-collapse text-xs font-mono table-fixed min-w-[950px]">
-            <thead>
-              <tr className="bg-slate-950 text-slate-500 uppercase tracking-wider text-[9px] border-b border-slate-800 select-none">
+            <thead className="sticky top-0 z-20">
+              <tr className="bg-slate-950 text-slate-500 uppercase tracking-wider text-[9px] border-b border-slate-800 select-none shadow-md">
                 <th 
                   onClick={() => {
                     const nextOrder = sortKey === 'name' && sortOrder === 'asc' ? 'desc' : 'asc';
                     setSortOrder(nextOrder);
                     setSortKey('name');
                   }}
-                  className="p-3 pl-5 w-[20%] cursor-pointer hover:text-white transition-colors"
+                  className="p-3 pl-5 w-[20%] cursor-pointer hover:text-white transition-colors bg-slate-950"
                 >
                   Member Name <span className="text-indigo-400 ml-1 font-sans text-xs">{sortKey === 'name' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}</span>
                 </th>
-                <th className="p-3 w-[16%]">Job Class</th>
-                <th className="p-3 w-[15%]">Role Classification</th>
-                <th className="p-3 w-[13%]">Group Assignment</th>
-                <th className="p-3 w-[16%]">Date Joined</th>
-                <th className="p-3 w-[14%]">SnowflakeID</th>
-                <th className="p-3 text-center w-[6%]">Action</th>
+                <th className="p-3 w-[16%] bg-slate-950">Job Class</th>
+                <th className="p-3 w-[15%] bg-slate-950">Role Classification</th>
+                <th className="p-3 w-[13%] bg-slate-950">Group Assignment</th>
+                <th className="p-3 w-[16%] bg-slate-950">Date Joined</th>
+                <th className="p-3 w-[14%] bg-slate-950">SnowflakeID</th>
+                <th className="p-3 text-center w-[6%] bg-slate-950">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/60">
