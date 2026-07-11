@@ -19,20 +19,31 @@ import {
   Users,
   Zap,
   Sparkles,
-  Sword
+  Sword,
+  RefreshCw
 } from 'lucide-react';
+import { apiFetch, getBackendUrl } from '../services/apiClient';
+import {
+  formatGuildDate,
+  getWeekMonday,
+  buildCompositeKey,
+  DEFAULT_TZ,
+} from '../utils/guildTime';
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+const backendUrl = getBackendUrl();
 
 export default function Scheduler({ user }) {
   const calendarRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [eventsCatalog, setEventsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
-  const [specialEvents, setSpecialEvents] = useState({}); // Restored core tracking state
-  const [activeInstances, setActiveInstances] = useState({}); // Phase 4: Normalized operational exceptions
-  const [timezone, setTimezone] = useState('Asia/Manila'); // Dynamic SSOT Timezone state initialized with a safe default
+  const [specialEvents, setSpecialEvents] = useState({});
+  const [weekInstances, setWeekInstances] = useState({});
+  const [weekMonday, setWeekMonday] = useState('');
+  const [timezone, setTimezone] = useState(DEFAULT_TZ);
+  const [specialCategoriesList, setSpecialCategoriesList] = useState(['Raid', 'Meeting', 'PVP', 'Casual']);
   const [selectedDayContext, setSelectedDayContext] = useState(null);
+  const [refreshingWeek, setRefreshingWeek] = useState(false);
   
   // Modal Multi-Day States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -49,24 +60,42 @@ export default function Scheduler({ user }) {
   const [formDaysOfWeek, setFormDaysOfWeek] = useState([]);
   const [formAllDay, setFormAllDay] = useState(false);
 
-  // Modals visibility toggles
+  const ensureCurrentWeek = async (force = false, tzOverride) => {
+    const tz = tzOverride || timezone;
+    const monday = getWeekMonday(tz);
+    const res = await apiFetch('/api/attendance/ensure-week', {
+      method: 'POST',
+      body: JSON.stringify({ weekMonday: monday, force }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setWeekMonday(data.weekMonday);
+      setWeekInstances(data.instances || {});
+      if (data.timezone) setTimezone(data.timezone);
+    }
+    return data;
+  };
+
   const loadSchedulerEcosystem = async () => {
     try {
       setLoading(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
+      const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
       const configData = await configRes.json();
+      let nextTz = timezone;
       if (configData.success && configData.config?.events) setEventsCatalog(configData.config.events);
-      if (configData.success && configData.config?.specialEventCategories) setSpecialCategoriesList(configData.config.specialEventCategories);
+      if (configData.success && configData.config?.specialEventCategories) {
+        setSpecialCategoriesList(configData.config.specialEventCategories);
+      }
+      if (configData.success && configData.config?.timezone) {
+        nextTz = configData.config.timezone;
+        setTimezone(nextTz);
+      }
 
-      // Real-time socket listeners now handle streaming updates for commitments and active instances dynamically
-      
-      const specialRes = await fetch(`${backendUrl}/api/attendance/special-events`, { method: 'GET', headers, credentials: 'include' });
+      const specialRes = await apiFetch('/api/attendance/special-events', { method: 'GET' });
       const specialData = await specialRes.json();
       if (specialData.success) setSpecialEvents(specialData.specialEvents || {});
+
+      await ensureCurrentWeek(false, nextTz);
     } catch (err) {
       console.error("Scheduler load failure:", err);
     } finally {
@@ -74,37 +103,98 @@ export default function Scheduler({ user }) {
     }
   };
 
+  const fetchCommitmentsFromApi = async () => {
+    try {
+      const res = await apiFetch('/api/attendance/commitments', { method: 'GET' });
+      const data = await res.json();
+      if (data.success && data.commitments) {
+        setCommitments(data.commitments);
+      }
+    } catch (err) {
+      console.error('Commitments poll failed:', err);
+    }
+  };
+
+  /** Resolve RSVP status for a user under a composite key (string/number snowflake safe). */
+  const getCommitmentStatus = (compositeKey, userId) => {
+    if (!compositeKey || userId == null) return null;
+    const bucket = commitments[compositeKey];
+    if (!bucket) return null;
+    const entry = bucket[userId] || bucket[String(userId)];
+    return entry?.status || null;
+  };
+
   useEffect(() => {
     loadSchedulerEcosystem();
-  // Live Firebase Listener: Instantly stream active user rsvp actions from Discord/Web
+    fetchCommitmentsFromApi();
+
+    // Admin-SDK poll — reliable when client RTDB rules block browser listeners
+    const pollId = setInterval(fetchCommitmentsFromApi, 4000);
+
+    // Best-effort realtime (works only if RTDB rules allow public/auth read)
     const commitmentsRef = ref(database, 'attendance/commitments');
-    const unsubscribeCommitments = onValue(commitmentsRef, (snapshot) => {
-      setCommitments(snapshot.exists() ? snapshot.val() : {});
-    });
+    const unsubscribeCommitments = onValue(
+      commitmentsRef,
+      (snapshot) => {
+        if (snapshot.exists()) setCommitments(snapshot.val());
+      },
+      () => {
+        // Permission denied — API poll remains the SSOT path
+      }
+    );
 
-    // Live Firebase Listener: Instantly stream single-night operational cancellations/notes
-    const instancesRef = ref(database, 'scheduler/active_instances');
-    const unsubscribeInstances = onValue(instancesRef, (snapshot) => {
-      setActiveInstances(snapshot.exists() ? snapshot.val() : {});
-    });
+    const instancesRef = ref(database, 'scheduler/instances');
+    const unsubscribeInstances = onValue(
+      instancesRef,
+      (snapshot) => {
+        const all = snapshot.exists() ? snapshot.val() : {};
+        const monday = weekMonday || getWeekMonday(timezone);
+        if (monday) {
+          const byWeek = {};
+          for (const [key, val] of Object.entries(all)) {
+            if (val?.weekMonday === monday) byWeek[key] = val;
+          }
+          if (Object.keys(byWeek).length > 0) {
+            setWeekInstances(byWeek);
+            return;
+          }
+        }
+        setWeekInstances(all);
+      },
+      () => {}
+    );
 
-    // Live Firebase Listener: Maintain absolute SSOT alignment with the SettingsTab configurations
     const timezoneRef = ref(database, 'settings/configuration/timezone');
     const unsubscribeTimezone = onValue(timezoneRef, (snapshot) => {
       if (snapshot.exists()) setTimezone(snapshot.val());
-    });
+    }, () => {});
 
     return () => {
+      clearInterval(pollId);
       unsubscribeCommitments();
       unsubscribeInstances();
       unsubscribeTimezone();
     };
   }, [user]);
 
-  const formatDateToLocalString = (dateObj) => {
-    if (!dateObj) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+  // Re-ensure when timezone changes after first load
+  useEffect(() => {
+    if (!loading && timezone) {
+      const monday = getWeekMonday(timezone);
+      if (monday !== weekMonday) {
+        ensureCurrentWeek(false);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timezone]);
+
+  const handleRefreshWeek = async () => {
+    try {
+      setRefreshingWeek(true);
+      await ensureCurrentWeek(true);
+    } finally {
+      setRefreshingWeek(false);
+    }
   };
 
   // 🛡️ MEMOIZED COMPILER GATEWAY: Prevents array reference loops from breaking FullCalendar's internal memory index
@@ -195,80 +285,27 @@ export default function Scheduler({ user }) {
   }, [eventsCatalog]);
 
   const weeklyUpcomingInstances = useMemo(() => {
-    const list = [];
-    
-    // Absolute SSOT: Parse date parameters using the database timezone state via cross-browser Intl formatting
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      weekday: 'short'
-    });
-    
-    const parts = formatter.formatToParts(new Date());
-    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
-    const todayMat = new Date(`${partMap.year}-${partMap.month}-${partMap.day}T00:00:00`);
-    
-    const dayOfWeekMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-    const currentDay = dayOfWeekMap[partMap.weekday];
-    
-    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date(todayMat);
-    monday.setDate(todayMat.getDate() + distanceToMonday);
-    
-    const pad = (n) => String(n).padStart(2, '0');
-    
-    for (let i = 0; i < 7; i++) {
-      const current = new Date(monday);
-      current.setDate(monday.getDate() + i);
-      
-      const dStr = `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
-      const dayOfWeek = current.getDay();
-      
-      Object.entries(eventsCatalog).forEach(([id, ev]) => {
-        const p3 = ev.phases?.[3];
-        if (p3 && parseInt(p3.dayStart, 10) === dayOfWeek) {
-          list.push({
-            id,
-            title: ev.title,
-            dateStr: dStr,
-            isSpecial: false,
-            timeStart: p3.timeStart || "20:55",
-            timeEnd: p3.timeEnd || "22:15"
-          });
-        }
-      });
-
-      Object.entries(specialEvents).forEach(([id, ev]) => {
-        if (ev.title && ev.date === dStr) {
-          list.push({
-            id,
-            title: ev.title,
-            dateStr: dStr,
-            isSpecial: true,
-            timeStart: ev.timeStart || "21:30",
-            timeEnd: ev.timeEnd || "23:00"
-          });
-        }
-      });
-    }
+    const list = Object.values(weekInstances || {}).map((inst) => ({
+      id: inst.eventId,
+      title: inst.title,
+      dateStr: inst.date,
+      isSpecial: !!inst.isSpecial,
+      timeStart: inst.timeStart || '20:55',
+      timeEnd: inst.timeEnd || '22:15',
+      isCancelled: inst.isCancelled === true,
+      notes: inst.notes || '',
+    }));
     return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.timeStart.localeCompare(b.timeStart));
-  }, [eventsCatalog, specialEvents, timezone]);
+  }, [weekInstances]);
 
   const handleAddSpecialEvent = async () => {
     if (!formTitle.trim() || !formDateStart || !formDateEnd) return alert("Fill required inputs.");
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
       const isEdit = !!editEventId;
-      const url = isEdit ? `${backendUrl}/api/attendance/special-events/${editEventId}` : `${backendUrl}/api/attendance/special-events/add`;
+      const url = isEdit ? `/api/attendance/special-events/${editEventId}` : `/api/attendance/special-events/add`;
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? 'PUT' : 'POST',
-        headers,
         body: JSON.stringify({ 
           title: formTitle, 
           description: formDesc, 
@@ -278,10 +315,9 @@ export default function Scheduler({ user }) {
           timeEnd: formAllDay ? '24:00' : formTimeEnd, 
           type: formType, 
           isAttendanceTracked: formTracked,
-          daysOfWeek: formIsRecurring ? formDaysOfWeek : null, // Clean array transmission contract
+          daysOfWeek: formIsRecurring ? formDaysOfWeek : null,
           allDay: formAllDay
         }),
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
@@ -293,7 +329,8 @@ export default function Scheduler({ user }) {
         setFormAllDay(false);
         setEditEventId(null);
         setSelectedDayContext(null);
-        loadSchedulerEcosystem();
+        await loadSchedulerEcosystem();
+        await ensureCurrentWeek(true);
       } else {
         alert(data.error || data.message || "Database synchronization failed. Check entry schema fields.");
       }
@@ -306,19 +343,14 @@ export default function Scheduler({ user }) {
   const handleDeleteSpecialEvent = async (eventId) => {
     if (!window.confirm("Are you absolutely certain you want to purge this special instance from the cloud? This action cannot be undone.")) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const res = await fetch(`${backendUrl}/api/attendance/special-events/${eventId}`, {
+      const res = await apiFetch(`/api/attendance/special-events/${eventId}`, {
         method: 'DELETE',
-        headers,
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
         setSelectedDayContext(null);
-        loadSchedulerEcosystem();
+        await loadSchedulerEcosystem();
+        await ensureCurrentWeek(true);
       } else {
         alert(data.message || "Failed to purge event from cloud.");
       }
@@ -330,47 +362,51 @@ export default function Scheduler({ user }) {
 
   const handleLogCommitment = async (dateStr, eventId, statusTarget) => {
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const compositeKey = `${dateStr}_${eventId}`;
+      const compositeKey = buildCompositeKey(dateStr, eventId);
+      const uid = String(user.id);
       setCommitments(prev => {
         const updated = { ...prev };
         if (statusTarget === 'None') {
-          if (updated[compositeKey]) delete updated[compositeKey][user.id];
+          if (updated[compositeKey]) {
+            const nextBucket = { ...updated[compositeKey] };
+            delete nextBucket[uid];
+            delete nextBucket[user.id];
+            updated[compositeKey] = nextBucket;
+          }
         } else {
           updated[compositeKey] = {
             ...updated[compositeKey],
-            [user.id]: { displayName: user.displayName || user.username || 'Raider', status: statusTarget, declaredAt: Date.now() }
+            [uid]: { displayName: user.displayName || user.username || 'Raider', status: statusTarget, declaredAt: Date.now() }
           };
         }
         return updated;
       });
 
-      await fetch(`${backendUrl}/api/attendance/commit-availability`, {
+      await apiFetch('/api/attendance/commit-availability', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ dateStr, eventId, status: statusTarget }),
-        credentials: 'include'
       });
+      // Refresh from Admin SDK so Discord/web stay in lockstep
+      await fetchCommitmentsFromApi();
     } catch (err) {
       console.error(err);
-      loadSchedulerEcosystem();
+      fetchCommitmentsFromApi();
     }
   };
 
   const handleConfirmAllWeeks = async () => {
         const targets = weeklyUpcomingInstances.filter(item => {
-          const compositeKey = `${item.dateStr}_${item.id}`;
-          return commitments[compositeKey]?.[user?.id]?.status !== 'Confirmed';
+          const compositeKey = buildCompositeKey(item.dateStr, item.id);
+          return getCommitmentStatus(compositeKey, user?.id) !== 'Confirmed';
         });
         if (targets.length === 0) return;
         await Promise.all(targets.map(item => handleLogCommitment(item.dateStr, item.id, 'Confirmed')));
       };
 
       const activeDayFocus = selectedDayContext;
-  const userCurrentStatus = activeDayFocus ? commitments[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.[user?.id]?.status : null;
+  const userCurrentStatus = activeDayFocus
+    ? getCommitmentStatus(`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`, user?.id)
+    : null;
 
   if (loading) {
     return <div className="p-6 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">Calling Pre-Built API Pipelines...</div>;
@@ -428,15 +464,26 @@ export default function Scheduler({ user }) {
         {user?.isOfficer && (
           <div className="bg-slate-900/40 border border-slate-800 h-[52px] px-5 rounded-2xl flex justify-between items-center select-none">
             <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">Officer Tools:</span>
-            <button
-              type="button"
-              onClick={() => {
-                setFormTitle(''); setFormDesc(''); setFormDateStart(new Date().toISOString().split('T')[0]); setFormDateEnd(new Date().toISOString().split('T')[0]); setEditEventId(null); setShowAddModal(true);
-              }}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] uppercase font-bold text-white transition flex items-center gap-1.5 shadow cursor-pointer"
-            >
-              <Plus size={13} strokeWidth={2.5} /> Create Special Event
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshWeek}
+                disabled={refreshingWeek}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-[10px] uppercase font-bold text-slate-200 transition flex items-center gap-1.5 border border-slate-700 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={13} strokeWidth={2.5} className={refreshingWeek ? 'animate-spin' : ''} /> Refresh Week
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const todayGuild = formatGuildDate(new Date(), timezone);
+                  setFormTitle(''); setFormDesc(''); setFormDateStart(todayGuild); setFormDateEnd(todayGuild); setEditEventId(null); setShowAddModal(true);
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] uppercase font-bold text-white transition flex items-center gap-1.5 shadow cursor-pointer"
+              >
+                <Plus size={13} strokeWidth={2.5} /> Create Special Event
+              </button>
+            </div>
           </div>
         )}
 
@@ -500,33 +547,30 @@ export default function Scheduler({ user }) {
               const { id, extendedProps, start, end } = dropInfo.event;
               if (!extendedProps.isSpecial) return dropInfo.revert();
 
-              const nextStart = start.toISOString().split('T')[0];
-              let nextEnd = end ? end.toISOString().split('T')[0] : nextStart;
+              const nextStart = formatGuildDate(start, timezone);
+              let nextEnd = end ? formatGuildDate(end, timezone) : nextStart;
               
               if (end && dropInfo.event.allDay) {
                 const d = new Date(end);
                 d.setDate(d.getDate() - 1);
-                nextEnd = d.toISOString().split('T')[0];
+                nextEnd = formatGuildDate(d, timezone);
               }
 
               try {
-                const savedUserSession = localStorage.getItem('dynasty_raid_session');
-                const headers = { 'Content-Type': 'application/json' };
-                if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-                const res = await fetch(`${backendUrl}/api/attendance/special-events/${id}`, {
+                const res = await apiFetch(`/api/attendance/special-events/${id}`, {
                   method: 'PUT',
-                  headers,
                   body: JSON.stringify({
                     ...extendedProps.details,
                     date: nextStart,
                     dateEnd: nextEnd
                   }),
-                  credentials: 'include'
                 });
                 const data = await res.json();
                 if (!data.success) dropInfo.revert();
-                else loadSchedulerEcosystem();
+                else {
+                  await loadSchedulerEcosystem();
+                  await ensureCurrentWeek(true);
+                }
               } catch (err) {
                 dropInfo.revert();
               }
@@ -535,8 +579,10 @@ export default function Scheduler({ user }) {
             // 🛠 *LIVE CORE SIGNUP BADGES COMPILER HOOK*
             eventContent={(eventInfo) => {
               const props = eventInfo.event.extendedProps;
-              const dateStr = props.isSpecial ? props.dateStr : formatDateToLocalString(eventInfo.event.start);
-              const compositeKey = `${dateStr}_${eventInfo.event.id}`;
+              const dateStr = props.isSpecial && props.dateStr
+                ? props.dateStr
+                : formatGuildDate(eventInfo.event.start, timezone);
+              const compositeKey = buildCompositeKey(dateStr, eventInfo.event.id);
               const signedUsers = commitments[compositeKey] ? Object.values(commitments[compositeKey]) : [];
               
               const presentCount = signedUsers.filter(u => u.status === 'Confirmed').length;
@@ -565,12 +611,13 @@ export default function Scheduler({ user }) {
             }}
 
             eventClick={(info) => {
-              info.jsEvent.stopPropagation(); // 🛡️ Blocks click from bubbling up to background containers
+              info.jsEvent.stopPropagation();
               const props = info.event.extendedProps;
-              const dateStr = props.isSpecial ? props.dateStr : formatDateToLocalString(info.event.start);
+              const dateStr = props.isSpecial && props.dateStr
+                ? props.dateStr
+                : formatGuildDate(info.event.start, timezone);
               
               setSelectedDayContext((prev) => {
-                // Functional verification: Detach panel cleanly if active instance matches target click
                 if (prev?.eventId === info.event.id && prev?.dateStr === dateStr) {
                   return null;
                 }
@@ -732,21 +779,19 @@ export default function Scheduler({ user }) {
                     <div className="text-center py-8 text-[11px] text-slate-600 font-mono italic">No events scheduled for the next 7 days.</div>
                   ) : (
                     weeklyUpcomingInstances.map((item, idx) => {
-                      const compositeKey = `${item.dateStr}_${item.id}`;
-                      const currentStatus = commitments[compositeKey]?.[user?.id]?.status;
+                      const compositeKey = buildCompositeKey(item.dateStr, item.id);
+                      const currentStatus = getCommitmentStatus(compositeKey, user?.id);
 
-                      // Phase 4: Extract structural modifications safely using the normalized dictionary matrix
-                      const instanceOverride = activeInstances[compositeKey];
-                      const isCancelled = instanceOverride?.isCancelled === true;
-                      const displayTitle = instanceOverride?.title || item.title;
-                      const displayNotes = instanceOverride?.notes;
+                      const isCancelled = item.isCancelled === true;
+                      const displayTitle = item.title;
+                      const displayNotes = item.notes;
                       
-                      const dateObj = new Date(item.dateStr + 'T00:00:00');
-                      const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-                      const monthDayLabel = dateObj.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' });
+                      const dateObj = new Date(item.dateStr + 'T12:00:00Z');
+                      const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+                      const monthDayLabel = dateObj.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', timeZone: 'UTC' });
 
                       return (
-                        <div key={idx} className="p-2.5 rounded-xl border border-slate-800/60 bg-slate-900/20 flex flex-col space-y-2 hover:border-slate-800 transition-colors">
+                        <div key={`${compositeKey}_${idx}`} className={`p-2.5 rounded-xl border border-slate-800/60 bg-slate-900/20 flex flex-col space-y-2 hover:border-slate-800 transition-colors ${isCancelled ? 'opacity-60' : ''}`}>
                           <div className="flex justify-between items-start gap-2 min-w-0">
                             <div className="min-w-0 flex-1">
                               <div className={`text-[11px] font-bold truncate uppercase tracking-wide flex items-center gap-1 ${isCancelled ? 'text-rose-500 line-through' : 'text-slate-200'}`}>
@@ -766,8 +811,9 @@ export default function Scheduler({ user }) {
                           <div className="grid grid-cols-2 gap-1.5 pt-0.5 font-sans">
                             <button
                               type="button"
+                              disabled={isCancelled}
                               onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Confirmed' ? 'None' : 'Confirmed')}
-                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer ${
+                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                 currentStatus === 'Confirmed'
                                   ? 'border-emerald-500 bg-emerald-950/30 text-emerald-400 font-black'
                                   : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-300'
@@ -777,8 +823,9 @@ export default function Scheduler({ user }) {
                             </button>
                             <button
                               type="button"
+                              disabled={isCancelled}
                               onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Leave' ? 'None' : 'Leave')}
-                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer ${
+                              className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                 currentStatus === 'Leave'
                                   ? 'border-amber-500 bg-amber-950/30 text-amber-400 font-black'
                                   : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-300'

@@ -445,8 +445,12 @@ export default function AttendanceHistoryTab({ user }) {
                         </div>
                         <div className="flex items-center gap-4 shrink-0 font-sans text-right">
                           <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                            <span title={`Calendar: ${log.points.calPt} pt`}>{log.points.calPt === 1.0 ? '📅' : '❌'}</span>
-                            <span title={`Discord Voice Presence: ${log.points.discPt} pt`}>{log.points.discPt === 1.0 ? '💬' : '🔇'}</span>
+                            <span title={`Calendar: ${log.points.calPt} pt`} className={log.points.calPt === 1.0 ? 'text-emerald-400' : 'text-slate-600'}>
+                              {log.points.calPt === 1.0 ? <Calendar size={12} /> : <XCircle size={12} />}
+                            </span>
+                            <span title={`Discord Voice Presence: ${log.points.discPt} pt`} className={log.points.discPt === 1.0 ? 'text-indigo-400' : 'text-slate-600'}>
+                              {log.points.discPt === 1.0 ? <Mic size={12} /> : <MicOff size={12} />}
+                            </span>
                             <span title={`Duration pulse: ${log.points.durationPt.toFixed(2)} pt`} className="text-[9px] font-mono text-slate-600">({Math.round(log.points.durationPt * 100)}%)</span>
                           </div>
                           <span className={`font-black text-sm ${log.points.total === 3.0 ? 'text-emerald-400' : log.points.total >= 1.5 ? 'text-amber-500' : 'text-rose-500'}`}>

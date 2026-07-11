@@ -1,7 +1,7 @@
 // frontend/src/components/LeftNavBar.jsx
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useEffect } from 'react';
+import { apiFetch } from '../services/apiClient';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconRequest = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
@@ -36,20 +36,17 @@ const raidItems = [
 export default function LeftNavBar({ macroTab }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [helpUrl, setHelpUrl] = useState('');
+  const [auctionHelpUrl, setAuctionHelpUrl] = useState('');
+  const [raidHelpUrl, setRaidHelpUrl] = useState('');
 
   useEffect(() => {
     const fetchHelpUrl = async () => {
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
-        const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
-          headers: {
-            ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {})
-          }
-        });
+        const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
         const data = await res.json();
-        if (data.success && data.config?.helpEmbedUrl) {
-          setHelpUrl(data.config.helpEmbedUrl);
+        if (data.success && data.config) {
+          setAuctionHelpUrl(data.config.helpEmbedUrl || '');
+          setRaidHelpUrl(data.config.raidHelpEmbedUrl || '');
         }
       } catch (err) {
         console.error("Error fetching help URL:", err);
@@ -58,7 +55,15 @@ export default function LeftNavBar({ macroTab }) {
     fetchHelpUrl();
   }, []);
 
-const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
+  const helpUrl = useMemo(
+    () => (macroTab === 'raid' ? raidHelpUrl : auctionHelpUrl),
+    [macroTab, raidHelpUrl, auctionHelpUrl]
+  );
+
+  const helpTitle = macroTab === 'raid' ? 'Raid Governance Guide' : 'Auction Help Guide';
+  const helpNavLabel = macroTab === 'raid' ? 'Raid Help Guide' : 'Auction Help Guide';
+
+  const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
 
   return (
     <aside className={`min-h-screen border-r border-slate-900 bg-slate-950 p-4 transition-all duration-300 relative shrink-0 shadow-2xl select-none ${
@@ -123,16 +128,16 @@ const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
           type="button"
           onClick={() => setIsHelpOpen(true)}
           className={`w-full flex items-center rounded-xl px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 ${isCollapsed ? 'justify-center' : ''}`}
-          title="System User Guide & Help Portal"
+          title={helpNavLabel}
         >
           {isCollapsed ? (
-            <span className="flex items-center justify-center" title="Help Guide">
+            <span className="flex items-center justify-center" title={helpNavLabel}>
               <IconHelp />
             </span>
           ) : (
             <>
               <span className="shrink-0"><IconHelp /></span>
-              <span className="ml-3 whitespace-nowrap truncate">Help Guide</span>
+              <span className="ml-3 whitespace-nowrap truncate">{helpNavLabel}</span>
             </>
           )}
         </button>
@@ -170,7 +175,7 @@ const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-semibold tracking-wider uppercase text-slate-200 flex items-center gap-2">
-                  <IconHelp /> System Help Guide
+                  <IconHelp /> {helpTitle}
                 </h3>
               </div>
               <button 
@@ -206,7 +211,11 @@ const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
                   </div>
                 </>
               ) : (
-                <div className="text-xs text-slate-500 font-mono italic">No interactive guide presentation configured by guild officers yet.</div>
+                <div className="text-xs text-slate-500 font-mono italic text-center px-4">
+                  {macroTab === 'raid'
+                    ? 'No Raid Governance guide URL configured yet. Set it under System Settings → Raid Governance Help Guide URL.'
+                    : 'No Auction help guide URL configured yet. Set it under System Settings → Auction Dashboard Help Guide URL.'}
+                </div>
               )}
             </div>
 

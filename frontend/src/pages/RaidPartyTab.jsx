@@ -11,15 +11,19 @@ import {
   Check, 
   X, 
   UserPlus, 
-  ShieldAlert, 
   Save,
   Grid,
   ChevronLeft,
   ChevronRight,
-  Info
+  Info,
+  Ban,
+  Lock
 } from 'lucide-react';
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
+import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
+import { formatGuildDate, DEFAULT_TZ } from '../utils/guildTime';
+import { apiFetch } from '../services/apiClient';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -32,13 +36,13 @@ export default function RaidPartyTab({ user }) {
   const [members, setMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
+  const [guildTimezone, setGuildTimezone] = useState(DEFAULT_TZ);
+  const [historySessions, setHistorySessions] = useState({});
+  const [historyLedger, setHistoryLedger] = useState({});
 
   // --- Workspace Planning States ---
   const [selectedConfigId, setSelectedConfigId] = useState('');
-  const [simulationDate, setSimulationDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+  const [simulationDate, setSimulationDate] = useState(() => formatGuildDate(new Date(), DEFAULT_TZ));
 
   // --- Local Staging Mirror States ---
   const [localTitle, setLocalTitle] = useState('');
@@ -52,7 +56,7 @@ export default function RaidPartyTab({ user }) {
   // --- UI Layout Presentation States ---
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuConfigId, setActiveMenuConfigId] = useState(null);
-  const [activePopover, setActivePopover] = useState(null); // Tracks { coordKey, type: 'assign' | 'gear' }
+  const [activePopover, setActivePopover] = useState(null); // { coordKey, type: 'assign' | 'gear' | 'trend' }
   const [selectedPopoverJob, setSelectedPopoverJob] = useState('');
   const [dragHoveredCoord, setDragHoveredCoord] = useState(null); 
 
@@ -89,8 +93,12 @@ export default function RaidPartyTab({ user }) {
 
       const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
       const configData = await configRes.json();
-      if (configData.success && configData.config?.jobs) {
-        setJobsCatalog(configData.config.jobs);
+      if (configData.success && configData.config) {
+        if (configData.config.jobs) setJobsCatalog(configData.config.jobs);
+        if (configData.config.timezone) {
+          setGuildTimezone(configData.config.timezone);
+          setSimulationDate((prev) => prev || formatGuildDate(new Date(), configData.config.timezone));
+        }
       }
 
       const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
@@ -101,6 +109,13 @@ export default function RaidPartyTab({ user }) {
           const firstKey = Object.keys(compsData.compositions)[0];
           setSelectedConfigId(firstKey);
         }
+      }
+
+      const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
+      const histData = await histRes.json();
+      if (histData.success) {
+        setHistorySessions(histData.sessions || {});
+        setHistoryLedger(histData.ledger || {});
       }
     } catch (err) {
       console.error("Workspace load error:", err);
@@ -759,6 +774,10 @@ export default function RaidPartyTab({ user }) {
 
                     const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                     const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
+                    const isTrendPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'trend';
+                    const trendTimeline = slotData.userId
+                      ? buildMemberTrendTimeline(historySessions, historyLedger, slotData.userId, 8)
+                      : [];
                     const isDragHovered = dragHoveredCoord === coordKey;
 
                     const isSearchHighlighted = !!(searchQuery.trim() && allocatedUserObj && 
@@ -824,18 +843,19 @@ export default function RaidPartyTab({ user }) {
                               <Settings size={13} />
                             </button>
 
-                            {/* Info Icon: Toggle Roster Member Selector Assignment Popup */}
+                            {/* Info Icon: Member attendance reliability trend */}
                             <button
                               type="button"
+                              disabled={!slotData.userId}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActivePopover(activePopover?.coordKey === coordKey && activePopover?.type === 'assign' ? null : { coordKey, type: 'assign' });
-                                setSelectedPopoverJob(slotData.roleLock || '');
+                                if (!slotData.userId) return;
+                                setActivePopover(isTrendPopoverOpen ? null : { coordKey, type: 'trend' });
                               }}
-                              className={`p-1 rounded hover:bg-slate-800 transition-colors ${
-                                activePopover?.coordKey === coordKey && activePopover?.type === 'assign' ? 'text-indigo-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
+                              className={`p-1 rounded hover:bg-slate-800 transition-colors disabled:opacity-20 disabled:cursor-not-allowed ${
+                                isTrendPopoverOpen ? 'text-indigo-400 bg-slate-800' : 'text-slate-500 hover:text-slate-300'
                               }`}
-                              title="Assign Roster Candidate"
+                              title={slotData.userId ? 'Attendance reliability trend' : 'Assign a member first'}
                             >
                               <Info size={13} />
                             </button>
@@ -880,8 +900,13 @@ export default function RaidPartyTab({ user }) {
                             <div className="h-full flex flex-col items-center justify-center space-y-1 text-slate-700 group-hover:text-slate-500 transition-colors py-2">
                               {isCellRoleLocked ? (
                                 <>
-                                  <ShieldAlert size={14} style={{ color: cellColorTheme }} />
-                                  <span className="text-[8px] font-bold uppercase tracking-wider text-center max-w-full truncate px-0.5" style={{ color: cellColorTheme }}>
+                                  <img
+                                    src={`/assets/icons/classes/${lockedJobObj?.iconFile || 'default.svg'}`}
+                                    alt=""
+                                    className="w-5 h-5 object-contain opacity-90"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                  <span className="text-[8px] font-bold uppercase tracking-wider text-center max-w-full truncate px-0.5 text-slate-400">
                                     {lockedJobObj?.name}
                                   </span>
                                 </>
@@ -898,30 +923,56 @@ export default function RaidPartyTab({ user }) {
                         {/* ================= IN-GRID CELL OVERLAY POPUPS ================= */}
                         {isGearPopoverOpen && (
                           <>
-                            <div className="fixed inset-0 z-40" onClick={() => setActivePopover(null)} />
-                            <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-50 w-44 font-sans space-y-1.5 animate-fadeIn text-left`}>
+                            <div className="fixed inset-0 z-[90]" onClick={() => setActivePopover(null)} />
+                            <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-[100] w-56 font-sans space-y-1.5 animate-fadeIn text-left`}>
                               <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1">Pre-Assign Job Role</div>
                               <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">
                                 <button
                                   type="button"
                                   onClick={() => handleToggleCellRoleLock(coordKey, '')}
-                                  className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                                  className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
                                 >
-                                  ❌ Clear Role Lock
+                                  <Ban size={12} className="shrink-0 text-rose-400" /> Clear Role Lock
                                 </button>
                                 {Object.entries(jobsCatalog).map(([code, j]) => (
                                   <button
                                     key={code}
                                     type="button"
                                     onClick={() => handleToggleCellRoleLock(coordKey, code)}
-                                    className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-semibold hover:bg-slate-800 cursor-pointer flex items-center justify-between"
-                                    style={{ color: j.colorTheme || '#cbd5e1' }}
+                                    className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-semibold text-slate-200 hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-2"
                                   >
-                                    <span>{j.name}</span>
-                                    {slotData.roleLock === code && <Check size={10} />}
+                                    <span className="flex items-center gap-1.5 min-w-0">
+                                      <img
+                                        src={`/assets/icons/classes/${j.iconFile || 'default.svg'}`}
+                                        alt=""
+                                        className="w-3.5 h-3.5 object-contain shrink-0"
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                      />
+                                      <span className="truncate">{j.name}</span>
+                                    </span>
+                                    {slotData.roleLock === code && <Check size={10} className="shrink-0 text-indigo-400" />}
                                   </button>
                                 ))}
                               </div>
+                            </div>
+                          </>
+                        )}
+
+                        {isTrendPopoverOpen && slotData.userId && (
+                          <>
+                            <div className="fixed inset-0 z-[90] bg-black/40" onClick={() => setActivePopover(null)} />
+                            <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl z-[100] w-[min(22rem,92vw)] font-sans space-y-2 animate-fadeIn text-left">
+                              <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1.5 flex items-center justify-between gap-2">
+                                <span className="truncate">{allocatedUserObj?.displayName || 'Raider'} · Reliability Trend</span>
+                                <button type="button" onClick={() => setActivePopover(null)} className="text-slate-500 hover:text-white cursor-pointer">
+                                  <X size={14} />
+                                </button>
+                              </div>
+                              <MemberTrendSparkline
+                                timeline={trendTimeline}
+                                displayName={allocatedUserObj?.displayName || 'Raider'}
+                                compact
+                              />
                             </div>
                           </>
                         )}
@@ -947,7 +998,10 @@ export default function RaidPartyTab({ user }) {
                                 </div>
                               ) : (
                                 <div className="text-[9px] font-mono font-bold uppercase tracking-wider select-none px-1 border-b border-slate-800 pb-1 flex items-center justify-between" style={{ color: cellColorTheme }}>
-                                  <span>🔒 Role Lock: {lockedJobObj?.name}</span>
+                                  <span className="flex items-center gap-1.5 text-slate-300">
+                                    <Lock size={11} className="shrink-0 text-amber-400" />
+                                    Role Lock: {lockedJobObj?.name}
+                                  </span>
                                 </div>
                               )}
 

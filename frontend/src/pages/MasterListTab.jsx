@@ -1,7 +1,6 @@
 // frontend/src/pages/MasterListTab.jsx
 import { useState, useEffect } from 'react';
-
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+import { apiFetch } from '../services/apiClient';
 
 const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z" /></svg>;
 const IconShield = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
@@ -16,7 +15,6 @@ export default function MasterListTab({ user }) {
   const [stagedMembers, setStagedMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [rolesCatalog, setRolesCatalog] = useState({});
-  const [rosterSearch, setRosterSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,19 +28,14 @@ export default function MasterListTab({ user }) {
   const loadRosterDirectory = async (showLoader = true) => {
     try {
       if (showLoader) setLoading(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
 
-      const res = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
+      const res = await apiFetch('/api/requests/init', { method: 'GET' });
       const data = await res.json();
       if (data.success) {
         setDbMembers(data.members || {});
         setStagedMembers(JSON.parse(JSON.stringify(data.members || {})));
         
-        const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
+        const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
         const configData = await configRes.json();
         if (configData.success) {
           setJobsCatalog(configData.config?.jobs || {});
@@ -63,11 +56,7 @@ export default function MasterListTab({ user }) {
   const handleSyncDiscordRoster = async () => {
     try {
       setSyncing(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      await fetch(`${backendUrl}/api/requests/sync-roster`, { method: 'POST', headers, credentials: 'include' });
+      await apiFetch('/api/requests/sync-roster', { method: 'POST' });
       await loadRosterDirectory(true);
     } catch (err) {
       console.error(err);
@@ -89,15 +78,9 @@ export default function MasterListTab({ user }) {
   const handleSaveRosterProgress = async () => {
     try {
       setSaving(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const res = await fetch(`${backendUrl}/api/attendance/roster/save-batch`, {
+      const res = await apiFetch('/api/attendance/roster/save-batch', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ stagedMembers }),
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
@@ -116,15 +99,9 @@ export default function MasterListTab({ user }) {
   const handleExecuteVanish = async () => {
     if (confirmKeyword !== 'YES' || !vanishTarget) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      await fetch(`${backendUrl}/api/attendance/vanish`, {
+      await apiFetch('/api/attendance/vanish', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ targetUid: vanishTarget }),
-        credentials: 'include'
       });
       setVanishTarget(null);
       setConfirmKeyword('');
@@ -162,13 +139,13 @@ export default function MasterListTab({ user }) {
       {/* MASTER ACTIVE DIRECTORY PANEL */}
       <div className="col-span-12 lg:col-span-9 space-y-4">
         <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 select-none">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">📋 True Guild Roster ({activeRaidRosterList.length} Active / Cap 200)</h2>
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">True Guild Roster ({activeRaidRosterList.length} Active / Cap 200)</h2>
           <input 
             type="text" 
-            placeholder="Find in Active Roster..." 
-            value={rosterSearch} 
-            onChange={(e) => setRosterSearch(e.target.value)} 
-            className="w-full sm:w-48 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition" 
+            placeholder="Search members (roster + pool)..." 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            className="w-full sm:w-64 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition" 
           />
         </div>
 
@@ -222,7 +199,7 @@ export default function MasterListTab({ user }) {
                 }
 
                 const [uid, m] = entry;
-                const isFoundMatch = rosterSearch.trim() && (m.displayName || '').toLowerCase().includes(rosterSearch.toLowerCase());
+                const isFoundMatch = searchQuery.trim() && (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase());
                 const isGhost = m.status === 'Ghost';
 
                 return (
@@ -240,23 +217,27 @@ export default function MasterListTab({ user }) {
                       </div>
                     </td>
                     <td className="p-3">
-                      <select 
-                        value={m.jobCode || ''} 
-                        disabled={!user?.isOfficer}
-                        onChange={(e) => handleStageLocalUpdate(uid, 'jobCode', e.target.value)}
-                        className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1 text-xs font-sans queen-select-box outline-none w-full font-bold cursor-pointer transition-colors"
-                        style={{ 
-                          color: jobsCatalog[m.jobCode]?.colorTheme || '#94a3b8',
-                          borderColor: jobsCatalog[m.jobCode]?.colorTheme ? `${jobsCatalog[m.jobCode].colorTheme}40` : '#1e293b'
-                        }}
-                      >
-                        <option value="" className="bg-slate-950 text-slate-400 font-sans">Select Job...</option>
-                        {Object.entries(jobsCatalog).map(([code, j]) => (
-                          <option key={code} value={code} className="bg-slate-950 font-sans font-semibold" style={{ color: j.colorTheme || '#cbd5e1' }}>
-                            {j.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <img
+                          src={`/assets/icons/classes/${jobsCatalog[m.jobCode]?.iconFile || 'default.svg'}`}
+                          alt=""
+                          className="w-5 h-5 object-contain shrink-0 opacity-90"
+                          onError={(e) => { e.target.src = '/assets/icons/classes/default.svg'; }}
+                        />
+                        <select 
+                          value={m.jobCode || ''} 
+                          disabled={!user?.isOfficer}
+                          onChange={(e) => handleStageLocalUpdate(uid, 'jobCode', e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1 text-xs font-sans outline-none w-full font-bold cursor-pointer transition-colors text-slate-200"
+                        >
+                          <option value="" className="bg-slate-950 text-slate-400 font-sans">Select Job...</option>
+                          {Object.entries(jobsCatalog).map(([code, j]) => (
+                            <option key={code} value={code} className="bg-slate-950 font-sans font-semibold text-slate-200">
+                              {j.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
 
                     <td className="p-3">
@@ -326,13 +307,6 @@ export default function MasterListTab({ user }) {
               <IconSync /> {syncing ? 'Syncing...' : 'Sync'}
             </button>
           </div>
-          <input 
-            type="text" 
-            placeholder="Search Pool Identities..." 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            className="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-3 py-1.5 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition shadow-inner" 
-          />
         </div>
 
         <div className="border border-slate-800 bg-slate-950/40 rounded-2xl p-3 h-[31.5rem] overflow-y-auto scrollbar-thin space-y-2">

@@ -1,8 +1,9 @@
 // frontend/src/pages/SettingsTab.jsx
 import { useState, useEffect } from 'react';
+import { apiFetch, getAuthHeaders, getBackendUrl } from '../services/apiClient';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+const backendUrl = getBackendUrl();
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -57,6 +58,7 @@ export default function SettingsTab() {
     timezone: 'Asia/Manila',
     isForceLocked: false,
     helpEmbedUrl: '',
+    raidHelpEmbedUrl: '',
     priorityLookbackDays: 30,
     adminRoles: [],
     items: [],
@@ -96,26 +98,17 @@ export default function SettingsTab() {
   /**
    * 🛡️ AUTOMATED HEADER EXTRACTOR UTILITY
    */
-  const getRequestHeaders = () => {
-    const savedUserSession = localStorage.getItem('dynasty_raid_session');
-    const headers = { 'Content-Type': 'application/json' };
-    if (savedUserSession) {
-      headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-    }
-    return headers;
-  };
+  const getRequestHeaders = () => getAuthHeaders({ json: true });
 
   const loadGlobalConfigurationTree = async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
-        method: 'GET',
-        headers: getRequestHeaders(),
-        credentials: 'include'
-      });
+      const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
       const data = await res.json();
       if (data.success) {
         setConfig({
           ...data.config,
+          helpEmbedUrl: data.config.helpEmbedUrl || '',
+          raidHelpEmbedUrl: data.config.raidHelpEmbedUrl || '',
           roles: data.config.roles || {},
           liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
           liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
@@ -458,18 +451,31 @@ export default function SettingsTab() {
           </div>
 
           {/* HELP CANVASES EMBED LINK AREA */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconHelp /> Help Guide URL</div>
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconHelp /> Help Guide URLs</div>
               <span className="text-[10px] text-slate-600 font-mono">Google Slides Embed URL</span>
             </div>
-            <input
-              type="text"
-              value={config.helpEmbedUrl || ''}
-              onChange={(e) => setConfig(prev => ({ ...prev, helpEmbedUrl: e.target.value }))}
-              placeholder="https://docs.google.com/presentation/d/.../embed"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-slate-700 font-mono transition"
-            />
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Auction Dashboard Help Guide URL</label>
+              <input
+                type="text"
+                value={config.helpEmbedUrl || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, helpEmbedUrl: e.target.value }))}
+                placeholder="https://docs.google.com/presentation/d/.../embed"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-slate-700 font-mono transition"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-indigo-400/80 uppercase tracking-wider">Raid Governance Help Guide URL</label>
+              <input
+                type="text"
+                value={config.raidHelpEmbedUrl || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, raidHelpEmbedUrl: e.target.value }))}
+                placeholder="https://docs.google.com/presentation/d/.../embed (separate from Auction)"
+                className="w-full bg-slate-950 border border-indigo-900/40 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-indigo-700 font-mono transition"
+              />
+            </div>
           </div>
         </div>
       )}

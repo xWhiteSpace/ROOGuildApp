@@ -48,8 +48,15 @@ const allowedOrigins = [
 // 📡 PRODUCTION HARDENED EXPLICIT CORS WHITELIST FOR MULTI-HOST HANDSHAKES
 app.use(cors({ 
   origin: function (origin, callback) {
-    // Broadens origin matches to accept ngrok tunnels and vercel staging indicators cleanly
-    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.includes('ngrok-free.app')) {
+    // Allow missing Origin (same-origin / mobile webviews), configured FRONTEND_URL,
+    // known hosts, Vercel preview deployments, LAN, and ngrok tunnels.
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      origin.startsWith('http://192.168.') ||
+      origin.includes('ngrok-free.app') ||
+      origin.endsWith('.vercel.app')
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Blocked by CORS policy rules layout context.'));
@@ -63,9 +70,9 @@ app.use(cors({
     'X-Requested-With', 
     'Accept', 
     'Origin',
-    'x-user-profile',      // Whitelists fallback auth headers
-    'x-authorized-user',   // Whitelists mobile chat verification headers
-    'ngrok-skip-browser-warning' // Whitelists tunnel warning bypass flags
+    'x-user-profile',
+    'x-authorized-user',
+    'ngrok-skip-browser-warning'
   ]
 }));
 

@@ -1,106 +1,49 @@
 import admin from 'firebase-admin'; // Hooked directly to your backend setup[cite: 1]
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-
-function getUpcomingTargetCalendarDates(targetDayOfWeekIndex) {
-  const calculatedDates = [];
-  const serverTimeContext = new Date();
-  for (let offsetIndex = 0; offsetIndex < 14; offsetIndex++) {
-    const calendarDayFocus = new Date(serverTimeContext.getTime() + (offsetIndex * 24 * 60 * 60 * 1000));
-    if (calendarDayFocus.getDay() === parseInt(targetDayOfWeekIndex, 10)) {
-      calculatedDates.push(calendarDayFocus.toISOString().split('T')[0]);
-    }
-  }
-  return calculatedDates;
-}
+import { ensureWeekInstances, writeCommitment } from '../services/scheduleService.js';
+import { buildCompositeKey, parseCompositeKey } from '../utils/guildTime.js';
 
 async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
-  const eventsSnap = await db.ref('settings/configuration/events').once('value'); //[cite: 1]
-  const specialSnap = await db.ref('scheduler/special_events').once('value'); //[cite: 2]
+  const { weekMonday, instances } = await ensureWeekInstances({});
 
-  // Phase 3: Resolve dynamic timezone alignment using configurations from settings path
-  const globalConfigSnap = await db.ref('settings/configuration').once('value');
-  const targetTimezone = globalConfigSnap.exists() ? (globalConfigSnap.val().timezone || 'Asia/Manila') : 'Asia/Manila';
-  
-  const localTimeString = new Date().toLocaleString('en-US', { timeZone: targetTimezone });
-  const now = new Date(localTimeString);
-  const allEvents = [];
-
- // Mirror Scheduler.jsx: Calculate the current week's Monday bound dynamically
-  const currentDay = now.getDay();
-  const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + distanceToMonday);
-
-  const pad = (n) => String(n).padStart(2, '0');
-
-  for (let i = 0; i < 7; i++) {
-    const currentDayFocus = new Date(monday);
-    currentDayFocus.setDate(monday.getDate() + i);
-    const dStr = `${currentDayFocus.getFullYear()}-${pad(currentDayFocus.getMonth() + 1)}-${pad(currentDayFocus.getDate())}`;
-    const dayOfWeek = currentDayFocus.getDay();
-
-    // 1. Map matching weekly templates for this calendar day
-    if (eventsSnap.exists()) {
-      Object.entries(eventsSnap.val()).forEach(([id, ev]) => {
-        const p3 = ev.phases?.[3];
-        if (p3 && parseInt(p3.dayStart, 10) === dayOfWeek) {
-          allEvents.push({ id: `weekly:${id}`, title: ev.title, dateStr: dStr, type: 'Weekly' });
-        }
-      });
-    }
-
-    // 2. Map matching ad-hoc special events for this calendar day
-    if (specialSnap.exists()) {
-      Object.entries(specialSnap.val()).forEach(([id, ev]) => {
-        if (ev.title && ev.date === dStr) {
-          allEvents.push({ id: `special:${id}`, title: ev.title, dateStr: dStr, type: 'Special' });
-        }
-      });
-    }
-  }
-
-  const paginatedEvents = allEvents; // Direct 7-day list assignment with no pagination required
+  const sorted = Object.entries(instances || {})
+    .map(([key, inst]) => ({ key, ...inst }))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.timeStart || '').localeCompare(b.timeStart || ''));
 
   const embed = new EmbedBuilder()
     .setTitle('🗓️ Upcoming Week Sign-Up (7 Days)')
-    .setDescription('Review active raid deployments for the current week (Monday - Sunday). Toggle availability tags seamlessly:')
+    .setDescription(`Review active raid deployments for week starting \`${weekMonday}\` (Monday - Sunday). Toggle availability tags seamlessly:`)
     .setColor('#9333ea')
     .setTimestamp();
 
   const componentRows = [];
 
-  // Build matrix row groupings dynamically for each scheduled timeline entry
-  for (const ev of paginatedEvents) {
-    const rawEventId = ev.id.split(':')[1];
-    const compositeKey = `${ev.dateStr}_${rawEventId}`; //[cite: 2]
+  for (const ev of sorted) {
+    const compositeKey = ev.key || buildCompositeKey(ev.date, ev.eventId);
     const commitmentSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
     const userStatus = commitmentSnap.exists() ? commitmentSnap.val().status : 'Unanswered';
 
-    // Phase 2: Fetch specific ad-hoc operational overrides from the normalized tracking path
-    const instanceSnap = await db.ref(`scheduler/active_instances/${compositeKey}`).once('value');
-    const instanceData = instanceSnap.exists() ? instanceSnap.val() : null;
-    const isCancelled = instanceData?.isCancelled === true;
-    const customTitle = instanceData?.title || ev.title;
+    const isCancelled = ev.isCancelled === true;
+    const customTitle = ev.title || ev.eventId;
+    const customNotes = ev.notes ? `\n📝 **Notes:** ${ev.notes}` : '';
+    const typeLabel = ev.isSpecial ? 'Special' : 'Weekly';
 
-    const customNotes = instanceData?.notes ? `\n📝 **Notes:** ${instanceData.notes}` : '';
     embed.addFields([{
-      name: `${isCancelled ? '❌ [CANCELLED]' : (ev.type === 'Weekly' ? '📅' : '⚔️')} ${customTitle}`,
-      value: `Target Window: \`${ev.dateStr}\` | Current Status: **${isCancelled ? 'N/A' : userStatus}**${customNotes}`,
+      name: `${isCancelled ? '❌ [CANCELLED]' : (ev.isSpecial ? '⚔️' : '📅')} ${customTitle}`,
+      value: `Target Window: \`${ev.date}\` | Current Status: **${isCancelled ? 'N/A' : userStatus}**${customNotes}`,
       inline: false
     }]);
 
     const row = new ActionRowBuilder();
 
-    // Column Component 1: Context Meta Label Info Display
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`lbl:${ev.id}`)
-        .setLabel(`${ev.title.slice(0, 10)}...`)
+        .setCustomId(`lbl:${typeLabel}:${ev.eventId}`.slice(0, 100))
+        .setLabel(`${String(customTitle).slice(0, 10)}...`)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(true)
     );
 
-    // Column Component 2: Confirm Engagement Control
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`matrsvp:confirm:${compositeKey}:1`)
@@ -109,7 +52,6 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
         .setDisabled(isCancelled)
     );
 
-    // Column Component 3: Absence Request Control (Enforcing 'Leave' as absolute SSOT)
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`matrsvp:leave:${compositeKey}:${page}`)
@@ -223,10 +165,15 @@ export async function handleSlashCommand(interaction) {
           for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) { //[cite: 2]
             // Safe checking parameter to protect against unallocated null grid cells
             if (slotData?.userId === snowflakeId) {
-              const parts = coordKey.split('_'); 
-              const partyNum = parseInt(parts[0], 10) + 1;
-              const slotNum = parseInt(parts[1], 10) + 1;
-              locatedSlot = `P${partyNum}-S${slotNum}`;
+              // Grid keys are 1-indexed "party-slot" (e.g. "3-1" = P3-S1)
+              const parts = coordKey.split(/[-_]/);
+              const partyNum = parseInt(parts[0], 10);
+              const slotNum = parseInt(parts[1], 10);
+              if (!Number.isNaN(partyNum) && !Number.isNaN(slotNum)) {
+                locatedSlot = `P${partyNum}-S${slotNum}`;
+              } else {
+                locatedSlot = coordKey;
+              }
               break;
             }
           }
@@ -303,17 +250,21 @@ export async function handleComponentInteraction(interaction) {
     const targetStatus = action === 'confirm' ? 'Confirmed' : 'Leave';
 
     // Guard Rule: Intercept button event mutations if the targeted instance night was cancelled mid-flight
-    const instanceCheck = await db.ref(`scheduler/active_instances/${compositeKey}`).once('value');
+    const instanceCheck = await db.ref(`scheduler/instances/${compositeKey}`).once('value');
     if (instanceCheck.exists() && instanceCheck.val().isCancelled === true) return;
 
     const raiderProfileSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
-    const displayName = raiderProfileSnap.exists() ? (raiderProfileSnap.val().name || interaction.user.username) : interaction.user.username;
+    const member = raiderProfileSnap.exists() ? raiderProfileSnap.val() : {};
+    const displayName = member.displayName || member.name || interaction.user.username;
 
-    // Persist status updates atomically straight into the targeted composite node path
-    await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).set({
-      displayName: displayName,
+    const parsed = parseCompositeKey(compositeKey);
+    await writeCommitment({
+      userId: snowflakeId,
+      displayName,
+      dateStr: parsed?.dateStr,
+      eventId: parsed?.eventId,
       status: targetStatus,
-      declaredAt: Date.now()
+      compositeKey,
     });
 
     // Re-render the matrix instantly to update component visual states

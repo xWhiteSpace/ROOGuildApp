@@ -18,8 +18,10 @@ import LiveRaidTab from './pages/LiveRaidTab';
 import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
 
 import Scheduler from './pages/Scheduler';
+import { apiFetch, getBackendUrl } from './services/apiClient';
+import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+const backendUrl = getBackendUrl();
 
 import { createContext, useRef } from 'react';
 export const MimicBookContext = createContext(null);
@@ -34,11 +36,7 @@ export function MimicBookProvider({ children }) {
   const [expandedGroups, setExpandedGroups] = useState({}); 
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
   const [availableEvents, setAvailableEvents] = useState({});
-  const [commitDate, setCommitDate] = useState(() => {
-    const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-    const gmt8Date = new Date(gmt8String);
-    return `${gmt8Date.getFullYear()}-${String(gmt8Date.getMonth() + 1).padStart(2, '0')}-${String(gmt8Date.getDate()).padStart(2, '0')}`;
-  });
+  const [commitDate, setCommitDate] = useState(() => formatGuildDate(new Date(), DEFAULT_TZ));
   const [committing, setCommittingSetting] = useState(false);
   const [syncingRoster, setSyncingRoster] = useState(false);
   const [items, setItems] = useState([]); 
@@ -124,26 +122,19 @@ export default function App() {
 
       // 🛰️ BACKGROUND SIGNATURE VERIFICATION: Verify token integrity with backend cryptographic seals
       try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (savedSession) {
-          headers['x-user-profile'] = encodeURIComponent(savedSession);
-        }
-        
-        const response = await fetch(`${backendUrl}/auth/me`, {
-          credentials: 'include',
-          headers: headers
-        });
+        const response = await apiFetch('/auth/me', { method: 'GET' });
         const result = await response.json();
         
         if (result.authenticated && result.user) {
           // Sync state and local storage with fresh information from the server
           setAuthUser(result.user);
           localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
-        } else {
-          // Session expired or revoked: Clean workspace state fields smoothly
+        } else if (!initialInMemoryUser) {
+          // Only clear if we had no local fallback — mobile Safari often blocks cookies
           setAuthUser(null);
           localStorage.removeItem('dynasty_raid_session');
         }
+        // If /auth/me fails cookie but local signed profile exists, keep local session
       } catch (err) {
         // Fallback: If your server is briefly unreachable, trust local cache to prevent offline lockouts
         if (!initialInMemoryUser) {
