@@ -70,7 +70,7 @@ export default function LiveRaidTab({ user }) {
   const [liveVoiceUids, setLiveVoiceUids] = useState([]); // Array of UIDs in voice rooms currently
   
   // UI Panels states
-  const [activePopover, setActivePopover] = useState(null); // { coordKey, type: 'assign' | 'gear' }
+  const [activePopover, setActivePopover] = useState(null); // { coordKey, type: 'assign' | 'gear' | 'trend' }
   const [selectedPopoverJob, setSelectedPopoverJob] = useState('');
   const [dragHoveredCoord, setDragHoveredCoord] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1164,6 +1164,25 @@ export default function LiveRaidTab({ user }) {
                                         </button>
                                       ))}
                                     </div>
+                                  </div>
+                                </>
+                              )}
+
+                              {isTrendPopoverOpen && slotData.userId && (
+                                <>
+                                  <div className="fixed inset-0 z-[90] bg-black/40" onClick={() => setActivePopover(null)} />
+                                  <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-2xl z-[100] w-[min(22rem,92vw)] font-sans space-y-2 animate-fadeIn text-left">
+                                    <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1.5 flex items-center justify-between gap-2">
+                                      <span className="truncate">{allocatedUserObj?.displayName || 'Raider'} · Reliability Trend</span>
+                                      <button type="button" onClick={() => setActivePopover(null)} className="text-slate-500 hover:text-white cursor-pointer">
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                    <MemberTrendSparkline
+                                      timeline={trendTimeline}
+                                      displayName={allocatedUserObj?.displayName || 'Raider'}
+                                      compact
+                                    />
                                   </div>
                                 </>
                               )}
