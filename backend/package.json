@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "deploy-commands": "node src/discord-bot/deploy.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

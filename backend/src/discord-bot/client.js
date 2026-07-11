@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
+import { handleSlashCommand, handleComponentInteraction } from './discordSlashcmd.js';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 
@@ -32,15 +33,26 @@ export async function initializeDiscordBot() {
   discordClient.once('ready', () => {
     console.log(`🚀 Discord bot successfully deployed as: ${discordClient.user?.tag}`);
 
-   // 🕹️ LIVE INTERACTION ROUTER: Catches and processes rapid-fire button board claims and select menu shifts
+   // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
     discordClient.on('interactionCreate', async (interaction) => {
       try {
-        await handleAuctionInteraction(interaction);
+        if (interaction.channelId !== process.env.DISCORD_GENROOM_ID_1) {
+          return await interaction.reply({
+            content: '❌ System commands are strictly locked to the designated general room channel.',
+            ephemeral: true
+          }).catch(() => {});
+        }
+
+        if (interaction.isChatInputCommand()) {
+          await handleSlashCommand(interaction);
+        } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
+          await handleComponentInteraction(interaction);
+        }
       } catch (err) {
-        console.error("❌ [GATEWAY INTERACTION ROUTE ERROR]: Failed to resolve click event:", err.message);
+        console.error("❌ [GATEWAY INTERACTION ROUTE ERROR]: Failed to resolve command event:", err.message);
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({ 
-            content: '❌ An internal processing failure occurred while verifying your item slot assignment command.', 
+            content: '❌ An internal processing failure occurred while verifying your tracking command.', 
             ephemeral: true 
           }).catch(() => {});
         }
