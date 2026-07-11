@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
+import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 
 import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
 
@@ -206,39 +207,7 @@ router.get('/settings/get', async (req, res) => {
     const configSnap = await db.ref('settings/configuration').once('value');
     
     if (!configSnap.exists()) {
-      const defaultData = {
-            timezone: "Asia/Manila",
-            isForceLocked: false,
-            adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
-            helpEmbedUrl: "",
-            items: [
-              { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
-              { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
-              { id: "item_003", name: "Light & Dark Scroll", colorTheme: "slate" },
-              { id: "item_004", name: "Time & Space Scroll", colorTheme: "red" }
-            ],
-            events: {
-              "ev_001": {
-                title: "GuildLeague",
-                phases: {
-                  1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
-                  2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
-                  3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-                },
-                loots: {
-                  "item_001": 1,
-                  "item_002": 1,
-                  "item_003": 3,
-                  "item_004": 5
-                },
-                announcements: {
-              phase1: ["07:00", "12:00", "19:00"],
-              phase2: "22:15",
-              phase3: "20:55"
-            }
-          }
-        }
-      };
+      const defaultData = { ...DEFAULT_CONFIGURATION };
       await db.ref('settings/configuration').set(defaultData);
       return res.json({ success: true, config: defaultData });
     }
@@ -465,7 +434,11 @@ router.get('/init', async (req, res) => {
     // Query global commitments node tree to ensure state persistence across interface loads
     const commitmentsSnap = await db.ref('attendance/commitments').once('value');
     const commitmentsData = commitmentsSnap.exists() ? commitmentsSnap.val() : {};
-const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+    const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+
+    // Phase 4 Clean Up: Query explicit administrative active instances to pipe down to the frontend
+    const instancesSnap = await db.ref('scheduler/active_instances').once('value');
+    const activeInstancesData = instancesSnap.exists() ? instancesSnap.val() : {};
     const { compileLeaderboard } = await import('../utils/sortingEngine.js');
     const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
     
@@ -489,6 +462,7 @@ const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
       announcementMinutes: timeGateStatus.announcementMinutes || { phase1: [], phase2: null, phase3: null },
       events: dynamicConfig.events || {}, 
       commitments: commitmentsData, // Transmit the tracking map downstream to protect state cache values
+      activeInstances: activeInstancesData, // Transmit administrative cancellations and operational custom notes
       rankingsByItem,
       requestsByItemDetails,
       fullRoster: fullRosterArray.sort(),

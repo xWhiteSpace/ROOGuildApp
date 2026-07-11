@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
 import crypto from 'crypto';
+import { ensureWeekInstances, getWeekInstances, writeCommitment } from '../services/scheduleService.js';
 
 const router = Router();
 
@@ -312,6 +313,64 @@ router.post('/update-job-target', async (req, res) => {
   }
 });
 
+// 📅 POST /api/attendance/ensure-week -> Materialize scheduler/instances for a week
+router.post('/ensure-week', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const { weekMonday, force } = req.body || {};
+    const result = await ensureWeekInstances({
+      weekMonday: weekMonday || undefined,
+      force: force === true,
+    });
+    return res.json({
+      success: true,
+      weekMonday: result.weekMonday,
+      instances: result.instances,
+      timezone: result.timezone,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📅 GET /api/attendance/week-instances -> Read materialized week (auto-ensure if empty)
+router.get('/week-instances', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const weekMonday = req.query.weekMonday || undefined;
+    const result = await getWeekInstances(weekMonday);
+    return res.json({
+      success: true,
+      weekMonday: result.weekMonday,
+      instances: result.instances,
+      timezone: result.timezone,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 📅 GET /api/attendance/commitments -> Live RSVP tree (Admin SDK; works when client RTDB rules block)
+router.get('/commitments', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const snap = await db.ref('attendance/commitments').once('value');
+    return res.json({
+      success: true,
+      commitments: snap.exists() ? snap.val() : {},
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 📅 POST /api/attendance/commit-availability -> Log Raider Presence/Leave
 router.post('/commit-availability', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -323,23 +382,17 @@ router.post('/commit-availability', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing scheduling configuration vectors.' });
     }
 
-    const db = getDatabase();
-    const compositeKey = `${dateStr}_${eventId}`;
+    const result = await writeCommitment({
+      userId: user.id,
+      displayName: user.displayName || user.username || 'Unknown Raider',
+      dateStr,
+      eventId,
+      status,
+    });
 
-    // Toggle-Off Safeguard: If status targets None, completely wipe the user record node from the tree
-    if (status === 'None') {
-      await db.ref(`attendance/commitments/${compositeKey}/${user.id}`).remove();
+    if (result.removed) {
       return res.json({ success: true, message: 'Schedule commitment removed successfully.' });
     }
-
-    const commitmentPayload = {
-      displayName: user.displayName || user.username || 'Unknown Raider',
-      status: status,
-      declaredAt: Date.now()
-    };
-
-    // Atomic set directly under the targeted composite tracking node
-    await db.ref(`attendance/commitments/${compositeKey}/${user.id}`).set(commitmentPayload);
     return res.json({ success: true, message: 'Schedule commitment logged.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
