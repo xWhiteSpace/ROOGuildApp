@@ -14,6 +14,8 @@ import MasterListTab from './pages/MasterListTab';
 
 import RaidPartyTab from './pages/RaidPartyTab';
 import StatisticsTab from './pages/StatisticsTab';
+import LiveRaidTab from './pages/LiveRaidTab';
+import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
 
 import Scheduler from './pages/Scheduler';
 
@@ -186,6 +188,8 @@ export default function App() {
             {/* 🛡️ Foundational Raid Governance Routes Mapping */}
             <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
             <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+            <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
+            <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
             <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
             <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
           </Routes>

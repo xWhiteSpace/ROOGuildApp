@@ -27,6 +27,8 @@ const auctionItems = [
 const raidItems = [
   { label: 'MasterList', path: '/attendance/masterlist', icon: IconRequest },
   { label: 'Raid Party', path: '/attendance/raidparty', icon: IconBook },
+  { label: 'Live Raid', path: '/attendance/liveraid', icon: IconLive },
+  { label: 'History', path: '/attendance/history', icon: IconHistory },
   { label: 'Statistics', path: '/attendance/statistics', icon: IconHistory },
   { label: 'Scheduler', path: '/attendance/scheduler', icon: IconScheduler }
 ];
