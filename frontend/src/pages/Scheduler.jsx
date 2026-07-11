@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import { database } from '../services/firebaseClient';
+import { ref, onValue } from 'firebase/database';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { 
@@ -27,9 +29,9 @@ export default function Scheduler({ user }) {
   const [loading, setLoading] = useState(true);
   const [eventsCatalog, setEventsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
-  const [specialEvents, setSpecialEvents] = useState({});
-  
-  const [specialCategoriesList, setSpecialCategoriesList] = useState(["Raid", "Meeting", "PVP", "Casual"]);
+  const [specialEvents, setSpecialEvents] = useState({}); // Restored core tracking state
+  const [activeInstances, setActiveInstances] = useState({}); // Phase 4: Normalized operational exceptions
+  const [timezone, setTimezone] = useState('Asia/Manila'); // Dynamic SSOT Timezone state initialized with a safe default
   const [selectedDayContext, setSelectedDayContext] = useState(null);
   
   // Modal Multi-Day States
@@ -60,9 +62,7 @@ export default function Scheduler({ user }) {
       if (configData.success && configData.config?.events) setEventsCatalog(configData.config.events);
       if (configData.success && configData.config?.specialEventCategories) setSpecialCategoriesList(configData.config.specialEventCategories);
 
-      const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
-      const initData = await initRes.json();
-      if (initData.success) setCommitments(initData.commitments || {});
+      // Real-time socket listeners now handle streaming updates for commitments and active instances dynamically
       
       const specialRes = await fetch(`${backendUrl}/api/attendance/special-events`, { method: 'GET', headers, credentials: 'include' });
       const specialData = await specialRes.json();
@@ -76,6 +76,29 @@ export default function Scheduler({ user }) {
 
   useEffect(() => {
     loadSchedulerEcosystem();
+  // Live Firebase Listener: Instantly stream active user rsvp actions from Discord/Web
+    const commitmentsRef = ref(database, 'attendance/commitments');
+    const unsubscribeCommitments = onValue(commitmentsRef, (snapshot) => {
+      setCommitments(snapshot.exists() ? snapshot.val() : {});
+    });
+
+    // Live Firebase Listener: Instantly stream single-night operational cancellations/notes
+    const instancesRef = ref(database, 'scheduler/active_instances');
+    const unsubscribeInstances = onValue(instancesRef, (snapshot) => {
+      setActiveInstances(snapshot.exists() ? snapshot.val() : {});
+    });
+
+    // Live Firebase Listener: Maintain absolute SSOT alignment with the SettingsTab configurations
+    const timezoneRef = ref(database, 'settings/configuration/timezone');
+    const unsubscribeTimezone = onValue(timezoneRef, (snapshot) => {
+      if (snapshot.exists()) setTimezone(snapshot.val());
+    });
+
+    return () => {
+      unsubscribeCommitments();
+      unsubscribeInstances();
+      unsubscribeTimezone();
+    };
   }, [user]);
 
   const formatDateToLocalString = (dateObj) => {
@@ -173,17 +196,34 @@ export default function Scheduler({ user }) {
 
   const weeklyUpcomingInstances = useMemo(() => {
     const list = [];
-    const today = new Date();
-    const currentDay = today.getDay();
-    // Calculate distance to the current week's Monday (0 = Sunday, 1 = Monday...)
+    
+    // Absolute SSOT: Parse date parameters using the database timezone state via cross-browser Intl formatting
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short'
+    });
+    
+    const parts = formatter.formatToParts(new Date());
+    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    const todayMat = new Date(`${partMap.year}-${partMap.month}-${partMap.day}T00:00:00`);
+    
+    const dayOfWeekMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const currentDay = dayOfWeekMap[partMap.weekday];
+    
     const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date();
-    monday.setDate(today.getDate() + distanceToMonday);
+    const monday = new Date(todayMat);
+    monday.setDate(todayMat.getDate() + distanceToMonday);
+    
+    const pad = (n) => String(n).padStart(2, '0');
     
     for (let i = 0; i < 7; i++) {
       const current = new Date(monday);
       current.setDate(monday.getDate() + i);
-      const dStr = formatDateToLocalString(current);
+      
+      const dStr = `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`;
       const dayOfWeek = current.getDay();
       
       Object.entries(eventsCatalog).forEach(([id, ev]) => {
@@ -199,10 +239,9 @@ export default function Scheduler({ user }) {
           });
         }
       });
-      
-      }
-          return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.timeStart.localeCompare(b.timeStart));
-        }, [eventsCatalog]);
+    }
+    return list.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.timeStart.localeCompare(b.timeStart));
+  }, [eventsCatalog, timezone]);
 
   const handleAddSpecialEvent = async () => {
     if (!formTitle.trim() || !formDateStart || !formDateEnd) return alert("Fill required inputs.");
@@ -682,6 +721,12 @@ export default function Scheduler({ user }) {
                     weeklyUpcomingInstances.map((item, idx) => {
                       const compositeKey = `${item.dateStr}_${item.id}`;
                       const currentStatus = commitments[compositeKey]?.[user?.id]?.status;
+
+                      // Phase 4: Extract structural modifications safely using the normalized dictionary matrix
+                      const instanceOverride = activeInstances[compositeKey];
+                      const isCancelled = instanceOverride?.isCancelled === true;
+                      const displayTitle = instanceOverride?.title || item.title;
+                      const displayNotes = instanceOverride?.notes;
                       
                       const dateObj = new Date(item.dateStr + 'T00:00:00');
                       const dayLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
@@ -691,10 +736,11 @@ export default function Scheduler({ user }) {
                         <div key={idx} className="p-2.5 rounded-xl border border-slate-800/60 bg-slate-900/20 flex flex-col space-y-2 hover:border-slate-800 transition-colors">
                           <div className="flex justify-between items-start gap-2 min-w-0">
                             <div className="min-w-0 flex-1">
-                              <div className="text-[11px] font-bold text-slate-200 truncate uppercase tracking-wide flex items-center gap-1">
+                              <div className={`text-[11px] font-bold truncate uppercase tracking-wide flex items-center gap-1 ${isCancelled ? 'text-rose-500 line-through' : 'text-slate-200'}`}>
                                 {item.isSpecial ? <Sparkles size={11} className="text-violet-400 shrink-0" /> : <Sword size={11} className="text-slate-500 shrink-0" />}
-                                <span className="truncate">{item.title}</span>
+                                <span className="truncate">{isCancelled ? `[CANCELLED] ${displayTitle}` : displayTitle}</span>
                               </div>
+                              {displayNotes && <div className="text-[10px] text-indigo-400 font-sans italic mt-0.5">📝 {displayNotes}</div>}
                               <div className="text-[9px] font-mono text-slate-500 mt-0.5">
                                 {item.timeStart} - {item.timeEnd}
                               </div>

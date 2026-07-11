@@ -465,7 +465,11 @@ router.get('/init', async (req, res) => {
     // Query global commitments node tree to ensure state persistence across interface loads
     const commitmentsSnap = await db.ref('attendance/commitments').once('value');
     const commitmentsData = commitmentsSnap.exists() ? commitmentsSnap.val() : {};
-const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+    const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
+
+    // Phase 4 Clean Up: Query explicit administrative active instances to pipe down to the frontend
+    const instancesSnap = await db.ref('scheduler/active_instances').once('value');
+    const activeInstancesData = instancesSnap.exists() ? instancesSnap.val() : {};
     const { compileLeaderboard } = await import('../utils/sortingEngine.js');
     const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
     
@@ -489,6 +493,7 @@ const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
       announcementMinutes: timeGateStatus.announcementMinutes || { phase1: [], phase2: null, phase3: null },
       events: dynamicConfig.events || {}, 
       commitments: commitmentsData, // Transmit the tracking map downstream to protect state cache values
+      activeInstances: activeInstancesData, // Transmit administrative cancellations and operational custom notes
       rankingsByItem,
       requestsByItemDetails,
       fullRoster: fullRosterArray.sort(),

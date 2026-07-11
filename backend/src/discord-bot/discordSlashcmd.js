@@ -1,43 +1,69 @@
 import admin from 'firebase-admin'; // Hooked directly to your backend setup[cite: 1]
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
 
-/**
- * 📊 HELPER: COMPUTE AND COMPILE 14-DAY RSVP MATRIX BOARD
- * Uses clean colon (:) spacing to protect dates and IDs from parsing string splits
- */
+function getUpcomingTargetCalendarDates(targetDayOfWeekIndex) {
+  const calculatedDates = [];
+  const serverTimeContext = new Date();
+  for (let offsetIndex = 0; offsetIndex < 14; offsetIndex++) {
+    const calendarDayFocus = new Date(serverTimeContext.getTime() + (offsetIndex * 24 * 60 * 60 * 1000));
+    if (calendarDayFocus.getDay() === parseInt(targetDayOfWeekIndex, 10)) {
+      calculatedDates.push(calendarDayFocus.toISOString().split('T')[0]);
+    }
+  }
+  return calculatedDates;
+}
+
 async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
   const eventsSnap = await db.ref('settings/configuration/events').once('value'); //[cite: 1]
   const specialSnap = await db.ref('scheduler/special_events').once('value'); //[cite: 2]
 
-  const now = new Date();
+  // Phase 3: Resolve dynamic timezone alignment using configurations from settings path
+  const globalConfigSnap = await db.ref('settings/configuration').once('value');
+  const targetTimezone = globalConfigSnap.exists() ? (globalConfigSnap.val().timezone || 'Asia/Manila') : 'Asia/Manila';
+  
+  const localTimeString = new Date().toLocaleString('en-US', { timeZone: targetTimezone });
+  const now = new Date(localTimeString);
   const allEvents = [];
 
-  // 1. Process Weekly Template Baseline Configuration Nights
-  if (eventsSnap.exists()) {
-    Object.entries(eventsSnap.val()).forEach(([id, ev]) => {
-      if (ev.title) {
-        allEvents.push({ id: `weekly:${id}`, title: ev.title, dateStr: new Date().toISOString().split('T')[0], type: 'Weekly' });
-      }
-    });
+ // Mirror Scheduler.jsx: Calculate the current week's Monday bound dynamically
+  const currentDay = now.getDay();
+  const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + distanceToMonday);
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  for (let i = 0; i < 7; i++) {
+    const currentDayFocus = new Date(monday);
+    currentDayFocus.setDate(monday.getDate() + i);
+    const dStr = `${currentDayFocus.getFullYear()}-${pad(currentDayFocus.getMonth() + 1)}-${pad(currentDayFocus.getDate())}`;
+    const dayOfWeek = currentDayFocus.getDay();
+
+    // 1. Map matching weekly templates for this calendar day
+    if (eventsSnap.exists()) {
+      Object.entries(eventsSnap.val()).forEach(([id, ev]) => {
+        const p3 = ev.phases?.[3];
+        if (p3 && parseInt(p3.dayStart, 10) === dayOfWeek) {
+          allEvents.push({ id: `weekly:${id}`, title: ev.title, dateStr: dStr, type: 'Weekly' });
+        }
+      });
+    }
+
+    // 2. Map matching ad-hoc special events for this calendar day
+    if (specialSnap.exists()) {
+      Object.entries(specialSnap.val()).forEach(([id, ev]) => {
+        if (ev.title && ev.date === dStr) {
+          allEvents.push({ id: `special:${id}`, title: ev.title, dateStr: dStr, type: 'Special' });
+        }
+      });
+    }
   }
 
-  // 2. Process Multi-Day Ad-Hoc Special Events
-  if (specialSnap.exists()) {
-    Object.entries(specialSnap.val()).forEach(([id, ev]) => {
-      if (ev.title && ev.date) {
-        allEvents.push({ id: `special:${id}`, title: ev.title, dateStr: ev.date, type: 'Special' });
-      }
-    });
-  }
-
-  // Paginate options cleanly: 4 events max per page loop to reserve Row 5 for page controls
-  const eventsPerPage = 4;
-  const startIndex = (page - 1) * eventsPerPage;
-  const paginatedEvents = allEvents.slice(startIndex, startIndex + eventsPerPage);
+  const paginatedEvents = allEvents; // Direct 7-day list assignment with no pagination required
 
   const embed = new EmbedBuilder()
-    .setTitle('🗓️ Raid Operations Matrix Board (Next 14 Days)')
-    .setDescription('Review active raid deployments below. Toggle availability tags directly across rows sequentially without menu collapses:')
+    .setTitle('🗓️ Upcoming Week Sign-Up (7 Days)')
+    .setDescription('Review active raid deployments for the current week (Monday - Sunday). Toggle availability tags seamlessly:')
     .setColor('#9333ea')
     .setTimestamp();
 
@@ -47,12 +73,19 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
   for (const ev of paginatedEvents) {
     const rawEventId = ev.id.split(':')[1];
     const compositeKey = `${ev.dateStr}_${rawEventId}`; //[cite: 2]
-    const commitmentSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value'); //[cite: 2]
-    const userStatus = commitmentSnap.exists() ? commitmentSnap.val().status : 'Unanswered'; //[cite: 2]
+    const commitmentSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
+    const userStatus = commitmentSnap.exists() ? commitmentSnap.val().status : 'Unanswered';
 
+    // Phase 2: Fetch specific ad-hoc operational overrides from the normalized tracking path
+    const instanceSnap = await db.ref(`scheduler/active_instances/${compositeKey}`).once('value');
+    const instanceData = instanceSnap.exists() ? instanceSnap.val() : null;
+    const isCancelled = instanceData?.isCancelled === true;
+    const customTitle = instanceData?.title || ev.title;
+
+    const customNotes = instanceData?.notes ? `\n📝 **Notes:** ${instanceData.notes}` : '';
     embed.addFields([{
-      name: `${ev.type === 'Weekly' ? '📅' : '⚔️'} ${ev.title}`,
-      value: `Target Window: \`${ev.dateStr}\` | Current Status: **${userStatus}**`,
+      name: `${isCancelled ? '❌ [CANCELLED]' : (ev.type === 'Weekly' ? '📅' : '⚔️')} ${customTitle}`,
+      value: `Target Window: \`${ev.dateStr}\` | Current Status: **${isCancelled ? 'N/A' : userStatus}**${customNotes}`,
       inline: false
     }]);
 
@@ -70,37 +103,23 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
     // Column Component 2: Confirm Engagement Control
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`matrsvp:confirm:${compositeKey}:${page}`)
+        .setCustomId(`matrsvp:confirm:${compositeKey}:1`)
         .setLabel(userStatus === 'Confirmed' ? '✅ Confirmed' : 'Confirm')
         .setStyle(userStatus === 'Confirmed' ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(isCancelled)
     );
 
-    // Column Component 3: Absence Request Control
+    // Column Component 3: Absence Request Control (Enforcing 'Leave' as absolute SSOT)
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`matrsvp:leave:${compositeKey}:${page}`)
-        .setLabel(userStatus === 'Absent' ? '❌ Absent' : 'Leave')
-        .setStyle(userStatus === 'Absent' ? ButtonStyle.Danger : ButtonStyle.Secondary)
+        .setLabel(userStatus === 'Leave' ? '❌ Leave' : 'Leave')
+        .setStyle(userStatus === 'Leave' ? ButtonStyle.Danger : ButtonStyle.Secondary)
+        .setDisabled(isCancelled)
     );
 
     componentRows.push(row);
   }
-
-  // Row 5: Navigation and Page Context controls
-  const navRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`matnav:1`)
-      .setLabel('Week 1')
-      .setStyle(page === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(page === 1),
-    new ButtonBuilder()
-      .setCustomId(`matnav:2`)
-      .setLabel('Week 2')
-      .setStyle(page === 2 ? ButtonStyle.Primary : ButtonStyle.Secondary)
-      .setDisabled(page === 2 || allEvents.length <= eventsPerPage)
-  );
-
-  componentRows.push(navRow);
 
   return { embeds: [embed], components: componentRows };
 }
@@ -112,6 +131,14 @@ export async function handleSlashCommand(interaction) {
   const { commandName } = interaction;
   const db = admin.database(); // Establish direct Realtime DB handle[cite: 1]
   const snowflakeId = interaction.user.id; // Unique Snowflake key[cite: 1, 2]
+
+  // Phase 3: Global System Lockdown Verification Gate
+  if (['jobchange', 'rolechange', 'event'].includes(commandName)) {
+    const globalConfigSnap = await db.ref('settings/configuration').once('value');
+    if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
+      return await interaction.reply({ content: '🔒 System Notice: The database is currently locked down by an administrative freeze. Modification requests are suspended.', ephemeral: true });
+    }
+  }
 
   // 1. /jobchange Execution
   if (commandName === 'jobchange') {
@@ -179,6 +206,15 @@ export async function handleSlashCommand(interaction) {
 
     const liveData = liveSessionSnap.val();
     let assignedRaidName = liveData.eventName || "Live Raid Operation"; //[cite: 2]
+
+    // Phase 3 Mitigation: Assert cross-reference checks against explicit instance cancellations
+    const currentActiveDateStr = new Date().toISOString().split('T')[0];
+    const activeEventIdField = liveData.eventId || "unknown";
+    const activeInstanceKey = `${currentActiveDateStr}_${activeEventIdField}`;
+    const activeInstanceCheck = await db.ref(`scheduler/active_instances/${activeInstanceKey}`).once('value');
+    if (activeInstanceCheck.exists() && activeInstanceCheck.val().isCancelled === true) {
+      return await interaction.editReply({ content: '🛑 Notice: The scheduled raid operation assigned for tonight has been marked as officially CANCELLED by guild officers.' });
+    }
     let locatedSlot = null;
 
     if (liveData.grids) { //[cite: 2]
@@ -223,6 +259,14 @@ export async function handleComponentInteraction(interaction) {
   const db = admin.database(); //[cite: 1]
   const snowflakeId = interaction.user.id; //[cite: 1, 2]
 
+  // Phase 3: Component Interaction Lockdown Safety Gate
+  if (interaction.customId.startsWith('menu_') || interaction.customId.startsWith('matrsvp:')) {
+    const globalConfigSnap = await db.ref('settings/configuration').once('value');
+    if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
+      return await interaction.reply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', ephemeral: true }).catch(() => {});
+    }
+  }
+
   // A. Chained Job Selection dropdown hooks
   if (interaction.customId === 'menu_job_selection') {
     const selectedJobCode = interaction.values[0];
@@ -254,18 +298,22 @@ export async function handleComponentInteraction(interaction) {
     await interaction.deferUpdate();
     const parts = interaction.customId.split(':');
     const action = parts[1]; // 'confirm' or 'leave'
-    const compositeKey = parts[2];
+    const compositeKey = parts[2]; // Extracts the safe unbroken format: dateStr_eventId
     const currentPage = parseInt(parts[3], 10);
-    const targetStatus = action === 'confirm' ? 'Confirmed' : 'Absent'; //[cite: 2]
+    const targetStatus = action === 'confirm' ? 'Confirmed' : 'Leave';
 
-    const raiderProfileSnap = await db.ref(`auction/members/${snowflakeId}`).once('value'); //[cite: 1]
+    // Guard Rule: Intercept button event mutations if the targeted instance night was cancelled mid-flight
+    const instanceCheck = await db.ref(`scheduler/active_instances/${compositeKey}`).once('value');
+    if (instanceCheck.exists() && instanceCheck.val().isCancelled === true) return;
+
+    const raiderProfileSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
     const displayName = raiderProfileSnap.exists() ? (raiderProfileSnap.val().name || interaction.user.username) : interaction.user.username;
 
     // Persist status updates atomically straight into the targeted composite node path
-    await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).set({ //[cite: 2]
-      displayName: displayName, //[cite: 2]
-      status: targetStatus, //[cite: 2]
-      declaredAt: Date.now() //[cite: 2]
+    await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).set({
+      displayName: displayName,
+      status: targetStatus,
+      declaredAt: Date.now()
     });
 
     // Re-render the matrix instantly to update component visual states
@@ -273,11 +321,5 @@ export async function handleComponentInteraction(interaction) {
     return await interaction.editReply(updatedPayload);
   }
 
-  // D. Dashboard Pagination Controls
-  if (interaction.customId.startsWith('matnav:')) {
-    await interaction.deferUpdate();
-    const targetPage = parseInt(interaction.customId.split(':')[1], 10);
-    const paginatedPayload = await generateRSVPMatrixDashboard(db, snowflakeId, targetPage);
-    return await interaction.editReply(paginatedPayload);
-  }
+  // Dashboard Pagination Controls dropped to maintain clean alignment with the single-week schedule framework
 }
