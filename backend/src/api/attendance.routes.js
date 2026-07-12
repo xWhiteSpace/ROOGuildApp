@@ -4,6 +4,11 @@ import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
 import crypto from 'crypto';
 import { ensureWeekInstances, getWeekInstances, writeCommitment } from '../services/scheduleService.js';
+import {
+  normalizeComposition,
+  compositionForPersist,
+  findCrossTabDuplicates,
+} from '@dynastyguild/shared/compositionTabs';
 
 const router = Router();
 
@@ -151,10 +156,7 @@ router.post('/begin-raid', async (req, res) => {
 
     await db.ref('attendance/active_session').set(sessionPayload);
 
-    // Fetch adjustable polling interval from settings or default strictly to 5 minutes (300000ms)
-    const settingsSnap = await db.ref('settings/configuration').once('value');
-    const pollIntervalMinutes = settingsSnap.exists() ? (parseInt(settingsSnap.val().attendancePollInterval, 10) || 5) : 5;
-    const pollIntervalMs = pollIntervalMinutes * 60 * 1000;
+    const pollIntervalMs = 5 * 60 * 1000; // 5-minute default for the legacy attendance ticker
 
     // Initialize the low-overhead synchronous connection-state polling routine
     if (global.attendanceIntervalTicker) clearInterval(global.attendanceIntervalTicker);
@@ -248,34 +250,20 @@ router.post('/end-raid', async (req, res) => {
     const atomicUpdates = {};
     const sessionHistoryId = db.ref('attendance/history').push().key;
 
-    Object.keys(membersData).forEach(uid => {
-      const userTicksCount = s.userTallies?.[uid] || 0;
-      const calculatedAttendanceRatio = totalPulses > 0 ? (userTicksCount / totalPulses) * 100 : 0;
-      
-      let finalStatusOutcome = "Unexcused Absence";
-      if (compositionMatrix[uid] || calculatedAttendanceRatio >= 75) {
-        finalStatusOutcome = "Selected/Present";
-      } else if (excusedUids.includes(uid)) {
-        finalStatusOutcome = "Excused Absence";
-      }
+    // Collect non-None commitments as a flat uid:status map
+    const commitments = {};
+    if (Array.isArray(excusedUids)) {
+      excusedUids.forEach(uid => { commitments[uid] = 'Leave'; });
+    }
 
-      const historicalLogEntryKey = db.ref(`attendance/history_ledger/${uid}`).push().key;
-      atomicUpdates[`attendance/history_ledger/${uid}/${historicalLogEntryKey}`] = {
-        id: historicalLogEntryKey,
-        date: timestampDate,
-        sessionId: sessionHistoryId,
-        status: finalStatusOutcome,
-        ratio: Math.round(calculatedAttendanceRatio)
-      };
-    });
-
-    // Archive overall layout layout metadata cleanly
+    // Archive overall layout metadata cleanly
     atomicUpdates[`attendance/session_archive/${sessionHistoryId}`] = {
       id: sessionHistoryId,
       date: timestampDate,
       committedBy: user.displayName || user.username,
       totalPulses: totalPulses,
-      finalComposition: compositionMatrix
+      finalComposition: compositionMatrix,
+      commitments,
     };
 
     // 🧼 Sandbox Cleansing: Permanently clear scratchpad nodes
@@ -530,20 +518,37 @@ router.put('/special-events/:id', async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
-// 📁 GET /api/attendance/compositions -> Read Compositions via Admin SDK (Bypasses rules)
+// 📁 GET /api/attendance/compositions -> Read + lazily migrate legacy flat compositions to Grid Tabs
 router.get('/compositions', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
     const db = getDatabase();
     const snap = await db.ref('attendance/compositions').once('value');
-    return res.json({ success: true, compositions: snap.exists() ? snap.val() : {} });
+    const rawMap = snap.exists() ? snap.val() : {};
+    const compositions = {};
+    const migrationWrites = {};
+
+    Object.entries(rawMap).forEach(([configId, raw]) => {
+      const normalized = normalizeComposition(raw, configId);
+      const persistable = compositionForPersist(normalized);
+      compositions[configId] = persistable;
+      if (normalized._migratedFromLegacy) {
+        migrationWrites[`attendance/compositions/${configId}`] = persistable;
+      }
+    });
+
+    if (Object.keys(migrationWrites).length > 0) {
+      await db.ref().update(migrationWrites);
+    }
+
+    return res.json({ success: true, compositions });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 📁 POST /api/attendance/compositions/create -> Create Blank Configuration via Admin SDK (Bypasses rules)
+// 📁 POST /api/attendance/compositions/create -> Create blank Raid Config with one Main Grid Tab
 router.post('/compositions/create', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
@@ -561,33 +566,39 @@ router.post('/compositions/create', async (req, res) => {
     let nextIndex = 1;
     if (compsSnap.exists()) {
       const existingKeys = Object.keys(compsSnap.val());
-  const numericIds = existingKeys.map(k => {
-    const match = k.match(/^raid_(\d+)$/);
-    return match ? parseInt(match[1], 10) : 0;
-  });
-  nextIndex = Math.max(...numericIds, 0) + 1;
-}
+      const numericIds = existingKeys.map(k => {
+        const match = k.match(/^raid_(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      nextIndex = Math.max(...numericIds, 0) + 1;
+    }
 
-const sequentialConfigId = `raid_${String(nextIndex).padStart(3, '0')}`;
-    const targetConfigRef = db.ref(`attendance/compositions/${sequentialConfigId}`);
-    
+    const sequentialConfigId = `raid_${String(nextIndex).padStart(3, '0')}`;
+    const tabId = 'tab_001';
     const blankPayload = {
       id: sequentialConfigId,
       title: `Raid Setup Configuration ${nextIndex}`,
       lastUpdated: Date.now(),
       updatedBy: user.displayName || user.username || 'Officer',
       gridTopology: { columns: 8, rows: 5 },
-      slots_allocation: {}
+      tabs: {
+        [tabId]: {
+          id: tabId,
+          name: 'Main',
+          slots_allocation: {},
+        },
+      },
+      tabOrder: [tabId],
     };
 
-    await targetConfigRef.set(blankPayload);
+    await db.ref(`attendance/compositions/${sequentialConfigId}`).set(blankPayload);
     return res.json({ success: true, id: sequentialConfigId });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 💾 POST /api/attendance/compositions/save -> Save Configuration Matrix via Admin SDK (Bypasses rules)
+// 💾 POST /api/attendance/compositions/save -> Save Raid Config + all Grid Tabs
 router.post('/compositions/save', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
@@ -601,23 +612,74 @@ router.post('/compositions/save', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
-    const { configId, title, gridMatrix } = req.body;
+    const { configId, title, tabs, tabOrder, gridMatrix, activeTabId } = req.body;
     if (!configId) return res.status(400).json({ success: false, error: 'Missing configId parameter.' });
 
-    await db.ref(`attendance/compositions/${configId}`).update({
-      title: title,
+    const existingSnap = await db.ref(`attendance/compositions/${configId}`).once('value');
+    const existingNormalized = normalizeComposition(existingSnap.exists() ? existingSnap.val() : null, configId);
+
+    let nextTabs;
+    let nextOrder;
+
+    if (tabs && typeof tabs === 'object') {
+      nextTabs = tabs;
+      nextOrder = Array.isArray(tabOrder) && tabOrder.length ? tabOrder : Object.keys(tabs);
+    } else if (gridMatrix && activeTabId) {
+      // Legacy single-matrix save targeting one tab
+      nextTabs = {
+        ...existingNormalized.tabs,
+        [activeTabId]: {
+          ...(existingNormalized.tabs[activeTabId] || { id: activeTabId, name: 'Main' }),
+          id: activeTabId,
+          name: existingNormalized.tabs[activeTabId]?.name || 'Main',
+          slots_allocation: gridMatrix,
+        },
+      };
+      nextOrder = existingNormalized.tabOrder;
+    } else if (gridMatrix) {
+      const firstTabId = existingNormalized.tabOrder[0] || 'tab_001';
+      nextTabs = {
+        ...existingNormalized.tabs,
+        [firstTabId]: {
+          ...(existingNormalized.tabs[firstTabId] || { id: firstTabId, name: 'Main' }),
+          id: firstTabId,
+          name: existingNormalized.tabs[firstTabId]?.name || 'Main',
+          slots_allocation: gridMatrix,
+        },
+      };
+      nextOrder = existingNormalized.tabOrder.length ? existingNormalized.tabOrder : [firstTabId];
+    } else {
+      return res.status(400).json({ success: false, error: 'Missing tabs or gridMatrix payload.' });
+    }
+
+    const duplicates = findCrossTabDuplicates(nextTabs);
+    if (duplicates.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cross-tab duplicate members detected (${duplicates.length}). Each member may appear in only one Grid Tab.`,
+        duplicates,
+      });
+    }
+
+    const persistable = compositionForPersist({
+      ...existingNormalized,
+      title: title ?? existingNormalized.title,
       lastUpdated: Date.now(),
       updatedBy: user.displayName || user.username || 'Officer',
-      slots_allocation: gridMatrix
+      tabs: nextTabs,
+      tabOrder: nextOrder,
     });
 
-    return res.json({ success: true });
+    // Replace document so legacy root slots_allocation is removed
+    await db.ref(`attendance/compositions/${configId}`).set(persistable);
+
+    return res.json({ success: true, composition: persistable });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// 🖨️ POST /api/attendance/compositions/duplicate -> Duplicate Matrix via Admin SDK (Bypasses rules)
+// 🖨️ POST /api/attendance/compositions/duplicate -> Duplicate full config including Grid Tabs
 router.post('/compositions/duplicate', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
@@ -631,33 +693,53 @@ router.post('/compositions/duplicate', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
-    const { sourceId, cleanAllocationPayload } = req.body;
+    const { sourceId, cleanAllocationPayload, cleanTabsPayload } = req.body;
     if (!sourceId) return res.status(400).json({ success: false, error: 'Missing sourceId parameter.' });
 
     const sourceSnap = await db.ref(`attendance/compositions/${sourceId}`).once('value');
     if (!sourceSnap.exists()) return res.status(404).json({ success: false, error: 'Source config not found' });
 
-    const sourceConfig = sourceSnap.val();
+    const sourceNormalized = normalizeComposition(sourceSnap.val(), sourceId);
     const compsSnap = await db.ref('attendance/compositions').once('value');
     let nextIndex = 1;
     if (compsSnap.exists()) {
       const existingKeys = Object.keys(compsSnap.val());
-  const numericIds = existingKeys.map(k => {
-    const match = k.match(/^raid_(\d+)$/);
-    return match ? parseInt(match[1], 10) : 0;
-  });
-  nextIndex = Math.max(...numericIds, 0) + 1;
-}
+      const numericIds = existingKeys.map(k => {
+        const match = k.match(/^raid_(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      nextIndex = Math.max(...numericIds, 0) + 1;
+    }
 
-const sequentialConfigId = `raid_${String(nextIndex).padStart(3, '0')}`;
-    const duplicatePayload = {
+    const sequentialConfigId = `raid_${String(nextIndex).padStart(3, '0')}`;
+
+    let tabs = sourceNormalized.tabs;
+    let tabOrder = sourceNormalized.tabOrder;
+
+    if (cleanTabsPayload && typeof cleanTabsPayload === 'object') {
+      tabs = cleanTabsPayload;
+      tabOrder = Object.keys(cleanTabsPayload);
+    } else if (cleanAllocationPayload) {
+      // Legacy: apply cleaned allocation to first tab only
+      const firstTabId = tabOrder[0] || 'tab_001';
+      tabs = {
+        ...tabs,
+        [firstTabId]: {
+          ...(tabs[firstTabId] || { id: firstTabId, name: 'Main' }),
+          slots_allocation: cleanAllocationPayload,
+        },
+      };
+    }
+
+    const duplicatePayload = compositionForPersist({
       id: sequentialConfigId,
-      title: `${sourceConfig.title || 'Untitled'} (Copy)`,
+      title: `${sourceNormalized.title || 'Untitled'} (Copy)`,
       lastUpdated: Date.now(),
       updatedBy: user.displayName || user.username || 'Officer',
-      gridTopology: { columns: 8, rows: 5 },
-      slots_allocation: cleanAllocationPayload || {}
-    };
+      gridTopology: sourceNormalized.gridTopology || { columns: 8, rows: 5 },
+      tabs,
+      tabOrder,
+    });
 
     await db.ref(`attendance/compositions/${sequentialConfigId}`).set(duplicatePayload);
     return res.json({ success: true, id: sequentialConfigId });

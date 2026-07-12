@@ -9,6 +9,7 @@
     "deploy-commands": "node src/discord-bot/deploy.js"
   },
   "dependencies": {
+    "@dynastyguild/shared": "*",
     "cors": "^2.8.5",
     "discord.js": "^14.15.0",
     "dotenv": "^16.4.3",

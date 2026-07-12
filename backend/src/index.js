@@ -15,7 +15,7 @@ import authRoutes from './auth/discordOAuth.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
-import liveRaidRoutes from './api/liveRaid.routes.js';
+import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid.routes.js';
 
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
@@ -131,6 +131,11 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
   console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
+
+  // Re-arm in-memory monitoring ticker if a live session was left Active across restart
+  resumeLiveRaidMonitoringIfNeeded().catch((err) => {
+    console.error('[live-raid] resume on boot failed:', err.message);
+  });
 
   // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
   // Execution tracking has been centralized into the drift-proof engine in client.js.

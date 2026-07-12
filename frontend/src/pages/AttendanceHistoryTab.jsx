@@ -13,15 +13,16 @@ import {
   MicOff,
   CheckCircle,
   XCircle,
-  MinusCircle
+  MinusCircle,
+  Trash2
 } from 'lucide-react';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
 export default function AttendanceHistoryTab({ user }) {
+  const isOfficer = user?.isOfficer === true;
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState({});
-  const [ledger, setLedger] = useState({});
   const [members, setMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   
@@ -64,12 +65,38 @@ export default function AttendanceHistoryTab({ user }) {
       const data = await res.json();
       if (data.success) {
         setSessions(data.sessions || {});
-        setLedger(data.ledger || {});
       }
     } catch (err) {
       console.error("Error loading attendance history logs:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async (e, sessionId) => {
+    e.stopPropagation();
+    const session = sessions[sessionId];
+    if (!window.confirm(`Delete session "${session?.eventTitle || 'Raid'}" (${session?.eventDate})?\nThis cannot be undone.`)) return;
+    try {
+      const headers = getRequestHeaders();
+      const res = await fetch(`${backendUrl}/api/live-raid/history/${sessionId}`, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSessions((prev) => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+        if (selectedSessionId === sessionId) setSelectedSessionId(null);
+      } else {
+        alert(`Failed to delete: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`);
     }
   };
 
@@ -117,12 +144,7 @@ export default function AttendanceHistoryTab({ user }) {
       const userTicks = targetSession.userTallies?.[uid] || 0;
       const totalPulses = targetSession.totalPulses || 0;
 
-      // Scan ledger for historical commitment string cached during checkout
-      let commitment = 'None';
-      if (ledger[uid]) {
-        const matchingLog = Object.values(ledger[uid]).find(l => l.sessionId === selectedSessionId);
-        if (matchingLog) commitment = matchingLog.commitmentStatus || 'None';
-      }
+      const commitment = targetSession.commitments?.[uid] || 'None';
 
       const pts = calculatePoints(commitment, userTicks, totalPulses);
 
@@ -138,7 +160,7 @@ export default function AttendanceHistoryTab({ user }) {
     });
 
     return rows.sort((a, b) => b.points.total - a.points.total || a.displayName.localeCompare(b.displayName));
-  }, [selectedSessionId, sessions, members, ledger]);
+  }, [selectedSessionId, sessions, members]);
 
   const sessionPlayerTally = useMemo(() => {
     const total = sessionRosterTableRows.length;
@@ -169,11 +191,7 @@ export default function AttendanceHistoryTab({ user }) {
       const userTicks = s.userTallies?.[selectedMemberUid] || 0;
       const totalPulses = s.totalPulses || 0;
 
-      let commitment = 'None';
-      if (ledger[selectedMemberUid]) {
-        const matchingLog = Object.values(ledger[selectedMemberUid]).find(l => l.sessionId === s.id);
-        if (matchingLog) commitment = matchingLog.commitmentStatus || 'None';
-      }
+      const commitment = s.commitments?.[selectedMemberUid] || 'None';
 
       const pts = calculatePoints(commitment, userTicks, totalPulses);
 
@@ -187,7 +205,7 @@ export default function AttendanceHistoryTab({ user }) {
 
     // Slice to show exclusively the last 8 runs for readable graph footprints
     return timeline.slice(-8);
-  }, [selectedMemberUid, sessions, ledger]);
+  }, [selectedMemberUid, sessions]);
 
   // Native Pure-SVG Path Generator for the Line Graph
   const svgGraphPath = useMemo(() => {
@@ -265,14 +283,26 @@ export default function AttendanceHistoryTab({ user }) {
                       <div
                         key={s.id}
                         onClick={() => setSelectedSessionId(s.id)}
-                        className={`p-3.5 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-slate-900 border-indigo-500 shadow' : 'bg-slate-950/40 border-slate-900 hover:border-slate-800'}`}
+                        className={`p-3.5 rounded-xl border transition-all cursor-pointer group ${isSelected ? 'bg-slate-900 border-indigo-500 shadow' : 'bg-slate-950/40 border-slate-900 hover:border-slate-800'}`}
                       >
-                        <div className="flex justify-between items-center">
-                          <div className="truncate">
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="truncate min-w-0">
                             <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 block">{s.eventDate}</span>
                             <h4 className="text-xs font-black uppercase text-slate-200 tracking-wider truncate mt-0.5">{s.eventTitle || 'Raid'}</h4>
                           </div>
-                          <ChevronRight size={14} className="text-slate-600 shrink-0" />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isOfficer && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteSession(e, s.id)}
+                                className="p-1 rounded-lg text-slate-700 hover:text-rose-400 hover:bg-rose-950/40 transition-colors opacity-0 group-hover:opacity-100"
+                                title="Delete session"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                            <ChevronRight size={14} className="text-slate-600" />
+                          </div>
                         </div>
                       </div>
                     );

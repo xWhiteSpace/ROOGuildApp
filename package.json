@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "packages/shared"
   ],
   "scripts": {
     "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",

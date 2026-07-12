@@ -17,7 +17,12 @@ import {
   ChevronRight,
   Info,
   Ban,
-  Lock
+  Lock,
+  Eraser,
+  Users,
+  ShieldOff,
+  Flag,
+  Crown
 } from 'lucide-react';
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
@@ -25,6 +30,16 @@ import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { formatGuildDate, DEFAULT_TZ } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
+import {
+  normalizeComposition,
+  normalizeCompositionsMap,
+  hydrateMatrixFromAllocation,
+  buildBlankGridMatrix,
+  buildAssignedLocationsAcrossTabs,
+  bindMemberAcrossTabs,
+  nextTabId,
+  isSlotCoordKey,
+} from '@dynastyguild/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -39,7 +54,6 @@ export default function RaidPartyTab({ user }) {
   const [commitments, setCommitments] = useState({});
   const [guildTimezone, setGuildTimezone] = useState(DEFAULT_TZ);
   const [historySessions, setHistorySessions] = useState({});
-  const [historyLedger, setHistoryLedger] = useState({});
 
   // --- Workspace Planning States ---
   const [selectedConfigId, setSelectedConfigId] = useState('');
@@ -47,8 +61,12 @@ export default function RaidPartyTab({ user }) {
 
   // --- Local Staging Mirror States ---
   const [localTitle, setLocalTitle] = useState('');
-  const [localGridMatrix, setLocalGridMatrix] = useState({}); 
+  const [localTabs, setLocalTabs] = useState({});
+  const [tabOrder, setTabOrder] = useState([]);
+  const [activeTabId, setActiveTabId] = useState('');
+  const [localGridMatrix, setLocalGridMatrix] = useState({});
   const [isDirty, setIsDirty] = useState(false);
+  const [renamingTabId, setRenamingTabId] = useState(null);
 
   // --- Dynamic Grid Dimensions (Stateful, max 10x10) ---
   const [columnsCount, setColumnsCount] = useState(8);
@@ -105,9 +123,10 @@ export default function RaidPartyTab({ user }) {
       const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
-        setCompositions(compsData.compositions || {});
-        if (compsData.compositions && Object.keys(compsData.compositions).length > 0 && !selectedConfigId) {
-          const firstKey = Object.keys(compsData.compositions)[0];
+        const normalized = normalizeCompositionsMap(compsData.compositions || {});
+        setCompositions(normalized);
+        if (Object.keys(normalized).length > 0 && !selectedConfigId) {
+          const firstKey = Object.keys(normalized)[0];
           setSelectedConfigId(firstKey);
         }
       }
@@ -116,7 +135,6 @@ export default function RaidPartyTab({ user }) {
       const histData = await histRes.json();
       if (histData.success) {
         setHistorySessions(histData.sessions || {});
-        setHistoryLedger(histData.ledger || {});
       }
     } catch (err) {
       console.error("Workspace load error:", err);
@@ -134,7 +152,7 @@ export default function RaidPartyTab({ user }) {
       const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
-        setCompositions(compsData.compositions || {});
+        setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
       }
     } catch (err) {
       console.error(err);
@@ -167,7 +185,7 @@ export default function RaidPartyTab({ user }) {
       await navigator.clipboard.write([
         new ClipboardItem({ "image/png": imagePromise })
       ]);
-      alert("📋 SUCCESS: Raid roster matrix snapshot copied straight to your clipboard!");
+      alert(`📋 SUCCESS: Grid Tab "${localTabs[activeTabId]?.name || 'Main'}" snapshot copied to clipboard!`);
     } catch (err) {
       console.error("Clipboard copy exception:", err);
       alert(`❌ ERROR: Copy failed.\nReason: ${err.name || 'Error'}: ${err.message || err}`);
@@ -181,51 +199,122 @@ export default function RaidPartyTab({ user }) {
 
   // --- 2. Load Selected Config Into Local Mirror Cache ---
   const [prevConfigId, setPrevConfigId] = useState('');
+
+  const applyTabMatrix = (tabs, tabId) => {
+    const tab = tabs[tabId];
+    const { matrix, columnsCount: cols, rowsCount: rows } = hydrateMatrixFromAllocation(
+      tab?.slots_allocation || {}
+    );
+    setLocalGridMatrix(matrix);
+    setColumnsCount(cols);
+    setRowsCount(rows);
+  };
+
+  const syncMatrixIntoTabs = (tabs, tabId, matrix, cols, rows) => {
+    if (!tabId || !tabs[tabId]) return tabs;
+    return {
+      ...tabs,
+      [tabId]: {
+        ...tabs[tabId],
+        slots_allocation: {
+          ...matrix,
+          meta_columnsCount: cols,
+          meta_rowsCount: rows,
+        },
+      },
+    };
+  };
   
   useEffect(() => {
     if (selectedConfigId && compositions[selectedConfigId]) {
-      const activeConfig = compositions[selectedConfigId];
-      const rawAllocation = activeConfig.slots_allocation || {};
-      
+      const activeConfig = normalizeComposition(compositions[selectedConfigId], selectedConfigId);
+
       if (selectedConfigId !== prevConfigId) {
         setLocalTitle(activeConfig.title || '');
         setPrevConfigId(selectedConfigId);
+        setLocalTabs(activeConfig.tabs);
+        setTabOrder(activeConfig.tabOrder);
+        const firstTab = activeConfig.tabOrder[0] || Object.keys(activeConfig.tabs)[0];
+        setActiveTabId(firstTab);
+        applyTabMatrix(activeConfig.tabs, firstTab);
+        setIsDirty(false);
+      } else if (!isDirty) {
+        // Refresh from server only when clean
+        setLocalTitle(activeConfig.title || '');
+        setLocalTabs(activeConfig.tabs);
+        setTabOrder(activeConfig.tabOrder);
+        const keepTab = activeConfig.tabs[activeTabId]
+          ? activeTabId
+          : (activeConfig.tabOrder[0] || Object.keys(activeConfig.tabs)[0]);
+        setActiveTabId(keepTab);
+        applyTabMatrix(activeConfig.tabs, keepTab);
       }
-
-      // Extract fluid grid dimension limits dynamically from stored metadata
-      const loadedCols = parseInt(rawAllocation["meta_columnsCount"], 10) || 8;
-      const loadedRows = parseInt(rawAllocation["meta_rowsCount"], 10) || 5;
-      setColumnsCount(loadedCols);
-      setRowsCount(loadedRows);
-      
-      const normalizedMatrix = {};
-      // Preserve layout metadata parameters securely
-      normalizedMatrix["meta_columnsCount"] = loadedCols;
-      normalizedMatrix["meta_rowsCount"] = loadedRows;
-
-      for (let c = 1; c <= 10; c++) {
-        const partyNameKey = `party_name_${c}`;
-        normalizedMatrix[partyNameKey] = rawAllocation[partyNameKey] || `Party ${c}`;
-        for (let r = 1; r <= 10; r++) {
-          const coordKey = `${c}-${r}`;
-          const loadedSlot = rawAllocation[coordKey];
-          normalizedMatrix[coordKey] = {
-            userId: loadedSlot?.userId || '',
-            roleLock: loadedSlot?.roleLock || ''
-          };
-        }
-      }
-      setLocalGridMatrix(normalizedMatrix);
-      setIsDirty(false);
     } else {
       setLocalTitle('');
+      setLocalTabs({});
+      setTabOrder([]);
+      setActiveTabId('');
       setLocalGridMatrix({});
       setColumnsCount(8);
       setRowsCount(5);
       setIsDirty(false);
     }
     setActivePopover(null);
-  }, [selectedConfigId, compositions]);
+  }, [selectedConfigId, compositions, isDirty]);
+
+  const handleSelectGridTab = (tabId) => {
+    if (!tabId || tabId === activeTabId) return;
+    const flushed = syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount);
+    setLocalTabs(flushed);
+    setActiveTabId(tabId);
+    applyTabMatrix(flushed, tabId);
+    setActivePopover(null);
+    setRenamingTabId(null);
+  };
+
+  const handleAddGridTab = () => {
+    if (!isOfficer || !selectedConfigId) return;
+    const flushed = syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount);
+    const newId = nextTabId(flushed);
+    const blank = buildBlankGridMatrix(8, 5);
+    const nextTabs = {
+      ...flushed,
+      [newId]: { id: newId, name: `Tab ${Object.keys(flushed).length + 1}`, slots_allocation: blank },
+    };
+    const nextOrder = [...(tabOrder.length ? tabOrder : Object.keys(flushed)), newId];
+    setLocalTabs(nextTabs);
+    setTabOrder(nextOrder);
+    setActiveTabId(newId);
+    applyTabMatrix(nextTabs, newId);
+    setIsDirty(true);
+  };
+
+  const handleRenameGridTab = (tabId, name) => {
+    setLocalTabs((prev) => ({
+      ...prev,
+      [tabId]: { ...prev[tabId], name: name || 'Untitled Tab' },
+    }));
+    setIsDirty(true);
+  };
+
+  const handleDeleteGridTab = (tabId) => {
+    if (!isOfficer) return;
+    if (tabOrder.length <= 1) {
+      alert('A Raid Config must keep at least one Grid Tab.');
+      return;
+    }
+    if (!window.confirm(`Delete Grid Tab "${localTabs[tabId]?.name || tabId}"?`)) return;
+    const flushed = syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount);
+    const nextTabs = { ...flushed };
+    delete nextTabs[tabId];
+    const nextOrder = tabOrder.filter((id) => id !== tabId);
+    const nextActive = activeTabId === tabId ? nextOrder[0] : activeTabId;
+    setLocalTabs(nextTabs);
+    setTabOrder(nextOrder);
+    setActiveTabId(nextActive);
+    applyTabMatrix(nextTabs, nextActive);
+    setIsDirty(true);
+  };
 
   // --- 3. Compute Roster Status Pools via Simulation Date ---
   const categorizedRosterPools = useMemo(() => {
@@ -233,12 +322,10 @@ export default function RaidPartyTab({ user }) {
     const uncommitted = [];
     const leave = [];
 
-    const assignedUserLocationsMap = {};
-    Object.entries(localGridMatrix).forEach(([coord, slot]) => {
-      if (slot && slot.userId) {
-        assignedUserLocationsMap[slot.userId] = coord;
-      }
-    });
+    const flushedTabs = activeTabId
+      ? syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount)
+      : localTabs;
+    const assignedMap = buildAssignedLocationsAcrossTabs(flushedTabs, tabOrder);
 
     const dateSignaturesMap = {};
     Object.entries(commitments).forEach(([compositeKey, signsSubNode]) => {
@@ -250,7 +337,7 @@ export default function RaidPartyTab({ user }) {
     });
 
     Object.entries(members).forEach(([uid, profile]) => {
-      if (profile.isRaidRoster !== true) return; 
+      if (profile.isRaidRoster !== true) return;
 
       const nameMatch = profile.displayName || 'Unknown';
       if (searchQuery.trim() && !nameMatch.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -258,13 +345,14 @@ export default function RaidPartyTab({ user }) {
       }
 
       const calendarStatus = dateSignaturesMap[uid];
-      const assignedCellCoord = assignedUserLocationsMap[uid];
-      
+      const assigned = assignedMap[uid];
+
       let locationBadge = '';
-      if (assignedCellCoord) {
-        const [col, row] = assignedCellCoord.split('-');
-        const customPartyTitle = localGridMatrix[`party_name_${col}`] || `P${col}`;
-        locationBadge = `${customPartyTitle} - S${row}`;
+      if (assigned) {
+        const [col, row] = assigned.coordKey.split('-');
+        const tabAlloc = flushedTabs[assigned.tabId]?.slots_allocation || {};
+        const customPartyTitle = tabAlloc[`party_name_${col}`] || `P${col}`;
+        locationBadge = `${assigned.tabName} · ${customPartyTitle}-S${row}`;
       }
 
       const enrichedRow = {
@@ -276,12 +364,11 @@ export default function RaidPartyTab({ user }) {
       };
 
       if (calendarStatus === 'Leave') {
-        // Only show in the sidebar pool if they haven't been placed on the grid matrix yet
-        if (!assignedCellCoord) leave.push(enrichedRow);
+        if (!assigned) leave.push(enrichedRow);
       } else if (calendarStatus === 'Confirmed') {
-        if (!assignedCellCoord) standby.push(enrichedRow);
+        if (!assigned) standby.push(enrichedRow);
       } else {
-        if (!assignedCellCoord) uncommitted.push(enrichedRow);
+        if (!assigned) uncommitted.push(enrichedRow);
       }
     });
 
@@ -291,7 +378,7 @@ export default function RaidPartyTab({ user }) {
       uncommitted: uncommitted.sort(alphaSort),
       leave: leave.sort(alphaSort)
     };
-  }, [members, commitments, simulationDate, localGridMatrix, searchQuery]);
+  }, [members, commitments, simulationDate, localGridMatrix, localTabs, tabOrder, activeTabId, columnsCount, rowsCount, searchQuery]);
 
   // --- 4. Administrative Configuration Command Handlers ---
   const handleCreateBlankConfig = async () => {
@@ -321,13 +408,18 @@ export default function RaidPartyTab({ user }) {
   const handleDuplicateConfig = async (targetId) => {
     if (!isOfficer || !compositions[targetId]) return;
     try {
-      const sourceConfig = compositions[targetId];
+      const sourceConfig = normalizeComposition(compositions[targetId], targetId);
       const blacklistedLeaveUids = new Set(categorizedRosterPools.leave.map(u => u.uid));
-      const cleanAllocationPayload = {};
+      const cleanTabsPayload = {};
 
-      if (sourceConfig.slots_allocation) {
-        Object.entries(sourceConfig.slots_allocation).forEach(([coord, slot]) => {
-          if (coord.startsWith("meta_") || coord.startsWith("party_name_")) {
+      Object.entries(sourceConfig.tabs || {}).forEach(([tabId, tab]) => {
+        const cleanAllocationPayload = {};
+        Object.entries(tab.slots_allocation || {}).forEach(([coord, slot]) => {
+          if (coord.startsWith('meta_') || coord.startsWith('party_name_')) {
+            cleanAllocationPayload[coord] = slot;
+            return;
+          }
+          if (!isSlotCoordKey(coord)) {
             cleanAllocationPayload[coord] = slot;
             return;
           }
@@ -338,7 +430,12 @@ export default function RaidPartyTab({ user }) {
             roleLock: slot?.roleLock || ''
           };
         });
-      }
+        cleanTabsPayload[tabId] = {
+          id: tabId,
+          name: tab.name || 'Untitled Tab',
+          slots_allocation: cleanAllocationPayload,
+        };
+      });
 
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const headers = { 'Content-Type': 'application/json' };
@@ -347,7 +444,7 @@ export default function RaidPartyTab({ user }) {
       const res = await fetch(`${backendUrl}/api/attendance/compositions/duplicate`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ sourceId: targetId, cleanAllocationPayload }),
+        body: JSON.stringify({ sourceId: targetId, cleanTabsPayload }),
         credentials: 'include'
       });
       const data = await res.json();
@@ -392,17 +489,13 @@ export default function RaidPartyTab({ user }) {
   };
 
   const handleCommitLocalMirrorToFirebase = async () => {
-    if (!selectedConfigId || !isOfficer) return;
+    if (!selectedConfigId || !isOfficer || !activeTabId) return;
     try {
       const savedUserSession = localStorage.getItem('dynasty_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      const finalizedMatrix = {
-        ...localGridMatrix,
-        "meta_columnsCount": columnsCount,
-        "meta_rowsCount": rowsCount
-      };
+      const flushedTabs = syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount);
 
       const res = await fetch(`${backendUrl}/api/attendance/compositions/save`, {
         method: 'POST',
@@ -410,14 +503,16 @@ export default function RaidPartyTab({ user }) {
         body: JSON.stringify({
           configId: selectedConfigId,
           title: localTitle,
-          gridMatrix: finalizedMatrix
+          tabs: flushedTabs,
+          tabOrder,
         }),
         credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
+        setLocalTabs(flushedTabs);
         setIsDirty(false);
-        alert("💾 SUCCESS: Composition layout batch saved and committed to Firebase Realtime Database.");
+        alert("💾 SUCCESS: Raid Config + Grid Tabs saved.");
         await refreshCompositionsOnly();
       } else {
         alert(data.error || "Batch save transaction failed.");
@@ -429,52 +524,117 @@ export default function RaidPartyTab({ user }) {
 
   // --- 5. Custom Party and Grid Dimension Modifiers ---
   const handleUpdatePartyName = (colIdx, value) => {
-    setLocalGridMatrix(prev => ({
-      ...prev,
-      [`party_name_${colIdx}`]: value
-    }));
+    setLocalGridMatrix(prev => {
+      const next = { ...prev, [`party_name_${colIdx}`]: value };
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
     setIsDirty(true);
   };
 
   const handleResizeGridTopology = (dimension, action) => {
     if (!isOfficer) return;
+    let nextCols = columnsCount;
+    let nextRows = rowsCount;
     if (dimension === 'cols') {
-      const nextCols = action === 'add' ? Math.min(10, columnsCount + 1) : Math.max(1, columnsCount - 1);
+      nextCols = action === 'add' ? Math.min(10, columnsCount + 1) : Math.max(1, columnsCount - 1);
       setColumnsCount(nextCols);
     } else {
-      const nextRows = action === 'add' ? Math.min(10, rowsCount + 1) : Math.max(1, rowsCount - 1);
+      nextRows = action === 'add' ? Math.min(10, rowsCount + 1) : Math.max(1, rowsCount - 1);
       setRowsCount(nextRows);
     }
+    setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, localGridMatrix, nextCols, nextRows));
     setIsDirty(true);
   };
 
   const handleToggleCellRoleLock = (coordKey, jobCode) => {
-    setLocalGridMatrix(prev => ({
-      ...prev,
-      [coordKey]: {
-        ...prev[coordKey],
-        roleLock: jobCode
-      }
-    }));
+    setLocalGridMatrix(prev => {
+      const next = {
+        ...prev,
+        [coordKey]: {
+          ...prev[coordKey],
+          roleLock: jobCode
+        }
+      };
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
+    setIsDirty(true);
+    setActivePopover(null);
+  };
+
+  const handleSetPartyLeader = (coordKey) => {
+    const isAlready = localGridMatrix[coordKey]?.isPartyLeader === true;
+    setLocalGridMatrix((prev) => {
+      const next = { ...prev };
+      // Clear leader from every slot first (only 1 leader per tab)
+      Object.keys(next).forEach((k) => {
+        if (next[k]?.isPartyLeader) next[k] = { ...next[k], isPartyLeader: false };
+      });
+      // If this slot wasn't the leader, crown it
+      if (!isAlready) next[coordKey] = { ...next[coordKey], isPartyLeader: true };
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
     setIsDirty(true);
     setActivePopover(null);
   };
 
   const handleBindMemberToCell = (coordKey, uid) => {
-    setLocalGridMatrix(prev => {
-      const updated = { ...prev };
-      if (uid) {
-        Object.keys(updated).forEach(k => {
-          if (updated[k] && updated[k].userId === uid) {
-            updated[k] = { ...updated[k], userId: '' };
-          }
-        });
-      }
-      updated[coordKey] = {
-        ...updated[coordKey],
-        userId: uid
-      };
-      return updated;
+    const flushed = syncMatrixIntoTabs(localTabs, activeTabId, localGridMatrix, columnsCount, rowsCount);
+    const nextTabs = bindMemberAcrossTabs(flushed, activeTabId, coordKey, uid);
+    setLocalTabs(nextTabs);
+    applyTabMatrix(nextTabs, activeTabId);
+    setIsDirty(true);
+    setActivePopover(null);
+  };
+
+  const handleClearGridMembers = () => {
+    if (!isOfficer || !activeTabId) return;
+    if (!window.confirm('Clear all member assignments on this Grid Tab? Role locks stay.')) return;
+    setLocalGridMatrix((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSlotCoordKey(k) && next[k]) {
+          next[k] = { ...next[k], userId: '' };
+        }
+      });
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
+    setIsDirty(true);
+    setActivePopover(null);
+  };
+
+  const handleClearGridJobLocks = () => {
+    if (!isOfficer || !activeTabId) return;
+    if (!window.confirm('Clear all job class role locks on this Grid Tab? Members stay assigned.')) return;
+    setLocalGridMatrix((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSlotCoordKey(k) && next[k]) {
+          next[k] = { ...next[k], roleLock: '' };
+        }
+      });
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
+    setIsDirty(true);
+    setActivePopover(null);
+  };
+
+  const handleClearGridAll = () => {
+    if (!isOfficer || !activeTabId) return;
+    if (!window.confirm('Clear ALL members and job locks on this Grid Tab?')) return;
+    setLocalGridMatrix((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (isSlotCoordKey(k) && next[k]) {
+          next[k] = { userId: '', roleLock: '' };
+        }
+      });
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
     });
     setIsDirty(true);
     setActivePopover(null);
@@ -500,11 +660,15 @@ export default function RaidPartyTab({ user }) {
           const srcUid = parsed.userId;
           const destUid = localGridMatrix[destCoordKey]?.userId || '';
 
-          setLocalGridMatrix(prev => ({
-            ...prev,
-            [srcCoord]: { ...prev[srcCoord], userId: destUid },
-            [destCoordKey]: { ...prev[destCoordKey], userId: srcUid }
-          }));
+          setLocalGridMatrix(prev => {
+            const next = {
+              ...prev,
+              [srcCoord]: { ...prev[srcCoord], userId: destUid },
+              [destCoordKey]: { ...prev[destCoordKey], userId: srcUid }
+            };
+            setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+            return next;
+          });
           setIsDirty(true);
         }
       } else {
@@ -556,7 +720,7 @@ export default function RaidPartyTab({ user }) {
               disabled={!isOfficer}
               onChange={(e) => { setLocalTitle(e.target.value); setIsDirty(true); }}
               className="mt-1 bg-transparent text-lg font-black text-slate-100 outline-none border-b border-dashed border-slate-700 focus:border-indigo-500 font-sans transition-all py-0.5 w-full lg:w-80"
-              placeholder="Edit Configuration Name..."
+              placeholder="Edit Raid Config Name..."
             />
           ) : (
             <h1 className="text-lg font-bold tracking-wider text-slate-400 uppercase mt-1">No Configuration Selected</h1>
@@ -590,13 +754,48 @@ export default function RaidPartyTab({ user }) {
               className="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-xs text-center text-indigo-400 font-bold font-mono outline-none cursor-pointer"
             />
           </div>
-          {selectedConfigId && (
+          {selectedConfigId && isOfficer && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleClearGridMembers}
+                className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-amber-700/60 p-2 px-2.5 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 transition cursor-pointer select-none"
+                title="Clear member assignments only (role locks kept)"
+              >
+                <Users size={12} /> Clear Members
+              </button>
+              <button
+                type="button"
+                onClick={handleClearGridJobLocks}
+                className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-sky-700/60 p-2 px-2.5 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-sky-300 transition cursor-pointer select-none"
+                title="Clear job class role locks only (members kept)"
+              >
+                <ShieldOff size={12} /> Clear Job Class
+              </button>
+              <button
+                type="button"
+                onClick={handleClearGridAll}
+                className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-rose-700/60 p-2 px-2.5 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-rose-300 transition cursor-pointer select-none"
+                title="Clear members and job locks on this Grid Tab"
+              >
+                <Eraser size={12} /> Clear All
+              </button>
               <button
                 type="button"
                 onClick={handleCopyRosterImage}
                 className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 p-2 px-3 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-white transition cursor-pointer select-none"
               >
-                <Copy size={13} /> Copy Roster Image
+                <Copy size={13} /> Copy Tab Image
+              </button>
+            </div>
+          )}
+          {selectedConfigId && !isOfficer && (
+              <button
+                type="button"
+                onClick={handleCopyRosterImage}
+                className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-slate-700 p-2 px-3 shadow-inner rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-white transition cursor-pointer select-none"
+              >
+                <Copy size={13} /> Copy Tab Image
               </button>
             )}
         </div>
@@ -630,7 +829,7 @@ export default function RaidPartyTab({ user }) {
                 >
                   <ChevronLeft size={14} />
                 </button>
-                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Configurations</span>
+                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Raid Configs</span>
               </div>
               {isOfficer && (
                 <button 
@@ -665,7 +864,9 @@ export default function RaidPartyTab({ user }) {
                         <h4 className={`text-xs font-bold truncate ${isSelected ? 'text-indigo-400' : 'text-slate-300'}`}>
                           {comp.title || 'Untitled Configuration'}
                         </h4>
-                        <span className="text-[9px] font-mono text-slate-600 block mt-0.5">{id}</span>
+                        <span className="text-[9px] font-mono text-slate-600 block mt-0.5">
+                          {id} · {(comp.tabOrder || Object.keys(comp.tabs || {})).length} tab{(comp.tabOrder || Object.keys(comp.tabs || {})).length === 1 ? '' : 's'}
+                        </span>
                       </div>
 
                       {/* CONTEXT ACTIONS CONTROLLER */}
@@ -716,6 +917,77 @@ export default function RaidPartyTab({ user }) {
 
         {/* ================= COLUMN 2: CENTER GRID CANVAS PANEL ================= */}
         <div className={`${centerColSpanClass} border border-slate-800 bg-slate-950/60 rounded-2xl p-4 shadow-xl flex flex-col justify-between min-h-[45rem] h-auto pb-8 overflow-visible transition-all duration-300`}>
+          {selectedConfigId && tabOrder.length > 0 && (
+            <div className="flex items-center gap-1.5 mb-3 flex-wrap select-none border-b border-slate-900 pb-3">
+              <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-600 mr-1">Grid Tabs</span>
+              {tabOrder.map((tabId) => {
+                const tab = localTabs[tabId];
+                const isActive = activeTabId === tabId;
+                const isRenaming = renamingTabId === tabId;
+                return (
+                  <div
+                    key={tabId}
+                    className={`group flex items-center gap-1 rounded-lg border px-2 py-1 transition-all ${
+                      isActive
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    {isRenaming && isOfficer ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        defaultValue={tab?.name || ''}
+                        onBlur={(e) => {
+                          handleRenameGridTab(tabId, e.target.value.trim());
+                          setRenamingTabId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleRenameGridTab(tabId, e.target.value.trim());
+                            setRenamingTabId(null);
+                          }
+                          if (e.key === 'Escape') setRenamingTabId(null);
+                        }}
+                        className="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[11px] font-bold text-slate-200 outline-none w-28"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectGridTab(tabId)}
+                        onDoubleClick={() => { if (isOfficer) setRenamingTabId(tabId); }}
+                        className="text-[11px] font-bold font-sans truncate max-w-[8rem] cursor-pointer"
+                        title="Click to switch · Double-click to rename"
+                      >
+                        {tab?.name || tabId}
+                      </button>
+                    )}
+                    {isOfficer && tabOrder.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteGridTab(tabId); }}
+                        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-400 transition p-0.5 cursor-pointer"
+                        title="Delete Grid Tab"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {isOfficer && (
+                <button
+                  type="button"
+                  onClick={handleAddGridTab}
+                  className="flex items-center gap-1 rounded-lg border border-dashed border-slate-700 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition cursor-pointer"
+                  title="Add Grid Tab"
+                >
+                  <Plus size={12} /> Tab
+                </button>
+              )}
+            </div>
+          )}
           <div className="overflow-x-auto overflow-visible scrollbar-thin pr-1 flex-1">
             {selectedConfigId ? (
               <div 
@@ -723,15 +995,17 @@ export default function RaidPartyTab({ user }) {
                 className="grid gap-2 pb-12 overflow-visible p-2"
                 style={{ gridTemplateColumns: `repeat(${columnsCount}, minmax(130px, 1fr))` }}
               >
-                {/* Overarching Raid Title Banner Card (Spans across all active columns for image capture) */}
+                {/* Banner: Grid Tab name (primary for image /myparty), config as subtitle */}
                 <div 
                   className="col-span-full bg-slate-950/80 border border-slate-900 rounded-xl p-3 mb-2 flex items-center justify-center select-none shadow-sm"
                   style={{ gridColumn: '1 / -1' }}
                 >
                   <div className="text-center">
-                    <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase block">Raid Composition Lineup</span>
+                    <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase block">
+                      {localTitle || 'Untitled Config'}
+                    </span>
                     <h2 className="text-sm font-black tracking-wide text-indigo-400 font-sans mt-0.5 uppercase">
-                      {localTitle || 'Untitled Configuration'}
+                      {localTabs[activeTabId]?.name || 'Main'}
                     </h2>
                   </div>
                 </div>
@@ -771,12 +1045,13 @@ export default function RaidPartyTab({ user }) {
                     const lockedJobObj = slotData.roleLock ? jobsCatalog[slotData.roleLock] : null;
                     
                     const isCellRoleLocked = !!slotData.roleLock;
+                    const isPartyLeader = !!slotData.isPartyLeader;
                     const cellColorTheme = lockedJobObj?.colorTheme || '#1e293b';
 
                     const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                     const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
                     const trendTimeline = slotData.userId
-                      ? buildMemberTrendTimeline(historySessions, historyLedger, slotData.userId, 8)
+                      ? buildMemberTrendTimeline(historySessions, slotData.userId, 8)
                       : [];
                     const isDragHovered = dragHoveredCoord === coordKey;
 
@@ -895,6 +1170,7 @@ export default function RaidPartyTab({ user }) {
                               jobObj={jobsCatalog[allocatedUserObj.jobCode]}
                               currentStatus={cellAttendanceMap[slotData.userId]}
                               isVoiceActive={allocatedUserObj?.isVoiceActive ?? (cellAttendanceMap[slotData.userId] === 'Confirmed')}
+                              isPartyLeader={isPartyLeader}
                             />
                           ) : (
                             <div className="h-full flex flex-col items-center justify-center space-y-1 text-slate-700 group-hover:text-slate-500 transition-colors py-2">
@@ -925,7 +1201,22 @@ export default function RaidPartyTab({ user }) {
                           <>
                             <div className="fixed inset-0 z-[90]" onClick={() => setActivePopover(null)} />
                             <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-[100] w-56 font-sans space-y-1.5 animate-fadeIn text-left`}>
-                              <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1">Pre-Assign Job Role</div>
+                              {/* Party Leader section */}
+                              <button
+                                type="button"
+                                disabled={!slotData.userId}
+                                onClick={() => handleSetPartyLeader(coordKey)}
+                                className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                                  isPartyLeader
+                                    ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                    : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
+                                }`}
+                              >
+                                <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
+                                {isPartyLeader ? 'Remove Leader' : 'Set as Leader'}
+                                {isPartyLeader && <Crown size={10} className="ml-auto text-red-400" />}
+                              </button>
+                              <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1 pt-0.5">Pre-Assign Job Role</div>
                               <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">
                                 <button
                                   type="button"
