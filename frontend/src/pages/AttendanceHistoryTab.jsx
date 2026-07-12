@@ -16,6 +16,7 @@ import {
   MinusCircle,
   Trash2
 } from 'lucide-react';
+import { calculatePoints } from '../utils/attendanceScore';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -103,21 +104,6 @@ export default function AttendanceHistoryTab({ user }) {
   useEffect(() => {
     loadHistoryData();
   }, [user]);
-
-  // Point System Core Formula Compiler
-  const calculatePoints = (commitment, presentTicks, totalPulses) => {
-    let calPt = (commitment === 'Confirmed' || commitment === 'Confirm' || commitment === 'Leave') ? 1.0 : 0.0;
-    let discPt = presentTicks > 0 ? 1.0 : 0.0;
-    let durationPt = totalPulses > 0 ? (presentTicks / totalPulses) * 1.0 : 0.0;
-    
-    const total = parseFloat((calPt + discPt + durationPt).toFixed(2));
-    return {
-      calPt,
-      discPt,
-      durationPt,
-      total: total > 3.0 ? 3.0 : total
-    };
-  };
 
   // --- VIEW A: RAID LOG HISTORY (BY EVENT/DATE) ---
   const sortedSessionsList = useMemo(() => {
