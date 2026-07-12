@@ -18,7 +18,7 @@ export function calculateAttendancePoints(commitment, presentTicks, totalPulses)
 /**
  * Build chronological trend points (last N lockouts) for one member.
  */
-export function buildMemberTrendTimeline(sessions, ledger, memberUid, limit = 8) {
+export function buildMemberTrendTimeline(sessions, memberUid, limit = 8) {
   if (!memberUid || !sessions) return [];
   const chronological = Object.values(sessions).sort((a, b) => (a.endedAt || 0) - (b.endedAt || 0));
   const timeline = [];
@@ -26,12 +26,7 @@ export function buildMemberTrendTimeline(sessions, ledger, memberUid, limit = 8)
   chronological.forEach((s) => {
     const userTicks = s.userTallies?.[memberUid] || s.userTallies?.[String(memberUid)] || 0;
     const totalPulses = s.totalPulses || 0;
-    let commitment = 'None';
-    const memberLedger = ledger?.[memberUid] || ledger?.[String(memberUid)];
-    if (memberLedger) {
-      const matchingLog = Object.values(memberLedger).find((l) => l.sessionId === s.id);
-      if (matchingLog) commitment = matchingLog.commitmentStatus || 'None';
-    }
+    const commitment = s.commitments?.[memberUid] || s.commitments?.[String(memberUid)] || 'None';
     const points = calculateAttendancePoints(commitment, userTicks, totalPulses);
     timeline.push({
       sessionId: s.id,

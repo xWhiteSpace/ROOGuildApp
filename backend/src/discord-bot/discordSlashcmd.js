@@ -143,10 +143,22 @@ export async function handleSlashCommand(interaction) {
     const liveSessionSnap = await db.ref('attendance/live_session').once('value'); //[cite: 2]
 
     if (!liveSessionSnap.exists()) {
-      return await interaction.editReply({ content: '❌ There is no active Live Raid session currently running on the dashboard operational paths.' });
+      return await interaction.editReply({
+        content:
+          '❌ No active Live Raid session found.\n' +
+          'Open the **Live Raid** tab on the dashboard and click **Start Live Raid Deck** first.\n' +
+          '_(Raid Party planning alone does not create a live session.)_'
+      });
     }
 
     const liveData = liveSessionSnap.val();
+    if (!liveData || liveData.status !== 'Active') {
+      return await interaction.editReply({
+        content:
+          '❌ Live Raid data exists but is not marked **Active**.\n' +
+          'End/cancel any stuck session on the dashboard, then start a fresh Live Raid.'
+      });
+    }
 
     // Phase 3 Mitigation: Assert cross-reference checks against explicit instance cancellations
     const currentActiveDateStr = new Date().toISOString().split('T')[0];
@@ -158,27 +170,43 @@ export async function handleSlashCommand(interaction) {
     }
     let locatedSlot = null;
     let raidConfigName = null;
+    let partyLeaderName = null;
 
     if (liveData.grids) {
       for (const [gridId, gridObj] of Object.entries(liveData.grids)) {
         if (gridObj.slots_allocation) {
+          // Scan this tab for the requesting user AND the party leader simultaneously
+          let foundInThisTab = false;
+          let tabLeaderUid = null;
+
           for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) {
-            if (slotData?.userId === snowflakeId) {
+            if (!slotData) continue;
+            if (slotData.userId === snowflakeId) {
               const parts = coordKey.split(/[-_]/);
               const partyNum = parseInt(parts[0], 10);
               const slotNum = parseInt(parts[1], 10);
-              if (!Number.isNaN(partyNum) && !Number.isNaN(slotNum)) {
-                locatedSlot = `P${partyNum}-S${slotNum}`;
-              } else {
-                locatedSlot = coordKey;
-              }
-              // Prefer the Raid Party composition title (config name), not the calendar event title
-              raidConfigName = gridObj.title || gridObj.name || gridId;
-              break;
+              locatedSlot = (!Number.isNaN(partyNum) && !Number.isNaN(slotNum))
+                ? `P${partyNum}-S${slotNum}`
+                : coordKey;
+              raidConfigName = gridObj.name || gridObj.title || gridId;
+              foundInThisTab = true;
+            }
+            if (slotData.isPartyLeader && slotData.userId) {
+              tabLeaderUid = slotData.userId;
             }
           }
+
+          if (foundInThisTab) {
+            // Resolve the leader's display name from the members list
+            if (tabLeaderUid) {
+              const leaderSnap = await db.ref(`auction/members/${tabLeaderUid}`).once('value');
+              if (leaderSnap.exists()) {
+                partyLeaderName = leaderSnap.val().displayName || leaderSnap.val().username || tabLeaderUid;
+              }
+            }
+            break;
+          }
         }
-        if (locatedSlot) break;
       }
     }
 
@@ -186,13 +214,19 @@ export async function handleSlashCommand(interaction) {
       return await interaction.editReply({ content: 'ℹ️ Your Snowflake ID is not found allocated inside the active Live Raid Grid Roster slots right now.' });
     }
 
+    const embedFields = [
+      { name: 'Grid Tab', value: `\`${raidConfigName || 'Untitled Tab'}\``, inline: true },
+      { name: 'Roster Placement Slot', value: `**${locatedSlot}**`, inline: true },
+    ];
+
+    if (partyLeaderName) {
+      embedFields.push({ name: '🚩 Party Leader', value: `**${partyLeaderName}**`, inline: false });
+    }
+
     const embed = new EmbedBuilder()
       .setTitle('🛡️ Active Live Deployment Slot Matrix')
       .setColor('#9333ea')
-      .addFields([
-        { name: 'Raid Name', value: `\`${raidConfigName || 'Untitled Config'}\``, inline: true },
-        { name: 'Roster Placement Slot', value: `**${locatedSlot}**`, inline: true }
-      ])
+      .addFields(embedFields)
       .setTimestamp();
 
     return await interaction.editReply({ content: null, embeds: [embed] });

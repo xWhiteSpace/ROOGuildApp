@@ -24,15 +24,23 @@ import {
   Radio,
   RefreshCw,
   Ban,
-  Lock
+  Lock,
+  Eraser,
+  Users,
+  ShieldOff,
+  Flag,
+  Crown,
+  Timer,
+  Square
 } from 'lucide-react';
 
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
-import { upcomingDatesForWeekday, DEFAULT_TZ } from '../utils/guildTime';
+import { upcomingDatesForWeekday, DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
+import { normalizeCompositionsMap, isSlotCoordKey } from '@dynastyguild/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -45,7 +53,6 @@ export default function LiveRaidTab({ user }) {
   const [localStep, setLocalStep] = useState(1); // Local wizard step when session is null
   const [guildTimezone, setGuildTimezone] = useState(DEFAULT_TZ);
   const [historySessions, setHistorySessions] = useState({});
-  const [historyLedger, setHistoryLedger] = useState({});
 
   // --- Master Registries Loaded from Settings ---
   const [eventsCatalog, setEventsCatalog] = useState({});
@@ -54,19 +61,19 @@ export default function LiveRaidTab({ user }) {
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
   const [warRoomsCatalog, setWarRoomsCatalog] = useState({});
-  const [maxConfigsLimit, setMaxConfigsLimit] = useState(5);
   const [maxWarRoomsLimit, setMaxWarRoomsLimit] = useState(2);
 
   // --- Step 2 Setup Forms States ---
   const [selectedEventKey, setSelectedEventKey] = useState('');
   const [selectedEventDate, setSelectedEventDate] = useState('');
-  const [selectedConfigIds, setSelectedConfigIds] = useState([]);
+  const [selectedConfigId, setSelectedConfigId] = useState('');
   const [selectedWarRooms, setSelectedWarRooms] = useState([]);
 
   // --- Step 3 Execution mirror states ---
   const [activeTabConfigId, setActiveTabConfigId] = useState('');
   const [localGrids, setLocalGrids] = useState({});
   const [isDirty, setIsDirty] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced' | 'saving' | 'error'
   const [liveVoiceUids, setLiveVoiceUids] = useState([]); // Array of UIDs in voice rooms currently
   
   // UI Panels states
@@ -77,8 +84,132 @@ export default function LiveRaidTab({ user }) {
   const [openAccordion, setOpenAccordion] = useState({ standby: true, uncommitted: true, leave: false });
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  // Tick once per second so monitoring start/end can light up green when reached
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  // --- Monitoring Schedule (set during Step 2 config, applied on launch) ---
+  const [monitoringStartTime, setMonitoringStartTime] = useState('');
+  const [monitoringEndTime, setMonitoringEndTime] = useState('');
+  const [monitoringPollInterval, setMonitoringPollInterval] = useState(5);
+  const monitoringStartTimeRef = useRef('');
+  const monitoringEndTimeRef = useRef('');
+  const monitoringPollIntervalRef = useRef(5);
+  const monitoringStartInputRef = useRef(null);
+  const monitoringEndInputRef = useRef(null);
+
+  const setMonitoringStart = (val) => {
+    const next = val || '';
+    monitoringStartTimeRef.current = next;
+    setMonitoringStartTime(next);
+  };
+  const setMonitoringEnd = (val) => {
+    const next = val || '';
+    monitoringEndTimeRef.current = next;
+    setMonitoringEndTime(next);
+  };
+  const setMonitoringPoll = (val) => {
+    const next = Number(val) || 5;
+    monitoringPollIntervalRef.current = next;
+    setMonitoringPollInterval(next);
+  };
 
   const gridRef = useRef(null);
+  const isDirtyRef = useRef(false);
+  const persistInFlightRef = useRef(false);
+  const localGridsRef = useRef({});
+  const sessionRef = useRef(null);
+  const partyNamePersistTimer = useRef(null);
+
+  const markDirty = (value) => {
+    isDirtyRef.current = value;
+    setIsDirty(value);
+  };
+
+  // Monitoring SSOT: use the SAME timezone as the server-time clock (DEFAULT_TZ), never browser-local or settings drift
+  const msToTimeInput = (ms) => formatGuildTimeHhMm(ms, DEFAULT_TZ);
+
+  /**
+   * Auto-format typed digits into HH:MM.
+   * 2000 → 20:00, 1924 → 19:24, 930 → 9:30 (pads to 09:30 on blur)
+   */
+  const formatTimeDigits = (raw) => {
+    const digits = String(raw || '').replace(/\D/g, '').slice(0, 4);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return digits;
+    if (digits.length === 3) return `${digits[0]}:${digits.slice(1)}`;
+    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+  };
+
+  // Normalize to strict HH:MM — accepts "20:00", "2000", "9:30", "930"
+  const normalizeTimeValue = (raw) => {
+    if (!raw || typeof raw !== 'string') return '';
+    const trimmed = raw.trim();
+    const withColon = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{2})?$/);
+    if (withColon) {
+      const hh = Math.min(23, parseInt(withColon[1], 10));
+      const mm = Math.min(59, parseInt(withColon[2], 10));
+      if (Number.isNaN(hh) || Number.isNaN(mm)) return '';
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.length === 3) {
+      // 930 → 09:30
+      const hh = Math.min(23, parseInt(digits.slice(0, 1), 10));
+      const mm = Math.min(59, parseInt(digits.slice(1), 10));
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+    if (digits.length === 4) {
+      const hh = Math.min(23, parseInt(digits.slice(0, 2), 10));
+      const mm = Math.min(59, parseInt(digits.slice(2), 10));
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
+    return '';
+  };
+
+  const handleMonitoringTimeChange = (setter) => (e) => {
+    setter(formatTimeDigits(e.target.value));
+  };
+
+  const handleMonitoringTimeBlur = (setter, current) => () => {
+    const normalized = normalizeTimeValue(current);
+    if (normalized) setter(normalized);
+  };
+
+  // Hydrate Step 2 form from an active live session.
+  // Important: if session has no monitoring yet, do NOT wipe draft times the officer typed.
+  const hydrateSetupFromSession = (s) => {
+    if (!s) return;
+    if (s.eventKey) setSelectedEventKey(s.eventKey);
+    if (s.eventDate) setSelectedEventDate(s.eventDate);
+    if (s.selectedConfigId) setSelectedConfigId(s.selectedConfigId);
+    if (Array.isArray(s.selectedWarRoomIds) && s.selectedWarRoomIds.length > 0) {
+      setSelectedWarRooms(s.selectedWarRoomIds);
+    }
+    if (s.monitoringStartsAt) {
+      setMonitoringStart(msToTimeInput(s.monitoringStartsAt));
+      setMonitoringEnd(msToTimeInput(s.monitoringEndsAt));
+      setMonitoringPoll(Number(s.pollIntervalMinutes) || 5);
+    }
+  };
+
+  useEffect(() => {
+    localGridsRef.current = localGrids;
+  }, [localGrids]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  // Live clock tick for monitoring status lights (only while deck is open)
+  useEffect(() => {
+    if (session == null || localStep !== 3) return undefined;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [session, localStep]);
+
+  useEffect(() => () => {
+    if (partyNamePersistTimer.current) clearTimeout(partyNamePersistTimer.current);
+  }, []);
 
   // Unified Request Headers
   const getRequestHeaders = () => {
@@ -88,6 +219,74 @@ export default function LiveRaidTab({ user }) {
       headers['x-user-profile'] = encodeURIComponent(savedUserSession);
     }
     return headers;
+  };
+
+  /** Optimistic local grids → Firebase. Blocks poll overwrite while in flight. */
+  const persistLiveGrids = async (grids, { quiet = true } = {}) => {
+    const activeSession = sessionRef.current;
+    if (!activeSession || !isOfficer) return false;
+
+    persistInFlightRef.current = true;
+    setSyncStatus('saving');
+    try {
+      const headers = getRequestHeaders();
+      const nextVersion = (activeSession.version || 1) + 1;
+      const res = await fetch(`${backendUrl}/api/live-raid/update`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          session: {
+            grids,
+            version: nextVersion,
+          },
+        }),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success) {
+        markDirty(false);
+        setSyncStatus('synced');
+        setSession((prev) => (prev ? { ...prev, grids, version: nextVersion } : prev));
+        if (!quiet) {
+          // Force-sync recovery path only
+        }
+        return true;
+      }
+      markDirty(true);
+      setSyncStatus('error');
+      if (!quiet) alert(data.error || 'Failed to sync live grid.');
+      return false;
+    } catch (err) {
+      console.error(err);
+      markDirty(true);
+      setSyncStatus('error');
+      if (!quiet) alert('Network error syncing live grid.');
+      return false;
+    } finally {
+      persistInFlightRef.current = false;
+    }
+  };
+
+  const applyLocalGridsAndPersist = async (updater, { debounceMs = 0 } = {}) => {
+    // Compute snapshot synchronously from ref BEFORE touching React state,
+    // so it's available to persistLiveGrids regardless of render scheduling.
+    const snapshot = typeof updater === 'function'
+      ? updater(localGridsRef.current)
+      : updater;
+    localGridsRef.current = snapshot;
+    setLocalGrids(snapshot);
+    markDirty(true);
+    setActivePopover(null);
+
+    if (debounceMs > 0) {
+      if (partyNamePersistTimer.current) clearTimeout(partyNamePersistTimer.current);
+      partyNamePersistTimer.current = setTimeout(() => {
+        persistLiveGrids(localGridsRef.current);
+      }, debounceMs);
+      return;
+    }
+
+    await persistLiveGrids(snapshot);
   };
 
   // Compute Layout spans matching RaidPartyTab
@@ -113,7 +312,6 @@ export default function LiveRaidTab({ user }) {
         setJobsCatalog(settingsData.config.jobs || {});
         setEventsCatalog(settingsData.config.events || {});
         setWarRoomsCatalog(settingsData.config.warRooms || {});
-        setMaxConfigsLimit(settingsData.config.liveRaidMaxConfigs || 5);
         setMaxWarRoomsLimit(settingsData.config.liveRaidMaxWarRooms || 2);
         if (settingsData.config.timezone) setGuildTimezone(settingsData.config.timezone);
       }
@@ -121,14 +319,13 @@ export default function LiveRaidTab({ user }) {
       const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
-        setCompositions(compsData.compositions || {});
+        setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
       }
 
       const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
       const histData = await histRes.json();
       if (histData.success) {
         setHistorySessions(histData.sessions || {});
-        setHistoryLedger(histData.ledger || {});
       }
     } catch (err) {
       console.error("Error loading master setup lists:", err);
@@ -147,12 +344,17 @@ export default function LiveRaidTab({ user }) {
       const data = await res.json();
       if (data.success && data.session) {
         setSession(data.session);
+        if (isInitial) {
+          setLocalStep(3); // only snap to Step 3 on first load, not on every poll
+          hydrateSetupFromSession(data.session);
+        }
         if (Array.isArray(data.session.lastVoicePoll?.presentUids)) {
           setLiveVoiceUids(data.session.lastVoicePoll.presentUids);
         }
-        // Sync local grid changes copy if not editing locally or initial load
-        if (isInitial || !isDirty) {
+        // Sync local grids from server only when no local edit / write is in flight
+        if (isInitial || (!isDirtyRef.current && !persistInFlightRef.current)) {
           setLocalGrids(data.session.grids || {});
+          localGridsRef.current = data.session.grids || {};
           if (data.session.selectedConfigIds?.length > 0 && !activeTabConfigId) {
             setActiveTabConfigId(data.session.selectedConfigIds[0]);
           }
@@ -344,17 +546,8 @@ export default function LiveRaidTab({ user }) {
   // -------------------------------------------------------------
   // administrative session handlers
   // -------------------------------------------------------------
-  const handleToggleConfigSelection = (id) => {
-    setSelectedConfigIds(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(c => c !== id);
-      }
-      if (prev.length >= maxConfigsLimit) {
-        alert(`Maximum selectable Configurations reached: ${maxConfigsLimit}`);
-        return prev;
-      }
-      return [...prev, id];
-    });
+  const handleSelectRaidConfig = (id) => {
+    setSelectedConfigId((prev) => (prev === id ? '' : id));
   };
 
   const handleToggleWarRoomSelection = (roomId) => {
@@ -370,44 +563,171 @@ export default function LiveRaidTab({ user }) {
     });
   };
 
+  // Helper: apply monitoring schedule to the current live session
+  const applyMonitoringSchedule = async (headers) => {
+    const startTime = normalizeTimeValue(
+      monitoringStartInputRef.current?.value
+      || monitoringStartTimeRef.current
+      || monitoringStartTime
+    );
+    const endTime = normalizeTimeValue(
+      monitoringEndInputRef.current?.value
+      || monitoringEndTimeRef.current
+      || monitoringEndTime
+    );
+    const pollMins = monitoringPollIntervalRef.current || monitoringPollInterval || 5;
+    if (!startTime || !endTime) return null;
+    const monitoringStartsAt = timeStringToTodayMs(startTime);
+    const monitoringEndsAt = timeStringToTodayMs(endTime);
+    if (monitoringEndsAt <= monitoringStartsAt) {
+      throw new Error('End time must be after start time.');
+    }
+    const mRes = await fetch(`${backendUrl}/api/live-raid/set-monitoring-time`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes: pollMins }),
+      credentials: 'include'
+    });
+    const mData = await mRes.json();
+    if (!mData.success) throw new Error(mData.error || 'Failed to set monitoring schedule.');
+    return {
+      monitoringStartsAt: mData.monitoringStartsAt ?? monitoringStartsAt,
+      monitoringEndsAt: mData.monitoringEndsAt ?? monitoringEndsAt,
+      pollIntervalMinutes: mData.pollIntervalMinutes ?? pollMins,
+    };
+  };
+
+  const buildMonitoringCreatePayload = () => {
+    const startTime = normalizeTimeValue(
+      monitoringStartInputRef.current?.value
+      || monitoringStartTimeRef.current
+      || monitoringStartTime
+    );
+    const endTime = normalizeTimeValue(
+      monitoringEndInputRef.current?.value
+      || monitoringEndTimeRef.current
+      || monitoringEndTime
+    );
+    const pollMins = monitoringPollIntervalRef.current || monitoringPollInterval || 5;
+    if (!startTime || !endTime) return {};
+    const monitoringStartsAt = timeStringToTodayMs(startTime);
+    const monitoringEndsAt = timeStringToTodayMs(endTime);
+    if (monitoringEndsAt <= monitoringStartsAt) return { error: 'End time must be after start time.' };
+    return {
+      monitoringStartsAt,
+      monitoringEndsAt,
+      pollIntervalMinutes: pollMins,
+    };
+  };
+
   const handleLaunchLiveSession = async () => {
     if (!selectedEventKey || !selectedEventDate) {
       return alert("Select target event cycle date.");
     }
-    if (selectedConfigIds.length === 0) {
-      return alert("Select at least one Raid Configuration.");
+    if (!selectedConfigId) {
+      return alert("Select one Raid Config (its Grid Tabs will load as live tabs).");
     }
     if (selectedWarRooms.length === 0) {
       return alert("Select at least one Discord War Room.");
     }
 
-    try {
-      const headers = getRequestHeaders();
-      const bodyPayload = {
-        eventKey: selectedEventKey,
-        eventDate: selectedEventDate,
-        eventTitle: eventsCatalog[selectedEventKey]?.title || 'Raid Session',
-        selectedConfigIds,
-        selectedWarRooms: selectedWarRooms
-      };
+    const startTime = normalizeTimeValue(
+      monitoringStartInputRef.current?.value
+      || monitoringStartTimeRef.current
+      || monitoringStartTime
+    );
+    const endTime = normalizeTimeValue(
+      monitoringEndInputRef.current?.value
+      || monitoringEndTimeRef.current
+      || monitoringEndTime
+    );
 
+    if (startTime && !endTime) {
+      return alert("Please set an End Time for the monitoring schedule.");
+    }
+    if (!startTime && endTime) {
+      return alert("Please set a Start Time for the monitoring schedule.");
+    }
+
+    const headers = getRequestHeaders();
+    const monitoringPayload = buildMonitoringCreatePayload();
+    if (monitoringPayload.error) return alert(monitoringPayload.error);
+
+    // ── EDIT MODE: session already running ────────────────────────────────────
+    if (session !== null) {
+      const configChanged = selectedConfigId !== session.selectedConfigId;
+
+      if (!configChanged) {
+        // Non-destructive path — only monitoring may have changed; update it and return to Step 3
+        try {
+          if (!startTime || !endTime) {
+            return alert('Set both Start Time and End Time before applying monitoring.\n\nUse 24h format, e.g. 20:00 and 22:00.');
+          }
+          const monUpdate = await applyMonitoringSchedule(headers);
+          if (monUpdate) {
+            const next = { ...(sessionRef.current || session), ...monUpdate };
+            setSession(next);
+            hydrateSetupFromSession(next);
+            alert(
+              `Monitoring saved to Firebase:\n` +
+              `attendance/live_session\n\n` +
+              `monitoringStartsAt: ${monUpdate.monitoringStartsAt}\n` +
+              `monitoringEndsAt: ${monUpdate.monitoringEndsAt}\n` +
+              `pollIntervalMinutes: ${monUpdate.pollIntervalMinutes}`
+            );
+          }
+          setLocalStep(3);
+        } catch (err) {
+          alert(err.message || 'Failed to update monitoring schedule.');
+        }
+        return;
+      }
+
+      // Destructive path — Raid Config changed; confirm before cancelling the active session
+      const ok = window.confirm(
+        "Changing the Raid Config will cancel the active live session and start a fresh one.\n\nAll current grid assignments and pulse data will be lost.\n\nProceed?"
+      );
+      if (!ok) return;
+
+      // Cancel the existing session first
+      try {
+        const cancelRes = await fetch(`${backendUrl}/api/live-raid/cancel`, { method: 'POST', headers, credentials: 'include' });
+        const cancelData = await cancelRes.json();
+        if (!cancelData.success) return alert(cancelData.error || "Failed to cancel the active session.");
+      } catch (err) {
+        return alert("Network error cancelling session: " + err.message);
+      }
+    }
+
+    // ── CREATE (fresh or after cancel) — monitoring written atomically with session ──
+    try {
       const res = await fetch(`${backendUrl}/api/live-raid/create`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(bodyPayload),
+        body: JSON.stringify({
+          eventKey: selectedEventKey,
+          eventDate: selectedEventDate,
+          eventTitle: eventsCatalog[selectedEventKey]?.title || 'Raid Session',
+          selectedConfigId,
+          selectedWarRooms,
+          ...monitoringPayload,
+        }),
         credentials: 'include'
       });
       const data = await res.json();
-      if (data.success) {
-        setSession(data.session);
-        setLocalGrids(data.session.grids || {});
-        if (data.session.selectedConfigIds?.length > 0) {
-          setActiveTabConfigId(data.session.selectedConfigIds[0]);
-        }
-        setIsDirty(false);
-      } else {
-        alert(data.error || "Failed to create Live Session.");
+      if (!data.success) return alert(data.error || "Failed to create Live Session.");
+
+      const sessionPayload = data.session;
+      setSession(sessionPayload);
+      setLocalGrids(sessionPayload.grids || {});
+      localGridsRef.current = sessionPayload.grids || {};
+      if (sessionPayload.selectedConfigIds?.length > 0) {
+        setActiveTabConfigId(sessionPayload.selectedConfigIds[0]);
       }
+      hydrateSetupFromSession(sessionPayload);
+      markDirty(false);
+      setSyncStatus('synced');
+      setLocalStep(3);
     } catch (err) {
       console.error(err);
       alert("Network transmission failure launching raid.");
@@ -416,31 +736,17 @@ export default function LiveRaidTab({ user }) {
 
   const handleCommitLiveGridsChanges = async () => {
     if (!session || !isOfficer) return;
-    try {
-      const headers = getRequestHeaders();
-      const res = await fetch(`${backendUrl}/api/live-raid/update`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          session: {
-            grids: localGrids,
-            version: (session.version || 1) + 1
-          }
-        }),
-        credentials: 'include'
-      });
-      const data = await res.json();
-      if (data.success) {
-        setIsDirty(false);
-        alert("💾 SUCCESS: Session snapshots committed to Firebase Realtime Database.");
-        fetchActiveLiveSession(false);
-      } else {
-        alert(data.error || "Failed to sync updates.");
-      }
-    } catch (err) {
-      console.error(err);
+    const ok = await persistLiveGrids(localGridsRef.current, { quiet: false });
+    if (ok) {
+      alert('Live grid force-synced to Firebase.');
     }
   };
+
+  // Monitoring SSOT: HH:MM is interpreted in the SAME timezone as the server-time clock (DEFAULT_TZ)
+  const timeStringToTodayMs = (timeStr) => {
+    return guildWallTimeToUtcMs(timeStr, DEFAULT_TZ);
+  };
+
 
  const handleCancelLiveRaid = async () => {
     if (!session || !isOfficer) return;
@@ -453,7 +759,9 @@ export default function LiveRaidTab({ user }) {
       if (data.success) {
         setSession(null);
         setLocalGrids({});
-        setIsDirty(false);
+        localGridsRef.current = {};
+        markDirty(false);
+        setSyncStatus('synced');
         setLocalStep(1);
       } else {
         alert(data.error || "Failed to terminate operation cache.");
@@ -463,25 +771,9 @@ export default function LiveRaidTab({ user }) {
     }
   };
 
-  const handleBackToSetup = async () => {
-    if (!session || !isOfficer) return;
-    if (!window.confirm("ATTENTION:\nReturning to setup will clear the current real-time operations session dashboard. Do you want to return to configuration configuration panels?")) return;
-
-    try {
-      const headers = getRequestHeaders();
-      const res = await fetch(`${backendUrl}/api/live-raid/cancel`, { method: 'POST', headers, credentials: 'include' });
-      const data = await res.json();
-      if (data.success) {
-        setSession(null);
-        setLocalGrids({});
-        setIsDirty(false);
-        setLocalStep(2);
-      } else {
-        alert(data.error || "Failed to reset session context.");
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  const handleBackToSetup = () => {
+    hydrateSetupFromSession(sessionRef.current || session);
+    setLocalStep(2);
   };
 
   const handleEndLiveRaid = async () => {
@@ -505,7 +797,9 @@ export default function LiveRaidTab({ user }) {
         alert("Raid finalized and archived to history ledger.");
         setSession(null);
         setLocalGrids({});
-        setIsDirty(false);
+        localGridsRef.current = {};
+        markDirty(false);
+        setSyncStatus('synced');
         setLocalStep(1);
       } else {
         alert(data.error || "Failed to terminate raid session.");
@@ -521,7 +815,7 @@ export default function LiveRaidTab({ user }) {
   // -------------------------------------------------------------
   const handleUpdatePartyName = (colIdx, value) => {
     if (!activeTabConfigId || !localGrids[activeTabConfigId]) return;
-    setLocalGrids(prev => {
+    applyLocalGridsAndPersist((prev) => {
       const updated = { ...prev };
       const configObj = { ...updated[activeTabConfigId] };
       const slotAlloc = { ...configObj.slots_allocation };
@@ -529,41 +823,124 @@ export default function LiveRaidTab({ user }) {
       configObj.slots_allocation = slotAlloc;
       updated[activeTabConfigId] = configObj;
       return updated;
-    });
-    setIsDirty(true);
+    }, { debounceMs: 400 });
   };
 
   const handleBindMemberToCell = async (coordKey, uid) => {
     if (!activeTabConfigId || !localGrids[activeTabConfigId]) return;
     
-    // Instantly modify state locally for optimal user interaction speed
+    // Cross-tab exclusivity: clear uid from every grid, then place on active tab
     setLocalGrids(prev => {
-      const updated = { ...prev };
-      const configObj = { ...updated[activeTabConfigId] };
-      const slotAlloc = { ...configObj.slots_allocation };
-      if (uid) {
-        Object.keys(slotAlloc).forEach(k => {
-          if (slotAlloc[k] && slotAlloc[k].userId === uid) slotAlloc[k] = { ...slotAlloc[k], userId: '' };
-        });
-      }
-      slotAlloc[coordKey] = { ...slotAlloc[coordKey], userId: uid };
-      configObj.slots_allocation = slotAlloc;
-      updated[activeTabConfigId] = configObj;
+      const updated = {};
+      Object.entries(prev).forEach(([gridId, gridObj]) => {
+        const slotAlloc = { ...(gridObj.slots_allocation || {}) };
+        if (uid) {
+          Object.keys(slotAlloc).forEach((k) => {
+            if (isSlotCoordKey(k) && slotAlloc[k]?.userId === uid) {
+              slotAlloc[k] = { ...slotAlloc[k], userId: '' };
+            }
+          });
+        }
+        if (gridId === activeTabConfigId) {
+          slotAlloc[coordKey] = { ...slotAlloc[coordKey], userId: uid || '' };
+        }
+        updated[gridId] = { ...gridObj, slots_allocation: slotAlloc };
+      });
+      localGridsRef.current = updated;
       return updated;
     });
     setActivePopover(null);
 
-    // Stream the atomic path mutation directly down the real-time database pipeline
     try {
-      await fetch(`${backendUrl}/api/live-raid/cell-update`, {
+      setSyncStatus('saving');
+      persistInFlightRef.current = true;
+      const res = await fetch(`${backendUrl}/api/live-raid/cell-update`, {
         method: 'POST',
         headers: getRequestHeaders(),
         body: JSON.stringify({ configId: activeTabConfigId, coordKey, userId: uid }),
         credentials: 'include'
       });
+      const data = await res.json();
+      if (data.success) {
+        markDirty(false);
+        setSyncStatus('synced');
+      } else {
+        markDirty(true);
+        setSyncStatus('error');
+      }
     } catch (err) {
       console.error("Granular database write exception caught:", err);
+      markDirty(true);
+      setSyncStatus('error');
+    } finally {
+      persistInFlightRef.current = false;
     }
+  };
+
+  const mutateActiveGridSlots = async (mapper) => {
+    if (!isOfficer || !activeTabConfigId || !localGrids[activeTabConfigId]) return;
+    await applyLocalGridsAndPersist((prev) => {
+      const gridObj = prev[activeTabConfigId];
+      if (!gridObj) return prev;
+      const slotAlloc = { ...(gridObj.slots_allocation || {}) };
+      Object.keys(slotAlloc).forEach((k) => {
+        if (!isSlotCoordKey(k) || !slotAlloc[k]) return;
+        slotAlloc[k] = mapper(slotAlloc[k]);
+      });
+      return {
+        ...prev,
+        [activeTabConfigId]: { ...gridObj, slots_allocation: slotAlloc },
+      };
+    });
+  };
+
+  const handleClearGridMembers = async () => {
+    if (!window.confirm('Clear all member assignments on this Grid Tab? Role locks stay.')) return;
+    await mutateActiveGridSlots((slot) => ({ ...slot, userId: '' }));
+  };
+
+  const handleClearGridJobLocks = async () => {
+    if (!window.confirm('Clear all job class role locks on this Grid Tab? Members stay assigned.')) return;
+    await mutateActiveGridSlots((slot) => ({ ...slot, roleLock: '' }));
+  };
+
+  const handleClearGridAll = async () => {
+    if (!window.confirm('Clear ALL members and job locks on this Grid Tab?')) return;
+    await mutateActiveGridSlots(() => ({ userId: '', roleLock: '' }));
+  };
+
+  const handleSetCellRoleLock = async (coordKey, roleLock) => {
+    if (!activeTabConfigId) return;
+    await applyLocalGridsAndPersist((prev) => {
+      const configObj = { ...prev[activeTabConfigId] };
+      if (!configObj) return prev;
+      const slotAlloc = { ...configObj.slots_allocation };
+      slotAlloc[coordKey] = { ...slotAlloc[coordKey], roleLock: roleLock || '' };
+      configObj.slots_allocation = slotAlloc;
+      return { ...prev, [activeTabConfigId]: configObj };
+    });
+  };
+
+  const handleSetPartyLeader = async (coordKey) => {
+    if (!activeTabConfigId) return;
+    await applyLocalGridsAndPersist((prev) => {
+      const configObj = { ...prev[activeTabConfigId] };
+      if (!configObj) return prev;
+      const slotAlloc = { ...configObj.slots_allocation };
+      const isAlready = slotAlloc[coordKey]?.isPartyLeader === true;
+      // Clear leader from all slots in this tab
+      Object.keys(slotAlloc).forEach((k) => {
+        if (slotAlloc[k]?.isPartyLeader) {
+          slotAlloc[k] = { ...slotAlloc[k], isPartyLeader: false };
+        }
+      });
+      // Crown this slot if it wasn't already
+      if (!isAlready) {
+        slotAlloc[coordKey] = { ...slotAlloc[coordKey], isPartyLeader: true };
+      }
+      configObj.slots_allocation = slotAlloc;
+      return { ...prev, [activeTabConfigId]: configObj };
+    });
   };
 
   // HTML5 Drag-Drop hooks
@@ -572,7 +949,7 @@ export default function LiveRaidTab({ user }) {
     e.dataTransfer.setData("text/plain", JSON.stringify({ source: 'cell', coordKey, userId }));
   };
 
-  const handleCellDropIntercept = (e, destCoordKey) => {
+  const handleCellDropIntercept = async (e, destCoordKey) => {
     e.preventDefault();
     if (!isOfficer || !activeTabConfigId || !localGrids[activeTabConfigId]) return;
     try {
@@ -585,23 +962,20 @@ export default function LiveRaidTab({ user }) {
           const srcCoord = parsed.coordKey;
           const srcUid = parsed.userId;
 
-          setLocalGrids(prev => {
+          await applyLocalGridsAndPersist((prev) => {
             const updated = { ...prev };
             const configObj = { ...updated[activeTabConfigId] };
             const slotAlloc = { ...configObj.slots_allocation };
-
             const destUid = slotAlloc[destCoordKey]?.userId || '';
             slotAlloc[srcCoord] = { ...slotAlloc[srcCoord], userId: destUid };
             slotAlloc[destCoordKey] = { ...slotAlloc[destCoordKey], userId: srcUid };
-
             configObj.slots_allocation = slotAlloc;
             updated[activeTabConfigId] = configObj;
             return updated;
           });
-          setIsDirty(true);
         }
       } else {
-        handleBindMemberToCell(destCoordKey, rawData);
+        await handleBindMemberToCell(destCoordKey, rawData);
       }
     } catch (err) {
       console.error(err);
@@ -661,7 +1035,7 @@ export default function LiveRaidTab({ user }) {
       )}
 
       {/* -------------------- STEP 2: SELECT SETTINGS FORM -------------------- */}
-      {session === null && localStep === 2 && (
+      {localStep === 2 && (
         <div className="mx-auto max-w-3xl bg-slate-900/40 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-6 animate-fadeIn">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 select-none">
             <div className="flex items-center gap-3">
@@ -717,28 +1091,32 @@ export default function LiveRaidTab({ user }) {
               </div>
             </div>
 
-            {/* b. Select Configurations (Max configured limit) */}
+            {/* b. Select one Raid Config (Grid Tabs become live tabs) */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
-                3. Choose Configurations (Select up to {maxConfigsLimit})
+                3. Choose Raid Config (one config · its Grid Tabs load as live tabs)
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">
                 {Object.values(compositions).map((comp) => {
-                  const isChecked = selectedConfigIds.includes(comp.id);
+                  const isChecked = selectedConfigId === comp.id;
+                  const tabCount = (comp.tabOrder || Object.keys(comp.tabs || {})).length;
                   return (
                     <div 
                       key={comp.id}
-                      onClick={() => handleToggleConfigSelection(comp.id)}
+                      onClick={() => handleSelectRaidConfig(comp.id)}
                       className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer select-none transition-all ${
                         isChecked 
                           ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400 shadow-md' 
                           : 'bg-slate-950/40 border-slate-800 hover:border-slate-750 text-slate-300'
                       }`}
                     >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isChecked ? 'bg-indigo-600 border-indigo-500' : 'border-slate-700 bg-slate-950'}`}>
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isChecked ? 'bg-indigo-600 border-indigo-500' : 'border-slate-700 bg-slate-950'}`}>
                         {isChecked && <Check size={11} className="text-white" />}
                       </div>
-                      <span className="text-[11px] font-bold font-sans truncate">{comp.title || 'Untitled Config'}</span>
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-bold font-sans truncate block">{comp.title || 'Untitled Config'}</span>
+                        <span className="text-[8px] font-mono text-slate-500">{tabCount} grid tab{tabCount === 1 ? '' : 's'}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -775,6 +1153,67 @@ export default function LiveRaidTab({ user }) {
                 })}
               </div>
             </div>
+
+            {/* 5. Monitoring Schedule */}
+            <div className="space-y-2 border-t border-slate-800/60 pt-5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
+                  5. Monitoring Schedule <span className="text-slate-600 font-medium normal-case tracking-normal">(optional)</span>
+                </label>
+                <p className="text-[9px] text-slate-600 font-sans mt-0.5">Voice channel presence will be polled between these times. Leave blank to set later.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Start Time */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">Start Time</span>
+                  <input
+                    ref={monitoringStartInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="2000 → 20:00"
+                    maxLength={5}
+                    value={monitoringStartTime}
+                    onChange={handleMonitoringTimeChange(setMonitoringStart)}
+                    onBlur={handleMonitoringTimeBlur(setMonitoringStart, monitoringStartTime)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold text-center outline-none focus:border-amber-500/50 transition"
+                  />
+                </div>
+                {/* End Time */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">End Time</span>
+                  <input
+                    ref={monitoringEndInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="2200 → 22:00"
+                    maxLength={5}
+                    value={monitoringEndTime}
+                    onChange={handleMonitoringTimeChange(setMonitoringEnd)}
+                    onBlur={handleMonitoringTimeBlur(setMonitoringEnd, monitoringEndTime)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold text-center outline-none focus:border-amber-500/50 transition"
+                  />
+                </div>
+                {/* Poll Interval stepper */}
+                <div className="space-y-1.5">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider font-mono">Poll Interval</span>
+                  <div className="flex items-center gap-0 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden h-[38px]">
+                    <button
+                      type="button"
+                      onClick={() => setMonitoringPoll(Math.max(1, monitoringPollInterval - 1))}
+                      className="px-3 h-full text-slate-400 hover:text-white hover:bg-slate-800 font-bold text-sm transition cursor-pointer select-none border-r border-slate-800"
+                    >−</button>
+                    <span className="flex-1 text-center text-xs font-mono font-bold text-amber-300 tabular-nums">
+                      {monitoringPollInterval} min
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMonitoringPoll(Math.min(30, monitoringPollInterval + 1))}
+                      className="px-3 h-full text-slate-400 hover:text-white hover:bg-slate-800 font-bold text-sm transition cursor-pointer select-none border-l border-slate-800"
+                    >+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="border-t border-slate-800/80 pt-4 flex justify-end gap-3 select-none">
@@ -790,14 +1229,14 @@ export default function LiveRaidTab({ user }) {
               onClick={handleLaunchLiveSession}
               className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-xl transition shadow-lg cursor-pointer"
             >
-              Start Live Raid Deck
+              {session !== null ? 'Apply Changes' : 'Start Live Raid Deck'}
             </button>
           </div>
         </div>
       )}
 
       {/* -------------------- STEP 3: STARTED DECK INTERFACE -------------------- */}
-      {session !== null && (
+      {session !== null && localStep === 3 && (
         <div className="space-y-4 animate-fadeIn">
           {/* HEADER DECK */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-md flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 select-none">
@@ -812,15 +1251,94 @@ export default function LiveRaidTab({ user }) {
                 </button>
               )}
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-widest flex items-center gap-1">
-                    <Radio size={10} className="text-emerald-400 animate-pulse shrink-0" /> Live Operations Active
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest">
-                    Cycle: {session.eventTitle} ({session.eventDate})
-                  </span>
+                <div className="flex items-stretch gap-2 flex-wrap">
+                  {/* Live — same chip height as Monitoring */}
+                  <div className="flex items-center gap-1.5 h-[42px] px-3 rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-200">
+                    <Radio size={12} className="text-emerald-400 animate-pulse shrink-0" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest">Live</span>
+                  </div>
+
+                  {/* Monitoring — neutral white/slate; start & end go green when triggered */}
+                  {(() => {
+                    const { monitoringStartsAt, monitoringEndsAt } = session;
+                    const isScheduled = !!monitoringStartsAt && !!monitoringEndsAt;
+                    const startTriggered = isScheduled && nowMs >= monitoringStartsAt;
+                    const endTriggered = isScheduled && nowMs >= monitoringEndsAt;
+                    // SSOT: render monitoring times in the SAME timezone as the server-time clock (DEFAULT_TZ)
+                    const fmt = (ms) => formatGuildTimeHhMm(ms, DEFAULT_TZ);
+
+                    // Pulse progress: current pulses taken vs. total expected across the window
+                    const pollMs = (Number(session.pollIntervalMinutes) || 0) * 60000;
+                    const expectedPulses = isScheduled && pollMs > 0
+                      ? Math.max(1, Math.round((monitoringEndsAt - monitoringStartsAt) / pollMs))
+                      : 0;
+                    const currentPulses = session.totalPulses || 0;
+
+                    return (
+                      <div className="flex items-center gap-3 h-[42px] px-3 rounded-xl border border-slate-700/80 bg-slate-950/80">
+                        <div className="flex items-center gap-1.5 text-slate-200 shrink-0">
+                          <Timer size={12} className="shrink-0 text-slate-300" />
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-widest">Monitoring</span>
+                        </div>
+                        <div className="w-px h-5 bg-slate-700 shrink-0" />
+                        <div className="flex items-center gap-2.5 text-[11px] font-mono font-bold tabular-nums">
+                          <span
+                            className={`flex items-center gap-1 transition-colors duration-500 ${
+                              startTriggered ? 'text-emerald-400' : 'text-slate-200'
+                            }`}
+                            title={startTriggered ? 'Start reached — monitoring running' : 'Waiting for start'}
+                          >
+                            <Play size={10} className={`shrink-0 ${startTriggered ? 'fill-emerald-400' : ''}`} />
+                            {isScheduled ? fmt(monitoringStartsAt) : '--:--'}
+                          </span>
+                          <span className="text-slate-600">|</span>
+                          <span
+                            className={`flex items-center gap-1 transition-colors duration-500 ${
+                              endTriggered ? 'text-emerald-400' : 'text-slate-200'
+                            }`}
+                            title={endTriggered ? 'End reached — monitoring stopped' : 'Waiting for end'}
+                          >
+                            <Square size={10} className={`shrink-0 ${endTriggered ? 'fill-emerald-400' : ''}`} />
+                            {isScheduled ? fmt(monitoringEndsAt) : '--:--'}
+                          </span>
+                        </div>
+                        <div className="w-px h-5 bg-slate-700 shrink-0" />
+                        <span
+                          className={`flex items-center gap-1.5 text-[11px] font-mono font-bold tabular-nums ${
+                            currentPulses > 0 ? 'text-emerald-400' : 'text-slate-400'
+                          }`}
+                          title={[
+                            `Pulses ${currentPulses}/${expectedPulses}`,
+                            `present in VC=${(session.lastVoicePoll?.presentUids || []).length}`,
+                            `ticker=${session.monitoringTickerStatus || 'n/a'}`,
+                            session.monitoringTickerNote || '',
+                          ].filter(Boolean).join(' · ')}
+                        >
+                          <Radio size={11} className="shrink-0" />
+                          {currentPulses}/{expectedPulses || '--'}
+                          <span className="text-slate-500 font-medium uppercase text-[9px] tracking-widest">pulses</span>
+                        </span>
+                        <div className="w-px h-5 bg-slate-700 shrink-0" />
+                        <span
+                          className="flex items-center gap-1.5 text-[11px] font-mono font-bold tabular-nums text-slate-300"
+                          title={`${(session.lastVoicePoll?.presentUids || []).length} member(s) present in voice channel (last poll)`}
+                        >
+                          <Users size={11} className="shrink-0" />
+                          {(session.lastVoicePoll?.presentUids || []).length}
+                          <span className="text-slate-500 font-medium uppercase text-[9px] tracking-widest">vc</span>
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex items-center gap-1.5 h-[42px] px-3 rounded-xl border border-slate-800 bg-transparent text-slate-500">
+                    <RefreshCw size={12} className="shrink-0" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest">
+                      {session.eventTitle} ({session.eventDate})
+                    </span>
+                  </div>
                 </div>
-                <h2 className="text-md font-black text-slate-200 uppercase mt-1">
+                <h2 className="text-md font-black text-slate-200 uppercase mt-1.5">
                   Collab Console (Officer: {session.launchedBy})
                 </h2>
               </div>
@@ -856,15 +1374,16 @@ export default function LiveRaidTab({ user }) {
               
               {/* OneNote Notebook Folder Tabs Left-Aligned Row */}
               <div className="absolute -top-[33px] left-0 flex items-end pl-2 z-10">
-                {session.selectedConfigIds?.map(configId => {
-                  const isActive = activeTabConfigId === configId;
-                  const cTitle = compositions[configId]?.title || configId;
+                {session.selectedConfigIds?.map(gridId => {
+                  const isActive = activeTabConfigId === gridId;
+                  const gridObj = localGrids[gridId] || session.grids?.[gridId];
+                  const cTitle = gridObj?.name || gridObj?.title || compositions[gridId]?.title || gridId;
                   return (
                     <button
-                      key={configId}
+                      key={gridId}
                       type="button"
                       onClick={() => {
-                        setActiveTabConfigId(configId);
+                        setActiveTabConfigId(gridId);
                         setActivePopover(null);
                       }}
                       className={`px-4 py-1.5 text-xs font-mono font-black uppercase tracking-wider rounded-t-xl transition-all border-t border-x ${
@@ -895,15 +1414,17 @@ export default function LiveRaidTab({ user }) {
                       className="grid gap-2 pb-12 overflow-visible p-2"
                       style={{ gridTemplateColumns: `repeat(${columnsCount}, minmax(130px, 1fr))` }}
                     >
-                      {/* Grid Title Card */}
+                      {/* Grid Title Card — Grid Tab name (matches /myparty) */}
                       <div 
                         className="col-span-full bg-slate-950/80 border border-slate-900 rounded-xl p-3 mb-2 flex items-center justify-center select-none shadow-sm"
                         style={{ gridColumn: '1 / -1' }}
                       >
                         <div className="text-center">
-                          <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase block">Grid Composition Session snapshot</span>
+                          <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase block">
+                            {activeConfig.parentConfigTitle || session?.eventTitle || 'Live Raid'}
+                          </span>
                           <h2 className="text-sm font-black tracking-wide text-indigo-400 font-sans mt-0.5 uppercase">
-                            {activeConfig.title || 'Untitled Blueprints'}
+                            {activeConfig.name || activeConfig.title || 'Untitled Tab'}
                           </h2>
                         </div>
                       </div>
@@ -942,12 +1463,13 @@ export default function LiveRaidTab({ user }) {
                           const allocatedUserObj = slotData.userId ? members[slotData.userId] : null;
                           const lockedJobObj = slotData.roleLock ? jobsCatalog[slotData.roleLock] : null;
                           const isCellRoleLocked = !!slotData.roleLock;
+                          const isPartyLeader = !!slotData.isPartyLeader;
                           const cellColorTheme = lockedJobObj?.colorTheme || '#1e293b';
 
                           const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
                           const isGearPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'gear';
                           const trendTimeline = slotData.userId
-                            ? buildMemberTrendTimeline(historySessions, historyLedger, slotData.userId, 8)
+                            ? buildMemberTrendTimeline(historySessions, slotData.userId, 8)
                             : [];
                           const isDragHovered = dragHoveredCoord === coordKey;
 
@@ -1082,6 +1604,7 @@ export default function LiveRaidTab({ user }) {
                                     jobObj={jobsCatalog[allocatedUserObj.jobCode]}
                                     currentStatus={commitments[calendarSignKey]?.[slotData.userId]?.status}
                                     isVoiceActive={liveVoiceUids.includes(slotData.userId)}
+                                    isPartyLeader={isPartyLeader}
                                   />
                                 ) : (
                                   <div className="h-full flex flex-col items-center justify-center space-y-1 text-slate-700 group-hover:text-slate-500 transition-colors py-2">
@@ -1111,23 +1634,26 @@ export default function LiveRaidTab({ user }) {
                                 <>
                                   <div className="fixed inset-0 z-[90]" onClick={() => setActivePopover(null)} />
                                   <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-[100] w-56 font-sans space-y-1.5 animate-fadeIn text-left`}>
-                                    <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1">Pre-Assign Job Role</div>
+                                    {/* Party Leader section */}
+                                    <button
+                                      type="button"
+                                      disabled={!slotData.userId}
+                                      onClick={() => handleSetPartyLeader(coordKey)}
+                                      className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                                        isPartyLeader
+                                          ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                          : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
+                                      }`}
+                                    >
+                                      <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
+                                      {isPartyLeader ? 'Remove Leader' : 'Set as Leader'}
+                                      {isPartyLeader && <Crown size={10} className="ml-auto text-red-400" />}
+                                    </button>
+                                    <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1 pt-0.5">Pre-Assign Job Role</div>
                                     <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setLocalGrids(prev => {
-                                            const updated = { ...prev };
-                                            const configObj = { ...updated[activeTabConfigId] };
-                                            const slotAlloc = { ...configObj.slots_allocation };
-                                            slotAlloc[coordKey] = { ...slotAlloc[coordKey], roleLock: '' };
-                                            configObj.slots_allocation = slotAlloc;
-                                            updated[activeTabConfigId] = configObj;
-                                            return updated;
-                                          });
-                                          setIsDirty(true);
-                                          setActivePopover(null);
-                                        }}
+                                        onClick={() => handleSetCellRoleLock(coordKey, '')}
                                         className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-medium text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
                                       >
                                         <Ban size={12} className="shrink-0 text-rose-400" /> Clear Role Lock
@@ -1136,19 +1662,7 @@ export default function LiveRaidTab({ user }) {
                                         <button
                                           key={code}
                                           type="button"
-                                          onClick={() => {
-                                            setLocalGrids(prev => {
-                                              const updated = { ...prev };
-                                              const configObj = { ...updated[activeTabConfigId] };
-                                              const slotAlloc = { ...configObj.slots_allocation };
-                                              slotAlloc[coordKey] = { ...slotAlloc[coordKey], roleLock: code };
-                                              configObj.slots_allocation = slotAlloc;
-                                              updated[activeTabConfigId] = configObj;
-                                              return updated;
-                                            });
-                                            setIsDirty(true);
-                                            setActivePopover(null);
-                                          }}
+                                          onClick={() => handleSetCellRoleLock(coordKey, code)}
                                           className="w-full px-2 py-1 rounded-lg text-left text-[10px] font-semibold text-slate-200 hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-2"
                                         >
                                           <span className="flex items-center gap-1.5 min-w-0">
@@ -1262,18 +1776,52 @@ export default function LiveRaidTab({ user }) {
 
               {/* Commit changes footer layout */}
               {isOfficer && (
-                <div className="border-t border-slate-900 pt-3 flex items-center justify-end select-none shrink-0">
+                <div className="border-t border-slate-900 pt-3 flex flex-wrap items-center justify-between gap-2 select-none shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleClearGridMembers}
+                      className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-amber-700/60 p-2 px-2.5 rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-amber-300 transition cursor-pointer"
+                      title="Clear member assignments only"
+                    >
+                      <Users size={12} /> Clear Members
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearGridJobLocks}
+                      className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-sky-700/60 p-2 px-2.5 rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-sky-300 transition cursor-pointer"
+                      title="Clear job class role locks only"
+                    >
+                      <ShieldOff size={12} /> Clear Job Class
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearGridAll}
+                      className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 hover:border-rose-700/60 p-2 px-2.5 rounded-xl text-[10px] font-mono font-bold text-slate-400 hover:text-rose-300 transition cursor-pointer"
+                      title="Clear members and job locks"
+                    >
+                      <Eraser size={12} /> Clear All
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={handleCommitLiveGridsChanges}
-                    disabled={!isDirty}
+                    disabled={syncStatus === 'saving'}
                     className={`flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider text-white transition-all shadow-xl select-none cursor-pointer ${
-                      isDirty 
-                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20' 
-                        : 'bg-slate-900 border border-slate-800 text-slate-650 cursor-not-allowed shadow-none'
+                      syncStatus === 'error' || isDirty
+                        ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                        : syncStatus === 'saving'
+                          ? 'bg-slate-800 border border-slate-700 text-slate-300 cursor-wait shadow-none'
+                          : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 shadow-none'
                     }`}
+                    title="Edits auto-save. Use Force Sync only if sync failed."
                   >
-                    <Save size={14} /> {isDirty ? 'Commit Layout Changes' : 'Live Snapshot Synchronized'}
+                    <Save size={14} />
+                    {syncStatus === 'saving'
+                      ? 'Saving…'
+                      : syncStatus === 'error' || isDirty
+                        ? 'Force Sync'
+                        : 'Auto-Synced'}
                   </button>
                 </div>
               )}
