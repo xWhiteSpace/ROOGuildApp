@@ -301,6 +301,33 @@ router.post('/update-job-target', async (req, res) => {
   }
 });
 
+// 🎯 POST /api/attendance/update-expected-rate -> Save the guild-wide expected attendance target (%)
+router.post('/update-expected-rate', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const parsed = parseInt(req.body?.expectedAttendanceRate, 10);
+    if (isNaN(parsed)) {
+      return res.status(400).json({ success: false, error: 'expectedAttendanceRate must be a number (0-100).' });
+    }
+    const clampedRate = Math.max(0, Math.min(100, parsed));
+
+    await db.ref('settings/configuration/expectedAttendanceRate').set(clampedRate);
+    return res.json({ success: true, expectedAttendanceRate: clampedRate });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 📅 POST /api/attendance/ensure-week -> Materialize scheduler/instances for a week
 router.post('/ensure-week', async (req, res) => {
   const user = resolveUserIdentity(req);
