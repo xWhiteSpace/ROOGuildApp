@@ -36,6 +36,13 @@ export async function initializeDiscordBot() {
    // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
     discordClient.on('interactionCreate', async (interaction) => {
       try {
+        // 📅 Weekly attendance lives in its own channel/thread — route by customId
+        // prefix so it bypasses the general-room gate (buttons fire inside a thread).
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('att:')) {
+          const { handleAttendanceInteraction } = await import('./attendanceAnnounce.js');
+          return await handleAttendanceInteraction(interaction);
+        }
+
         if (interaction.channelId !== process.env.DISCORD_GENROOM_ID_1) {
           return await interaction.reply({
             content: '❌ System commands are strictly locked to the designated general room channel.',
@@ -109,6 +116,11 @@ export async function initializeDiscordBot() {
     // 📢 Automated Modular Announcement Scheduler Ticker (Evaluated every 60 seconds)
     setInterval(async () => {
       try {
+        // 📅 Weekly attendance auto-announce (self-gated: Sunday + hour + marker; idempotent)
+        import('./attendanceAnnounce.js')
+          .then((m) => m.maybeAnnounceWeekly())
+          .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
+
         // 🚨 FORCED LOCK ANNOUNCEMENT SILENCER: Suppress all cron updates if manual absolute lockdown mode is toggled
         const db = admin.database();
         const configSnap = await db.ref('settings/configuration').once('value');

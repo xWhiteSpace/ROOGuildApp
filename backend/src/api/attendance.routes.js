@@ -328,6 +328,29 @@ router.post('/update-expected-rate', async (req, res) => {
   }
 });
 
+// 📢 POST /api/attendance/announce-week -> Officer-triggered weekly attendance post/re-post
+router.post('/announce-week', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    // force:true refreshes the existing week thread (no duplicate) or creates it if missing
+    const { postWeeklyAttendance } = await import('../discord-bot/attendanceAnnounce.js');
+    const result = await postWeeklyAttendance({ force: true });
+    return res.json({ success: true, result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 📅 POST /api/attendance/ensure-week -> Materialize scheduler/instances for a week
 router.post('/ensure-week', async (req, res) => {
   const user = resolveUserIdentity(req);
