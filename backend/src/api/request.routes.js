@@ -146,13 +146,18 @@ let isMatch = false;
     }
 
     if (isMatch) {
-      combinedItemTimeline.push((record.selectionStatus || 'pending').toLowerCase());
+      // Store each matched record's status alongside its own night key so the
+      // counting loop stays aligned to THIS item's filtered timeline (per-item).
+      combinedItemTimeline.push({
+        status: (record.selectionStatus || 'pending').toLowerCase(),
+        date: record.date || record.eventDate
+      });
     }
   });
 
   let lastSelectedIdx = -1;
   for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    if (combinedItemTimeline[i] === 'selected' || combinedItemTimeline[i] === 'absent') {
+    if (combinedItemTimeline[i].status === 'selected' || combinedItemTimeline[i].status === 'absent') {
       lastSelectedIdx = i;
       break;
     }
@@ -162,11 +167,9 @@ let isMatch = false;
   const countedDates = new Set();
   const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
   for (let i = searchStart; i < combinedItemTimeline.length; i++) {
-    const recordKey = sortedKeys[i];
-    const rawRecord = records[recordKey];
-    const uniqueNightKey = rawRecord.date || rawRecord.eventDate;
+    const { status, date: uniqueNightKey } = combinedItemTimeline[i];
 
-    if (combinedItemTimeline[i] === 'notselected' && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
+    if (status === 'notselected' && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
       priorityPoints++;
       countedDates.add(uniqueNightKey);
     }
