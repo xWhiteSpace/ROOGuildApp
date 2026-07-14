@@ -10,8 +10,18 @@ import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
 import LoginPage from './pages/LoginPage';
 import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
 import { fetchCurrentUser, logoutUser } from './services/authService';
+import MasterListTab from './pages/MasterListTab';
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+import RaidPartyTab from './pages/RaidPartyTab';
+import StatisticsTab from './pages/StatisticsTab';
+import LiveRaidTab from './pages/LiveRaidTab';
+import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
+
+import Scheduler from './pages/Scheduler';
+import { apiFetch, getBackendUrl } from './services/apiClient';
+import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
+
+const backendUrl = getBackendUrl();
 
 import { createContext, useRef } from 'react';
 export const MimicBookContext = createContext(null);
@@ -26,11 +36,7 @@ export function MimicBookProvider({ children }) {
   const [expandedGroups, setExpandedGroups] = useState({}); 
   const [commitEvent, setCommitEvent] = useState('GuildLeague');
   const [availableEvents, setAvailableEvents] = useState({});
-  const [commitDate, setCommitDate] = useState(() => {
-    const gmt8String = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-    const gmt8Date = new Date(gmt8String);
-    return `${gmt8Date.getFullYear()}-${String(gmt8Date.getMonth() + 1).padStart(2, '0')}-${String(gmt8Date.getDate()).padStart(2, '0')}`;
-  });
+  const [commitDate, setCommitDate] = useState(() => formatGuildDate(new Date(), DEFAULT_TZ));
   const [committing, setCommittingSetting] = useState(false);
   const [syncingRoster, setSyncingRoster] = useState(false);
   const [items, setItems] = useState([]); 
@@ -80,6 +86,8 @@ export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const [macroTab, setMacroTab] = useState('auction');
+
   useEffect(() => {
     async function loadUser() {
       setAuthLoading(true);
@@ -114,26 +122,19 @@ export default function App() {
 
       // 🛰️ BACKGROUND SIGNATURE VERIFICATION: Verify token integrity with backend cryptographic seals
       try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (savedSession) {
-          headers['x-user-profile'] = encodeURIComponent(savedSession);
-        }
-        
-        const response = await fetch(`${backendUrl}/auth/me`, {
-          credentials: 'include',
-          headers: headers
-        });
+        const response = await apiFetch('/auth/me', { method: 'GET' });
         const result = await response.json();
         
         if (result.authenticated && result.user) {
           // Sync state and local storage with fresh information from the server
           setAuthUser(result.user);
           localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
-        } else {
-          // Session expired or revoked: Clean workspace state fields smoothly
+        } else if (!initialInMemoryUser) {
+          // Only clear if we had no local fallback — mobile Safari often blocks cookies
           setAuthUser(null);
           localStorage.removeItem('dynasty_raid_session');
         }
+        // If /auth/me fails cookie but local signed profile exists, keep local session
       } catch (err) {
         // Fallback: If your server is briefly unreachable, trust local cache to prevent offline lockouts
         if (!initialInMemoryUser) {
@@ -163,7 +164,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <MimicBookProvider>
-        <MainLayout user={authUser} onLogout={handleLogout}>
+        <MainLayout user={authUser} onLogout={handleLogout} macroTab={macroTab} setMacroTab={setMacroTab}>
           <Routes>
             <Route path="/" element={<RequestTab user={authUser} />} />
             <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
@@ -174,6 +175,14 @@ export default function App() {
             
             {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
             <Route path="/settings-configuration" element={<SettingsTab />} />
+            
+            {/* 🛡️ Foundational Raid Governance Routes Mapping */}
+            <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
+            <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+            <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
+            <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
+            <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
+            <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
           </Routes>
         </MainLayout>
       </MimicBookProvider>

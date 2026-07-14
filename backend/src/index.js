@@ -15,10 +15,13 @@ import authRoutes from './auth/discordOAuth.js';
 import { initializeFirebase } from './config/firebase.js';
 import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
+import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid.routes.js';
 
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
 import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
+
+import attendanceRoutes from './api/attendance.routes.js';
 
 initializeEnv();
 initializeFirebase();
@@ -45,8 +48,15 @@ const allowedOrigins = [
 // 📡 PRODUCTION HARDENED EXPLICIT CORS WHITELIST FOR MULTI-HOST HANDSHAKES
 app.use(cors({ 
   origin: function (origin, callback) {
-    // Broadens origin matches to accept ngrok tunnels and vercel staging indicators cleanly
-    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.includes('ngrok-free.app')) {
+    // Allow missing Origin (same-origin / mobile webviews), configured FRONTEND_URL,
+    // known hosts, Vercel preview deployments, LAN, and ngrok tunnels.
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      origin.startsWith('http://192.168.') ||
+      origin.includes('ngrok-free.app') ||
+      origin.endsWith('.vercel.app')
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Blocked by CORS policy rules layout context.'));
@@ -60,9 +70,9 @@ app.use(cors({
     'X-Requested-With', 
     'Accept', 
     'Origin',
-    'x-user-profile',      // Whitelists fallback auth headers
-    'x-authorized-user',   // Whitelists mobile chat verification headers
-    'ngrok-skip-browser-warning' // Whitelists tunnel warning bypass flags
+    'x-user-profile',
+    'x-authorized-user',
+    'ngrok-skip-browser-warning'
   ]
 }));
 
@@ -82,6 +92,9 @@ app.use(
 
 app.use('/auth', authRoutes);
 app.use('/api/requests', requestRoutes);
+
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/live-raid', liveRaidRoutes);
 
 app.get('/', (req, res) => {
   res.send('DynastyGuild backend is online.');
@@ -118,6 +131,11 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
   console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
+
+  // Re-arm in-memory monitoring ticker if a live session was left Active across restart
+  resumeLiveRaidMonitoringIfNeeded().catch((err) => {
+    console.error('[live-raid] resume on boot failed:', err.message);
+  });
 
   // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
   // Execution tracking has been centralized into the drift-proof engine in client.js.

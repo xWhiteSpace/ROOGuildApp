@@ -5,40 +5,9 @@
  * Keeps function execution synchronous to protect background system loops against promise crashes.
  */
 import { getDatabase } from 'firebase-admin/database';
+import { DEFAULT_CONFIGURATION } from './defaultConfiguration.js';
 
-let cachedConfig = {
-  timezone: "Asia/Manila",
-  isForceLocked: false,
-  adminRoles: ["GUILD LEADER", "Vice Guild Leader", "Commander"],
-helpEmbedUrl: "",
-  items: [
-    { id: "item_001", name: "Puppet Scroll", colorTheme: "purple" },
-    { id: "item_002", name: "Illusion Scroll", colorTheme: "yellow" },
-    { id: "item_003", name: "Light & Dark Scroll", colorTheme: "slate" },
-    { id: "item_004", name: "Time & Space Scroll", colorTheme: "red" }
-  ],
-  events: {
-    "ev_001": {
-      title: "GuildLeague",
-      phases: {
-        1: { dayStart: 0, timeStart: "22:15", dayEnd: 1, timeEnd: "22:15" }, 
-        2: { dayStart: 1, timeStart: "22:15", dayEnd: 2, timeEnd: "20:55" }, 
-        3: { dayStart: 2, timeStart: "20:55", dayEnd: 2, timeEnd: "22:15" }  
-      },
-      loots: {
-        "item_001": 1,
-        "item_002": 1,
-        "item_003": 3,
-        "item_004": 5
-      },
-      announcements: {
-        phase1: ["07:00", "12:00", "19:00"],
-        phase2: "22:15",
-        phase3: "20:55"
-      }
-    }
-  }
-};
+let cachedConfig = { ...DEFAULT_CONFIGURATION };
 
 let isListenerAttached = false;
 
@@ -60,12 +29,16 @@ function initConfigListener() {
       if (snapshot.exists()) {
         const data = snapshot.val();
         cachedConfig = {
-          timezone: data.timezone || "Asia/Manila",
+          ...DEFAULT_CONFIGURATION,
+          ...data,
+          timezone: data.timezone || DEFAULT_CONFIGURATION.timezone,
           isForceLocked: data.isForceLocked !== undefined ? data.isForceLocked : false,
-          adminRoles: data.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"],
+          adminRoles: data.adminRoles || DEFAULT_CONFIGURATION.adminRoles,
           helpEmbedUrl: data.helpEmbedUrl || "",
-          items: data.items || cachedConfig.items,
-          events: data.events || cachedConfig.events
+          raidHelpEmbedUrl: data.raidHelpEmbedUrl || "",
+          specialEventCategories: data.specialEventCategories || DEFAULT_CONFIGURATION.specialEventCategories,
+          items: data.items || DEFAULT_CONFIGURATION.items,
+          events: data.events || DEFAULT_CONFIGURATION.events,
         };
       }
     }, (error) => {
@@ -291,6 +264,7 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
     activeEventId: activeEventId || "", 
     activeEventTitle: activeEventTitle || "Raid Session", 
     helpEmbedUrl: cachedConfig.helpEmbedUrl || "",
+    raidHelpEmbedUrl: cachedConfig.raidHelpEmbedUrl || "",
     // 🚀 CACHE EXPOSURE: Expose the synchronized memory timezone to save client network overhead
     timezone: timezone,
     announcementMinutes: computedAnnouncementMinutes,

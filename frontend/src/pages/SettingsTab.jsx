@@ -1,8 +1,9 @@
 // frontend/src/pages/SettingsTab.jsx
 import { useState, useEffect } from 'react';
+import { apiFetch, getAuthHeaders, getBackendUrl } from '../services/apiClient';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+const backendUrl = getBackendUrl();
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -44,8 +45,8 @@ const IconShield = () => <svg className="w-4 h-4" fill="none" stroke="currentCol
 const IconPackage = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>;
 const IconTrash = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>;
-const IconSave = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round"/><path d="M17 21v-8H7v8M7 3v5h8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const IconTag = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01"/></svg>;
 
 export default function SettingsTab() {
   const [isLocked, setIsLocked] = useState(true);
@@ -53,19 +54,31 @@ export default function SettingsTab() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
-  // Dynamic Configuration Template Workspace Core States
   const [config, setConfig] = useState({
     timezone: 'Asia/Manila',
     isForceLocked: false,
     helpEmbedUrl: '',
+    raidHelpEmbedUrl: '',
     priorityLookbackDays: 30,
     adminRoles: [],
     items: [],
     events: {},
+    jobs: {},
+    roles: {},
+    specialEventCategories: ["Raid", "Meeting", "PVP", "Casual"],
     announcements: {
       phase1: ["07:00", "12:00", "19:00"],
       phase2: "22:15",
       phase3: "20:55"
+    },
+    liveRaidMaxConfigs: 5,
+    liveRaidMaxWarRooms: 2,
+    warRooms: {
+      room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
+      room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
+      room_003: { name: 'Guild League Main 3', envKey: 'DISCORD_WARROOM_ID_3' },
+      room_004: { name: 'Guild League Main 4', envKey: 'DISCORD_WARROOM_ID_4' },
+      room_005: { name: 'Guild League Main 5', envKey: 'DISCORD_WARROOM_ID_5' }
     }
   });
 
@@ -77,33 +90,34 @@ export default function SettingsTab() {
   const [activeNavTab, setActiveNavTab] = useState('system');
   // 🎯 MASTER-DETAIL PANELS FOCUS STATE KEY
   const [editingEventKey, setEditingEventKey] = useState(null);
-// Floating absolute alarm popover target per phase timeline row (tracks phase string: '1', '2', '3' or null)
+  // Floating absolute alarm popover target per phase timeline row
   const [activeAlarmPopoverId, setActiveAlarmPopoverId] = useState(null);
-  // Floating color popover tracking target (tracks active item.id or null)
-  const [activeColorPopoverId, setActiveColorPopoverId] = useState(null);
 
   /**
    * 🛡️ AUTOMATED HEADER EXTRACTOR UTILITY
    */
-  const getRequestHeaders = () => {
-    const savedUserSession = localStorage.getItem('dynasty_raid_session');
-    const headers = { 'Content-Type': 'application/json' };
-    if (savedUserSession) {
-      headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-    }
-    return headers;
-  };
+  const getRequestHeaders = () => getAuthHeaders({ json: true });
 
   const loadGlobalConfigurationTree = async () => {
     try {
-      const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
-        method: 'GET',
-        headers: getRequestHeaders(),
-        credentials: 'include'
-      });
+      const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
       const data = await res.json();
       if (data.success) {
-        setConfig(data.config);
+        setConfig({
+          ...data.config,
+          helpEmbedUrl: data.config.helpEmbedUrl || '',
+          raidHelpEmbedUrl: data.config.raidHelpEmbedUrl || '',
+          roles: data.config.roles || {},
+          liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
+          liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
+          warRooms: data.config.warRooms || {
+            room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
+            room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
+            room_003: { name: 'Guild League Main 3', envKey: 'DISCORD_WARROOM_ID_3' },
+            room_004: { name: 'Guild League Main 4', envKey: 'DISCORD_WARROOM_ID_4' },
+            room_005: { name: 'Guild League Main 5', envKey: 'DISCORD_WARROOM_ID_5' }
+          }
+        });
       }
     } catch (err) {
       console.error("Error loading settings from server routing layer:", err);
@@ -178,7 +192,7 @@ export default function SettingsTab() {
   const handleAddRoleNode = () => {
     if (!newRoleStr.trim()) return;
     if (config.adminRoles.includes(newRoleStr.trim())) {
-      setErrorMsg('Role string signature already declared.');
+      alert('Role string signature already declared.');
       return;
     }
     setConfig(prev => ({ ...prev, adminRoles: [...prev.adminRoles, newRoleStr.trim()] }));
@@ -190,7 +204,6 @@ export default function SettingsTab() {
   };
 
   const handleAddEventNode = () => {
-    // 🚀 HIGH-WATER MARK RESOLVER: Parse numeric components of active keys to prevent index collisions caused by historical gaps
     const currentEventKeys = Object.keys(config.events || {});
     let nextEventIndex = 1;
 
@@ -319,28 +332,39 @@ export default function SettingsTab() {
       {/* CORE NAVIGATION STRIP */}
       <div className="flex bg-slate-950 border border-slate-800 p-1 rounded-xl gap-1 shadow-inner shrink-0">
         <button 
+          type="button"
           onClick={() => setActiveNavTab('system')} 
           className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'system' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           <IconSliders /> System Properties
         </button>
         <button 
+          type="button"
           onClick={() => setActiveNavTab('events')} 
           className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'events' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           <IconCalendar /> Events ({Object.keys(config.events || {}).length})
         </button>
         <button 
+          type="button"
           onClick={() => setActiveNavTab('roles')} 
           className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'roles' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           <IconShield /> Access Governance ({config.adminRoles?.length || 0})
         </button>
         <button 
+          type="button"
           onClick={() => setActiveNavTab('items')} 
           className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'items' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           <IconPackage /> Item Catalog ({config.items?.length || 0})
+        </button>
+        <button 
+          type="button"
+          onClick={() => setActiveNavTab('jobs')} 
+          className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'jobs' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <IconShield /> Job Registry ({Object.keys(config.jobs || {}).length})
         </button>
       </div>
 
@@ -360,6 +384,7 @@ export default function SettingsTab() {
                   {!config.isForceLocked ? 'Auto-Phase Lock' : 'Forced Bid Lock'}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setConfig(prev => ({ ...prev, isForceLocked: !prev.isForceLocked }))}
                   className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none shadow-inner ${
                     !config.isForceLocked ? 'bg-emerald-950/60 border border-emerald-500/20' : 'bg-rose-950/60 border-rose-900/20'
@@ -388,6 +413,7 @@ export default function SettingsTab() {
                   )}
                 </select>
                 <button
+                  type="button"
                   onClick={handleDetectBrowserTimezone}
                   className="w-full h-7 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white text-[10px] font-semibold tracking-tight transition cursor-pointer shadow-sm"
                 >
@@ -421,288 +447,369 @@ export default function SettingsTab() {
           </div>
 
           {/* HELP CANVASES EMBED LINK AREA */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconHelp /> Help Guide URL</div>
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconHelp /> Help Guide URLs</div>
               <span className="text-[10px] text-slate-600 font-mono">Google Slides Embed URL</span>
             </div>
-            <input
-              type="text"
-              value={config.helpEmbedUrl || ''}
-              onChange={(e) => setConfig(prev => ({ ...prev, helpEmbedUrl: e.target.value }))}
-              placeholder="https://docs.google.com/presentation/d/.../embed"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-slate-700 font-mono transition"
-            />
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Auction Dashboard Help Guide URL</label>
+              <input
+                type="text"
+                value={config.helpEmbedUrl || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, helpEmbedUrl: e.target.value }))}
+                placeholder="https://docs.google.com/presentation/d/.../embed"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-slate-700 font-mono transition"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-indigo-400/80 uppercase tracking-wider">Raid Governance Help Guide URL</label>
+              <input
+                type="text"
+                value={config.raidHelpEmbedUrl || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, raidHelpEmbedUrl: e.target.value }))}
+                placeholder="https://docs.google.com/presentation/d/.../embed (separate from Auction)"
+                className="w-full bg-slate-950 border border-indigo-900/40 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-indigo-700 font-mono transition"
+              />
+            </div>
           </div>
         </div>
       )}
 
       {/* PANEL 2: MASTER-DETAIL EVENTS OPERATION SUITE */}
       {activeNavTab === 'events' && (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start animate-fadeIn">
-          
-          {/* LEFT MASTER BLOCK STACK (35% WIDTH) */}
-          <div className="md:col-span-4 space-y-4">
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Event Setup</div>
-              <div className="flex flex-col gap-2">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start animate-fadeIn">
+            
+            {/* LEFT MASTER BLOCK STACK (35% WIDTH) */}
+            <div className="md:col-span-4 space-y-4">
+              <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Event Setup</div>
+                <div className="flex flex-col gap-2">
+                  <input 
+                    type="text"
+                    placeholder="Event Name (e.g. GL) ..."
+                    value={newEventName}
+                    onChange={(e) => setNewEventName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none font-sans focus:border-slate-700"
+                  />
+                  <button 
+                    type="button"
+                    onClick={handleAddEventNode}
+                    className="flex items-center justify-center gap-1.5 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                  >
+                    <IconPlus /> Create New Event
+                  </button>
+                </div>
+              </div>
+
+              {/* COMPACT EVENT INTERATION LIST MATRICES */}
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
+                {config.events && Object.keys(config.events).length > 0 ? (
+                  Object.keys(config.events).map((evKey) => {
+                    const ev = config.events[evKey];
+                    const activeDropsCount = Object.keys(ev.loots || {}).length;
+                    const isActiveSelection = editingEventKey === evKey;
+                    return (
+                      <div 
+                        key={evKey} 
+                        onClick={() => setEditingEventKey(evKey)}
+                        className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between space-y-2 cursor-pointer transition transform hover:-translate-y-0.5 group relative overflow-hidden ${isActiveSelection ? 'bg-slate-900 border-indigo-500/80 shadow-md' : 'bg-slate-900/30 border-slate-800/80 hover:border-slate-700'}`}
+                      >
+                        {isActiveSelection && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />}
+                        <div className="flex justify-between items-start">
+                          <div className="truncate pr-2">
+                            <h4 className={`text-xs font-semibold truncate transition ${isActiveSelection ? 'text-indigo-400' : 'text-slate-200 group-hover:text-indigo-400'}`}>{ev.title || 'Untitled Session'}</h4>
+                            <span className="font-mono text-[9px] text-slate-500 block mt-0.5">{evKey}</span>
+                          </div>
+                          <span className="bg-slate-950 border border-slate-800/60 px-2 py-0.5 rounded-lg text-[9px] font-mono text-slate-400 shrink-0">
+                            {activeDropsCount} Items
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">No scheduling events active.</div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT DETAILED SUITE WORKSPACE CANVAS (65% WIDTH) */}
+            <div className="md:col-span-8">
+              {editingEventKey && config.events?.[editingEventKey] ? (() => {
+                const ev = config.events[editingEventKey];
+                return (
+                  <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl animate-fadeIn">
+                    
+                    {/* CONFIG DESK CANVAS HEADER ELEMENT */}
+                    <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
+                      <div className="flex items-center gap-3 truncate pr-4">
+                        <span className="bg-slate-950 px-2.5 py-1 rounded-lg text-slate-500 font-mono text-[10px] border border-slate-800 select-none">{editingEventKey}</span>
+                        <input 
+                          type="text"
+                          value={ev.title || ''}
+                          onChange={(e) => {
+                            const updated = { ...config.events };
+                            updated[editingEventKey].title = e.target.value;
+                            setConfig(prev => ({ ...prev, events: updated }));
+                          }}
+                          className="bg-transparent text-sm font-semibold text-slate-100 outline-none border-b border-dashed border-slate-700 focus:border-indigo-500 font-sans transition py-0.5"
+                        />
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (confirm("Permanently erase this Event Setting?")) {
+                            handleRemoveEventNode(editingEventKey);
+                          }
+                        }}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 uppercase font-bold tracking-wider transition cursor-pointer"
+                      >
+                        <IconTrash /> Delete Event
+                      </button>
+                    </div>
+
+                    {/* ⏱️ UNIFIED LIFECYCLE TIMELINE: EXTRA COMPACT AND STACKED FOR 1-GLANCE VISIBILITY */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide"><IconSliders /> Event Cycle Setting</div>
+                      <div className="bg-slate-950/40 border border-slate-800/60 rounded-3xl p-5 relative space-y-4 select-none z-10">
+                        <div className="absolute left-11 top-10 bottom-10 w-0.5 bg-indigo-500/80 shadow-[0_0_12px_rgba(99,102,241,0.8)] z-0" />
+                        
+                        {['1', '2', '3'].map((phaseNum) => {
+                          const phase = ev.phases?.[phaseNum] || { dayStart: 0, timeStart: "00:00", dayEnd: 0, timeEnd: "00:00" };
+                          const phaseLabels = { 1: 'Bid Request Open', 2: 'Bid Request Closed', 3: 'Event + Live Auction' };
+                          const isPopoverOpen = activeAlarmPopoverId === phaseNum;
+
+                          return (
+                            <div key={phaseNum} className={`relative font-mono text-[11px] ${isPopoverOpen ? 'z-30' : 'z-10'}`}>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/30 p-3 rounded-2xl border border-slate-800/40 hover:border-slate-800/80 transition-colors">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-6 h-6 rounded-full bg-indigo-950 border-2 border-indigo-500 text-indigo-400 flex items-center justify-center font-sans font-bold shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.6)]">
+                                    {phaseNum}
+                                  </div>
+                                  <span className="font-sans font-medium text-slate-200">{phaseLabels[phaseNum]}</span>
+                                </div>
+
+                                <div className="flex items-center gap-3 relative">
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
+                                      <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">Start:</span>
+                                      <select value={phase.dayStart} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'dayStart', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0" >
+                                        {DAYS_OF_WEEK_MAP.map(d => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
+                                      </select>
+                                      <input type="text" maxLength="5" value={phase.timeStart} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'timeStart', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-500 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-indigo-500/40 shrink-0" />
+                                    </div>
+
+                                    <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
+                                      <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">End:</span>
+                                      <select value={phase.dayEnd} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'dayEnd', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0" >
+                                        {DAYS_OF_WEEK_MAP.map(d => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
+                                      </select>
+                                      <input type="text" maxLength="5" value={phase.timeEnd} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'timeEnd', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-400 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-indigo-500/40 shrink-0" />
+                                    </div>
+                                  </div>
+
+                                  <button type="button" onClick={() => setActiveAlarmPopoverId(isPopoverOpen ? null : phaseNum)} className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer shrink-0 ${isPopoverOpen ? 'bg-indigo-600 border-transparent text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500/40'}`} title="Configure Announcements">
+                                    <IconBell />
+                                  </button>
+
+                                  {isPopoverOpen && (
+                                    <>
+                                      <div className="fixed inset-0 z-40" onClick={() => setActiveAlarmPopoverId(null)} />
+                                      <div className="absolute right-0 top-full mt-2 bg-slate-900 border border-slate-800 p-3.5 rounded-2xl shadow-2xl z-50 w-72 space-y-2.5 font-sans animate-fadeIn">
+                                        {phaseNum === '1' ? (
+                                          <div className="space-y-2">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Current Bidders List Notifications (3)</span>
+                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                              {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).map((time, idx) => (
+                                                <div key={idx} className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
+                                                  <input type="time" value={time} onChange={(e) => {
+                                                      const updated = { ...config.events };
+                                                      const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                                                      const updatedPhase1 = [...(currentAnnouncements.phase1 || [])];
+                                                      updatedPhase1[idx] = e.target.value;
+                                                      updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                                                      setConfig(prev => ({ ...prev, events: updated }));
+                                                    }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
+                                                  <button type="button" onClick={() => {
+                                                      const updated = { ...config.events };
+                                                      const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                                                      const updatedPhase1 = (currentAnnouncements.phase1 || []).filter((_, i) => i !== idx);
+                                                      updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                                                      setConfig(prev => ({ ...prev, events: updated }));
+                                                    }} className="text-slate-500 hover:text-rose-400 transition cursor-pointer" ><IconX /></button>
+                                                </div>
+                                              ))}
+                                              {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).length < 3 && (
+                                                <button type="button" onClick={() => {
+                                                    const updated = { ...config.events };
+                                                    const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                                                    const updatedPhase1 = [...(currentAnnouncements.phase1 || []), "12:00"];
+                                                    updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
+                                                    setConfig(prev => ({ ...prev, events: updated }));
+                                                  }} className="px-2.5 py-1 rounded-xl border border-dashed border-slate-700 bg-slate-950 text-slate-500 text-[10px] font-semibold cursor-pointer" >+ Add</button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : phaseNum === '2' ? (
+                                          <div className="space-y-1.5">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Bid Close Notification</span>
+                                            <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
+                                              <input type="time" value={ev.announcements?.phase2 || "22:15"} onChange={(e) => {
+                                                  const updated = { ...config.events };
+                                                  const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                                                  updated[editingEventKey].announcements = { ...currentAnnouncements, phase2: e.target.value };
+                                                  setConfig(prev => ({ ...prev, events: updated }));
+                                                }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-1.5">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Event Starts Notification</span>
+                                            <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
+                                              <input type="time" value={ev.announcements?.phase3 || "20:55"} onChange={(e) => {
+                                                  const updated = { ...config.events };
+                                                  const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+                                                  updated[editingEventKey].announcements = { ...currentAnnouncements, phase3: e.target.value };
+                                                  setConfig(prev => ({ ...prev, events: updated }));
+                                                }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* TAC-TILE LOOT CEILINGS LIST COMPONENT */}
+                    <div className="bg-slate-950/40 border border-slate-800/80 p-4 rounded-xl space-y-3 shadow-inner flex flex-col justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider"><IconPackage /> Item & Quantity Limits</div>
+                          <p className="text-[10px] text-slate-500 font-normal">Enforces maximum Bid caps across individual items.</p>
+                        </div>
+                        <select
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            handleUpdateEventLootLimit(editingEventKey, e.target.value, 'up');
+                            e.target.value = '';
+                          }}
+                          className="bg-slate-900 border border-slate-800 text-[10px] font-medium rounded-lg px-2.5 py-1.5 outline-none text-slate-400 hover:text-white cursor-pointer font-sans"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>+ Add Item</option>
+                          {config.items.map(mi => (
+                            <option key={mi.id} value={mi.id} disabled={ev.loots?.[mi.id] !== undefined}>
+                              {mi.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-0.5 scrollbar-thin pt-1">
+                        {ev.loots && Object.keys(ev.loots).length > 0 ? (
+                          Object.keys(ev.loots).map(lootItemId => {
+                            const matchedItem = config.items.find(i => i.id === lootItemId) || { name: 'Unknown Item' };
+                            const currentLimit = ev.loots[lootItemId] || 0;
+                            return (
+                              <div key={lootItemId} className="flex items-center justify-between bg-slate-900 border border-slate-800/50 p-2.5 rounded-xl text-xs shadow-sm font-mono">
+                                <span className="text-slate-300 font-sans font-medium truncate pr-2 flex items-center gap-2"><IconPackage /> {matchedItem.name}</span>
+                                <div className="flex items-center gap-2.5 select-none shrink-0">
+                                  <button type="button" onClick={() => handleUpdateEventLootLimit(editingEventKey, lootItemId, 'down')} className="w-6 h-6 rounded bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">-</button>
+                                  <span className="text-xs font-bold text-amber-500 w-4 text-center">{currentLimit}</span>
+                                  <button type="button" onClick={() => handleUpdateEventLootLimit(editingEventKey, lootItemId, 'up')} className="w-6 h-6 rounded bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">+</button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="col-span-2 text-center py-6 text-[10px] text-slate-600 italic font-mono">No bound limit parameters mapped.</div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })() : (
+                <div className="text-center py-16 bg-slate-900/10 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">Select or initialize an event from the Left panel to view configurations.</div>
+              )}
+            </div>
+
+          </div>
+
+          {/* 🏷️ DYNAMIC SPECIAL EVENT CATEGORIES WORKSPACE */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 mt-6 space-y-4 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3.5">
+              <div>
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconTag />
+                  Special Event Classifications
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">Manage taxonomy tags available inside the calendar creation panel.</p>
+              </div>
+              <div className="flex gap-2">
                 <input 
                   type="text"
-                  placeholder="Event Name (e.g. GL) ..."
-                  value={newEventName}
-                  onChange={(e) => setNewEventName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none font-sans focus:border-slate-700"
+                  placeholder="New Category (e.g. Scrim)..."
+                  id="newSpecialCatInput"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none min-w-[220px]"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      const val = e.target.value.trim();
+                      if (config.specialEventCategories?.includes(val)) return alert("Category already exists.");
+                      const updatedCats = [...(config.specialEventCategories || ["Raid", "Meeting", "PVP", "Casual"]), val];
+                      setConfig(prev => ({ ...prev, specialEventCategories: updatedCats }));
+                      e.target.value = '';
+                    }
+                  }}
                 />
                 <button 
-                  onClick={handleAddEventNode}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer"
+                  type="button"
+                  onClick={() => {
+                    const input = document.getElementById('newSpecialCatInput');
+                    if (input && input.value.trim()) {
+                      const val = input.value.trim();
+                      if (config.specialEventCategories?.includes(val)) return alert("Category already exists.");
+                      const updatedCats = [...(config.specialEventCategories || ["Raid", "Meeting", "PVP", "Casual"]), val];
+                      setConfig(prev => ({ ...prev, specialEventCategories: updatedCats }));
+                      input.value = '';
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition text-white cursor-pointer"
                 >
-                  <IconPlus /> Create New Event
+                  + Add Tag
                 </button>
               </div>
             </div>
 
-            {/* COMPACT EVENT INTERATION LIST MATRICES */}
-            <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
-              {config.events && Object.keys(config.events).length > 0 ? (
-                Object.keys(config.events).map((evKey) => {
-                  const ev = config.events[evKey];
-                  const activeDropsCount = Object.keys(ev.loots || {}).length;
-                  const isActiveSelection = editingEventKey === evKey;
-                  return (
-                    <div 
-                      key={evKey} 
-                      onClick={() => setEditingEventKey(evKey)}
-                      className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between space-y-2 cursor-pointer transition transform hover:-translate-y-0.5 group relative overflow-hidden ${isActiveSelection ? 'bg-slate-900 border-indigo-500/80 shadow-md' : 'bg-slate-900/30 border-slate-800/80 hover:border-slate-700'}`}
-                    >
-                      {isActiveSelection && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500" />}
-                      <div className="flex justify-between items-start">
-                        <div className="truncate pr-2">
-                          <h4 className={`text-xs font-semibold truncate transition ${isActiveSelection ? 'text-indigo-400' : 'text-slate-200 group-hover:text-indigo-400'}`}>{ev.title || 'Untitled Session'}</h4>
-                          <span className="font-mono text-[9px] text-slate-500 block mt-0.5">{evKey}</span>
-                        </div>
-                        <span className="bg-slate-950 border border-slate-800/60 px-2 py-0.5 rounded-lg text-[9px] font-mono text-slate-400 shrink-0">
-                          {activeDropsCount} Items
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">No scheduling events active.</div>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+              {(config.specialEventCategories || ["Raid", "Meeting", "PVP", "Casual"]).map((catName) => (
+                <div key={catName} className="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl font-mono text-xs shadow-sm group hover:border-slate-700 transition">
+                  <span className="text-amber-500 font-sans font-semibold flex items-center gap-1.5"><IconTag /> {catName}</span>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const updatedCats = (config.specialEventCategories || ["Raid", "Meeting", "PVP", "Casual"]).filter(c => c !== catName);
+                      setConfig(prev => ({ ...prev, specialEventCategories: updatedCats }));
+                    }}
+                    className="text-slate-600 hover:text-rose-400 font-bold transition cursor-pointer"
+                  >
+                    ✖
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* RIGHT DETAILED SUITE WORKSPACE CANVAS (65% WIDTH) */}
-          <div className="md:col-span-8">
-            {editingEventKey && config.events?.[editingEventKey] ? (() => {
-              const ev = config.events[editingEventKey];
-              return (
-                <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl animate-fadeIn">
-                  
-                  {/* CONFIG DESK CANVAS HEADER ELEMENT */}
-                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
-                    <div className="flex items-center gap-3 truncate pr-4">
-                      <span className="bg-slate-950 px-2.5 py-1 rounded-lg text-slate-500 font-mono text-[10px] border border-slate-800 select-none">{editingEventKey}</span>
-                      <input 
-                        type="text"
-                        value={ev.title || ''}
-                        onChange={(e) => {
-                          const updated = { ...config.events };
-                          updated[editingEventKey].title = e.target.value;
-                          setConfig(prev => ({ ...prev, events: updated }));
-                        }}
-                        className="bg-transparent text-sm font-semibold text-slate-100 outline-none border-b border-dashed border-slate-700 focus:border-indigo-500 font-sans transition py-0.5"
-                      />
-                    </div>
-                    <button 
-                      onClick={() => {
-                        if (confirm("Permanently erase this Event Setting?")) {
-                          handleRemoveEventNode(editingEventKey);
-                        }
-                      }}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-rose-400 uppercase font-bold tracking-wider transition cursor-pointer"
-                    >
-                      <IconTrash /> Delete Event
-                    </button>
-                  </div>
-
-                  {/* ⏱️ UNIFIED LIFECYCLE TIMELINE: EXTRA COMPACT AND STACKED FOR 1-GLANCE VISIBILITY */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide"><IconSliders /> Event Cycle Setting</div>
-                    <div className="bg-slate-950/40 border border-slate-800/60 rounded-3xl p-5 relative space-y-4 select-none z-10">
-                      <div className="absolute left-11 top-10 bottom-10 w-0.5 bg-indigo-500/80 shadow-[0_0_12px_rgba(99,102,241,0.8)] z-0" />
-                      
-                      {['1', '2', '3'].map((phaseNum) => {
-                        const phase = ev.phases?.[phaseNum] || { dayStart: 0, timeStart: "00:00", dayEnd: 0, timeEnd: "00:00" };
-                        const phaseLabels = { 1: 'Bid Request Open', 2: 'Bid Request Closed', 3: 'Event + Live Auction' };
-                        const isPopoverOpen = activeAlarmPopoverId === phaseNum;
-                        const alarmCount = phaseNum === '1' ? (ev.announcements?.phase1 || []).length : 1;
-
-                        return (
-                          <div key={phaseNum} className={`relative font-mono text-[11px] ${isPopoverOpen ? 'z-30' : 'z-10'}`}>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/30 p-3 rounded-2xl border border-slate-800/40 hover:border-slate-800/80 transition-colors">
-                              <div className="flex items-center gap-4">
-                                <div className="w-6 h-6 rounded-full bg-indigo-950 border-2 border-indigo-500 text-indigo-400 flex items-center justify-center font-sans font-bold shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.6)]">
-                                  {phaseNum}
-                                </div>
-                                <span className="font-sans font-medium text-slate-200">{phaseLabels[phaseNum]}</span>
-                              </div>
-
-                              <div className="flex items-center gap-3 relative">
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
-                                    <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">Start:</span>
-                                    <select value={phase.dayStart} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'dayStart', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0" >
-                                      {DAYS_OF_WEEK_MAP.map(d => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
-                                    </select>
-                                    <input type="text" maxLength="5" value={phase.timeStart} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'timeStart', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-500 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-indigo-500/40 shrink-0" />
-                                  </div>
-
-                                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
-                                    <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">End:</span>
-                                    <select value={phase.dayEnd} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'dayEnd', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0" >
-                                      {DAYS_OF_WEEK_MAP.map(d => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
-                                    </select>
-                                    <input type="text" maxLength="5" value={phase.timeEnd} onChange={(e) => handlePhaseChange(editingEventKey, phaseNum, 'timeEnd', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-400 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-indigo-500/40 shrink-0" />
-                                  </div>
-                                </div>
-
-                                <button type="button" onClick={() => setActiveAlarmPopoverId(isPopoverOpen ? null : phaseNum)} className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer shrink-0 ${isPopoverOpen ? 'bg-indigo-600 border-transparent text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500/40'}`} title="Configure Announcements">
-                                  <IconBell />
-                                </button>
-
-                                {isPopoverOpen && (
-                                  <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setActiveAlarmPopoverId(null)} />
-                                    <div className="absolute right-0 top-full mt-2 bg-slate-900 border border-slate-800 p-3.5 rounded-2xl shadow-2xl z-50 w-72 space-y-2.5 font-sans animate-fadeIn">
-                                      {phaseNum === '1' ? (
-                                        <div className="space-y-2">
-                                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Current Bidders List Notifications (3)</span>
-                                          <div className="flex flex-wrap gap-1.5 items-center">
-                                            {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).map((time, idx) => (
-                                              <div key={idx} className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
-                                                <input type="time" value={time} onChange={(e) => {
-                                                    const updated = { ...config.events };
-                                                    const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
-                                                    const updatedPhase1 = [...(currentAnnouncements.phase1 || [])];
-                                                    updatedPhase1[idx] = e.target.value;
-                                                    updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
-                                                    setConfig(prev => ({ ...prev, events: updated }));
-                                                  }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
-                                                <button type="button" onClick={() => {
-                                                    const updated = { ...config.events };
-                                                    const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
-                                                    const updatedPhase1 = (currentAnnouncements.phase1 || []).filter((_, i) => i !== idx);
-                                                    updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
-                                                    setConfig(prev => ({ ...prev, events: updated }));
-                                                  }} className="text-slate-500 hover:text-rose-400 transition cursor-pointer" ><IconX /></button>
-                                              </div>
-                                            ))}
-                                            {(ev.announcements?.phase1 || ["07:00", "12:00", "19:00"]).length < 3 && (
-                                              <button type="button" onClick={() => {
-                                                  const updated = { ...config.events };
-                                                  const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
-                                                  const updatedPhase1 = [...(currentAnnouncements.phase1 || []), "12:00"];
-                                                  updated[editingEventKey].announcements = { ...currentAnnouncements, phase1: updatedPhase1 };
-                                                  setConfig(prev => ({ ...prev, events: updated }));
-                                                }} className="px-2.5 py-1 rounded-xl border border-dashed border-slate-700 bg-slate-950 text-slate-500 text-[10px] font-semibold cursor-pointer" >+ Add</button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ) : phaseNum === '2' ? (
-                                        <div className="space-y-1.5">
-                                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Bid Close Notification</span>
-                                          <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
-                                            <input type="time" value={ev.announcements?.phase2 || "22:15"} onChange={(e) => {
-                                                const updated = { ...config.events };
-                                                const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
-                                                updated[editingEventKey].announcements = { ...currentAnnouncements, phase2: e.target.value };
-                                                setConfig(prev => ({ ...prev, events: updated }));
-                                              }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="space-y-1.5">
-                                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Event Starts Notification</span>
-                                          <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
-                                            <input type="time" value={ev.announcements?.phase3 || "20:55"} onChange={(e) => {
-                                                const updated = { ...config.events };
-                                                const currentAnnouncements = updated[editingEventKey].announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
-                                                updated[editingEventKey].announcements = { ...currentAnnouncements, phase3: e.target.value };
-                                                setConfig(prev => ({ ...prev, events: updated }));
-                                              }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* TAC-TILE LOOT CEILINGS LIST COMPONENT */}
-                  <div className="bg-slate-950/40 border border-slate-800/80 p-4 rounded-xl space-y-3 shadow-inner flex flex-col justify-between">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-2">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 uppercase tracking-wider"><IconPackage /> Item & Quantity Limits</div>
-                        <p className="text-[10px] text-slate-500 font-normal">Enforces maximum Bid caps across individual items.</p>
-                      </div>
-                      <select
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          handleUpdateEventLootLimit(editingEventKey, e.target.value, 'up');
-                          e.target.value = '';
-                        }}
-                        className="bg-slate-900 border border-slate-800 text-[10px] font-medium rounded-lg px-2.5 py-1.5 outline-none text-slate-400 hover:text-white cursor-pointer font-sans"
-                        defaultValue=""
-                      >
-                        <option value="" disabled>+ Add Item</option>
-                        {config.items.map(mi => (
-                          <option key={mi.id} value={mi.id} disabled={ev.loots?.[mi.id] !== undefined}>
-                            {mi.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[140px] overflow-y-auto pr-0.5 scrollbar-thin pt-1">
-                      {ev.loots && Object.keys(ev.loots).length > 0 ? (
-                        Object.keys(ev.loots).map(lootItemId => {
-                          const matchedItem = config.items.find(i => i.id === lootItemId) || { name: 'Unknown Item' };
-                          const currentLimit = ev.loots[lootItemId] || 0;
-                          return (
-                            <div key={lootItemId} className="flex items-center justify-between bg-slate-900 border border-slate-800/50 p-2.5 rounded-xl text-xs shadow-sm font-mono">
-                              <span className="text-slate-300 font-sans font-medium truncate pr-2 flex items-center gap-2"><IconPackage /> {matchedItem.name}</span>
-                              <div className="flex items-center gap-2.5 select-none shrink-0">
-                                <button type="button" onClick={() => handleUpdateEventLootLimit(editingEventKey, lootItemId, 'down')} className="w-6 h-6 rounded bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">-</button>
-                                <span className="text-xs font-bold text-amber-500 w-4 text-center">{currentLimit}</span>
-                                <button type="button" onClick={() => handleUpdateEventLootLimit(editingEventKey, lootItemId, 'up')} className="w-6 h-6 rounded bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">+</button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="col-span-2 text-center py-6 text-[10px] text-slate-600 italic font-mono">No bound limit parameters mapped.</div>
-                      )}
-                    </div>
-                  </div>
-
-                </div>
-              );
-            })() : (
-              <div className="text-center py-16 bg-slate-900/10 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">Select or initialize an event from the Left panel to view configurations.</div>
-            )}
-          </div>
-
-        </div>
+        </>
       )}
+      
 
       {/* PANEL 3: ACCESS GOVERNANCE */}
       {activeNavTab === 'roles' && (
@@ -722,6 +829,7 @@ export default function SettingsTab() {
                 onKeyDown={(e) => e.key === 'Enter' && handleAddRoleNode()}
               />
               <button 
+                type="button"
                 onClick={handleAddRoleNode}
                 className="flex items-center gap-1 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer text-white"
               >
@@ -736,6 +844,7 @@ export default function SettingsTab() {
                 <div key={role} className="flex items-center justify-between bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl font-mono text-xs shadow-sm group hover:border-slate-700 transition">
                   <span className="text-indigo-400 font-sans font-semibold flex items-center gap-2"><IconShield /> {role}</span>
                   <button 
+                    type="button"
                     onClick={() => handleRemoveRoleNode(role)}
                     className="text-slate-600 hover:text-rose-400 text-[10px] font-bold transition cursor-pointer"
                   >
@@ -747,6 +856,99 @@ export default function SettingsTab() {
           ) : (
             <div className="text-xs text-slate-500 font-mono py-6 text-center border border-dashed border-slate-800 rounded-xl italic">No explicit bypass vectors mapped. Falling back to platform definitions.</div>
           )}
+
+          <div className="border-t border-slate-800/60 my-6" />
+
+          {/* Live Raid War Settings */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconSliders /> Live Raid War Settings</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Configure live raid restrictions for selected configurations and war rooms.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Raid Max Configs Selectable</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={config.liveRaidMaxConfigs || 5}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 5;
+                      setConfig(prev => ({ ...prev, liveRaidMaxConfigs: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Configurations (Max 10)</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Raid War Room Select Limit</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={config.liveRaidMaxWarRooms || 2}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 2;
+                      setConfig(prev => ({ ...prev, liveRaidMaxWarRooms: val }));
+                    }}
+                    className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-indigo-500/40"
+                  />
+                  <span className="text-[10px] text-slate-500 font-medium">Rooms (Max 5)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800/60 my-6" />
+
+          {/* Voice War Rooms Registry */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconGlobe /> Voice War Rooms Registry</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">Map custom display names to the Discord voice room channel IDs configured in backend `.env` file.</p>
+            </div>
+
+            <div className="space-y-2.5 max-w-4xl font-mono text-xs">
+              {['room_001', 'room_002', 'room_003', 'room_004', 'room_005'].map((roomId, idx) => {
+                const roomObj = config.warRooms?.[roomId] || { name: `Guild Voice Channel ${idx + 1}`, envKey: `DISCORD_WARROOM_ID_${idx + 1}` };
+                return (
+                  <div 
+                    key={roomId}
+                    className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-2.5 rounded-xl shadow-sm group hover:border-slate-700 hover:bg-slate-900/10 transition-all duration-150"
+                  >
+                    <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">
+                      {roomId.toUpperCase()}
+                    </span>
+                    <span className="col-span-3 text-[10px] text-indigo-400 font-bold tracking-wider select-none">
+                      {roomObj.envKey}
+                    </span>
+                    <input 
+                      type="text"
+                      value={roomObj.name || ''}
+                      onChange={(e) => {
+                        const updatedWarRooms = {
+                          ...config.warRooms,
+                          [roomId]: {
+                            ...roomObj,
+                            name: e.target.value
+                          }
+                        };
+                        setConfig(prev => ({ ...prev, warRooms: updatedWarRooms }));
+                      }}
+                      className="col-span-7 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-850 hover:border-slate-800 rounded-xl px-3 py-1 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                      placeholder="Display name e.g. Guild League Main..."
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -759,6 +961,7 @@ export default function SettingsTab() {
               <p className="text-[10px] text-slate-500 mt-0.5">The primary catalog that sets fixed item for all events.</p>
             </div>
             <button 
+              type="button"
               onClick={handleAddItemNode}
               className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md text-white"
             >
@@ -776,7 +979,7 @@ export default function SettingsTab() {
                   <span className="col-span-1 text-slate-600 font-bold text-center text-xs select-none">#{String(index + 1).padStart(2, '0')}</span>
                   <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">{item.id}</span>
                   
-                  {/* UNIFIED INTERACTIVE INTERACTION LAYER (Read-Only till active click) */}
+                  {/* UNIFIED INTERACTIVE INTERACTION LAYER */}
                   <input 
                     type="text"
                     value={item.name || ''}
@@ -833,10 +1036,188 @@ export default function SettingsTab() {
         </div>
       )}
 
-      {/* PERSISTENT RUNTIME ACTION DECK PILL FOOTER */}
+      {/* PERSISTENT RUNTIME ACTION DECK PILL FOOTER SECTION TRACK */}
+
+      {/* PANEL 5: DYNAMIC CHROMATIC JOB REGISTRY DESK */}
+      {activeNavTab === 'jobs' && (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-md animate-fadeIn">
+          <div className="flex justify-between items-center border-b border-slate-800/60 pb-3.5">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconShield /> Character Job Registry</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">The absolute master list defining player classes available across roster updates.</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => {
+                const updatedJobs = { ...config.jobs };
+                const nextIndex = Object.keys(updatedJobs).length + 1;
+                const jobCode = `job_${String(nextIndex).padStart(3, '0')}`;
+                updatedJobs[jobCode] = { name: `Custom Specialization ${nextIndex}`, colorTheme: '#3b82f6' };
+                setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+              }}
+              className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md text-white"
+            >
+              <IconPlus /> Add Job Assignment
+            </button>
+          </div>
+
+          <div className="space-y-2 max-w-4xl">
+            {config.jobs && Object.keys(config.jobs).length > 0 ? (
+              Object.entries(config.jobs).map(([code, jobObj], index) => (
+                <div 
+                  key={code} 
+                  className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-1.5 rounded-xl font-mono shadow-sm group hover:border-slate-800 hover:bg-slate-950/80 transition-all duration-150"
+                >
+                  <span className="col-span-1 text-slate-600 font-bold text-center text-xs select-none">#{String(index + 1).padStart(2, '0')}</span>
+                  <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">{code}</span>
+                  
+                  <input 
+                    type="text"
+                    value={jobObj.name || ''}
+                    onChange={(e) => {
+                      const updatedJobs = { ...config.jobs };
+                      updatedJobs[code].name = e.target.value;
+                      setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                    }}
+                    className="col-span-3 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-2 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                    placeholder="Job Title (e.g. Bard)..."
+                  />
+
+                  <div className="col-span-3 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 shrink-0">
+                    <div 
+                      className="relative w-5 h-5 rounded-md border border-slate-700/80 shadow-md transition transform hover:scale-105 cursor-pointer overflow-hidden shrink-0" 
+                      style={{ backgroundColor: jobObj.colorTheme || '#64748b' }}
+                    >
+                      <input 
+                        type="color" 
+                        value={jobObj.colorTheme || '#3b82f6'} 
+                        onChange={(e) => {
+                          const updatedJobs = { ...config.jobs };
+                          updatedJobs[code].colorTheme = e.target.value;
+                          setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                        }}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer scale-150"
+                        title="Choose Custom Job Color Mapping"
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-widest select-all">
+                      {jobObj.colorTheme || '#DEFAULT'}
+                    </span>
+                  </div>
+
+                  <select
+                    value={jobObj.iconFile || ''}
+                    onChange={(e) => {
+                      const updatedJobs = { ...config.jobs };
+                      updatedJobs[code].iconFile = e.target.value;
+                      setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                    }}
+                    className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-[11px] text-slate-300 font-semibold outline-none cursor-pointer focus:border-slate-700 transition-colors"
+                  >
+                    <option value="">-- No Icon --</option>
+                    <option value="acolyte.svg">Acolyte</option>
+                    <option value="archer.svg">Archer</option>
+                    <option value="doram.svg">Doram</option>
+                    <option value="mage.svg">Mage</option>
+                    <option value="merchant.svg">Merchant</option>
+                    <option value="rebellion.svg">Rebellion</option>
+                    <option value="swordsman.svg">Swordsman</option>
+                    <option value="thief.svg">Thief</option>
+                  </select>
+
+                  <div className="col-span-1 flex items-center justify-end pr-2">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const updatedJobs = { ...config.jobs };
+                        delete updatedJobs[code];
+                        setConfig(prev => ({ ...prev, jobs: updatedJobs }));
+                      }}
+                      className="text-slate-700 hover:text-rose-400 p-1 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                      title="Purge job assignment profile"
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom classes active.</div>
+            )}
+          </div>
+        {/* DYNAMIC GAME ROLE TAXONOMY REGISTRY SECTION */}
+          <div className="border-t border-slate-800/60 pt-6 mt-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800/60 pb-3.5">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconTag /> Game Role Registry</div>
+                <p className="text-[10px] text-slate-500 mt-0.5">Define tactical archetypes (e.g. DPS, Tank, Support) manageable under relational IDs.</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  const updatedRoles = { ...config.roles };
+                  const nextIndex = Object.keys(updatedRoles).length + 1;
+                  const roleCode = `role_${String(nextIndex).padStart(3, '0')}`;
+                  updatedRoles[roleCode] = { name: `Custom Archetype ${nextIndex}` };
+                  setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                }}
+                className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-semibold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-md text-white"
+              >
+                <IconPlus /> Add Game Role
+              </button>
+            </div>
+
+            <div className="space-y-2 max-w-4xl">
+              {config.roles && Object.keys(config.roles).length > 0 ? (
+                Object.entries(config.roles).map(([code, roleObj], index) => (
+                  <div 
+                    key={code} 
+                    className="grid grid-cols-12 items-center gap-3 border bg-slate-950/30 border-slate-900 p-1.5 rounded-xl font-mono shadow-sm group hover:border-slate-800 hover:bg-slate-950/80 transition-all duration-150"
+                  >
+                    <span className="col-span-1 text-slate-600 font-bold text-center text-xs select-none">#{String(index + 1).padStart(2, '0')}</span>
+                    <span className="col-span-2 text-[10px] text-slate-500 font-semibold tracking-tight select-none">{code}</span>
+                    
+                    <input 
+                      type="text"
+                      value={roleObj.name || ''}
+                      onChange={(e) => {
+                        const updatedRoles = { ...config.roles };
+                        updatedRoles[code].name = e.target.value;
+                        setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                      }}
+                      className="col-span-8 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                      placeholder="Role Title (e.g. Main Tank)..."
+                    />
+
+                    <div className="col-span-1 flex items-center justify-end pr-2">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const updatedRoles = { ...config.roles };
+                          delete updatedRoles[code];
+                          setConfig(prev => ({ ...prev, roles: updatedRoles }));
+                        }}
+                        className="text-slate-700 hover:text-rose-400 p-1 transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                        title="Purge game role profile"
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom game roles active.</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
+
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
         <div className="mx-auto max-w-5xl flex items-center justify-end gap-4">
           <button 
+            type="button"
             onClick={handleSaveWorkspaceChanges} 
             className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition shadow-xl cursor-pointer"
           >
@@ -844,7 +1225,6 @@ export default function SettingsTab() {
           </button>
         </div>
       </div>
-
     </div>
   );
 }

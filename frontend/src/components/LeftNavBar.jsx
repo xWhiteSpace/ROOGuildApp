@@ -1,7 +1,7 @@
 // frontend/src/components/LeftNavBar.jsx
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useEffect } from 'react';
+import { apiFetch } from '../services/apiClient';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconRequest = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
@@ -12,10 +12,11 @@ const IconPast = () => <svg className="w-4 h-4" fill="none" stroke="currentColor
 const IconEvidence = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>;
 const IconHelp = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg>;
 const IconSettings = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
+const IconScheduler = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconChevron = ({ collapsed }) => <svg className={`w-3.5 h-3.5 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>;
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>;
 
-const navItems = [
+const auctionItems = [
   { label: 'Request', path: '/', icon: IconRequest },
   { label: 'Mimic Book', path: '/mimic-book', icon: IconBook },
   { label: 'Request History', path: '/request-history', icon: IconHistory },
@@ -23,23 +24,29 @@ const navItems = [
   { label: 'Submit Evidence', path: '/submit-evidence', icon: IconEvidence }
 ];
 
-export default function LeftNavBar() {
+const raidItems = [
+  { label: 'MasterList', path: '/attendance/masterlist', icon: IconRequest },
+  { label: 'Raid Party', path: '/attendance/raidparty', icon: IconBook },
+  { label: 'Live Raid', path: '/attendance/liveraid', icon: IconLive },
+  { label: 'History', path: '/attendance/history', icon: IconHistory },
+  { label: 'Statistics', path: '/attendance/statistics', icon: IconHistory },
+  { label: 'Scheduler', path: '/attendance/scheduler', icon: IconScheduler }
+];
+
+export default function LeftNavBar({ macroTab }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [helpUrl, setHelpUrl] = useState('');
+  const [auctionHelpUrl, setAuctionHelpUrl] = useState('');
+  const [raidHelpUrl, setRaidHelpUrl] = useState('');
 
   useEffect(() => {
     const fetchHelpUrl = async () => {
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
-        const res = await fetch(`${backendUrl}/api/requests/settings/get`, {
-          headers: {
-            ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {})
-          }
-        });
+        const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
         const data = await res.json();
-        if (data.success && data.config?.helpEmbedUrl) {
-          setHelpUrl(data.config.helpEmbedUrl);
+        if (data.success && data.config) {
+          setAuctionHelpUrl(data.config.helpEmbedUrl || '');
+          setRaidHelpUrl(data.config.raidHelpEmbedUrl || '');
         }
       } catch (err) {
         console.error("Error fetching help URL:", err);
@@ -47,6 +54,16 @@ export default function LeftNavBar() {
     };
     fetchHelpUrl();
   }, []);
+
+  const helpUrl = useMemo(
+    () => (macroTab === 'raid' ? raidHelpUrl : auctionHelpUrl),
+    [macroTab, raidHelpUrl, auctionHelpUrl]
+  );
+
+  const helpTitle = macroTab === 'raid' ? 'Raid Governance Guide' : 'Auction Help Guide';
+  const helpNavLabel = macroTab === 'raid' ? 'Raid Help Guide' : 'Auction Help Guide';
+
+  const activeNavItems = macroTab === 'raid' ? raidItems : auctionItems;
 
   return (
     <aside className={`min-h-screen border-r border-slate-900 bg-slate-950 p-4 transition-all duration-300 relative shrink-0 shadow-2xl select-none ${
@@ -67,13 +84,17 @@ export default function LeftNavBar() {
       <div className={`mb-6 px-2 py-3 transition-all duration-200 overflow-hidden font-sans ${
         isCollapsed ? 'h-0 opacity-0 mb-0 py-0' : 'opacity-100'
       }`}>
-        <div className="text-sm font-bold uppercase tracking-wider text-slate-200">Auction Dashboard</div>
-        <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">Request Item, View Bid, Review History.</div>
+        <div className="text-sm font-bold uppercase tracking-wider text-slate-200">
+          {macroTab === 'raid' ? 'Raid Governance' : 'Auction Dashboard'}
+        </div>
+        <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase mt-0.5">
+          {macroTab === 'raid' ? 'Roster Management, Parties, Stats' : 'Request Item, View Bid, Review History.'}
+        </div>
       </div>
 
       {/* UNIFIED CORE LIST ELEMENT ANCHORS DECK */}
       <nav className="space-y-1">
-        {navItems.map((item) => (
+        {activeNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -107,16 +128,16 @@ export default function LeftNavBar() {
           type="button"
           onClick={() => setIsHelpOpen(true)}
           className={`w-full flex items-center rounded-xl px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 ${isCollapsed ? 'justify-center' : ''}`}
-          title="System User Guide & Help Portal"
+          title={helpNavLabel}
         >
           {isCollapsed ? (
-            <span className="flex items-center justify-center" title="Help Guide">
+            <span className="flex items-center justify-center" title={helpNavLabel}>
               <IconHelp />
             </span>
           ) : (
             <>
               <span className="shrink-0"><IconHelp /></span>
-              <span className="ml-3 whitespace-nowrap truncate">Help Guide</span>
+              <span className="ml-3 whitespace-nowrap truncate">{helpNavLabel}</span>
             </>
           )}
         </button>
@@ -154,7 +175,7 @@ export default function LeftNavBar() {
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-semibold tracking-wider uppercase text-slate-200 flex items-center gap-2">
-                  <IconHelp /> System Help Guide
+                  <IconHelp /> {helpTitle}
                 </h3>
               </div>
               <button 
@@ -190,7 +211,11 @@ export default function LeftNavBar() {
                   </div>
                 </>
               ) : (
-                <div className="text-xs text-slate-500 font-mono italic">No interactive guide presentation configured by guild officers yet.</div>
+                <div className="text-xs text-slate-500 font-mono italic text-center px-4">
+                  {macroTab === 'raid'
+                    ? 'No Raid Governance guide URL configured yet. Set it under System Settings → Raid Governance Help Guide URL.'
+                    : 'No Auction help guide URL configured yet. Set it under System Settings → Auction Dashboard Help Guide URL.'}
+                </div>
               )}
             </div>
 
