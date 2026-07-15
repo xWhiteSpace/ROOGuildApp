@@ -114,118 +114,19 @@ export async function initializeDiscordBot() {
     });
 
     // 📢 Automated Modular Announcement Scheduler Ticker (Evaluated every 60 seconds)
-    setInterval(async () => {
-      try {
-        // 📅 Weekly attendance auto-announce (self-gated: Sunday + hour + marker; idempotent)
-        import('./attendanceAnnounce.js')
-          .then((m) => m.maybeAnnounceWeekly())
-          .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
+    // Each announcer is self-gated on the force-lock flag and fully idempotent
+    // (backed by Firebase markers), so ticks are safe to fire-and-forget and
+    // announcements self-heal across restarts/redeploys instead of being lost.
+    setInterval(() => {
+      // 📅 Weekly attendance auto-announce (Sunday + hour + marker; idempotent)
+      import('./attendanceAnnounce.js')
+        .then((m) => m.maybeAnnounceWeekly())
+        .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
 
-        // 🚨 FORCED LOCK ANNOUNCEMENT SILENCER: Suppress all cron updates if manual absolute lockdown mode is toggled
-        const db = admin.database();
-        const configSnap = await db.ref('settings/configuration').once('value');
-        if (configSnap.exists() && configSnap.val().isForceLocked === true) {
-          return; // Abort execution loop cleanly to freeze channel notifications
-        }
-
-        const { getGateStatusDetails } = await import('../config/timeWindow.js');
-        const status = getGateStatusDetails(); // Pull synchronization baselines
-        if (!status || !status.announcementMinutes) return; // Safeguard if tree returns empty payload
-
-        // 🚀 EFFICIENCY GAIN: Pull the verified timezone directly from your synchronous memory cache
-        const targetTimezone = status.timezone || "Asia/Manila";
-
-        const now = new Date();
-        const parts = new Intl.DateTimeFormat('en-US', {
-          timeZone: targetTimezone,
-          hour12: false,
-          year: 'numeric',
-          month: 'numeric',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: 'numeric'
-        }).formatToParts(now);
-
-        const timeObj = {};
-        parts.forEach(p => { timeObj[p.type] = p.value; });
-
-        const year = parseInt(timeObj.year, 10);
-        const month = parseInt(timeObj.month, 10) - 1;
-        const day = parseInt(timeObj.day, 10);
-        const trueHours = parseInt(timeObj.hour, 10) % 24;
-        const trueMinutes = parseInt(timeObj.minute, 10);
-
-        const weekdayStr = new Intl.DateTimeFormat('en-US', { timeZone: targetTimezone, weekday: 'short' }).format(now);
-        const shortNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const dayOfWeek = shortNames.indexOf(weekdayStr) >= 0 ? shortNames.indexOf(weekdayStr) : 0;
-        const currentAbs = (dayOfWeek * 1440) + (trueHours * 60) + trueMinutes;
-
-        // 🛰️ SECURE CHANNEL SEPARATION: Pull distinct channel pointers from environment files
-        const aucreqChannelId = process.env.DISCORD_AUCREQ_CHANNEL_ID;     // Request/Signup Lobby
-        const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;   // Live Arena Deck
-
-        const { phase1, phase2, phase3 } = status.announcementMinutes; // Destructure targeted milestone integers
-
-        // 🛡️ DRIFT-PROOF TRACKING MATRIX: Initialize tracker or scan historical intervals to protect against skipped ticks
-        if (typeof global.lastProcessedAbs === 'undefined') {
-          global.lastProcessedAbs = (currentAbs - 1 + 10080) % 10080;
-        }
-
-        const minutesToCheck = [];
-        let cursorMin = (global.lastProcessedAbs + 1) % 10080;
-        const loopTargetMin = (currentAbs + 1) % 10080;
-
-        // Backfill the queue with any minutes that elapsed during processing lag or event loop drift
-        while (cursorMin !== loopTargetMin) {
-          minutesToCheck.push(cursorMin);
-          cursorMin = (cursorMin + 1) % 10080;
-        }
-
-        // Evaluate the sequential backfill timeline step-by-step
-        for (const minuteCode of minutesToCheck) {
-          if (phase1.includes(minuteCode)) {
-            if (auctionChannelId) {
-              const reqChannel = await discordClient.channels.fetch(auctionChannelId).catch(() => null);
-              if (reqChannel && reqChannel.isTextBased()) {
-                await reqChannel.send(`📢 **${status.eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`);
-              }
-            }
-            
-            // 📊 SNAPSHOT INTEGRATION: Automatically dispense live item demands
-            const { processAndPostDiscordSnapshot } = await import('../services/discordSnapshot.js');
-            await processAndPostDiscordSnapshot(false).catch(() => {});
-          }
-          if (minuteCode === phase2) {
-            if (auctionChannelId) {
-              const reqChannel = await discordClient.channels.fetch(auctionChannelId).catch(() => null);
-              if (reqChannel && reqChannel.isTextBased()) {
-                await reqChannel.send(`🔒 **${status.eventName} Registration Locked**:\nSubmissions are now closed! Bidding selections are frozen for list allocation processing by Management Officers.`);
-              }
-            }
-            
-            // 📊 SNAPSHOT INTEGRATION: Automatically lock and publish finalized lists
-            const { processAndPostDiscordSnapshot } = await import('../services/discordSnapshot.js');
-            await processAndPostDiscordSnapshot(true).catch(() => {});
-          }
-          if (minuteCode === phase3) {
-            // 📍 Live Auction Arena Announcement: Directed exclusively into DISCORD_AUCTION_CHANNEL_ID
-            if (auctionChannelId) {
-              const auctionChannel = await discordClient.channels.fetch(auctionChannelId).catch(() => null);
-              if (auctionChannel && auctionChannel.isTextBased()) {
-                await auctionChannel.send(`⚡ **${status.eventName} Auction Arena LIVE**:\nThe raid session has commenced! Stand by for interactive live bidding controls.`);
-              }
-            }
-            
-            // 📊 SNAPSHOT INTEGRATION: Publish the opening live auction board notice
-            const { processAndPostDiscordSnapshot } = await import('../services/discordSnapshot.js');
-            await processAndPostDiscordSnapshot(false).catch(() => {});
-          }
-        }
-
-        global.lastProcessedAbs = currentAbs; // Pin down anchor for next interval comparison loop
-      } catch (err) {
-        console.error("⚠️ Automated notification scheduler loop warning:", err.message);
-      }
+      // 🚀 Event phase announcements (restart-safe + idempotent via Firebase markers)
+      import('./eventAnnounce.js')
+        .then((m) => m.maybeAnnounceEvents())
+        .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
     }, 60000);
   });
 
