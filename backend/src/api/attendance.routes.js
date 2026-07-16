@@ -70,8 +70,10 @@ router.post('/vanish', async (req, res) => {
     const { targetUid } = req.body;
     if (!targetUid) return res.status(400).json({ success: false, error: 'Missing user ID parameter.' });
 
-    // 1. Kick member straight off the active Discord Server Guild
-    if (discordClient && discordClient.isReady()) {
+    // 1. Kick member straight off the active Discord Server Guild.
+    // Dummies are placeholder-only (no Discord identity) so we skip the kick entirely.
+    const isDummyTarget = targetUid.startsWith('dummy_');
+    if (!isDummyTarget && discordClient && discordClient.isReady()) {
       const guild = await discordClient.guilds.fetch(process.env.DISCORD_GUILD_ID).catch(() => null);
       if (guild) {
         const member = await guild.members.fetch(targetUid).catch(() => null);
@@ -850,6 +852,13 @@ router.post('/roster/save-batch', async (req, res) => {
       if (m.status) {
         batchAtomicUpdates[`auction/members/${uid}/status`] = m.status;
       }
+
+      // Dummies own an editable displayName (no Discord source), so persist it here.
+      // Real member names remain Discord-owned and are never written from the batch.
+      if (uid.startsWith('dummy_') || m.isDummy === true) {
+        batchAtomicUpdates[`auction/members/${uid}/isDummy`] = true;
+        batchAtomicUpdates[`auction/members/${uid}/displayName`] = m.displayName || "";
+      }
     });
 
     if (Object.keys(batchAtomicUpdates).length > 0) {
@@ -857,6 +866,55 @@ router.post('/roster/save-batch', async (req, res) => {
     }
 
     return res.json({ success: true, message: 'Roster directory batch saved successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 🧩 POST /api/attendance/dummy/create -> Create Placeholder Member with Relational dummy_### ID
+router.post('/dummy/create', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { displayName, jobCode, roleCode, groupTag, joinedAt } = req.body;
+    if (!displayName || !displayName.trim()) {
+      return res.status(400).json({ success: false, error: 'Missing required displayName parameter.' });
+    }
+
+    // Compute next relational sequence identifier by scanning existing dummy_### keys
+    const membersSnap = await db.ref('auction/members').once('value');
+    let nextIndex = 1;
+    if (membersSnap.exists()) {
+      const numericIds = Object.keys(membersSnap.val()).map(k => {
+        const match = k.match(/^dummy_(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      });
+      nextIndex = Math.max(...numericIds, 0) + 1;
+    }
+
+    const dummyId = `dummy_${String(nextIndex).padStart(3, '0')}`;
+    const dummyPayload = {
+      isDummy: true,
+      isRaidRoster: false,
+      displayName: displayName.trim(),
+      jobCode: jobCode || "",
+      roleCode: roleCode || "",
+      groupTag: groupTag || "",
+      joinedAt: joinedAt || "",
+      status: "Active",
+    };
+
+    await db.ref(`auction/members/${dummyId}`).set(dummyPayload);
+    return res.json({ success: true, id: dummyId, member: dummyPayload });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

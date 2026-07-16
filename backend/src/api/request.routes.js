@@ -541,6 +541,8 @@ router.post('/sync-roster', async (req, res) => {
     });
 
     Object.keys(currentDbMembers).forEach(dbUid => {
+      // Dummies have no Discord identity, so the sync pass must never touch or Ghost them
+      if (dbUid.startsWith('dummy_') || currentDbMembers[dbUid]?.isDummy === true) return;
       if (!discordActiveSnowflakeIds.has(dbUid)) {
         structuralLeafPatches[`auction/members/${dbUid}/status`] = "Ghost";
       }
