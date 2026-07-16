@@ -43,6 +43,20 @@ export async function initializeDiscordBot() {
           return await handleAttendanceInteraction(interaction);
         }
 
+        // ⚔️ Live Auction panel lives in its own auction-request channel — route by
+        // customId so it bypasses the general-room gate (self-service loot claiming).
+        if (
+          (interaction.isButton() || interaction.isStringSelectMenu()) &&
+          (
+            interaction.customId === 'open_auction_panel' ||
+            interaction.customId === 'open_auction_panel_back' ||
+            interaction.customId === 'auction_select_item_type' ||
+            interaction.customId?.startsWith('claim_slot_btn_')
+          )
+        ) {
+          return await handleAuctionInteraction(interaction);
+        }
+
         if (interaction.channelId !== process.env.DISCORD_GENROOM_ID_1) {
           return await interaction.reply({
             content: '❌ System commands are strictly locked to the designated general room channel.',
