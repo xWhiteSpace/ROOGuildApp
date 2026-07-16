@@ -8,6 +8,8 @@ const IconTrash = () => <svg className="w-3.5 h-3.5" fill="none" stroke="current
 const IconSync = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" /></svg>;
 const IconX = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>;
 const IconSave = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2v-9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>;
+const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
+const IconEdit = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
 
 export default function MasterListTab({ user }) {
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,12 @@ export default function MasterListTab({ user }) {
 
   const [vanishTarget, setVanishTarget] = useState(null);
   const [confirmKeyword, setConfirmKeyword] = useState('');
+
+  const emptyDummyDraft = { displayName: '', jobCode: '', roleCode: '', groupTag: '', joinedAt: new Date().toISOString().slice(0, 10) };
+  const [showCreateDummy, setShowCreateDummy] = useState(false);
+  const [dummyDraft, setDummyDraft] = useState(emptyDummyDraft);
+  const [creatingDummy, setCreatingDummy] = useState(false);
+  const [editingNameUid, setEditingNameUid] = useState(null);
 
   const loadRosterDirectory = async (showLoader = true) => {
     try {
@@ -96,6 +104,29 @@ export default function MasterListTab({ user }) {
     }
   };
 
+  const handleCreateDummy = async () => {
+    if (!dummyDraft.displayName.trim()) return;
+    try {
+      setCreatingDummy(true);
+      const res = await apiFetch('/api/attendance/dummy/create', {
+        method: 'POST',
+        body: JSON.stringify(dummyDraft),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowCreateDummy(false);
+        setDummyDraft(emptyDummyDraft);
+        await loadRosterDirectory(false);
+      } else {
+        alert(data.error || 'Failed to create dummy member.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreatingDummy(false);
+    }
+  };
+
   const handleExecuteVanish = async () => {
     if (confirmKeyword !== 'YES' || !vanishTarget) return;
     try {
@@ -123,7 +154,11 @@ export default function MasterListTab({ user }) {
   });
 
   const identityPoolList = Object.entries(stagedMembers).filter(([_, m]) => 
-    !m.isRaidRoster && (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
+    !m.isRaidRoster && !m.isDummy && (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const dummyPoolList = Object.entries(stagedMembers).filter(([_, m]) => 
+    m.isDummy && !m.isRaidRoster && (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const isDirty = JSON.stringify(dbMembers) !== JSON.stringify(stagedMembers);
@@ -206,9 +241,39 @@ export default function MasterListTab({ user }) {
                   <tr key={uid} className={`hover:bg-slate-900/10 transition-colors group ${isFoundMatch ? 'bg-amber-500/10' : ''} ${isGhost ? 'bg-rose-950/5 text-slate-400' : ''}`}>
                     <td className="p-3 pl-5 font-sans font-bold truncate">
                       <div className="flex items-center gap-2">
-                        <span className={isFoundMatch ? 'bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 shadow-sm' : 'text-slate-200'}>
-                          {m.displayName}
-                        </span>
+                        {m.isDummy && editingNameUid === uid ? (
+                          <input
+                            type="text"
+                            autoFocus
+                            value={m.displayName || ''}
+                            disabled={!user?.isOfficer}
+                            onChange={(e) => handleStageLocalUpdate(uid, 'displayName', e.target.value)}
+                            onBlur={() => setEditingNameUid(null)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') setEditingNameUid(null); }}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs font-sans font-bold text-slate-100 outline-none focus:border-indigo-600 w-full"
+                          />
+                        ) : (
+                          <span className={isFoundMatch ? 'bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 shadow-sm' : 'text-slate-200'}>
+                            {m.displayName}
+                          </span>
+                        )}
+                        {m.isDummy && (
+                          <>
+                            {user?.isOfficer && editingNameUid !== uid && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingNameUid(uid)}
+                                className="text-slate-600 hover:text-indigo-400 transition cursor-pointer shrink-0"
+                                title="Edit name"
+                              >
+                                <IconEdit />
+                              </button>
+                            )}
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[8px] font-mono uppercase font-black tracking-wide shrink-0">
+                              [Dummy]
+                            </span>
+                          </>
+                        )}
                         {isGhost && (
                           <span className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[8px] font-mono uppercase font-black tracking-wide">
                             [Ghost]
@@ -294,9 +359,9 @@ export default function MasterListTab({ user }) {
         </div>
       </div>
 
-      {/* DISCORD DISCOVERY POOL DRAWER */}
-      <div className="col-span-12 lg:col-span-3 space-y-4">
-        <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md space-y-3 flex flex-col justify-between select-none">
+      {/* DISCORD DISCOVERY POOL DRAWER + DUMMY ROSTER (RIGHT RAIL) */}
+      <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+        <div className="shrink-0 bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md space-y-3 flex flex-col justify-between select-none">
           <div className="flex justify-between items-center">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><IconUser /> Discord Feeder Pool</h2>
             <button 
@@ -309,7 +374,7 @@ export default function MasterListTab({ user }) {
           </div>
         </div>
 
-        <div className="border border-slate-800 bg-slate-950/40 rounded-2xl p-3 h-[31.5rem] overflow-y-auto scrollbar-thin space-y-2">
+        <div className="shrink-0 border border-slate-800 bg-slate-950/40 rounded-2xl p-3 h-[22rem] overflow-y-auto scrollbar-thin space-y-2">
           {identityPoolList.map(([uid, m]) => (
             <div 
               key={uid}
@@ -342,6 +407,86 @@ export default function MasterListTab({ user }) {
             </div>
           ))}
         </div>
+
+        {/* DUMMY PLACEHOLDER ROSTER BOX */}
+        <div className="shrink-0 bg-slate-900/40 border border-slate-800 p-4 rounded-2xl shadow-md flex justify-between items-center gap-2 select-none">
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 min-w-0">
+            <IconUser /> <span className="truncate">Dummy Roster ({dummyPoolList.length})</span>
+          </h2>
+          {user?.isOfficer && (
+            <button
+              type="button"
+              onClick={() => { setDummyDraft(emptyDummyDraft); setShowCreateDummy(true); }}
+              className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase font-bold tracking-wide border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-600 hover:text-white transition rounded-xl shadow-sm cursor-pointer"
+            >
+              <IconPlus /> Create
+            </button>
+          )}
+        </div>
+
+        <div className="shrink-0 h-[9.5rem] border border-slate-800 bg-slate-950/40 rounded-2xl p-3 overflow-y-auto scrollbar-thin space-y-2">
+          {dummyPoolList.length === 0 && (
+            <div className="text-center text-[11px] text-slate-700 italic font-sans py-8 select-none">
+              No dummy placeholders yet. Use “Create” to add one.
+            </div>
+          )}
+          {dummyPoolList.map(([uid, m]) => (
+            <div
+              key={uid}
+              draggable={user?.isOfficer && editingNameUid !== uid}
+              onDragStart={(e) => { e.dataTransfer.setData("text/plain", uid); }}
+              className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/30 text-xs font-mono shadow-sm flex flex-col space-y-1 relative group cursor-grab active:cursor-grabbing hover:border-slate-700 transition-colors"
+            >
+              {editingNameUid === uid ? (
+                <input
+                  type="text"
+                  autoFocus
+                  value={m.displayName || ''}
+                  disabled={!user?.isOfficer}
+                  onChange={(e) => handleStageLocalUpdate(uid, 'displayName', e.target.value)}
+                  onBlur={() => setEditingNameUid(null)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingNameUid(null); }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs font-sans font-bold text-slate-100 outline-none focus:border-indigo-600"
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 pr-16 min-w-0">
+                  <span className="font-sans font-bold text-slate-200 truncate">{m.displayName || 'Unnamed Dummy'}</span>
+                  {user?.isOfficer && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingNameUid(uid)}
+                      className="text-slate-600 hover:text-indigo-400 transition cursor-pointer shrink-0"
+                      title="Edit name"
+                    >
+                      <IconEdit />
+                    </button>
+                  )}
+                </div>
+              )}
+              <div className="text-[9px] text-slate-600 tracking-tighter">id: {uid}</div>
+              <div className="absolute right-2.5 top-3.5 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const inheritedDate = m.joinedAt || new Date().toISOString().slice(0, 10);
+                    handleStageLocalUpdate(uid, 'isRaidRoster', true);
+                    handleStageLocalUpdate(uid, 'joinedAt', inheritedDate);
+                  }}
+                  className="px-2 py-0.5 bg-indigo-950/30 border border-indigo-500/20 hover:bg-indigo-600 text-[9px] font-bold uppercase tracking-wider text-indigo-400 hover:text-white rounded-lg cursor-pointer transition-colors"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVanishTarget(uid)}
+                  className="px-2 py-0.5 bg-rose-950/30 border border-rose-500/20 hover:bg-rose-600 text-[9px] font-bold uppercase tracking-wider text-rose-400 hover:text-white rounded-lg cursor-pointer transition-colors"
+                >
+                  Vanish
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* PERSISTENT MANUAL SAVE STICKY DESK COMPONENT */}
@@ -362,13 +507,110 @@ export default function MasterListTab({ user }) {
         </div>
       </div>
 
+      {/* CREATE DUMMY MODAL */}
+      {showCreateDummy && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold tracking-wider uppercase text-emerald-400 flex items-center gap-1.5"><IconPlus /> Create Dummy Member</h2>
+              <button type="button" onClick={() => setShowCreateDummy(false)} className="text-slate-500 hover:text-white transition cursor-pointer"><IconX /></button>
+            </div>
+
+            <div className="space-y-3 font-sans">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Member Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={dummyDraft.displayName}
+                  onChange={(e) => setDummyDraft(prev => ({ ...prev, displayName: e.target.value }))}
+                  placeholder="e.g. Placeholder Tank"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-700 font-medium placeholder-slate-600/60"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Job Class</label>
+                <div className="flex items-center gap-2">
+                  <img
+                    src={`/assets/icons/classes/${jobsCatalog[dummyDraft.jobCode]?.iconFile || 'default.svg'}`}
+                    alt=""
+                    className="w-5 h-5 object-contain shrink-0 opacity-90"
+                    onError={(e) => { e.target.src = '/assets/icons/classes/default.svg'; }}
+                  />
+                  <select
+                    value={dummyDraft.jobCode}
+                    onChange={(e) => setDummyDraft(prev => ({ ...prev, jobCode: e.target.value }))}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs outline-none w-full font-bold cursor-pointer text-slate-200"
+                  >
+                    <option value="">Select Job...</option>
+                    {Object.entries(jobsCatalog).map(([code, j]) => (
+                      <option key={code} value={code} className="bg-slate-950">{j.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Role Classification</label>
+                <select
+                  value={dummyDraft.roleCode}
+                  onChange={(e) => setDummyDraft(prev => ({ ...prev, roleCode: e.target.value }))}
+                  className="bg-slate-950 border border-indigo-900/30 rounded-xl px-2 py-1.5 text-xs outline-none w-full text-indigo-400 font-bold cursor-pointer"
+                >
+                  <option value="" className="text-slate-500">Select Role...</option>
+                  {Object.entries(rolesCatalog).map(([code, r]) => (
+                    <option key={code} value={code} className="text-indigo-300 bg-slate-950">{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Group Assignment</label>
+                <input
+                  type="text"
+                  value={dummyDraft.groupTag}
+                  onChange={(e) => setDummyDraft(prev => ({ ...prev, groupTag: e.target.value }))}
+                  placeholder="e.g. Team A"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-700 font-medium placeholder-slate-600/60"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Date Joined</label>
+                <input
+                  type="date"
+                  value={dummyDraft.joinedAt}
+                  onChange={(e) => setDummyDraft(prev => ({ ...prev, joinedAt: e.target.value }))}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-slate-700 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1 text-xs">
+              <button type="button" onClick={() => setShowCreateDummy(false)} className="px-4 py-2 border border-slate-800 bg-slate-950 text-slate-400 hover:text-white rounded-xl transition cursor-pointer font-sans font-semibold">Cancel</button>
+              <button
+                type="button"
+                disabled={!dummyDraft.displayName.trim() || creatingDummy}
+                onClick={handleCreateDummy}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 text-white rounded-xl font-bold uppercase tracking-wider transition shadow-lg cursor-pointer font-sans flex items-center gap-1.5"
+              >
+                <IconPlus /> {creatingDummy ? 'Creating...' : 'Create Dummy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VANISH EXVICTION MODAL TARGET */}
       {vanishTarget && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fadeIn">
           <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
-            <h2 className="text-sm font-bold tracking-wider uppercase text-rose-500">🚨 Severe Guild Eviction</h2>
+            <h2 className="text-sm font-bold tracking-wider uppercase text-rose-500">🚨 {vanishTarget?.startsWith('dummy_') ? 'Remove Dummy Placeholder' : 'Severe Guild Eviction'}</h2>
             <p className="text-xs text-slate-400 leading-relaxed font-sans">
-              This triggers a kick configuration command on the active Discord server and purges all related history rows completely out of your cloud database records.
+              {vanishTarget?.startsWith('dummy_')
+                ? 'This permanently purges the dummy placeholder record from your cloud database. No Discord server action is taken.'
+                : 'This triggers a kick configuration command on the active Discord server and purges all related history rows completely out of your cloud database records.'}
             </p>
             <div className="space-y-1 font-mono text-xs">
               <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Type keyword <strong className="text-white">YES</strong> to execute:</label>

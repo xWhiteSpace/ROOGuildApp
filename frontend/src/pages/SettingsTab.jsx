@@ -47,12 +47,15 @@ const IconTrash = () => <svg className="w-3.5 h-3.5" fill="none" stroke="current
 const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" strokeLinecap="round"/></svg>;
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconTag = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01"/></svg>;
+const IconMegaphone = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 11-5.8-1.6"/></svg>;
 
 export default function SettingsTab() {
   const [isLocked, setIsLocked] = useState(true);
   const [passphrase, setPassphrase] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [announcing, setAnnouncing] = useState(false);
+  const [announceMsg, setAnnounceMsg] = useState(null);
   
   const [config, setConfig] = useState({
     timezone: 'Asia/Manila',
@@ -161,6 +164,29 @@ export default function SettingsTab() {
       }
     } catch (e) {
       setErrorMsg('Could not securely auto-detect browser timezone variables.');
+    }
+  };
+
+  const handleAnnounceWeek = async () => {
+    if (announcing) return;
+    setAnnouncing(true);
+    setAnnounceMsg(null);
+    try {
+      const res = await apiFetch('/api/attendance/announce-week', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const r = data.result || {};
+        const week = r.weekMonday ? ` (Week of ${r.weekMonday})` : '';
+        const verb = r.reposted ? 'Refreshed existing thread' : r.posted ? 'Posted new thread' : r.skipped ? 'Already posted' : 'Done';
+        setAnnounceMsg({ ok: true, text: `${verb}${week}` });
+      } else {
+        setAnnounceMsg({ ok: false, text: data.error || `Failed (${res.status})` });
+      }
+    } catch (err) {
+      setAnnounceMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setAnnouncing(false);
+      setTimeout(() => setAnnounceMsg(null), 6000);
     }
   };
 
@@ -805,6 +831,36 @@ export default function SettingsTab() {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* 📢 WEEKLY ATTENDANCE DISCORD ANNOUNCEMENT */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 mt-6 space-y-4 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <IconMegaphone />
+                  Weekly Attendance Announcement
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">Post or refresh next week&apos;s attendance thread in Discord.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {announceMsg && (
+                  <span className={`text-[10px] font-mono font-semibold ${announceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {announceMsg.text}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleAnnounceWeek}
+                  disabled={announcing}
+                  title="Post (or refresh) next week's attendance announcement thread in Discord"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-[10px] font-semibold uppercase tracking-wider rounded-xl transition text-white cursor-pointer"
+                >
+                  <IconMegaphone />
+                  {announcing ? 'Announcing…' : 'Announce Week'}
+                </button>
+              </div>
             </div>
           </div>
         </>

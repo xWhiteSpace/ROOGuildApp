@@ -10,7 +10,6 @@ const IconUsers = () => <svg className="w-4 h-4" fill="none" stroke="currentColo
 const IconTrend = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
 const IconSearch = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" d="M21 21l-4.35-4.35"/></svg>;
 const IconClose = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" d="M18 6L6 18M6 6l12 12"/></svg>;
-const IconMegaphone = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 11-5.8-1.6"/></svg>;
 
 const DEFAULT_EXPECTED_RATE = 80;
 const MAX_TREND_SESSIONS = 12;
@@ -23,8 +22,6 @@ export default function StatisticsTab({ user }) {
   const [expectedRate, setExpectedRate] = useState(DEFAULT_EXPECTED_RATE);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
-  const [announcing, setAnnouncing] = useState(false);
-  const [announceMsg, setAnnounceMsg] = useState(null);
 
   const loadAnalyticsMetrics = async () => {
     try {
@@ -69,29 +66,6 @@ export default function StatisticsTab({ user }) {
       });
     } catch (err) {
       console.error('Failed to commit expected attendance rate:', err);
-    }
-  };
-
-  const handleAnnounceWeek = async () => {
-    if (announcing) return;
-    setAnnouncing(true);
-    setAnnounceMsg(null);
-    try {
-      const res = await apiFetch('/api/attendance/announce-week', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const r = data.result || {};
-        const week = r.weekMonday ? ` (Week of ${r.weekMonday})` : '';
-        const verb = r.reposted ? 'Refreshed existing thread' : r.posted ? 'Posted new thread' : r.skipped ? 'Already posted' : 'Done';
-        setAnnounceMsg({ ok: true, text: `${verb}${week}` });
-      } else {
-        setAnnounceMsg({ ok: false, text: data.error || `Failed (${res.status})` });
-      }
-    } catch (err) {
-      setAnnounceMsg({ ok: false, text: err.message || 'Request failed' });
-    } finally {
-      setAnnouncing(false);
-      setTimeout(() => setAnnounceMsg(null), 6000);
     }
   };
 
@@ -295,27 +269,6 @@ export default function StatisticsTab({ user }) {
               />
               <span className="text-[11px] font-mono font-bold text-slate-500">%</span>
             </div>
-
-            {/* Officer: post/refresh the weekly Discord attendance thread */}
-            {user?.isOfficer && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAnnounceWeek}
-                  disabled={announcing}
-                  title="Post (or refresh) next week's attendance announcement thread in Discord"
-                  className="flex items-center gap-1.5 bg-indigo-950/50 border border-indigo-800/60 text-indigo-200 hover:bg-indigo-900/60 hover:border-indigo-700 rounded-xl px-3 py-1.5 text-[11px] font-sans font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <IconMegaphone />
-                  {announcing ? 'Announcing…' : 'Announce Week'}
-                </button>
-                {announceMsg && (
-                  <span className={`text-[10px] font-mono font-semibold ${announceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {announceMsg.text}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
