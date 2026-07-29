@@ -235,9 +235,11 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
         </div>
         <button
           onClick={() => setIsCancelModalOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-[10px] uppercase font-bold tracking-wider rounded-xl text-rose-400 hover:text-rose-300 transition cursor-pointer shadow-sm shrink-0"
+          disabled={currentPhase === 3}
+          title={currentPhase === 3 ? 'Cancellations are locked during the Live Event / Auction phase.' : undefined}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-[10px] uppercase font-bold tracking-wider rounded-xl text-rose-400 hover:text-rose-300 transition cursor-pointer shadow-sm shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-slate-800 disabled:hover:text-rose-400"
         >
-          Cancel Request <IconTrash />
+          {currentPhase === 3 ? 'Cancel Locked' : 'Cancel Request'} <IconTrash />
         </button>
       </div>
 
@@ -538,6 +540,12 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
               </button>
             </div>
 
+            {currentPhase === 3 && (
+              <div className="flex items-center gap-2 bg-amber-950/20 border border-amber-500/20 text-amber-400 text-xs px-3.5 py-2 rounded-xl font-semibold shadow-inner">
+                <IconLock /> Cancellations are locked during the Live Event / Auction phase.
+              </div>
+            )}
+
             {activeCancelableItems.length === 0 ? (
               <div className="text-center py-10 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">
                 You have no active pending requests currently in queue.
@@ -552,7 +560,8 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                     </div>
                     <button
                       onClick={() => handleExecuteCancel(item.id, item.name, liveCounts[item.id])}
-                      disabled={processing} 
+                      disabled={processing || currentPhase === 3} 
+                      title={currentPhase === 3 ? 'Cancellations are locked during the Live Event / Auction phase.' : undefined}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/20 border border-rose-500/20 hover:border-rose-500 hover:bg-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-lg text-rose-400 hover:text-white transition cursor-pointer shrink-0 disabled:opacity-20 disabled:bg-slate-950 disabled:border-slate-800 disabled:text-slate-600"
                     >
                       <IconTrash /> Drop

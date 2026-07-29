@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "deploy-commands": "node src/discord-bot/deploy.js"
+    "deploy-commands": "node src/discord-bot/deploy.js",
+    "uninstall-commands": "node src/discord-bot/uninstall.js"
   },
   "dependencies": {
     "@dynastyguild/shared": "*",

@@ -126,6 +126,16 @@ async function calculatePriorityScore(db, userId, itemId, itemNameFallback) {
   const expirationWindowInMs = lookbackDays * 24 * 60 * 60 * 1000;
   const nowMs = Date.now();
 
+  // 💰 HIGH VALUE RULING: Precious items retain (instead of reset) priority when a
+  // chosen member ends up Absent — only an actual pickup or an officer's manual
+  // reset should zero the streak out for these items.
+  const itemsList = dynamicConfig.items || [];
+  const targetItemMeta = itemsList.find(i => {
+    if (i.id && itemId) return i.id.trim().toLowerCase() === itemId.trim().toLowerCase();
+    return false;
+  }) || (itemNameFallback ? itemsList.find(i => (i.name || '').trim().toLowerCase() === itemNameFallback.trim().toLowerCase()) : null);
+  const isHighValueItem = targetItemMeta?.isHighValue === true;
+
   sortedKeys.forEach(key => {
     const record = records[key];
     
@@ -157,7 +167,12 @@ let isMatch = false;
 
   let lastSelectedIdx = -1;
   for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    if (combinedItemTimeline[i].status === 'selected' || combinedItemTimeline[i].status === 'absent') {
+    const { status } = combinedItemTimeline[i];
+    // 🛡️ 'reset' is an officer-issued manual override and always terminates the streak.
+    // 'absent' only terminates the streak for regular items — High Value items retain
+    // priority through an Absent outcome instead of resetting it.
+    const isTerminal = status === 'selected' || status === 'reset' || (status === 'absent' && !isHighValueItem);
+    if (isTerminal) {
       lastSelectedIdx = i;
       break;
     }
@@ -169,7 +184,8 @@ let isMatch = false;
   for (let i = searchStart; i < combinedItemTimeline.length; i++) {
     const { status, date: uniqueNightKey } = combinedItemTimeline[i];
 
-    if (status === 'notselected' && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
+    const countsTowardPity = status === 'notselected' || (status === 'absent' && isHighValueItem);
+    if (countsTowardPity && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
       priorityPoints++;
       countedDates.add(uniqueNightKey);
     }
@@ -680,6 +696,11 @@ router.post('/submit', async (req, res) => {
  * POST /api/requests/cancel
  */
 router.post('/cancel', async (req, res) => {
+  const timeGateStatus = getGateStatusDetails();
+  if (timeGateStatus.currentPhase === 3) {
+    return res.status(423).json({ success: false, error: 'Cancellations are locked during the Live Event / Auction phase.' });
+  }
+
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
@@ -952,6 +973,112 @@ router.post('/commit-session', async (req, res) => {
     // Fire everything down to Firebase in a single synchronized network pass
     await db.ref().update(atomicUpdates);
     return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/requests/reset-priority
+ * 🛡️ OFFICER GUARDRAIL: Manual override for the High Value retained-priority ruling.
+ * Writes a terminal 'Reset' marker into the ledger so calculatePriorityScore zeroes
+ * the streak out from this point forward, without touching prior historical rows.
+ */
+router.post('/reset-priority', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const db = getDatabase();
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+  const allowedRoles = dynamicConfig.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+  const timezone = dynamicConfig.timezone || "Asia/Manila";
+  const itemsList = dynamicConfig.items || [];
+
+  if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+  }
+
+  const { userId: targetUserId, itemId } = req.body;
+  if (!targetUserId || !itemId) {
+    return res.status(400).json({ success: false, error: 'Missing target member or item identifier.' });
+  }
+
+  try {
+    const resolvedItem = itemsList.find(i => i.id === itemId) || { name: itemId };
+    const membersSnap = await db.ref('auction/members').once('value');
+    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+    const resolvedName = membersMap[targetUserId]?.displayName || 'Unknown Member';
+
+    const newResetRef = db.ref('auction/web_requests').push();
+    await newResetRef.set({
+      id: newResetRef.key,
+      userId: targetUserId,
+      date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),
+      member: resolvedName,
+      item: resolvedItem.name,
+      itemId,
+      quantity: 0,
+      applicationStatus: 'AdminReset',
+      selectionStatus: 'Reset',
+      liveStatus: '',
+      priority: 0
+    });
+
+    return res.json({ success: true, message: `Priority for ${resolvedName} on ${resolvedItem.name} has been manually reset.` });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/requests/clear-history
+ * 🛡️ OFFICER GUARDRAIL: Permanently deletes Request History ledger rows whose
+ * request Timestamp falls within an officer-selected date range (inclusive).
+ */
+router.post('/clear-history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const db = getDatabase();
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+  const allowedRoles = dynamicConfig.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+  if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+  }
+
+  const { startDate, endDate } = req.body;
+  if (!startDate || !endDate) {
+    return res.status(400).json({ success: false, error: 'Both a start and end date are required.' });
+  }
+
+  const rangeStart = new Date(startDate);
+  const rangeEnd = new Date(`${endDate}T23:59:59.999`);
+  if (isNaN(rangeStart) || isNaN(rangeEnd) || rangeStart > rangeEnd) {
+    return res.status(400).json({ success: false, error: 'Invalid date range.' });
+  }
+
+  try {
+    const snapshot = await db.ref('auction/web_requests').once('value');
+    const records = snapshot.exists() ? snapshot.val() : {};
+
+    const atomicUpdates = {};
+    let deletedCount = 0;
+    Object.entries(records).forEach(([key, record]) => {
+      const recordDate = new Date(record.date || '');
+      if (!isNaN(recordDate) && recordDate >= rangeStart && recordDate <= rangeEnd) {
+        atomicUpdates[`auction/web_requests/${key}`] = null;
+        deletedCount++;
+      }
+    });
+
+    if (deletedCount > 0) {
+      await db.ref().update(atomicUpdates);
+    }
+
+    return res.json({ success: true, deletedCount });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

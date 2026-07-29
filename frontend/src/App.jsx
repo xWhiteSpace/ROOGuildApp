@@ -168,7 +168,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<RequestTab user={authUser} />} />
             <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
-            <Route path="/request-history" element={<RequestHistoryTab />} />
+            <Route path="/request-history" element={<RequestHistoryTab user={authUser} />} />
             <Route path="/past-auction" element={<PastAuctionTab />} />
             <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
             <Route path="/login" element={<LoginPage />} />

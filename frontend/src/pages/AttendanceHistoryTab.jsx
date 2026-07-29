@@ -14,9 +14,10 @@ import {
   CheckCircle,
   XCircle,
   MinusCircle,
-  Trash2
+  Trash2,
+  Swords
 } from 'lucide-react';
-import { calculatePoints } from '../utils/attendanceScore';
+import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -101,6 +102,64 @@ export default function AttendanceHistoryTab({ user }) {
     }
   };
 
+  // Officer toggle: confirm/unconfirm in-game presence for a member on an archived session (+1 raid score).
+  const handleToggleInGameStatus = async (sessionId, uid) => {
+    if (!isOfficer || !sessionId || !uid) return;
+    const prevConfirmed = sessions[sessionId]?.inGameStatus?.[uid] === true;
+    const nextConfirmed = !prevConfirmed;
+
+    setSessions((prev) => {
+      const session = prev[sessionId];
+      if (!session) return prev;
+      const nextInGame = { ...(session.inGameStatus || {}) };
+      if (nextConfirmed) nextInGame[uid] = true;
+      else delete nextInGame[uid];
+      return {
+        ...prev,
+        [sessionId]: { ...session, inGameStatus: nextInGame },
+      };
+    });
+
+    try {
+      const headers = getRequestHeaders();
+      const res = await fetch(`${backendUrl}/api/live-raid/history/${sessionId}/in-game`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ userId: uid, confirmed: nextConfirmed }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        // Revert optimistic update
+        setSessions((prev) => {
+          const session = prev[sessionId];
+          if (!session) return prev;
+          const nextInGame = { ...(session.inGameStatus || {}) };
+          if (prevConfirmed) nextInGame[uid] = true;
+          else delete nextInGame[uid];
+          return {
+            ...prev,
+            [sessionId]: { ...session, inGameStatus: nextInGame },
+          };
+        });
+        alert(data.error || 'Failed to update in-game status.');
+      }
+    } catch (err) {
+      setSessions((prev) => {
+        const session = prev[sessionId];
+        if (!session) return prev;
+        const nextInGame = { ...(session.inGameStatus || {}) };
+        if (prevConfirmed) nextInGame[uid] = true;
+        else delete nextInGame[uid];
+        return {
+          ...prev,
+          [sessionId]: { ...session, inGameStatus: nextInGame },
+        };
+      });
+      alert(`Error: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     loadHistoryData();
   }, [user]);
@@ -131,8 +190,9 @@ export default function AttendanceHistoryTab({ user }) {
       const totalPulses = targetSession.totalPulses || 0;
 
       const commitment = targetSession.commitments?.[uid] || 'None';
+      const inGameConfirmed = targetSession.inGameStatus?.[uid] === true;
 
-      const pts = calculatePoints(commitment, userTicks, totalPulses);
+      const pts = calculatePoints(commitment, userTicks, totalPulses, inGameConfirmed);
 
       rows.push({
         uid,
@@ -141,6 +201,7 @@ export default function AttendanceHistoryTab({ user }) {
         commitment,
         presentTicks: userTicks,
         totalPulses,
+        inGameConfirmed,
         points: pts
       });
     });
@@ -178,8 +239,9 @@ export default function AttendanceHistoryTab({ user }) {
       const totalPulses = s.totalPulses || 0;
 
       const commitment = s.commitments?.[selectedMemberUid] || 'None';
+      const inGameConfirmed = s.inGameStatus?.[selectedMemberUid] === true;
 
-      const pts = calculatePoints(commitment, userTicks, totalPulses);
+      const pts = calculatePoints(commitment, userTicks, totalPulses, inGameConfirmed);
 
       timeline.push({
         sessionId: s.id,
@@ -198,15 +260,15 @@ export default function AttendanceHistoryTab({ user }) {
     if (memberTrendTimeline.length < 2) return '';
     const width = 500;
     const height = 120;
-    const padding = 20;
+    const padX = 36;
+    const padY = 20;
 
     const pointsCount = memberTrendTimeline.length;
-    const stepX = (width - padding * 2) / (pointsCount - 1);
+    const stepX = (width - padX * 2) / (pointsCount - 1);
 
     return memberTrendTimeline.map((item, index) => {
-      const x = padding + index * stepX;
-      // Map 3.0 pts max down to vertical graph boundaries height coordinates
-      const y = height - padding - ((item.points.total / 3.0) * (height - padding * 2));
+      const x = padX + index * stepX;
+      const y = height - padY - ((item.points.total / MAX_RAID_SCORE) * (height - padY * 2));
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     }).join(' ');
   }, [memberTrendTimeline]);
@@ -327,6 +389,7 @@ export default function AttendanceHistoryTab({ user }) {
                           <th className="px-4 py-2.5 text-left">Character Name</th>
                           <th className="px-4 py-2.5 text-center w-24">Calendar Status</th>
                           <th className="px-4 py-2.5 text-center w-24">Discord Presence</th>
+                          <th className="px-4 py-2.5 text-center w-24">In-game Status</th>
                           <th className="px-4 py-2.5 text-center w-28">Duration pulse</th>
                           <th className="px-4 py-2.5 text-right w-28">Raid Score</th>
                         </tr>
@@ -334,7 +397,7 @@ export default function AttendanceHistoryTab({ user }) {
                       <tbody className="divide-y divide-slate-900 font-mono text-[12px]">
                         {sessionRosterTableRows.map((row) => {
                           const jobObj = jobsCatalog[row.jobCode];
-                          const scoreRatio = row.points.total / 3.0;
+                          const scoreRatio = row.points.total / MAX_RAID_SCORE;
                           return (
                             <tr key={row.uid} className={`hover:bg-slate-900/20 transition-colors ${scoreRatio === 0 ? 'bg-rose-950/5' : ''}`}>
                               <td className="px-4 py-2 flex items-center gap-2 font-sans">
@@ -358,11 +421,26 @@ export default function AttendanceHistoryTab({ user }) {
                                   {row.points.discPt === 1.0 ? <Mic size={15} className="text-indigo-400" /> : <MicOff size={15} className="text-slate-600 opacity-40" />}
                                 </div>
                               </td>
+                              <td className="px-4 py-2 text-center">
+                                <div className="flex justify-center">
+                                  <button
+                                    type="button"
+                                    disabled={!isOfficer}
+                                    onClick={() => handleToggleInGameStatus(selectedSessionId, row.uid)}
+                                    title={row.inGameConfirmed ? 'In-game confirmed (+1). Click to unset.' : 'Not confirmed in-game. Click to confirm (+1).'}
+                                    className={`p-1 rounded-lg transition ${
+                                      isOfficer ? 'cursor-pointer hover:bg-slate-900' : 'cursor-default'
+                                    } ${row.inGameConfirmed ? 'text-cyan-400' : 'text-slate-600 opacity-40'}`}
+                                  >
+                                    <Swords size={15} />
+                                  </button>
+                                </div>
+                              </td>
                               <td className="px-4 py-2 text-center text-slate-400 text-[11px]">
                                 {row.presentTicks} / {row.totalPulses} <span className="text-[9px] text-slate-600">({Math.round(row.points.durationPt * 100)}%)</span>
                               </td>
-                              <td className={`px-4 py-2 text-right font-black font-sans ${row.points.total === 3.0 ? 'text-emerald-400' : row.points.total >= 1.5 ? 'text-amber-500' : 'text-rose-500'}`}>
-                                {row.points.total.toFixed(2)} <span className="text-[9px] text-slate-500 font-normal">/ 3.0</span>
+                              <td className={`px-4 py-2 text-right font-black font-sans ${row.points.total === MAX_RAID_SCORE ? 'text-emerald-400' : row.points.total >= 2.0 ? 'text-amber-500' : 'text-rose-500'}`}>
+                                {row.points.total.toFixed(2)} <span className="text-[9px] text-slate-500 font-normal">/ {MAX_RAID_SCORE.toFixed(1)}</span>
                               </td>
                             </tr>
                           );
@@ -431,18 +509,22 @@ export default function AttendanceHistoryTab({ user }) {
                     <div className="bg-slate-950 border border-slate-900 rounded-2xl p-4 shadow-inner flex flex-col items-center">
                       <div className="w-full max-w-[500px] h-[130px] relative">
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 500 120" fill="none">
-                          {/* Horizontal Score Helper Guide Vectors */}
-                          <line x1="20" y1="20" x2="480" y2="20" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
-                          <line x1="20" y1="100" x2="480" y2="100" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+                          {/* Y-axis guides: 100% / 50% / 0% */}
+                          <line x1="36" y1="20" x2="464" y2="20" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+                          <line x1="36" y1="60" x2="464" y2="60" stroke="#475569" strokeWidth="1" strokeDasharray="2 4" />
+                          <line x1="36" y1="100" x2="464" y2="100" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+                          <text x="4" y="23" fill="#64748b" fontSize="8" fontFamily="monospace">100%</text>
+                          <text x="4" y="63" fill="#64748b" fontSize="8" fontFamily="monospace">50%</text>
+                          <text x="4" y="103" fill="#64748b" fontSize="8" fontFamily="monospace">0%</text>
                           
                           {/* Chronological Grid Connectors */}
                           <path d={svgGraphPath} stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                           
                           {/* Coordinates anchor nodes */}
                           {memberTrendTimeline.map((item, index) => {
-                            const stepX = (500 - 40) / (memberTrendTimeline.length - 1);
-                            const x = 20 + index * stepX;
-                            const y = 120 - 20 - ((item.points.total / 3.0) * (120 - 40));
+                            const stepX = (500 - 72) / (memberTrendTimeline.length - 1);
+                            const x = 36 + index * stepX;
+                            const y = 100 - ((item.points.total / MAX_RAID_SCORE) * 80);
                             return (
                               <g key={index} className="group cursor-pointer">
                                 <circle cx={x} cy={y} r="4" className="fill-indigo-500 stroke-slate-950" strokeWidth="1.5" />
@@ -453,9 +535,9 @@ export default function AttendanceHistoryTab({ user }) {
                         </svg>
                       </div>
                       <div className="w-full max-w-[500px] flex justify-between text-[8px] font-mono font-bold uppercase tracking-wide text-slate-500 px-3 mt-1 select-none">
-                        <span>Older Lockout</span>
-                        <span>Chronological Sequence</span>
-                        <span>Latest Raid</span>
+                        <span>Earlier scores</span>
+                        <span>Last 8 consecutive</span>
+                        <span>Latest score</span>
                       </div>
                     </div>
                   ) : (
@@ -479,9 +561,12 @@ export default function AttendanceHistoryTab({ user }) {
                             <span title={`Discord Voice Presence: ${log.points.discPt} pt`} className={log.points.discPt === 1.0 ? 'text-indigo-400' : 'text-slate-600'}>
                               {log.points.discPt === 1.0 ? <Mic size={12} /> : <MicOff size={12} />}
                             </span>
+                            <span title={`In-game Status: ${log.points.inGamePt} pt`} className={log.points.inGamePt === 1.0 ? 'text-cyan-400' : 'text-slate-600 opacity-40'}>
+                              <Swords size={12} />
+                            </span>
                             <span title={`Duration pulse: ${log.points.durationPt.toFixed(2)} pt`} className="text-[9px] font-mono text-slate-600">({Math.round(log.points.durationPt * 100)}%)</span>
                           </div>
-                          <span className={`font-black text-sm ${log.points.total === 3.0 ? 'text-emerald-400' : log.points.total >= 1.5 ? 'text-amber-500' : 'text-rose-500'}`}>
+                          <span className={`font-black text-sm ${log.points.total === MAX_RAID_SCORE ? 'text-emerald-400' : log.points.total >= 2.0 ? 'text-amber-500' : 'text-rose-500'}`}>
                             {log.points.total.toFixed(2)}
                           </span>
                         </div>

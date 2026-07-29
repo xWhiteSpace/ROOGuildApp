@@ -48,6 +48,27 @@ const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentC
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const IconTag = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01"/></svg>;
 const IconMegaphone = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 11-5.8-1.6"/></svg>;
+const IconMoneyBag = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5c-.5-1 0-2 1-3h4c1 1 1.5 2 1 3M7 5h10l2.5 5.5A7 7 0 0112 21a7 7 0 01-7.5-10.5L7 5z"/><path d="M12 10v6M10 13.5c0 1 .8 1.5 2 1.5s2-.5 2-1.5-.8-1.5-2-1.5-2-.5-2-1.5.8-1.5 2-1.5 2 .5 2 1.5"/></svg>;
+const IconTerminal = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>;
+const IconCopy = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>;
+
+const DISCORD_DEPLOY_SCRIPT = `# Run locally in VS Code / Terminal (NOT from the browser)
+# Requires backend/.env with these keys already filled:
+#   DISCORD_BOT_TOKEN
+#   DISCORD_CLIENT_ID
+#   DISCORD_GUILD_ID
+
+cd backend
+npm run deploy-commands`;
+
+const DISCORD_CLEAR_SCRIPT = `# Run locally in VS Code / Terminal (NOT from the browser)
+# Requires backend/.env with these keys already filled:
+#   DISCORD_BOT_TOKEN
+#   DISCORD_CLIENT_ID
+#   DISCORD_GUILD_ID
+
+cd backend
+npm run uninstall-commands`;
 
 export default function SettingsTab() {
   const [isLocked, setIsLocked] = useState(true);
@@ -56,6 +77,11 @@ export default function SettingsTab() {
   const [successMsg, setSuccessMsg] = useState('');
   const [announcing, setAnnouncing] = useState(false);
   const [announceMsg, setAnnounceMsg] = useState(null);
+  const [ephemeralBaseUrl, setEphemeralBaseUrl] = useState(() => (backendUrl || '').replace(/\/$/, ''));
+  const [deployingCard, setDeployingCard] = useState(false);
+  const [deployCardMsg, setDeployCardMsg] = useState(null);
+  const [deployScriptCopied, setDeployScriptCopied] = useState(false);
+  const [clearScriptCopied, setClearScriptCopied] = useState(false);
   
   const [config, setConfig] = useState({
     timezone: 'Asia/Manila',
@@ -190,6 +216,58 @@ export default function SettingsTab() {
     }
   };
 
+  // Posts the interactive public auction card into DISCORD_AUCREQ_CHANNEL_ID via the backend deploy route.
+  const handleDeployAuctionCard = async () => {
+    if (deployingCard) return;
+    const base = (ephemeralBaseUrl || '').trim().replace(/\/$/, '');
+    if (!base) {
+      setDeployCardMsg({ ok: false, text: 'Backend base URL is required.' });
+      return;
+    }
+
+    setDeployingCard(true);
+    setDeployCardMsg(null);
+    try {
+      const targetUrl = `${base}/api/deploy-auction-card`;
+      const res = await fetch(targetUrl, {
+        method: 'GET',
+        headers: getAuthHeaders({ json: false }),
+        credentials: 'include',
+      });
+      const text = await res.text();
+      if (res.ok) {
+        setDeployCardMsg({ ok: true, text: text || 'Auction card deployed to Discord.' });
+      } else {
+        setDeployCardMsg({ ok: false, text: text || `Failed (${res.status})` });
+      }
+    } catch (err) {
+      setDeployCardMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setDeployingCard(false);
+      setTimeout(() => setDeployCardMsg(null), 8000);
+    }
+  };
+
+  const handleCopyDiscordDeployScript = async () => {
+    try {
+      await navigator.clipboard.writeText(DISCORD_DEPLOY_SCRIPT);
+      setDeployScriptCopied(true);
+      setTimeout(() => setDeployScriptCopied(false), 2500);
+    } catch {
+      setErrorMsg('Could not copy script to clipboard.');
+    }
+  };
+
+  const handleCopyDiscordClearScript = async () => {
+    try {
+      await navigator.clipboard.writeText(DISCORD_CLEAR_SCRIPT);
+      setClearScriptCopied(true);
+      setTimeout(() => setClearScriptCopied(false), 2500);
+    } catch {
+      setErrorMsg('Could not copy script to clipboard.');
+    }
+  };
+
   const handleUpdateEventLootLimit = (evKey, itemId, direction) => {
     const updatedEvents = { ...config.events };
     if (!updatedEvents[evKey].loots) updatedEvents[evKey].loots = {};
@@ -210,7 +288,8 @@ export default function SettingsTab() {
     const newItemObj = {
       id: `item_${paddingStr}`,
       name: `Custom Loot Classification ${nextIndex}`,
-      colorTheme: 'slate'
+      colorTheme: 'slate',
+      isHighValue: false
     };
     setConfig(prev => ({ ...prev, items: [...prev.items, newItemObj] }));
   };
@@ -469,6 +548,106 @@ export default function SettingsTab() {
                 />
                 <span className="text-[11px] text-slate-400 font-medium">Calendar Days</span>
               </div>
+            </div>
+          </div>
+
+          {/* EPHEMERAL / AUCTION CARD DEPLOY LINK */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconMegaphone /> Ephemeral Auction Card</div>
+                <p className="text-[11px] text-slate-500 mt-1 font-normal">
+                  Posts the interactive public auction card into your Discord auction-request channel. Use your deployment backend URL (unique per environment).
+                </p>
+              </div>
+              {deployCardMsg && (
+                <span className={`text-[10px] font-mono font-semibold shrink-0 max-w-[45%] text-right ${deployCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {deployCardMsg.text}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Backend Base URL</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1 flex items-stretch rounded-xl border border-slate-800 bg-slate-950 overflow-hidden focus-within:border-slate-700 transition">
+                  <input
+                    type="text"
+                    value={ephemeralBaseUrl}
+                    onChange={(e) => setEphemeralBaseUrl(e.target.value)}
+                    placeholder="https://your-backend.onrender.com"
+                    className="flex-1 min-w-0 bg-transparent px-3 py-2 text-xs text-slate-300 outline-none font-mono"
+                  />
+                  <span className="shrink-0 flex items-center px-2.5 border-l border-slate-800 text-[10px] font-mono font-bold text-indigo-400/80 bg-slate-900/50 select-all">
+                    /api/deploy-auction-card
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDeployAuctionCard}
+                  disabled={deployingCard || !(ephemeralBaseUrl || '').trim()}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deployingCard ? 'Sending…' : 'Send'}
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-600 font-mono truncate">
+                Full link: {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-auction-card
+              </p>
+            </div>
+          </div>
+
+          {/* DISCORD BOT SLASH-COMMAND DEPLOY / CLEAR (LOCAL SCRIPTS) */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconTerminal /> Discord Bot Scripts</div>
+              <p className="text-[11px] text-slate-500 mt-1 font-normal">
+                Run these <strong className="text-slate-400 font-semibold">locally</strong> in VS Code&apos;s terminal — not from this web page — because they need Discord secrets (<span className="font-mono text-slate-400">DISCORD_BOT_TOKEN</span>, <span className="font-mono text-slate-400">DISCORD_CLIENT_ID</span>, <span className="font-mono text-slate-400">DISCORD_GUILD_ID</span>).
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2 text-[11px] text-amber-400/90 font-medium">
+              Where: open the DynastyGuild repo in VS Code → Terminal → paste a script below.
+            </div>
+
+            {/* REGISTER / DEPLOY */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-mono font-bold text-emerald-400/80 uppercase tracking-wider">Register slash commands</label>
+                <button
+                  type="button"
+                  onClick={handleCopyDiscordDeployScript}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-slate-700 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <IconCopy /> {deployScriptCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre className="w-full overflow-x-auto rounded-xl border border-slate-800 bg-slate-950 px-3 py-3 text-[11px] leading-relaxed text-slate-300 font-mono whitespace-pre select-all">
+{DISCORD_DEPLOY_SCRIPT}
+              </pre>
+              <p className="text-[10px] text-slate-600 font-mono">
+                Uses backend/.env · script: backend/src/discord-bot/deploy.js · npm run deploy-commands
+              </p>
+            </div>
+
+            {/* CLEAR / DELETE */}
+            <div className="space-y-2 border-t border-slate-800/80 pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-mono font-bold text-rose-400/80 uppercase tracking-wider">Clear / delete guild commands</label>
+                <button
+                  type="button"
+                  onClick={handleCopyDiscordClearScript}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-950 hover:border-slate-700 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  <IconCopy /> {clearScriptCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre className="w-full overflow-x-auto rounded-xl border border-rose-900/30 bg-slate-950 px-3 py-3 text-[11px] leading-relaxed text-slate-300 font-mono whitespace-pre select-all">
+{DISCORD_CLEAR_SCRIPT}
+              </pre>
+              <p className="text-[10px] text-slate-600 font-mono">
+                Uses backend/.env · script: backend/src/discord-bot/uninstall.js · npm run uninstall-commands · Wipes all staging guild slash commands.
+              </p>
             </div>
           </div>
 
@@ -1043,12 +1222,12 @@ export default function SettingsTab() {
                       const updated = config.items.map(i => i.id === item.id ? { ...i, name: e.target.value } : i);
                       setConfig(prev => ({ ...prev, items: updated }));
                     }}
-                    className="col-span-4 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
+                    className="col-span-3 bg-transparent border border-transparent focus:bg-slate-950 focus:border-slate-700/80 hover:border-slate-800/40 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none font-sans font-medium transition shadow-none focus:shadow-inner"
                     placeholder="Loot Tracker Label..."
                   />
 
                   {/* DYNAMIC CHROMATIC SYSTEM COLOR PICKER */}
-                  <div className="col-span-4 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 max-w-[240px] shrink-0">
+                  <div className="col-span-3 flex items-center gap-3 bg-slate-900/40 border border-slate-800/60 rounded-xl px-3 h-9 max-w-[240px] shrink-0">
                     <div 
                       className="relative w-5 h-5 rounded-md border border-slate-700/80 shadow-md transition transform hover:scale-115 active:scale-95 cursor-pointer overflow-hidden shrink-0" 
                       style={{ 
@@ -1070,6 +1249,25 @@ export default function SettingsTab() {
                     <span className="text-[10px] font-mono font-bold uppercase text-slate-400 tracking-widest select-all">
                       {item.colorTheme?.startsWith('#') ? item.colorTheme : '#DEFAULT'}
                     </span>
+                  </div>
+
+                  {/* 💰 HIGH VALUE PRECIOUS ITEM TOGGLE: Absent outcomes retain priority instead of resetting it */}
+                  <div className="col-span-2 flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = config.items.map(i => i.id === item.id ? { ...i, isHighValue: !i.isHighValue } : i);
+                        setConfig(prev => ({ ...prev, items: updated }));
+                      }}
+                      className={`flex items-center justify-center w-9 h-9 rounded-xl border transition cursor-pointer shrink-0 ${
+                        item.isHighValue
+                          ? 'bg-amber-500/15 border-amber-500/50 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                          : 'bg-slate-900/40 border-slate-800 text-slate-600 hover:text-slate-400 hover:border-slate-700'
+                      }`}
+                      title={item.isHighValue ? 'High Value: Absent outcomes retain priority (click to unset)' : 'Mark as High Value item'}
+                    >
+                      <IconMoneyBag />
+                    </button>
                   </div>
 
                   {/* PURGE ELEMENT RECORD */}
