@@ -399,7 +399,8 @@ router.get('/init', async (req, res) => {
             id: masterItem.id,
             name: masterItem.name,
             colorTheme: masterItem.colorTheme || 'slate',
-            limitQty: activeLoots[masterItem.id]
+            limitQty: activeLoots[masterItem.id],
+            isHighValue: masterItem.isHighValue === true
           });
         }
       });

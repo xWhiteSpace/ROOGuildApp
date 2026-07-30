@@ -14,6 +14,7 @@ const IconCart = () => <svg className="w-4 h-4" fill="none" stroke="currentColor
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>;
 const IconCycle = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67"/></svg>;
 const IconTarget = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>;
+const IconMoneyBag = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5c-.5-1 0-2 1-3h4c1 1 1.5 2 1 3M7 5h10l2.5 5.5A7 7 0 0112 21a7 7 0 01-7.5-10.5L7 5z"/><path d="M12 10v6M10 13.5c0 1 .8 1.5 2 1.5s2-.5 2-1.5-.8-1.5-2-1.5-2-.5-2-1.5.8-1.5 2-1.5 2 .5 2 1.5"/></svg>;
 
 export default function RequestTab({ user }) {
   const [loading, setLoading] = useState(true);
@@ -414,8 +415,18 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="truncate">
-                        <h3 className="text-xs font-semibold text-slate-200 truncate font-sans group-hover:text-indigo-400 transition">{item.name}</h3>
+                      <div className="truncate min-w-0">
+                        <h3 className="text-xs font-semibold text-slate-200 truncate font-sans group-hover:text-indigo-400 transition flex items-center gap-1.5">
+                          <span className="truncate">{item.name}</span>
+                          {item.isHighValue && (
+                            <span
+                              className="shrink-0 text-amber-400"
+                              title="High Value: Absent outcomes retain priority"
+                            >
+                              <IconMoneyBag />
+                            </span>
+                          )}
+                        </h3>
                         <span className="font-mono text-[9px] text-slate-500 block mt-0.5">{item.id}</span>
                       </div>
                       <span className={`px-2 py-0.5 rounded-md text-[9px] font-mono tracking-wider uppercase shrink-0 font-bold border ${
