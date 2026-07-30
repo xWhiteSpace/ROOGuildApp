@@ -14,6 +14,7 @@ const IconCart = () => <svg className="w-4 h-4" fill="none" stroke="currentColor
 const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>;
 const IconCycle = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67"/></svg>;
 const IconTarget = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>;
+const IconMoneyBag = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5c-.5-1 0-2 1-3h4c1 1 1.5 2 1 3M7 5h10l2.5 5.5A7 7 0 0112 21a7 7 0 01-7.5-10.5L7 5z"/><path d="M12 10v6M10 13.5c0 1 .8 1.5 2 1.5s2-.5 2-1.5-.8-1.5-2-1.5-2-.5-2-1.5.8-1.5 2-1.5 2 .5 2 1.5"/></svg>;
 
 export default function RequestTab({ user }) {
   const [loading, setLoading] = useState(true);
@@ -235,9 +236,11 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
         </div>
         <button
           onClick={() => setIsCancelModalOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-[10px] uppercase font-bold tracking-wider rounded-xl text-rose-400 hover:text-rose-300 transition cursor-pointer shadow-sm shrink-0"
+          disabled={currentPhase === 3}
+          title={currentPhase === 3 ? 'Cancellations are locked during the Live Event / Auction phase.' : undefined}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 text-[10px] uppercase font-bold tracking-wider rounded-xl text-rose-400 hover:text-rose-300 transition cursor-pointer shadow-sm shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-slate-800 disabled:hover:text-rose-400"
         >
-          Cancel Request <IconTrash />
+          {currentPhase === 3 ? 'Cancel Locked' : 'Cancel Request'} <IconTrash />
         </button>
       </div>
 
@@ -412,8 +415,18 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="truncate">
-                        <h3 className="text-xs font-semibold text-slate-200 truncate font-sans group-hover:text-indigo-400 transition">{item.name}</h3>
+                      <div className="truncate min-w-0">
+                        <h3 className="text-xs font-semibold text-slate-200 truncate font-sans group-hover:text-indigo-400 transition flex items-center gap-1.5">
+                          <span className="truncate">{item.name}</span>
+                          {item.isHighValue && (
+                            <span
+                              className="shrink-0 text-amber-400"
+                              title="High Value: Absent outcomes retain priority"
+                            >
+                              <IconMoneyBag />
+                            </span>
+                          )}
+                        </h3>
                         <span className="font-mono text-[9px] text-slate-500 block mt-0.5">{item.id}</span>
                       </div>
                       <span className={`px-2 py-0.5 rounded-md text-[9px] font-mono tracking-wider uppercase shrink-0 font-bold border ${
@@ -538,6 +551,12 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
               </button>
             </div>
 
+            {currentPhase === 3 && (
+              <div className="flex items-center gap-2 bg-amber-950/20 border border-amber-500/20 text-amber-400 text-xs px-3.5 py-2 rounded-xl font-semibold shadow-inner">
+                <IconLock /> Cancellations are locked during the Live Event / Auction phase.
+              </div>
+            )}
+
             {activeCancelableItems.length === 0 ? (
               <div className="text-center py-10 border border-dashed border-slate-800 rounded-xl text-[11px] text-slate-500 font-mono italic">
                 You have no active pending requests currently in queue.
@@ -552,7 +571,8 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                     </div>
                     <button
                       onClick={() => handleExecuteCancel(item.id, item.name, liveCounts[item.id])}
-                      disabled={processing} 
+                      disabled={processing || currentPhase === 3} 
+                      title={currentPhase === 3 ? 'Cancellations are locked during the Live Event / Auction phase.' : undefined}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/20 border border-rose-500/20 hover:border-rose-500 hover:bg-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-lg text-rose-400 hover:text-white transition cursor-pointer shrink-0 disabled:opacity-20 disabled:bg-slate-950 disabled:border-slate-800 disabled:text-slate-600"
                     >
                       <IconTrash /> Drop

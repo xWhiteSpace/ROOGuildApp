@@ -1,19 +1,8 @@
 /**
  * Pure SVG sparkline for a member's attendance reliability trend.
- * Same scoring model as AttendanceHistoryTab Member Trend Card.
+ * Uses the shared attendanceScore SSOT (max 4.0 including In-game Status).
  */
-export function calculateAttendancePoints(commitment, presentTicks, totalPulses) {
-  const calPt = (commitment === 'Confirmed' || commitment === 'Confirm' || commitment === 'Leave') ? 1.0 : 0.0;
-  const discPt = presentTicks > 0 ? 1.0 : 0.0;
-  const durationPt = totalPulses > 0 ? (presentTicks / totalPulses) * 1.0 : 0.0;
-  const total = parseFloat((calPt + discPt + durationPt).toFixed(2));
-  return {
-    calPt,
-    discPt,
-    durationPt,
-    total: total > 3.0 ? 3.0 : total,
-  };
-}
+import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
 
 /**
  * Build chronological trend points (last N lockouts) for one member.
@@ -24,10 +13,13 @@ export function buildMemberTrendTimeline(sessions, memberUid, limit = 8) {
   const timeline = [];
 
   chronological.forEach((s) => {
-    const userTicks = s.userTallies?.[memberUid] || s.userTallies?.[String(memberUid)] || 0;
+    const uidKey = memberUid;
+    const uidStr = String(memberUid);
+    const userTicks = s.userTallies?.[uidKey] || s.userTallies?.[uidStr] || 0;
     const totalPulses = s.totalPulses || 0;
-    const commitment = s.commitments?.[memberUid] || s.commitments?.[String(memberUid)] || 'None';
-    const points = calculateAttendancePoints(commitment, userTicks, totalPulses);
+    const commitment = s.commitments?.[uidKey] || s.commitments?.[uidStr] || 'None';
+    const inGameConfirmed = s.inGameStatus?.[uidKey] === true || s.inGameStatus?.[uidStr] === true;
+    const points = calculatePoints(commitment, userTicks, totalPulses, inGameConfirmed);
     timeline.push({
       sessionId: s.id,
       eventTitle: s.eventTitle || 'Raid run',
@@ -41,7 +33,7 @@ export function buildMemberTrendTimeline(sessions, memberUid, limit = 8) {
 
 export function buildSparklinePath(timeline, width = 500, height = 120) {
   if (!timeline || timeline.length < 2) return '';
-  const padX = 20;
+  const padX = 36;
   const padY = 20;
   const pointsCount = timeline.length;
   const stepX = (width - padX * 2) / (pointsCount - 1);
@@ -49,7 +41,7 @@ export function buildSparklinePath(timeline, width = 500, height = 120) {
   return timeline
     .map((item, index) => {
       const x = padX + index * stepX;
-      const y = height - padY - ((item.points.total / 3.0) * (height - padY * 2));
+      const y = height - padY - ((item.points.total / MAX_RAID_SCORE) * (height - padY * 2));
       return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
     })
     .join(' ');
@@ -63,6 +55,11 @@ export default function MemberTrendSparkline({
   const path = buildSparklinePath(timeline);
   const h = compact ? 90 : 120;
   const w = 500;
+  const padX = 36;
+  const padY = 20;
+  const plotTop = padY;
+  const plotBottom = h - padY;
+  const plotMid = (plotTop + plotBottom) / 2;
 
   if (timeline.length < 2) {
     return (
@@ -76,13 +73,19 @@ export default function MemberTrendSparkline({
     <div className="bg-slate-950 border border-slate-900 rounded-2xl p-3 shadow-inner flex flex-col items-center">
       <div className={`w-full ${compact ? 'h-[90px]' : 'h-[130px]'} relative`}>
         <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${w} ${h}`} fill="none">
-          <line x1="20" y1="20" x2={w - 20} y2="20" stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
-          <line x1="20" y1={h - 20} x2={w - 20} y2={h - 20} stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+          {/* Y-axis guides: 100% / 50% / 0% */}
+          <line x1={padX} y1={plotTop} x2={w - padX} y2={plotTop} stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+          <line x1={padX} y1={plotMid} x2={w - padX} y2={plotMid} stroke="#475569" strokeWidth="1" strokeDasharray="2 4" />
+          <line x1={padX} y1={plotBottom} x2={w - padX} y2={plotBottom} stroke="#334155" strokeWidth="1" strokeDasharray="3 3" />
+          <text x="4" y={plotTop + 3} fill="#64748b" fontSize="8" fontFamily="monospace">100%</text>
+          <text x="4" y={plotMid + 3} fill="#64748b" fontSize="8" fontFamily="monospace">50%</text>
+          <text x="4" y={plotBottom + 3} fill="#64748b" fontSize="8" fontFamily="monospace">0%</text>
+
           <path d={path} stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           {timeline.map((item, index) => {
-            const stepX = (w - 40) / (timeline.length - 1);
-            const x = 20 + index * stepX;
-            const y = h - 20 - ((item.points.total / 3.0) * (h - 40));
+            const stepX = (w - padX * 2) / (timeline.length - 1);
+            const x = padX + index * stepX;
+            const y = plotBottom - ((item.points.total / MAX_RAID_SCORE) * (plotBottom - plotTop));
             return (
               <circle
                 key={item.sessionId || index}
@@ -97,9 +100,9 @@ export default function MemberTrendSparkline({
         </svg>
       </div>
       <div className="w-full flex justify-between text-[8px] font-mono font-bold uppercase tracking-wide text-slate-500 px-2 mt-1 select-none">
-        <span>Older</span>
-        <span>Last {timeline.length} lockouts</span>
-        <span>Latest</span>
+        <span>Earlier scores</span>
+        <span>Last 8 consecutive</span>
+        <span>Latest score</span>
       </div>
     </div>
   );

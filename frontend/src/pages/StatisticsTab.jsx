@@ -1,7 +1,7 @@
 // frontend/src/pages/StatisticsTab.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../services/apiClient';
-import { calculatePoints } from '../utils/attendanceScore';
+import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
 import AttendanceTrendChart from '../components/AttendanceTrendChart';
 
 const IconLayers = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>;
@@ -94,7 +94,8 @@ export default function StatisticsTab({ user }) {
       rosterUids.forEach((uid) => {
         const ticks = s.userTallies?.[uid] || 0;
         const commitment = s.commitments?.[uid] || 'None';
-        guildScoreSum += calculatePoints(commitment, ticks, totalPulses).total / 3.0;
+        const inGameConfirmed = s.inGameStatus?.[uid] === true;
+        guildScoreSum += calculatePoints(commitment, ticks, totalPulses, inGameConfirmed).total / MAX_RAID_SCORE;
       });
       const guildPct = rosterUids.length > 0 ? (guildScoreSum / rosterUids.length) * 100 : 0;
 
@@ -103,7 +104,8 @@ export default function StatisticsTab({ user }) {
       if (selectedMemberUid) {
         const mTicks = s.userTallies?.[selectedMemberUid] || 0;
         const mCommitment = s.commitments?.[selectedMemberUid] || 'None';
-        point.memberPct = (calculatePoints(mCommitment, mTicks, totalPulses).total / 3.0) * 100;
+        const mInGame = s.inGameStatus?.[selectedMemberUid] === true;
+        point.memberPct = (calculatePoints(mCommitment, mTicks, totalPulses, mInGame).total / MAX_RAID_SCORE) * 100;
       }
 
       return point;

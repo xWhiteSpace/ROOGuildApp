@@ -82,7 +82,7 @@ router.get('/callback', async (req, res) => {
   const targetFrontend = getFrontendUrl();
 
   if (!code) {
-    return res.redirect(`${targetFrontend}/login?error=missing_code`);
+    return res.redirect(`${targetFrontend}/landing?error=missing_code`);
   }
 
   try {
@@ -172,7 +172,7 @@ router.get('/callback', async (req, res) => {
     });
   } catch (error) {
     console.error("❌ OAuth callback processing failed:", error);
-    return res.redirect(`${targetFrontend}/login?error=discord_oauth_failed`);
+    return res.redirect(`${targetFrontend}/landing?error=discord_oauth_failed`);
   }
 });
 

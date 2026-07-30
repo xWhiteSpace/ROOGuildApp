@@ -12,6 +12,9 @@ const IconDownload = () => <svg className="w-3.5 h-3.5" fill="none" stroke="curr
 const IconUndo = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>;
 const IconAward = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>;
 const IconLayers = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>;
+const IconTrash = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>;
+const IconAlertTriangle = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>;
+const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>;
 const IconSortArrows = ({ active, direction }) => {
   if (!active) return <svg className="w-3 h-3 text-slate-600 inline ml-1.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg>;
   return direction === 'asc' 
@@ -19,14 +22,20 @@ const IconSortArrows = ({ active, direction }) => {
     : <svg className="w-3 h-3 text-indigo-400 inline ml-1.5 animate-fadeIn" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>;
 };
 
-export default function RequestHistoryTab() {
+export default function RequestHistoryTab({ user }) {
   const navigate = useNavigate();
+  const isOfficer = user?.isOfficer === true;
   const [loading, setLoading] = useState(true);
   const [historyData, setHistoryData] = useState([]);
   const [currentUserName, setCurrentUserName] = useState('');
   const [configItems, setConfigItems] = useState([]); // Dynamic setting collection matrix
   const [authError, setAuthError] = useState(false);
-  
+  const [resettingKey, setResettingKey] = useState(null); // 🛡️ Tracks in-flight officer priority reset requests
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [clearRangeStart, setClearRangeStart] = useState('');
+  const [clearRangeEnd, setClearRangeEnd] = useState('');
+  const [clearingHistory, setClearingHistory] = useState(false);
+
   const [currentUserId, setCurrentUserId] = useState('');
   
   // --- 🔍 ADVANCED FILTER, SEARCH, AND SORT STATES ---
@@ -122,6 +131,79 @@ export default function RequestHistoryTab() {
     return sortDirection === 'asc' ? '▲' : '▼';
   };
 
+  // 🛡️ OFFICER GUARDRAIL: Manually force a member's priority on a specific item back to
+  // zero — the safety valve for the High Value "retained priority on Absent" ruling.
+  const handleResetPriority = async (targetUserId, itemId, memberName, itemName) => {
+    if (!isOfficer || !targetUserId || !itemId) return;
+    const resetKey = `${targetUserId}_${itemId}`;
+    if (!window.confirm(`Force reset priority for ${memberName || 'this member'} on ${itemName || itemId}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setResettingKey(resetKey);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+
+      const res = await fetch(`${backendUrl}/api/requests/reset-priority`, {
+        method: 'POST',
+        headers: customHeaders,
+        body: JSON.stringify({ userId: targetUserId, itemId }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchGlobalHistoryLog();
+      } else {
+        alert(data.error || 'Failed to reset priority.');
+      }
+    } catch (err) {
+      console.error("Priority reset request failed:", err.message);
+      alert('Connection error while resetting priority.');
+    } finally {
+      setResettingKey(null);
+    }
+  };
+
+  // 🗑️ OFFICER GUARDRAIL: Permanently deletes ledger rows within a selected Timestamp
+  // date range. A live preview count (computed below) is shown before this ever fires.
+  const handleClearHistory = async () => {
+    if (!isOfficer || !clearRangeStart || !clearRangeEnd || clearPreviewCount === 0) return;
+    if (!window.confirm(`Permanently delete ${clearPreviewCount} record(s) dated ${clearRangeStart} through ${clearRangeEnd}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setClearingHistory(true);
+      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const customHeaders = { 'Content-Type': 'application/json' };
+      if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+
+      const res = await fetch(`${backendUrl}/api/requests/clear-history`, {
+        method: 'POST',
+        headers: customHeaders,
+        body: JSON.stringify({ startDate: clearRangeStart, endDate: clearRangeEnd }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsClearModalOpen(false);
+        setClearRangeStart('');
+        setClearRangeEnd('');
+        await fetchGlobalHistoryLog();
+        alert(`${data.deletedCount} record(s) permanently deleted.`);
+      } else {
+        alert(data.error || 'Failed to clear history.');
+      }
+    } catch (err) {
+      console.error("Clear history request failed:", err.message);
+      alert('Connection error while clearing history.');
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
  const getItemStyleProfile = (itemType, itemId) => {
     const THEME_MAP = {
       purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
@@ -207,6 +289,19 @@ export default function RequestHistoryTab() {
   });
 
   const historyTotalPages = Math.ceil(sortedRecords.length / rowLimit) || 1;
+
+  // 🔎 LIVE CLEAR-HISTORY PREVIEW: Counts how many already-loaded rows fall inside the
+  // selected range, so officers see the exact impact before anything is deleted.
+  const clearPreviewCount = (() => {
+    if (!clearRangeStart || !clearRangeEnd) return 0;
+    const rangeStart = new Date(clearRangeStart);
+    const rangeEnd = new Date(`${clearRangeEnd}T23:59:59.999`);
+    if (isNaN(rangeStart) || isNaN(rangeEnd) || rangeStart > rangeEnd) return 0;
+    return historyData.filter(row => {
+      const rowDate = new Date(row.date || '');
+      return !isNaN(rowDate) && rowDate >= rangeStart && rowDate <= rangeEnd;
+    }).length;
+  })();
 
   /**
    * 📥 BROWSER-NATIVE CSV EXPORT MODULE
@@ -436,7 +531,22 @@ export default function RequestHistoryTab() {
                       <td className="p-3 text-slate-500 group-hover:text-slate-400 transition-colors whitespace-nowrap text-[10px] font-sans uppercase font-bold tracking-wide truncate">
                         <span className="block truncate">{row.liveStatus ? row.liveStatus : '---'}</span>
                       </td>
-                      <td className="p-3 font-normal text-center text-cyan-600/90 group-hover:text-cyan-400 transition-colors">{row.priority}</td>
+                      <td className="p-3 font-normal text-center text-cyan-600/90 group-hover:text-cyan-400 transition-colors">
+                        <span className="inline-flex items-center justify-center gap-1.5">
+                          <span>{row.priority}</span>
+                          {isOfficer && row.userId && row.itemId && (
+                            <button
+                              type="button"
+                              onClick={() => handleResetPriority(row.userId, row.itemId, row.member, row.item)}
+                              disabled={resettingKey === `${row.userId}_${row.itemId}`}
+                              className="text-slate-700 hover:text-amber-400 transition opacity-0 group-hover:opacity-100 cursor-pointer disabled:opacity-40 disabled:cursor-wait"
+                              title={`Force reset priority for ${row.member} on ${row.item || row.itemId}`}
+                            >
+                              <IconUndo />
+                            </button>
+                          )}
+                        </span>
+                      </td>
                       <td className="p-3 text-slate-500 group-hover:text-slate-400 transition-colors font-semibold whitespace-nowrap text-right pr-5">
                         {row.eventDate === "" ? "---" : row.eventDate}
                       </td>
@@ -476,14 +586,26 @@ export default function RequestHistoryTab() {
       <div className="w-full select-none pt-2 animate-fadeIn">
         <div className="w-full flex items-center justify-between bg-slate-900/40 border border-slate-800/80 p-3 px-5 rounded-2xl shadow-md">
           
-          <button
-            type="button"
-            onClick={handleDownloadCSVExport}
-            disabled={sortedRecords.length === 0}
-            className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition py-2 px-4 shadow cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
-          >
-            <IconDownload /> Export to CSV
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleDownloadCSVExport}
+              disabled={sortedRecords.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition py-2 px-4 shadow cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+            >
+              <IconDownload /> Export to CSV
+            </button>
+
+            {isOfficer && (
+              <button
+                type="button"
+                onClick={() => setIsClearModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-950/20 hover:bg-rose-600 hover:border-rose-500 text-[10px] font-bold uppercase tracking-wider text-rose-400 hover:text-white transition py-2 px-4 shadow cursor-pointer"
+              >
+                <IconTrash /> Clear History
+              </button>
+            )}
+          </div>
           
           <button
             type="button"
@@ -495,6 +617,81 @@ export default function RequestHistoryTab() {
           
         </div>
       </div>
+
+      {/* 🗑️ CLEAR HISTORY DATE-RANGE MODAL (OFFICER-ONLY DESTRUCTIVE ACTION) */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fadeIn">
+          <div className="fixed inset-0 z-0" onClick={() => !clearingHistory && setIsClearModalOpen(false)} />
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl relative z-10 space-y-4">
+
+            <div className="flex justify-between items-start border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-sm font-semibold tracking-wider uppercase text-rose-400">Clear History</h2>
+                <p className="text-[11px] text-slate-400 mt-1">Permanently delete ledger rows within a Timestamp date range.</p>
+              </div>
+              <button
+                onClick={() => !clearingHistory && setIsClearModalOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <IconX />
+              </button>
+            </div>
+
+            <div className="flex items-start gap-2 bg-amber-950/20 border border-amber-500/20 text-amber-400 text-[11px] px-3.5 py-2.5 rounded-xl font-medium shadow-inner">
+              <IconAlertTriangle />
+              <span>Rows inside the configured Priority Lookback window still feed current pity calculations. Clearing them removes that history from future priority scoring.</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider select-none">From</label>
+                <input
+                  type="date"
+                  value={clearRangeStart}
+                  onChange={(e) => setClearRangeStart(e.target.value)}
+                  className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 outline-none focus:border-slate-700 transition shadow-inner font-sans"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider select-none">To</label>
+                <input
+                  type="date"
+                  value={clearRangeEnd}
+                  onChange={(e) => setClearRangeEnd(e.target.value)}
+                  className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 outline-none focus:border-slate-700 transition shadow-inner font-sans"
+                />
+              </div>
+            </div>
+
+            <div className={`text-center py-3 rounded-xl border font-mono text-xs font-bold ${
+              clearPreviewCount > 0
+                ? 'bg-rose-950/20 border-rose-500/30 text-rose-400'
+                : 'bg-slate-950 border-slate-800 text-slate-600'
+            }`}>
+              {!clearRangeStart || !clearRangeEnd
+                ? 'Select both dates to preview affected records.'
+                : `${clearPreviewCount} record(s) will be permanently deleted`}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsClearModalOpen(false)}
+                disabled={clearingHistory}
+                className="px-4 py-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-sm disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearHistory}
+                disabled={clearingHistory || clearPreviewCount === 0}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-[10px] font-bold uppercase tracking-wider rounded-xl text-white transition cursor-pointer shadow-md disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <IconTrash /> {clearingHistory ? 'Deleting...' : `Delete ${clearPreviewCount} Record(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

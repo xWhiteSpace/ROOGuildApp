@@ -809,6 +809,38 @@ router.delete('/history/:sessionId', async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/live-raid/history/:sessionId/in-game
+ * Officer toggle: confirm/unconfirm that a member was present in-game for this archived session.
+ * Writes attendance/session_archive/{sessionId}/inGameStatus/{userId} = true | null
+ */
+router.patch('/history/:sessionId/in-game', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  if (!user.isOfficer) return res.status(403).json({ success: false, error: 'Officer access required' });
+
+  const { sessionId } = req.params;
+  const { userId, confirmed } = req.body || {};
+  if (!sessionId || !userId) {
+    return res.status(400).json({ success: false, error: 'sessionId and userId are required' });
+  }
+
+  try {
+    const db = getDatabase();
+    const sessionRef = db.ref(`attendance/session_archive/${sessionId}`);
+    const sessionSnap = await sessionRef.once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Session archive not found' });
+    }
+
+    const flagValue = confirmed === true ? true : null;
+    await db.ref(`attendance/session_archive/${sessionId}/inGameStatus/${userId}`).set(flagValue);
+    return res.json({ success: true, confirmed: flagValue === true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/history/all', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });

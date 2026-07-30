@@ -10,10 +10,10 @@ export const DEFAULT_CONFIGURATION = {
   priorityLookbackDays: 30,
   specialEventCategories: ['Raid', 'Meeting', 'PVP', 'Casual'],
   items: [
-    { id: 'item_001', name: 'Puppet Scroll', colorTheme: 'purple' },
-    { id: 'item_002', name: 'Illusion Scroll', colorTheme: 'yellow' },
-    { id: 'item_003', name: 'Light & Dark Scroll', colorTheme: 'slate' },
-    { id: 'item_004', name: 'Time & Space Scroll', colorTheme: 'red' },
+    { id: 'item_001', name: 'Puppet Scroll', colorTheme: 'purple', isHighValue: false },
+    { id: 'item_002', name: 'Illusion Scroll', colorTheme: 'yellow', isHighValue: false },
+    { id: 'item_003', name: 'Light & Dark Scroll', colorTheme: 'slate', isHighValue: false },
+    { id: 'item_004', name: 'Time & Space Scroll', colorTheme: 'red', isHighValue: false },
   ],
   events: {
     ev_001: {

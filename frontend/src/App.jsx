@@ -1,15 +1,15 @@
 // frontend/src/App.jsx
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useEffect, useState, createContext, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import RequestTab from './pages/RequestTab';
 import MimicBookTab from './pages/MimicBookTab';
 import RequestHistoryTab from './pages/RequestHistoryTab';
 import PastAuctionTab from './pages/PastAuctionTab';
 import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
-import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
-import { fetchCurrentUser, logoutUser } from './services/authService';
+import { logoutUser } from './services/authService';
 import MasterListTab from './pages/MasterListTab';
 
 import RaidPartyTab from './pages/RaidPartyTab';
@@ -18,12 +18,9 @@ import LiveRaidTab from './pages/LiveRaidTab';
 import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
 
 import Scheduler from './pages/Scheduler';
-import { apiFetch, getBackendUrl } from './services/apiClient';
+import { apiFetch } from './services/apiClient';
 import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
 
-const backendUrl = getBackendUrl();
-
-import { createContext, useRef } from 'react';
 export const MimicBookContext = createContext(null);
 
 export function MimicBookProvider({ children }) {
@@ -151,9 +148,11 @@ export default function App() {
     localStorage.removeItem('dynasty_raid_session');
     await logoutUser();
     setAuthUser(null);
+    window.location.assign('/landing');
   };
 
-  if (authLoading) {
+  // Landing is public — don't block it behind session sync
+  if (authLoading && window.location.pathname !== '/landing') {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-mono text-xs uppercase tracking-widest animate-pulse">
         Synchronizing Security Workspace Modules...
@@ -164,28 +163,59 @@ export default function App() {
   return (
     <BrowserRouter>
       <MimicBookProvider>
-        <MainLayout user={authUser} onLogout={handleLogout} macroTab={macroTab} setMacroTab={setMacroTab}>
-          <Routes>
-            <Route path="/" element={<RequestTab user={authUser} />} />
-            <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
-            <Route path="/request-history" element={<RequestHistoryTab />} />
-            <Route path="/past-auction" element={<PastAuctionTab />} />
-            <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
-            <Route path="/login" element={<LoginPage />} />
-            
-            {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
-            <Route path="/settings-configuration" element={<SettingsTab />} />
-            
-            {/* 🛡️ Foundational Raid Governance Routes Mapping */}
-            <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
-            <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
-            <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
-            <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
-            <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
-            <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
-          </Routes>
-        </MainLayout>
+        <AppShell
+          authUser={authUser}
+          onLogout={handleLogout}
+          macroTab={macroTab}
+          setMacroTab={setMacroTab}
+        />
       </MimicBookProvider>
     </BrowserRouter>
+  );
+}
+
+/** Landing is full-bleed (no nav chrome); everything else stays in MainLayout. */
+function AppShell({ authUser, onLogout, macroTab, setMacroTab }) {
+  const { pathname, search } = useLocation();
+
+  // Old /login URLs (and OAuth error redirects) → landing, keep ?error=...
+  if (pathname === '/login') {
+    return <Navigate to={`/landing${search}`} replace />;
+  }
+
+  // Signed-in users skip landing
+  if (pathname === '/landing' && authUser) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Logged-out users: landing is the front door
+  if (pathname === '/landing' && !authUser) {
+    return <LandingPage />;
+  }
+  if (pathname === '/' && !authUser) {
+    return <Navigate to="/landing" replace />;
+  }
+
+  return (
+    <MainLayout user={authUser} onLogout={onLogout} macroTab={macroTab} setMacroTab={setMacroTab}>
+      <Routes>
+        <Route path="/" element={<RequestTab user={authUser} />} />
+        <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
+        <Route path="/request-history" element={<RequestHistoryTab user={authUser} />} />
+        <Route path="/past-auction" element={<PastAuctionTab />} />
+        <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
+
+        {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
+        <Route path="/settings-configuration" element={<SettingsTab />} />
+
+        {/* 🛡️ Foundational Raid Governance Routes Mapping */}
+        <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
+        <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+        <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
+        <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
+        <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
+        <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
+      </Routes>
+    </MainLayout>
   );
 }
