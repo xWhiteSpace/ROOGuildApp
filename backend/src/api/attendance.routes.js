@@ -8,7 +8,7 @@ import {
   normalizeComposition,
   compositionForPersist,
   findCrossTabDuplicates,
-} from '@dynastyguild/shared/compositionTabs';
+} from '@guildname/shared/compositionTabs';
 
 const router = Router();
 

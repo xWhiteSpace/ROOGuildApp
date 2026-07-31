@@ -1,4 +1,4 @@
-# Dynasty Guild
+# Guild Name
 
 Guild tooling for auction requests, Mimic Book allocation, attendance / raid parties, live raid voice tracking, and Discord slash commands.
 
@@ -58,7 +58,7 @@ Enable **Developer Mode** in Discord (User Settings → App Settings → Advance
 ### 1.1 Create an application
 
 1. Open [https://discord.com/developers/applications](https://discord.com/developers/applications)
-2. Click **New Application**, name it (e.g. `DynastyGuild`), accept terms, **Create**
+2. Click **New Application**, name it (e.g. `GuildName`), accept terms, **Create**
 3. On **General Information**, copy **Application ID** → this is `DISCORD_CLIENT_ID` (and `VITE_DISCORD_CLIENT_ID` if you set it)
 
 ### 1.2 Create a bot
@@ -165,7 +165,7 @@ This is where the frontend `VITE_FIREBASE_*` values come from.
 1. Gear icon → **Project settings**
 2. Scroll to **Your apps**
 3. Click the **Web** icon (`</>`)
-4. Register app nickname (e.g. `dynasty-web`) → **Register app**
+4. Register app nickname (e.g. `guild-web`) → **Register app**
 5. Copy the `firebaseConfig` fields into frontend env:
 
 | Firebase config key | Frontend env |
@@ -270,7 +270,7 @@ npm run dev
 | App | URL |
 | :--- | :--- |
 | Frontend (Vite) | [http://localhost:3000](http://localhost:3000) |
-| Backend | [http://localhost:5001](http://localhost:5001) — open `/` and expect `DynastyGuild backend is online.` |
+| Backend | [http://localhost:5001](http://localhost:5001) — open `/` and expect `GuildName backend is online.` |
 
 Vite proxies `/api` and `/auth` to port 5001.
 
@@ -298,7 +298,7 @@ npm run deploy-commands
 | **Build Command** | `npm install` |
 | **Start Command** | `npm start` |
 
-If `@dynastyguild/shared` fails to resolve from `backend` alone, set Root Directory to the **repo root**, Build Command to `npm install`, and Start Command to `npm --prefix backend start`.
+If `@guildname/shared` fails to resolve from `backend` alone, set Root Directory to the **repo root**, Build Command to `npm install`, and Start Command to `npm --prefix backend start`.
 
 4. **Environment** → add every backend variable from section 3  
    - `OAUTH_REDIRECT_URI=https://YOUR-SERVICE.onrender.com/auth/callback`  

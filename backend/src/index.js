@@ -79,7 +79,7 @@ app.use(cors({
 app.use(express.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'dynasty_secret_pass',
+    secret: process.env.SESSION_SECRET || 'guild_secret_pass',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -97,7 +97,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/live-raid', liveRaidRoutes);
 
 app.get('/', (req, res) => {
-  res.send('DynastyGuild backend is online.');
+  res.send('GuildName backend is online.');
 });
 
 // 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP

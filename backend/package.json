@@ -1,5 +1,5 @@
 {
-  "name": "dynastyguild-backend",
+  "name": "guildname-backend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "uninstall-commands": "node src/discord-bot/uninstall.js"
   },
   "dependencies": {
-    "@dynastyguild/shared": "*",
+    "@guildname/shared": "*",
     "cors": "^2.8.5",
     "discord.js": "^14.15.0",
     "dotenv": "^16.4.3",

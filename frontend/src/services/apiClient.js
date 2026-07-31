@@ -20,7 +20,7 @@ export function getAuthHeaders({ json = true } = {}) {
   }
 
   try {
-    const savedUserSession = localStorage.getItem('dynasty_raid_session');
+    const savedUserSession = localStorage.getItem('guild_raid_session');
     if (savedUserSession) {
       headers['x-user-profile'] = encodeURIComponent(savedUserSession);
     }

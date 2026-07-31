@@ -39,7 +39,7 @@ export default function LandingPage() {
       <div className="relative z-10 flex flex-col items-center gap-10 px-6 text-center">
         <img
           src="/assets/brand/logo.png"
-          alt="Dynasty Guild"
+          alt="Guild logo"
           className="h-28 w-auto object-contain drop-shadow-lg sm:h-36"
         />
 

@@ -23,6 +23,21 @@ import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
 
 export const MimicBookContext = createContext(null);
 
+const SESSION_KEY = 'guild_raid_session';
+const LEGACY_SESSION_KEY = 'dynasty_raid_session';
+
+function readSessionRaw() {
+  const current = localStorage.getItem(SESSION_KEY);
+  if (current) return current;
+  const legacy = localStorage.getItem(LEGACY_SESSION_KEY);
+  if (legacy) {
+    localStorage.setItem(SESSION_KEY, legacy);
+    localStorage.removeItem(LEGACY_SESSION_KEY);
+    return legacy;
+  }
+  return null;
+}
+
 export function MimicBookProvider({ children }) {
   const [isAdminMode, setIsAdminMode] = useState(true); 
   const [activeStep, setActiveStep] = useState(1); 
@@ -95,7 +110,8 @@ export default function App() {
         try {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
           setAuthUser(parsedUser);
-          localStorage.setItem('dynasty_raid_session', JSON.stringify(parsedUser));
+          localStorage.setItem(SESSION_KEY, JSON.stringify(parsedUser));
+          localStorage.removeItem(LEGACY_SESSION_KEY);
           window.history.replaceState({}, document.title, window.location.pathname);
           setAuthLoading(false);
           return; 
@@ -105,7 +121,7 @@ export default function App() {
       }
 
       // 🚀 CACHE PRE-LOAD: Instantly parse local storage to eliminate UI loading flicker
-      const savedSession = localStorage.getItem('dynasty_raid_session');
+      const savedSession = readSessionRaw();
       let initialInMemoryUser = null;
       
       if (savedSession) {
@@ -113,7 +129,8 @@ export default function App() {
           initialInMemoryUser = JSON.parse(savedSession);
           setAuthUser(initialInMemoryUser);
         } catch (e) {
-          localStorage.removeItem('dynasty_raid_session');
+          localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(LEGACY_SESSION_KEY);
         }
       }
 
@@ -125,11 +142,13 @@ export default function App() {
         if (result.authenticated && result.user) {
           // Sync state and local storage with fresh information from the server
           setAuthUser(result.user);
-          localStorage.setItem('dynasty_raid_session', JSON.stringify(result.user));
+          localStorage.setItem(SESSION_KEY, JSON.stringify(result.user));
+          localStorage.removeItem(LEGACY_SESSION_KEY);
         } else if (!initialInMemoryUser) {
           // Only clear if we had no local fallback — mobile Safari often blocks cookies
           setAuthUser(null);
-          localStorage.removeItem('dynasty_raid_session');
+          localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem(LEGACY_SESSION_KEY);
         }
         // If /auth/me fails cookie but local signed profile exists, keep local session
       } catch (err) {
@@ -144,8 +163,30 @@ export default function App() {
     loadUser();
   }, []);
 
+  // Browser tab: "Sign in" while logged out; "{Guild} Guild App" after auth
+  useEffect(() => {
+    if (!authUser) {
+      document.title = 'Sign in';
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
+        const data = await res.json();
+        if (cancelled) return;
+        const name = (data?.config?.guildDisplayName || '').trim();
+        document.title = `${name || 'Guild'} Guild App`;
+      } catch {
+        if (!cancelled) document.title = 'Guild App';
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authUser]);
+
   const handleLogout = async () => {
-    localStorage.removeItem('dynasty_raid_session');
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LEGACY_SESSION_KEY);
     await logoutUser();
     setAuthUser(null);
     window.location.assign('/landing');

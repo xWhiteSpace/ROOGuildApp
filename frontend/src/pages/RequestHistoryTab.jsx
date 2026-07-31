@@ -60,7 +60,7 @@ export default function RequestHistoryTab({ user }) {
       setLoading(true);
       setAuthError(false);
 
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       
       if (savedUserSession) {
@@ -142,7 +142,7 @@ export default function RequestHistoryTab({ user }) {
 
     try {
       setResettingKey(resetKey);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -176,7 +176,7 @@ export default function RequestHistoryTab({ user }) {
 
     try {
       setClearingHistory(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
 
