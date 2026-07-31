@@ -1,5 +1,5 @@
 {
-  "name": "dynastyguild-frontend",
+  "name": "guildname-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dynastyguild/shared": "*",
+    "@guildname/shared": "*",
     "@fullcalendar/daygrid": "^6.1.21",
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",

@@ -1,6 +1,6 @@
-# Dynasty Guild — System Requirements Specification
+# Guild Name — System Requirements Specification
 
-Single source of truth for functional requirements of the Dynasty Guild full-stack platform (Express + Discord bot backend, Vite/React frontend, Firebase Realtime Database).
+Single source of truth for functional requirements of the Guild Name full-stack platform (Express + Discord bot backend, Vite/React frontend, Firebase Realtime Database).
 
 This document reflects **current code behavior**. Historical chat / Google Sheets / LiveBidding requirements that no longer map to mounted code are listed under [Deleted requirements](#deleted-requirements).
 
@@ -51,7 +51,7 @@ For install and deploy instructions, see the root [README.md](../README.md).
 * **REQ013 (Persist requests):** Valid submissions write into Firebase (`auction/web_requests` and related auction nodes) with status/selection fields.
 * **REQ014 (Leaderboards):** APIs expose ranked participant lists for active item types (sorting via `sortingEngine`).
 * **REQ015 (Settings unlock):** `POST /api/requests/settings/unlock` verifies `SETTINGS_MASTER_KEY` and marks the session as settings-unlocked.
-* **REQ016 (Settings get + auto-seed):** `GET /api/requests/settings/get` returns `settings/configuration`. If missing, write `DEFAULT_CONFIGURATION` from `backend/src/config/defaultConfiguration.js` then return it.
+* **REQ016 (Settings get + auto-seed):** `GET /api/requests/settings/get` returns `settings/configuration`. If missing, write `DEFAULT_CONFIGURATION` from `backend/src/config/defaultConfiguration.js` then return it. Optional `guildDisplayName` is a display-only brand string (browser title); it is not a tenant / data-partition key.
 * **REQ017 (Settings save):** `POST /api/requests/settings/save` requires an unlocked settings session and overwrites `settings/configuration`.
 * **REQ018 (Active session / Mimic Book APIs):** Endpoints support active session read/update/commit, roster sync, loot history, past auctions, and request history used by Mimic Book and history tabs.
 * **REQ019 (Officer role checks):** Officer-only mutations compare the caller’s Discord guild roles against `settings/configuration.adminRoles` (defaults: `GUILD LEADER`, `Vice Guild Leader`, `Commander`).
@@ -142,7 +142,7 @@ For install and deploy instructions, see the root [README.md](../README.md).
 
 ### App shell — `frontend/src/App.jsx`
 
-* **REQ061 (Session restore):** On mount, prefer `auth_user` query → then `localStorage` (`dynasty_raid_session`) → verify with `GET /auth/me`.
+* **REQ061 (Session restore):** On mount, prefer `auth_user` query → then `localStorage` (`guild_raid_session`) → verify with `GET /auth/me`.
 * **REQ062 (Logout):** Clear local session and call backend logout.
 * **REQ063 (Macro hub state):** Maintain Auction vs Attendance (`raid`) macro tab; layout swaps nav sets.
 * **REQ064 (Route table):**

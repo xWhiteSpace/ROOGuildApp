@@ -13,7 +13,7 @@ import {
   buildLiveGridsFromComposition,
   findCrossTabDuplicates,
   isSlotCoordKey,
-} from '@dynastyguild/shared/compositionTabs';
+} from '@guildname/shared/compositionTabs';
 
 const router = Router();
 

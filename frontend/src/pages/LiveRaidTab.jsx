@@ -40,7 +40,7 @@ import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { upcomingDatesForWeekday, DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
-import { normalizeCompositionsMap, isSlotCoordKey } from '@dynastyguild/shared/compositionTabs';
+import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -213,7 +213,7 @@ export default function LiveRaidTab({ user }) {
 
   // Unified Request Headers
   const getRequestHeaders = () => {
-    const savedUserSession = localStorage.getItem('dynasty_raid_session');
+    const savedUserSession = localStorage.getItem('guild_raid_session');
     const headers = { 'Content-Type': 'application/json' };
     if (savedUserSession) {
       headers['x-user-profile'] = encodeURIComponent(savedUserSession);

@@ -1,5 +1,5 @@
 /**
- * @dynastyguild/shared – compositionTabs
+ * @guildname/shared – compositionTabs
  *
  * Single source of truth for Raid Composition / Grid Tab logic.
  * Used by both backend (Node.js ESM) and frontend (Vite/React).

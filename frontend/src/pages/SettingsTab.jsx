@@ -84,6 +84,7 @@ export default function SettingsTab() {
   const [clearScriptCopied, setClearScriptCopied] = useState(false);
   
   const [config, setConfig] = useState({
+    guildDisplayName: '',
     timezone: 'Asia/Manila',
     isForceLocked: false,
     helpEmbedUrl: '',
@@ -134,6 +135,7 @@ export default function SettingsTab() {
       if (data.success) {
         setConfig({
           ...data.config,
+          guildDisplayName: data.config.guildDisplayName || '',
           helpEmbedUrl: data.config.helpEmbedUrl || '',
           raidHelpEmbedUrl: data.config.raidHelpEmbedUrl || '',
           roles: data.config.roles || {},
@@ -377,6 +379,8 @@ export default function SettingsTab() {
       const data = await res.json();
       if (data.success) {
         setSuccessMsg('Global configurations successfully saved and committed to Firebase.');
+        const name = (config.guildDisplayName || '').trim();
+        document.title = `${name || 'Guild'} Guild App`;
         loadGlobalConfigurationTree();
       } else {
         setErrorMsg(data.error || 'Failed to update dynamic configuration matrix.');
@@ -527,6 +531,22 @@ export default function SettingsTab() {
               </div>
             </div>
 
+            {/* CARD: GUILD DISPLAY NAME */}
+            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300">Guild Name</div>
+                <p className="text-[11px] text-slate-500 mt-1 font-normal">Shown in the browser tab after login as &quot;YourName Guild App&quot;. Leave blank to use &quot;Guild&quot;.</p>
+              </div>
+              <input
+                type="text"
+                value={config.guildDisplayName || ''}
+                onChange={(e) => setConfig(prev => ({ ...prev, guildDisplayName: e.target.value }))}
+                placeholder="e.g. My Guild"
+                maxLength={64}
+                className="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-3 py-2.5 text-xs text-slate-200 outline-none font-sans placeholder:text-slate-600"
+              />
+            </div>
+
             {/* CARD 3: LOOKBACK EXPIRATION */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md flex flex-col justify-between space-y-3">
               <div>
@@ -607,7 +627,7 @@ export default function SettingsTab() {
             </div>
 
             <div className="rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2 text-[11px] text-amber-400/90 font-medium">
-              Where: open the DynastyGuild repo in VS Code → Terminal → paste a script below.
+              Where: open the GuildName repo in VS Code → Terminal → paste a script below.
             </div>
 
             {/* REGISTER / DEPLOY */}

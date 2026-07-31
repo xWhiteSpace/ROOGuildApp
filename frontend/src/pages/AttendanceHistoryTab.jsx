@@ -34,7 +34,7 @@ export default function AttendanceHistoryTab({ user }) {
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
 
   const getRequestHeaders = () => {
-    const savedUserSession = localStorage.getItem('dynasty_raid_session');
+    const savedUserSession = localStorage.getItem('guild_raid_session');
     const headers = { 'Content-Type': 'application/json' };
     if (savedUserSession) {
       headers['x-user-profile'] = encodeURIComponent(savedUserSession);

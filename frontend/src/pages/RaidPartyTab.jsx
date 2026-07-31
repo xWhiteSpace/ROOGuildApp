@@ -39,7 +39,7 @@ import {
   bindMemberAcrossTabs,
   nextTabId,
   isSlotCoordKey,
-} from '@dynastyguild/shared/compositionTabs';
+} from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -99,7 +99,7 @@ export default function RaidPartyTab({ user }) {
   const loadRaidPartyWorkspace = async () => {
     try {
       setLoading(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -145,7 +145,7 @@ export default function RaidPartyTab({ user }) {
 
   const refreshCompositionsOnly = async () => {
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -384,7 +384,7 @@ export default function RaidPartyTab({ user }) {
   const handleCreateBlankConfig = async () => {
     if (!isOfficer) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -437,7 +437,7 @@ export default function RaidPartyTab({ user }) {
         };
       });
 
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -464,7 +464,7 @@ export default function RaidPartyTab({ user }) {
     if (!isOfficer) return;
     if (!window.confirm("Permanently erase this composition grid configuration? This action cannot be undone.")) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
@@ -491,7 +491,7 @@ export default function RaidPartyTab({ user }) {
   const handleCommitLocalMirrorToFirebase = async () => {
     if (!selectedConfigId || !isOfficer || !activeTabId) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 

@@ -136,7 +136,7 @@ const [rawMembers, setRawMembers] = useState({});
   const loadTrueRequestPool = async () => {
     try {
       setLoadingPool(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -173,7 +173,7 @@ const [rawMembers, setRawMembers] = useState({});
   const handleSyncRosterFromDiscord = async () => {
     try {
       setSyncingRoster(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -195,7 +195,7 @@ const [rawMembers, setRawMembers] = useState({});
     try {
       setLoadingLootHistory(true);
       setExpandedGroups({}); 
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -216,7 +216,7 @@ const [rawMembers, setRawMembers] = useState({});
     // 🛡️ CIRCUIT BREAKER: Mute background poll snapshots if user performed a local write within 4 seconds
       if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
 
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -261,7 +261,7 @@ const [rawMembers, setRawMembers] = useState({});
   const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {
     if (!isOfficer) return;
     try {
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -558,7 +558,7 @@ const [rawMembers, setRawMembers] = useState({});
     if (!commitDate.trim() || !isOfficer) return alert("Operation locked or criteria missing.");
     try {
       setCommittingSetting(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
 

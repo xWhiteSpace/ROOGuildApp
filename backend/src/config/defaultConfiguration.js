@@ -2,6 +2,7 @@
  * Single default settings/configuration seed — imported by request.routes + timeWindow.
  */
 export const DEFAULT_CONFIGURATION = {
+  guildDisplayName: '',
   timezone: 'Asia/Manila',
   isForceLocked: false,
   adminRoles: ['GUILD LEADER', 'Vice Guild Leader', 'Commander'],

@@ -43,7 +43,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
       setLoading(true);
       setAuthError(false);
 
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -140,7 +140,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
 
     try {
       setProcessing(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
@@ -166,7 +166,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
   const handleExecuteCancel = async (itemId, itemName, activeQty) => {
     try {
       setProcessing(true);
-      const savedUserSession = localStorage.getItem('dynasty_raid_session');
+      const savedUserSession = localStorage.getItem('guild_raid_session');
       const customHeaders = { 'Content-Type': 'application/json' };
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
