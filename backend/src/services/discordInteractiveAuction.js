@@ -9,6 +9,21 @@ const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
   `This guarantees your game client layout matches our Request Page and Slot numbering system.`;
 
 /**
+ * Phase 3 Actual Bid Limit: Loot Registry (session lootSummary) is source of truth.
+ * Settings loots remain the fallback seed when summary has not been allocated yet.
+ */
+function resolveActualBidLimit(session, settingsLoots, itemId) {
+  const sessionLimit = session?.lootSummary?.[itemId]?.limit;
+  if (sessionLimit !== undefined && sessionLimit !== null && Number(sessionLimit) >= 1) {
+    return Number(sessionLimit);
+  }
+  if (settingsLoots && settingsLoots[itemId] !== undefined) {
+    return settingsLoots[itemId];
+  }
+  return 0;
+}
+
+/**
  * ⚙️ CORE COMPILER: Calculates book geometry coordinates dynamically in runtime memory
  * Projects a pure Single Source of Truth layout map out of Phase 2 flat allocation arrays.
  */
@@ -176,12 +191,13 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const sessionSnap = await db.ref('auction/active_session').once('value');
 
   const { items = [] } = configSnap.val();
-  const { categoryAllocations = {}, qtyPerPage = 4 } = sessionSnap.val();
+  const sessionData = sessionSnap.exists() ? sessionSnap.val() : {};
+  const { categoryAllocations = {}, qtyPerPage = 4 } = sessionData;
 
   const selectedItemObj = items.find(i => i.id === itemId);
   const gateDetails = getGateStatusDetails() || {};
   const activeEventObj = configSnap.val().events?.[gateDetails.activeEventId];
-  const maxAllowedLimit = activeEventObj?.loots && activeEventObj.loots[itemId] !== undefined ? activeEventObj.loots[itemId] : 0;
+  const maxAllowedLimit = resolveActualBidLimit(sessionData, activeEventObj?.loots, itemId);
 
   const membersSnap = await db.ref('auction/members').once('value');
   const membersMap = membersSnap.exists() ? membersSnap.val() : {};
@@ -308,6 +324,10 @@ export async function handleAuctionInteraction(interaction) {
     const itemId = valueParts[1];
 
     try {
+      const preClaimConfigSnap = await db.ref('settings/configuration').once('value');
+      const gateDetailsForClaim = getGateStatusDetails() || {};
+      const settingsLootsForClaim = preClaimConfigSnap.val()?.events?.[gateDetailsForClaim.activeEventId]?.loots || {};
+
         // 🚀 UNIFIED MULTI-WRITER ALIGNMENT: Elevate transaction to the root node to update coordinates and increment master version simultaneously
       const txResult = await db.ref('auction/active_session').transaction((currentSession) => {
         if (!currentSession) return currentSession;
@@ -336,6 +356,13 @@ export async function handleAuctionInteraction(interaction) {
           return; // 🛑 Abort transaction safely if slot is occupied
         }
 
+        // Enforce Actual Bid Limit from Loot Registry before assigning the claim
+        const maxAllowedLimit = resolveActualBidLimit(currentSession, settingsLootsForClaim, itemId);
+        const currentUserClaims = selectedList.filter(slotValue => slotValue === interaction.user.id).length;
+        if (maxAllowedLimit > 0 && currentUserClaims >= maxAllowedLimit) {
+          return; // 🛑 Abort — member already at Actual Bid Limit
+        }
+
         selectedList[targetIndex] = interaction.user.id; // Pure relational ID assignment
         currentSession.categoryAllocations[itemId].selected = selectedList;
 
@@ -347,12 +374,21 @@ export async function handleAuctionInteraction(interaction) {
         return currentSession;
       });
 
-      // If the transaction aborted because another thread claimed it first, trigger collision handler
+      // Differentiate slot collision vs Actual Bid Limit abort
       if (!txResult.committed) {
+        const abortedSession = txResult.snapshot?.val() || {};
+        let abortedSelected = abortedSession.categoryAllocations?.[itemId]?.selected || [];
+        if (!Array.isArray(abortedSelected)) abortedSelected = Object.values(abortedSelected);
+        const slotOccupied = abortedSelected[targetIndex] && abortedSelected[targetIndex] !== "";
+        const abortedLimit = resolveActualBidLimit(abortedSession, settingsLootsForClaim, itemId);
+        const abortedUserClaims = abortedSelected.filter(slotValue => slotValue === interaction.user.id).length;
+        if (!slotOccupied && abortedLimit > 0 && abortedUserClaims >= abortedLimit) {
+          throw new Error('LIMIT_REACHED');
+        }
         throw new Error('COLLISION_DETECTED');
       }
 
-      const updatedConfigSnap = await db.ref('settings/configuration').once('value');
+      const updatedConfigSnap = preClaimConfigSnap;
       const localSessionCacheSnap = await db.ref('auction/active_session').once('value');
       const membersSnap = await db.ref('auction/members').once('value');
       
@@ -373,10 +409,9 @@ export async function handleAuctionInteraction(interaction) {
 
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage, membersMap);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
-        // 🔍 LIMIT INTEGRITY CHECK: Calculate current claims vs configuration maximums
-      const gateDetails = getGateStatusDetails() || {};
-      const activeEventObj = updatedConfigSnap.val().events?.[gateDetails.activeEventId];
-      const maxAllowedLimit = activeEventObj?.loots && activeEventObj.loots[itemId] !== undefined ? activeEventObj.loots[itemId] : 0;
+        // 🔍 LIMIT INTEGRITY CHECK: Actual Bid Limit from Loot Registry session (Settings fallback)
+      const activeEventObj = updatedConfigSnap.val().events?.[gateDetailsForClaim.activeEventId];
+      const maxAllowedLimit = resolveActualBidLimit(sessionCacheObj, activeEventObj?.loots, itemId);
       const userClaimedCount = freshMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
 
       if (userClaimedCount >= maxAllowedLimit) {
@@ -398,7 +433,20 @@ export async function handleAuctionInteraction(interaction) {
       const finalQtyPerPage = updatedSessionSnap.val().qtyPerPage || 4;
       const freshMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage);
       const resolvedSlot = freshMatrix.find(s => s.itemType === itemId && s.index === targetIndex);
-      if (err.message === 'COLLISION_DETECTED') {
+      if (err.message === 'LIMIT_REACHED') {
+        const gateDetails = getGateStatusDetails() || {};
+        const activeEventObj = updatedConfigSnap.val().events?.[gateDetails.activeEventId];
+        const maxAllowedLimit = resolveActualBidLimit(updatedSessionSnap.val(), activeEventObj?.loots, itemId);
+        const membersSnap = await db.ref('auction/members').once('value');
+        const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+        const limitMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage, membersMap);
+        const userClaimedCount = limitMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
+        await renderItemCategoryView(
+          interaction,
+          finalRosterName,
+          `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for this item category.`
+        );
+      } else if (err.message === 'COLLISION_DETECTED') {
         // 🎯 Safely parse coordinates directly from the dynamically compiled memory matrix 
         const collisionBanner = `⚠️ **SLOT OCCUPIED!** Another member claimed **Page ${resolvedSlot?.page || '?'}, Slot ${resolvedSlot?.slot || '?'}** right before you tapped.\n\n*No layout cells were overwritten. Try claiming another item below:*`;
 

@@ -403,12 +403,47 @@ const [rawMembers, setRawMembers] = useState({});
         updatedFields[key] = Math.max(1, parsedPage);
       }
       if (key === 'itemType') {
-        const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
-        updatedFields.limit = selectedEventObj?.loots?.[val] || 1;
+        // Prefer an existing Actual Bid Limit already set for this item type; else seed from Settings
+        const sibling = lootRows.find(row => row.id !== id && row.itemType === val);
+        if (sibling?.limit >= 1) {
+          updatedFields.limit = sibling.limit;
+        } else {
+          const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
+          updatedFields.limit = selectedEventObj?.loots?.[val] || 1;
+        }
       }
       return { ...r, ...updatedFields };
     });
     saveWorkspaceState({ lootRows: updatedRows });
+  };
+
+  // Phase 3 Actual Bid Limit: session-only override (per itemType). Never mutates Settings.
+  const handleUpdateActualBidLimit = (rowId, nextLimitRaw) => {
+    if (!isAdminMode || !isOfficer) return;
+    const targetRow = lootRows.find(r => r.id === rowId);
+    if (!targetRow) return;
+
+    const nextLimit = Math.max(1, parseInt(nextLimitRaw, 10) || 1);
+    const itemType = targetRow.itemType;
+
+    const updatedRows = lootRows.map(r =>
+      r.itemType === itemType ? { ...r, limit: nextLimit } : r
+    );
+
+    // Always upsert lootSummary.limit so Discord claim caps stay aligned (pre- and post-allocate)
+    const current = lootSummary[itemType] || { qty: 0, seats: 0 };
+    const qty = current.qty || 0;
+    saveWorkspaceState({
+      lootRows: updatedRows,
+      lootSummary: {
+        ...lootSummary,
+        [itemType]: {
+          ...current,
+          limit: nextLimit,
+          seats: Math.floor(qty / nextLimit)
+        }
+      }
+    });
   };
 
   // Safety checks shield database engine loop from crashing if async records haven't loaded
@@ -455,8 +490,10 @@ const [rawMembers, setRawMembers] = useState({});
       const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
       if (calculatedSummary[row.itemType]) {
         calculatedSummary[row.itemType].qty += qty;
-        const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
-        calculatedSummary[row.itemType].limit = selectedEventObj?.loots?.[row.itemType] || 1;
+        // Actual Bid Limit from Loot Registry rows (Settings only as fallback seed)
+        calculatedSummary[row.itemType].limit = row.limit >= 1
+          ? row.limit
+          : (activeLoots[row.itemType] || 1);
       }
     }
 
@@ -707,7 +744,8 @@ const [rawMembers, setRawMembers] = useState({});
 
   const sidebarFilteredRosterList = masterGuildRoster.filter(name => {
     const currentItemObj = items.find(i => i.id === activeMatrixFilter);
-    const maxRowLimit = currentItemObj ? (currentItemObj.limitQty || 1) : 1;
+    const maxRowLimit = lootSummary[activeMatrixFilter]?.limit
+      || (currentItemObj ? (currentItemObj.limitQty || 1) : 1);
     const currentAllocatedVolumeAcrossGrid = (currentActiveSelections.selected || []).filter(n => resolveDisplayName(n) === name).length;
     return name.toLowerCase().includes(sidebarSearch.toLowerCase()) && currentAllocatedVolumeAcrossGrid < maxRowLimit;
   });
@@ -831,7 +869,7 @@ const [rawMembers, setRawMembers] = useState({});
                       <th className="p-3 text-center">Start Pos</th>
                       <th className="p-3 text-center">End Page</th>
                       <th className="p-3 text-center">End Pos</th>
-                      <th className="p-3 text-center">Bid Limit</th>
+                      <th className="p-3 text-center">Actual Bid Limit</th>
                       <th className="p-3 text-center">Remove</th>
                     </tr>
                   </thead>
@@ -888,8 +926,12 @@ const [rawMembers, setRawMembers] = useState({});
                           </div>
                         </td>
 
-                        <td className="p-2 text-center text-amber-500 font-bold text-xs select-none">
-                          {row.limit || 1}
+                        <td className="p-2 text-center">
+                          <div className="flex items-center justify-center gap-1.5 bg-slate-950/30 border border-slate-800/40 rounded-xl px-1.5 max-w-[95px] mx-auto py-0.5">
+                            <button type="button" onClick={() => handleUpdateActualBidLimit(row.id, Math.max(1, (row.limit || 1) - 1))} className="w-5 h-5 rounded bg-slate-950 border border-slate-800 text-slate-400 text-[10px] font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">-</button>
+                            <input type="number" value={row.limit || 1} onChange={(e) => handleUpdateActualBidLimit(row.id, e.target.value)} className="w-6 bg-transparent text-center text-amber-500 font-bold text-xs font-mono outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button type="button" onClick={() => handleUpdateActualBidLimit(row.id, (row.limit || 1) + 1)} className="w-5 h-5 rounded bg-slate-950 border border-slate-800 text-slate-400 text-[10px] font-bold hover:bg-slate-800 hover:text-white transition flex items-center justify-center cursor-pointer shadow-sm">+</button>
+                          </div>
                         </td>
 
                         <td className="p-2 text-center">
@@ -938,7 +980,7 @@ const [rawMembers, setRawMembers] = useState({});
                       <div className="text-[9px] uppercase tracking-wider font-bold flex items-center justify-between gap-2">
                         <span className="truncate">{item.name}</span>
                         <span className={`font-mono font-bold tracking-tight shrink-0 ${isActiveCategory ? 'text-indigo-200' : 'text-amber-500/90'}`}>
-                          MAX: {item.limitQty || 1}
+                          MAX: {lootSummary[item.id]?.limit || item.limitQty || 1}
                         </span>
                       </div>
                       <div className={`text-sm font-black mt-1 font-mono tracking-tight ${isActiveCategory ? 'text-white' : 'text-slate-200'}`}>
