@@ -330,6 +330,32 @@ If Discord API calls fail from Render with network/block errors, set optional `P
    - `VITE_BACKEND_API_URL=https://YOUR-SERVICE.onrender.com`
 4. Deploy. Copy the site URL (e.g. `https://your-app.vercel.app`)
 
+5. **Deployment hygiene** (recommended so GitHub / Vercel stay tidy):
+
+   | Setting | Where | Recommended |
+   | :--- | :--- | :--- |
+   | `deployment_status` Events | Vercel → Project → **Settings → Git** | **Off** (unless a GitHub Action depends on them) |
+   | Production retention | Vercel → Project → **Settings → Security → Deployment Retention** | **7 days (`1w`)** — not 1 day |
+   | Preview / Canceled / Errored retention | Same | **1 day (`1d`)** |
+
+   Every git push creates a Vercel deployment and a matching **GitHub Deployments** record. Retention only deletes Vercel artifacts; it does **not** clear GitHub’s list. One current production alias is enough — you do not need hundreds of old records.
+
+   Apply retention via API (optional) and print the Git toggle reminder:
+
+   ```bash
+   export VERCEL_TOKEN=...          # https://vercel.com/account/tokens
+   export VERCEL_PROJECT_ID=...     # Project Settings → General
+   # export VERCEL_TEAM_ID=...      # if the project is under a team
+   ./scripts/configure-vercel-deploy-hygiene.sh
+   ```
+
+   Clear accumulated GitHub deployment metadata (safe for the live site):
+
+   ```bash
+   gh auth login
+   ./scripts/cleanup-github-deployments.sh --keep 1
+   ```
+
 ---
 
 ## 7. Wire production URLs together
@@ -374,6 +400,8 @@ npm run deploy-commands
 | `frontend` | `npm run build` | Production build |
 | `backend` | `npm start` | Production API + bot |
 | `backend` | `npm run deploy-commands` | Register Discord slash commands |
+| `scripts/` | `./scripts/configure-vercel-deploy-hygiene.sh` | Set Vercel retention (needs `VERCEL_TOKEN`) |
+| `scripts/` | `./scripts/cleanup-github-deployments.sh --keep 1` | Delete old GitHub deployment records |
 
 ---
 
