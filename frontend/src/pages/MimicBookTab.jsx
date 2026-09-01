@@ -42,6 +42,7 @@ export default function MimicBookTab({ user }) {
     initialWinnersByItem, setInitialWinnersByItem, isDiscordGateOpen, setIsDiscordGateOpen,
     sidebarTab, setSidebarTab, sidebarSearch, setSidebarSearch, viewLens, setViewLens,
     searchQuery, setSearchQuery, bookCurrentPage, setBookCurrentPage, generatedSlots, setGeneratedSlots,
+    autoCommitArmed, setAutoCommitArmed,
     lastLocalWriteTimeRef, clientVersionRef
   } = useContext(MimicBookContext);
 
@@ -249,6 +250,7 @@ const [rawMembers, setRawMembers] = useState({});
       if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
       if (s.sidebarTab) setSidebarTab(s.sidebarTab);
       if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
+      if (s.autoCommitArmed !== undefined) setAutoCommitArmed(s.autoCommitArmed);
     } else if (isInitialMount) {
         // Defensive Initialization Guard: Network dropouts or temporary auth latency must never destructively wipe progress fields back to zero
         console.warn("⚠️ [INITIAL SYNC PENDING]: Handshake latency detected; waiting for subsequent background poller stream to clear the gate.");
@@ -293,8 +295,11 @@ const [rawMembers, setRawMembers] = useState({});
     if (updatedStateFields.activeMatrixFilter) setActiveMatrixFilter(updatedStateFields.activeMatrixFilter);
     if (updatedStateFields.sidebarTab) setSidebarTab(updatedStateFields.sidebarTab);
     if (updatedStateFields.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(updatedStateFields.isDiscordGateOpen);
+    if (updatedStateFields.autoCommitArmed !== undefined) setAutoCommitArmed(updatedStateFields.autoCommitArmed);
 
     // 2. Build a sanitized transactional data map to send to Firebase, leaving visual states local
+    // NOTE: /update-session REPLACES the whole node, so every field must be present on
+    // each save or it gets wiped — always re-send autoCommitArmed from the latest value.
     const transactionalSnapshot = {
       activeStep: updatedStateFields.activeStep !== undefined ? updatedStateFields.activeStep : activeStep,
       lootRows: updatedStateFields.lootRows || lootRows,
@@ -302,6 +307,7 @@ const [rawMembers, setRawMembers] = useState({});
       categoryAllocations: updatedStateFields.categoryAllocations || categoryAllocations,
       initialWinnersByItem: updatedStateFields.initialWinnersByItem || initialWinnersByItem,
       isDiscordGateOpen: updatedStateFields.isDiscordGateOpen !== undefined ? updatedStateFields.isDiscordGateOpen : isDiscordGateOpen,
+      autoCommitArmed: updatedStateFields.autoCommitArmed !== undefined ? updatedStateFields.autoCommitArmed : autoCommitArmed,
       version: clientVersionRef.current
     };
 
@@ -1211,6 +1217,26 @@ const [rawMembers, setRawMembers] = useState({});
                   {committing ? "Writing Ledger Data..." : "COMMIT SESSION & ARCHIVE TO FIREBASE"}
                 </button>
               </div>
+
+              {isOfficer && (
+                <div className="max-w-md mx-auto pt-1">
+                  <button
+                    onClick={() => saveWorkspaceState({ autoCommitArmed: !autoCommitArmed })}
+                    className={`w-full px-4 py-2 rounded-xl text-xs font-bold tracking-wider uppercase border transition ${
+                      autoCommitArmed
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {autoCommitArmed
+                      ? '🟢 Auto-Commit ARMED — fires ~1 min before Phase 3 ends'
+                      : '⚪ Auto-Commit OFF — click to arm safety auto-commit'}
+                  </button>
+                  <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
+                    When armed, the server auto-commits this staged board about one minute before the event's Phase 3 ends. It is skipped if no winners are staged, and disarms automatically once committed.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

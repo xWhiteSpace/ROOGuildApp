@@ -138,4 +138,33 @@ export function upcomingDatesForWeekday(targetDayOfWeek, timezone = DEFAULT_TZ, 
   return dates;
 }
 
+/**
+ * Guild-timezone week-minute (0–10079) and calendar date for an instant.
+ * week-minute = dayOfWeek*1440 + hour*60 + minute, matching the phase-window
+ * math in settings (dayStart*1440 + timeStart). Used by time-driven schedulers
+ * (event announcements, auto-commit) so all "is it this minute yet?" checks
+ * share one definition.
+ * @param {string} [timezone]
+ * @param {Date} [instant]
+ * @returns {{ absMinute: number, dateStr: string }}
+ */
+export function getGuildWeekMinute(timezone = DEFAULT_TZ, instant = new Date()) {
+  const { dayOfWeek } = getGuildNowParts(timezone, instant);
+
+  const hmParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || DEFAULT_TZ,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(instant);
+  const t = Object.fromEntries(hmParts.map((p) => [p.type, p.value]));
+
+  const hour = parseInt(t.hour, 10) % 24;
+  const minute = parseInt(t.minute, 10);
+
+  const absMinute = dayOfWeek * 1440 + hour * 60 + minute;
+  const dateStr = formatGuildDate(instant, timezone);
+  return { absMinute, dateStr };
+}
+
 export { DEFAULT_TZ };

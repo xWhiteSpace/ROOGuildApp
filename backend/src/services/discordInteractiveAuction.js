@@ -263,15 +263,23 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
 export async function handleAuctionInteraction(interaction) {
   const db = admin.database();
 
+  // ⏱️ ACK-FIRST: acknowledge based on the component (customId — no I/O) BEFORE
+  // any Firebase read, so slow/cold reads can never expire the interaction token
+  // and surface as "Unknown interaction" (10062). The public entry button opens
+  // a fresh ephemeral panel (deferReply); every other control edits in place
+  // (deferUpdate).
+  const opensNewPanel = interaction.isButton() && interaction.customId === 'open_auction_panel';
+  if (opensNewPanel) {
+    await interaction.deferReply({ ephemeral: true });
+  } else {
+    await interaction.deferUpdate();
+  }
+
   // 🚨 ABSOLUTE EMERGENCY OVERRIDE SHIELD: Instantly terminate all gateway interactions if Forced Lock is active
   const globalConfigSnap = await db.ref('settings/configuration').once('value');
   if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
     const lockdownNotice = `🚨 **ADMINISTRATIVE LOCKDOWN**: The bidding framework has been completely frozen by management. Discord inputs are currently offline.`;
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: lockdownNotice, components: [] }).catch(() => {});
-    } else {
-      await interaction.reply({ content: lockdownNotice, ephemeral: true }).catch(() => {});
-    }
+    await interaction.editReply({ content: lockdownNotice, components: [] }).catch(() => {});
     return;
   }
 
@@ -281,7 +289,7 @@ export async function handleAuctionInteraction(interaction) {
 
     // ─── STEP 1: USER CLICKS THE PUBLIC ENTRY BUTTON ───
   if (interaction.isButton() && interaction.customId === 'open_auction_panel') {
-    await interaction.deferReply({ ephemeral: true });
+    // (ack handled at top via deferReply)
 
     // 🛡️ SECURE DISCORD INPUT INTERCEPTOR: Checks the manual override switch on your admin dashboard before accepting inputs
     const sessionSnap = await db.ref('auction/active_session').once('value');
@@ -302,21 +310,21 @@ export async function handleAuctionInteraction(interaction) {
 
   // ─── LOOPBACK JUMP: USER CLICKS THE BACK BUTTON INSIDE THE CORE WORKFLOW ───
   if (interaction.isButton() && interaction.customId === 'open_auction_panel_back') {
-    await interaction.deferUpdate();
+    // (ack handled at top via deferUpdate)
     await renderItemCategoryView(interaction, finalRosterName);
   }
 
   // ─── STEP 2: USER SELECTS AN ITEM CATEGORY DROPDOWN ───
   if (interaction.isStringSelectMenu() && interaction.customId === 'auction_select_item_type') {
-    await interaction.deferUpdate();
+    // (ack handled at top via deferUpdate)
     const itemId = interaction.values[0].replace('select_item_', '');
     await renderSpecificSlotView(interaction, itemId, finalRosterName);
   }
 
   // ─── STEP 3 & 4: USER TAPS A SPECIFIC GRID CANVAS BUTTON MATRIX CELL ───
   if (interaction.isButton() && interaction.customId.startsWith('claim_slot_btn_')) {
-    await interaction.deferUpdate();
-    
+    // (ack handled at top via deferUpdate)
+
     const rawValueToken = interaction.customId.replace('claim_slot_btn_', '');
     const valueParts = rawValueToken.split('_item_');
 

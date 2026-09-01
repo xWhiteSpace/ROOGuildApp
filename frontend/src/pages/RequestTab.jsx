@@ -357,8 +357,10 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
               ) : (
                 currentRosterList.map((playerName, index) => {
                   const positionLabel = String(index + 1).padStart(2, '0');
-                  const resolvedDisplayName = members[playerName]?.displayName || playerName;
                   const itemDetails = requestsByItemDetails[activeListTab]?.[playerName];
+                  // Fall back to the request-time name when the live member record
+                  // is missing (e.g. purged/vanished) so we never show a bare id.
+                  const resolvedDisplayName = members[playerName]?.displayName || itemDetails?.name || playerName;
                   
                   const priorityScoreInt = itemDetails?.priority ?? 0;
                   const timestampTimeStr = itemDetails?.time || '';

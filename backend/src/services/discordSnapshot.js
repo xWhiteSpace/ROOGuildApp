@@ -134,21 +134,42 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
       }
 
       const EMBED_CHUNK_SIZE = 8; // 🛡️ Safe size buffer (Discord max absolute limit is 10 embeds per single text post)
-      
+      const CHUNK_DELAY_MS = 750; // Gentle spacing so multi-chunk posts don't burst the REST queue
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const isRateLimited = (err) => {
+        const status = err?.status ?? err?.httpStatus ?? err?.code;
+        return status === 429 || /rate limit|too many requests|being blocked/i.test(err?.message || '');
+      };
+
       for (let i = 0; i < embedsPayload.length; i += EMBED_CHUNK_SIZE) {
         const structuralChunk = embedsPayload.slice(i, i + EMBED_CHUNK_SIZE);
-        
-        if (i === 0) {
-          // Send the headline banner strictly inside the first payload frame message
-          await targetChannel.send({ 
-            content: broadcastHeadlineText, 
-            embeds: structuralChunk 
-          });
-        } else {
-          // Stream subsequent item blocks cleanly down the tracking feed channel
-          await targetChannel.send({ 
-            embeds: structuralChunk 
-          });
+
+        try {
+          if (i === 0) {
+            // Send the headline banner strictly inside the first payload frame message
+            await targetChannel.send({ 
+              content: broadcastHeadlineText, 
+              embeds: structuralChunk 
+            });
+          } else {
+            // Stream subsequent item blocks cleanly down the tracking feed channel
+            await targetChannel.send({ 
+              embeds: structuralChunk 
+            });
+          }
+        } catch (sendErr) {
+          // 🛑 If Discord rate-limits us mid-broadcast, stop pushing the rest of
+          // the chunks — continuing would only deepen a global soft-ban.
+          if (isRateLimited(sendErr)) {
+            console.error("⏳ [BROADCAST]: Rate-limited mid-send — aborting remaining chunks to avoid deepening the soft-ban.");
+            return;
+          }
+          throw sendErr; // Non-rate-limit failure → bubble to the outer handler
+        }
+
+        // Space out subsequent chunk posts (no delay needed after the final chunk)
+        if (i + EMBED_CHUNK_SIZE < embedsPayload.length) {
+          await sleep(CHUNK_DELAY_MS);
         }
       }
       

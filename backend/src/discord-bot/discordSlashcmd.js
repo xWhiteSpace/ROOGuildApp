@@ -74,18 +74,26 @@ export async function handleSlashCommand(interaction) {
   const db = admin.database(); // Establish direct Realtime DB handle[cite: 1]
   const snowflakeId = interaction.user.id; // Unique Snowflake key[cite: 1, 2]
 
+  // ⏱️ ACK-FIRST: acknowledge within Discord's hard 3-second window BEFORE any
+  // Firebase read or REST call. Slow/cold reads can otherwise expire the
+  // interaction token and surface as "Unknown interaction" (10062). Everything
+  // below responds via editReply against this deferred (ephemeral) ack.
+  const KNOWN_COMMANDS = ['jobchange', 'rolechange', 'namechange', 'event', 'myparty'];
+  if (!KNOWN_COMMANDS.includes(commandName)) return;
+  await interaction.deferReply({ ephemeral: true });
+
   // Phase 3: Global System Lockdown Verification Gate
   if (['jobchange', 'rolechange', 'event'].includes(commandName)) {
     const globalConfigSnap = await db.ref('settings/configuration').once('value');
     if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
-      return await interaction.reply({ content: '🔒 System Notice: The database is currently locked down by an administrative freeze. Modification requests are suspended.', ephemeral: true });
+      return await interaction.editReply({ content: '🔒 System Notice: The database is currently locked down by an administrative freeze. Modification requests are suspended.' });
     }
   }
 
   // 1. /jobchange Execution
   if (commandName === 'jobchange') {
     const configSnap = await db.ref('settings/configuration/jobs').once('value'); //[cite: 1]
-    if (!configSnap.exists()) return interaction.reply({ content: '❌ Jobs database catalog missing.', ephemeral: true });
+    if (!configSnap.exists()) return interaction.editReply({ content: '❌ Jobs database catalog missing.' });
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId('menu_job_selection')
@@ -95,13 +103,13 @@ export async function handleSlashCommand(interaction) {
         value: code // Maps to standard jobCode properties[cite: 1]
       })));
 
-    return await interaction.reply({ content: 'Select your new Job Class:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+    return await interaction.editReply({ content: 'Select your new Job Class:', components: [new ActionRowBuilder().addComponents(menu)] });
   }
 
   // 2. /rolechange Execution
   if (commandName === 'rolechange') {
     const configSnap = await db.ref('settings/configuration/roles').once('value');
-    if (!configSnap.exists()) return interaction.reply({ content: '❌ Roles database catalog missing.', ephemeral: true });
+    if (!configSnap.exists()) return interaction.editReply({ content: '❌ Roles database catalog missing.' });
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId('menu_role_selection')
@@ -111,7 +119,7 @@ export async function handleSlashCommand(interaction) {
         value: code
       })));
 
-    return await interaction.reply({ content: 'Select your Combat Role assignment:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+    return await interaction.editReply({ content: 'Select your Combat Role assignment:', components: [new ActionRowBuilder().addComponents(menu)] });
   }
 
   // 3. /namechange Execution
@@ -119,15 +127,14 @@ export async function handleSlashCommand(interaction) {
     const desiredNickname = interaction.options.getString('nickname');
     try {
       await interaction.member.setNickname(desiredNickname);
-      return await interaction.reply({ content: `✅ Guild server display profile name shifted to **${desiredNickname}**.`, ephemeral: true });
+      return await interaction.editReply({ content: `✅ Guild server display profile name shifted to **${desiredNickname}**.` });
     } catch (err) {
-      return await interaction.reply({ content: '❌ Security baseline mutation blocked. Server owners or higher ranked roles cannot be renamed by automation bots.', ephemeral: true });
+      return await interaction.editReply({ content: '❌ Security baseline mutation blocked. Server owners or higher ranked roles cannot be renamed by automation bots.' });
     }
   }
 
   // 4. /event Execution (Upgraded Button Matrix Board Layout)
   if (commandName === 'event') {
-    await interaction.deferReply({ ephemeral: true });
     try {
       const payload = await generateRSVPMatrixDashboard(db, snowflakeId, 1);
       return await interaction.editReply(payload);
@@ -139,7 +146,6 @@ export async function handleSlashCommand(interaction) {
 
   // 5. /myparty Execution (Fixed Roster Schema Verification Pipeline)
   if (commandName === 'myparty') {
-    await interaction.deferReply({ ephemeral: true });
     const liveSessionSnap = await db.ref('attendance/live_session').once('value'); //[cite: 2]
 
     if (!liveSessionSnap.exists()) {
@@ -240,11 +246,16 @@ export async function handleComponentInteraction(interaction) {
   const db = admin.database(); //[cite: 1]
   const snowflakeId = interaction.user.id; //[cite: 1, 2]
 
+  // ⏱️ ACK-FIRST: defer the component update before any Firebase I/O so slow
+  // reads can never expire the interaction token (10062). All branches below
+  // edit the (ephemeral) source message via editReply.
+  await interaction.deferUpdate();
+
   // Phase 3: Component Interaction Lockdown Safety Gate
   if (interaction.customId.startsWith('menu_') || interaction.customId.startsWith('matrsvp:')) {
     const globalConfigSnap = await db.ref('settings/configuration').once('value');
     if (globalConfigSnap.exists() && globalConfigSnap.val().isForceLocked === true) {
-      return await interaction.reply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', ephemeral: true }).catch(() => {});
+      return await interaction.editReply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', components: [] }).catch(() => {});
     }
   }
 
@@ -254,14 +265,14 @@ export async function handleComponentInteraction(interaction) {
     await db.ref(`auction/members/${snowflakeId}`).update({ jobCode: selectedJobCode }); //[cite: 1]
 
     const configSnap = await db.ref('settings/configuration/roles').once('value');
-    if (!configSnap.exists()) return await interaction.update({ content: `✅ Job spec successfully saved.`, components: [] });
+    if (!configSnap.exists()) return await interaction.editReply({ content: `✅ Job spec successfully saved.`, components: [] });
 
     const roleMenu = new StringSelectMenuBuilder()
       .setCustomId('menu_role_selection_chained')
       .setPlaceholder('Next, confirm your primary combat raid role...')
       .addOptions(Object.entries(configSnap.val()).map(([code, roleObj]) => ({ label: roleObj.name || code, value: code })));
 
-    return await interaction.update({
+    return await interaction.editReply({
       content: `✅ Job specialized to **${selectedJobCode}**! Let's update your role configuration next:`,
       components: [new ActionRowBuilder().addComponents(roleMenu)]
     });
@@ -271,12 +282,11 @@ export async function handleComponentInteraction(interaction) {
   if (interaction.customId === 'menu_role_selection' || interaction.customId === 'menu_role_selection_chained') {
     const selectedRoleCode = interaction.values[0];
     await db.ref(`auction/members/${snowflakeId}`).update({ roleCode: selectedRoleCode });
-    return await interaction.update({ content: `🎉 Profile configuration set! Saved combat role: **${selectedRoleCode}**.`, components: [] });
+    return await interaction.editReply({ content: `🎉 Profile configuration set! Saved combat role: **${selectedRoleCode}**.`, components: [] });
   }
 
   // C. Upgraded Rapid-Fire Availability Button Grid Handler (Colon delimited parsing)
   if (interaction.customId.startsWith('matrsvp:')) {
-    await interaction.deferUpdate();
     const parts = interaction.customId.split(':');
     const action = parts[1]; // 'confirm' or 'leave'
     const compositeKey = parts[2]; // Extracts the safe unbroken format: dateStr_eventId

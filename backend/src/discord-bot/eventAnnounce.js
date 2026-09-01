@@ -56,15 +56,44 @@ function getGuildMinuteContext(timezone, instant) {
 }
 
 /**
+ * How long a stale in-flight ('sending') marker is held before it can be
+ * reclaimed. Covers two cases without hammering Discord every 60s tick:
+ *  - a process crash mid-send (self-heals once past the TTL), and
+ *  - a rate-limit back-off hold (see maybeAnnounceEvents catch handler).
+ * Kept below the catch-up window so a held occurrence gets at most one delayed
+ * retry inside the window instead of ~20 rapid-fire retries.
+ */
+const SENDING_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Detect Discord global rate-limit / soft-ban style failures so the announcer
+ * can back off instead of retrying (which only deepens the ban).
+ */
+function isRateLimitError(err) {
+  if (!err) return false;
+  const status = err.status ?? err.httpStatus ?? err.code;
+  if (status === 429) return true;
+  if (err.name === 'RateLimitError' || err.name === 'RateLimitedError') return true;
+  return /rate limit|too many requests|being blocked/i.test(err.message || '');
+}
+
+/**
  * Atomically claim an announcement occurrence. Returns { claimed, ref }.
- * claimed === true means THIS call reserved it (marker was absent) and the
- * caller must send. claimed === false means it was already sent / in-flight.
+ * claimed === true means THIS call reserved it (marker was absent or a stale
+ * in-flight hold aged past the TTL) and the caller must send. claimed === false
+ * means it was already sent / is actively in-flight.
  */
 async function claimAnnouncement(db, markerKey) {
   const ref = db.ref(`scheduler/event_announcements/${markerKey}`);
   const res = await ref.transaction((current) => {
     if (current === null) return { status: 'sending', at: Date.now() };
-    return; // abort — someone already holds this occurrence
+    // Reclaim a stale in-flight marker (crash mid-send, or a rate-limit hold)
+    // only once it ages past the TTL — otherwise leave it so we never double-post
+    // and never hammer Discord on back-to-back ticks.
+    if (current.status === 'sending' && (Date.now() - (current.at || 0)) > SENDING_TTL_MS) {
+      return { status: 'sending', at: Date.now() };
+    }
+    return; // abort — already sent or actively in-flight
   });
   return { claimed: res.committed === true, ref };
 }
@@ -143,9 +172,14 @@ export async function maybeAnnounceEvents() {
     if (duePhases.length === 0) continue;
 
     for (const phaseTag of duePhases) {
-      // dateStr scopes the marker per calendar day (Phase 1 repeats daily) and
-      // per week (Phase 2/3), so it auto-resets on the next occurrence.
-      const markerKey = `${eventId}_${dateStr}_${phaseTag}`;
+      // Marker scoping. Phase 1 fires at MULTIPLE times per day, so its marker
+      // includes the exact week-minute (absMinute) to keep each occurrence
+      // independent — otherwise a single shared daily key would let the first
+      // Phase-1 time suppress the 12:00/19:00 ones. Phase 2/3 are single weekly
+      // milestones, so day-scoping (dateStr) is enough and auto-resets weekly.
+      const markerKey = phaseTag === 'p1'
+        ? `${eventId}_${dateStr}_p1_${absMinute}`
+        : `${eventId}_${dateStr}_${phaseTag}`;
       const { claimed, ref } = await claimAnnouncement(db, markerKey);
       if (!claimed) continue;
 
@@ -153,9 +187,16 @@ export async function maybeAnnounceEvents() {
         await dispatchAnnouncement(phaseTag, eventName);
         await ref.update({ status: 'sent', at: Date.now() });
       } catch (err) {
-        // Release so a later tick within the window can retry transient failures.
-        await ref.remove().catch(() => {});
-        console.error(`⚠️ Event announcement (${phaseTag}) failed to post:`, err.message);
+        if (isRateLimitError(err)) {
+          // Back off: KEEP the 'sending' marker so ticks stop retrying every 60s
+          // (rapid retries only deepen a global soft-ban). The SENDING_TTL_MS
+          // window lets a single delayed retry happen later if still viable.
+          console.error(`⏳ Event announcement (${phaseTag}) rate-limited — holding marker to back off:`, err.message);
+        } else {
+          // Transient non-rate-limit failure: release so a later tick can retry.
+          await ref.remove().catch(() => {});
+          console.error(`⚠️ Event announcement (${phaseTag}) failed to post:`, err.message);
+        }
       }
     }
   }

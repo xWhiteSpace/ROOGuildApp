@@ -70,22 +70,36 @@ router.post('/vanish', async (req, res) => {
     const { targetUid } = req.body;
     if (!targetUid) return res.status(400).json({ success: false, error: 'Missing user ID parameter.' });
 
-    // 1. Kick member straight off the active Discord Server Guild.
-    // Dummies are placeholder-only (no Discord identity) so we skip the kick entirely.
+    // 1. Best-effort kick off the active Discord Server Guild. This is NON-FATAL:
+    // the bot often lacks Kick permission (or the target outranks it), and that
+    // must never block the database purge below. Dummies are placeholder-only
+    // (no Discord identity) so we skip the kick entirely.
     const isDummyTarget = targetUid.startsWith('dummy_');
+    let kicked = false;
     if (!isDummyTarget && discordClient && discordClient.isReady()) {
-      const guild = await discordClient.guilds.fetch(process.env.DISCORD_GUILD_ID).catch(() => null);
-      if (guild) {
-        const member = await guild.members.fetch(targetUid).catch(() => null);
-        if (member) {
-          await member.kick('Vanished from guild via administrative dashboard web request');
+      try {
+        const guild = await discordClient.guilds.fetch(process.env.DISCORD_GUILD_ID).catch(() => null);
+        if (guild) {
+          const member = await guild.members.fetch(targetUid).catch(() => null);
+          if (member) {
+            await member.kick('Vanished from guild via administrative dashboard web request');
+            kicked = true;
+          }
         }
+      } catch (kickErr) {
+        console.warn(`⚠️ [VANISH]: Discord kick skipped for ${targetUid} (proceeding with DB purge):`, kickErr.message);
       }
     }
 
-    // 2. Clear out identity document variables from cloud nodes
+    // 2. ALWAYS clear the identity record from the cloud nodes, regardless of kick outcome.
     await db.ref(`auction/members/${targetUid}`).remove();
-    return res.json({ success: true, message: 'Server kick completed and database profile record purged.' });
+
+    const kickNote = isDummyTarget
+      ? 'Dummy placeholder record purged from the database.'
+      : kicked
+        ? 'Discord server kick completed and database profile record purged.'
+        : 'Database profile record purged. Discord kick was skipped or not permitted (bot lacks permission or member already gone).';
+    return res.json({ success: true, kicked, message: kickNote });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

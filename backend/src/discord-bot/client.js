@@ -21,6 +21,16 @@ export const discordClient = new Client({
     GatewayIntentBits.GuildVoiceStates
   ],
   partials: [Partials.Channel, Partials.Message],
+  // 🛑 RATE-LIMIT SHIELD: cap automatic REST retries so a single 429 can't
+  // silently snowball into repeated requests that deepen a global soft-ban.
+  rest: { retries: 1 },
+});
+
+// 📉 Surface rate-limit hits with a single warning instead of silently retrying.
+discordClient.rest.on('rateLimited', (info) => {
+  console.warn(
+    `⚠️ [DISCORD RATE LIMIT]: route=${info.route} method=${info.method} global=${info.global} timeoutMs=${info.timeToReset}`
+  );
 });
 
 export async function initializeDiscordBot() {
@@ -71,6 +81,14 @@ export async function initializeDiscordBot() {
         }
       } catch (err) {
         console.error("❌ [GATEWAY INTERACTION ROUTE ERROR]: Failed to resolve command event:", err.message);
+
+        // Discord 10062 = Unknown interaction (token already expired), 40060 =
+        // interaction already acknowledged. In both cases the token is dead, so
+        // a fallback reply is another doomed REST call that only burns rate-limit
+        // quota — skip it. Only attempt a fallback for still-valid, un-acked ones.
+        const deadInteractionCodes = [10062, 40060];
+        if (deadInteractionCodes.includes(err?.code)) return;
+
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({ 
             content: '❌ An internal processing failure occurred while verifying your tracking command.', 
@@ -141,6 +159,16 @@ export async function initializeDiscordBot() {
       import('./eventAnnounce.js')
         .then((m) => m.maybeAnnounceEvents())
         .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
+
+      // ⏰ Auto-end a Live Raid once its monitoring End Time passes (idempotent via status guard)
+      import('../api/liveRaid.routes.js')
+        .then((m) => m.maybeAutoEndLiveRaid())
+        .catch((err) => console.error('⚠️ Live raid auto-end scheduler warning:', err.message));
+
+      // 🧾 Opt-in auto-commit of the MimicBook auction ~1 min before Phase 3 ends (marker-idempotent)
+      import('./autoCommitAuction.js')
+        .then((m) => m.maybeAutoCommitAuction())
+        .catch((err) => console.error('⚠️ Auto-commit auction scheduler warning:', err.message));
     }, 60000);
   });
 
