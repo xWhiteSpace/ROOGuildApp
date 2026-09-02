@@ -161,6 +161,8 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
           // 🛑 If Discord rate-limits us mid-broadcast, stop pushing the rest of
           // the chunks — continuing would only deepen a global soft-ban.
           if (isRateLimited(sendErr)) {
+            const { logDiscordRateLimit } = await import('../utils/discordRateLimit.js');
+            logDiscordRateLimit('snapshot broadcast', sendErr);
             console.error("⏳ [BROADCAST]: Rate-limited mid-send — aborting remaining chunks to avoid deepening the soft-ban.");
             return;
           }

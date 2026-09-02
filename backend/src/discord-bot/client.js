@@ -4,6 +4,7 @@ import admin from 'firebase-admin'; // 🛰️ Connect absolute database referen
 import { handleSlashCommand, handleComponentInteraction } from './discordSlashcmd.js';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { logDiscordRateLimit } from '../utils/discordRateLimit.js';
 
 // 📡 GLOBAL NETWORK TUNNEL OVERRIDE — IMMUNE TO DATACENTER IP BLOCKS
 if (process.env.PROXY_URL) {
@@ -26,11 +27,9 @@ export const discordClient = new Client({
   rest: { retries: 1 },
 });
 
-// 📉 Surface rate-limit hits with a single warning instead of silently retrying.
+// 📉 Surface rate-limit hits with a human-readable wait (soft-ban Retry-After).
 discordClient.rest.on('rateLimited', (info) => {
-  console.warn(
-    `⚠️ [DISCORD RATE LIMIT]: route=${info.route} method=${info.method} global=${info.global} timeoutMs=${info.timeToReset}`
-  );
+  logDiscordRateLimit('REST bucket', info);
 });
 
 export async function initializeDiscordBot() {
@@ -188,9 +187,15 @@ export async function initializeDiscordBot() {
     console.log(`📡 [DISCORD PROBE RAW RESULT]: HTTP Status ${probeResponse.status} (${probeResponse.statusText})`);
     const bodyText = await probeResponse.text();
     console.log(`📄 [DISCORD PROBE BODY SNIPPET]: ${bodyText.slice(0, 250)}`);
+    if (probeResponse.status === 429) {
+      let retryPayload = { headers: probeResponse.headers, message: bodyText };
+      try { retryPayload = { ...retryPayload, ...JSON.parse(bodyText) }; } catch { /* body may not be JSON */ }
+      logDiscordRateLimit('boot gateway probe', retryPayload);
+    }
   } catch (probeErr) {
     console.error("🛑 [DISCORD PROBE CRITICAL FAULT]: Raw network route is heavily rate-limited or tarpitted.");
     console.error(`   Error Reason: ${probeErr.message}`);
+    logDiscordRateLimit('boot gateway probe exception', probeErr);
   }
 
   try {
@@ -200,5 +205,6 @@ export async function initializeDiscordBot() {
     console.error("🛑 [DISCORD BOT GATEWAY EXCEPTION]:");
     console.error(`   Error Message: ${loginErr.message}`);
     console.error(`   Error Code: ${loginErr.code || 'N/A'}`);
+    logDiscordRateLimit('gateway login', loginErr);
   }
 }

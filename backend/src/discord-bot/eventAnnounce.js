@@ -19,6 +19,7 @@
 import admin from 'firebase-admin';
 import { discordClient } from './client.js';
 import { getGuildNowParts, formatGuildDate, DEFAULT_TZ } from '../utils/guildTime.js';
+import { logDiscordRateLimit } from '../utils/discordRateLimit.js';
 
 const DAY_MINUTES = 1440;
 
@@ -191,6 +192,7 @@ export async function maybeAnnounceEvents() {
           // Back off: KEEP the 'sending' marker so ticks stop retrying every 60s
           // (rapid retries only deepen a global soft-ban). The SENDING_TTL_MS
           // window lets a single delayed retry happen later if still viable.
+          logDiscordRateLimit(`event announcement ${phaseTag}`, err);
           console.error(`⏳ Event announcement (${phaseTag}) rate-limited — holding marker to back off:`, err.message);
         } else {
           // Transient non-rate-limit failure: release so a later tick can retry.

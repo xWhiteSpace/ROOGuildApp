@@ -4,6 +4,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
+import { logDiscordRateLimit } from '../utils/discordRateLimit.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
@@ -101,6 +102,15 @@ router.get('/callback', async (req, res) => {
     if (!tokenResponse.ok) {
       const errorPayload = await tokenResponse.json().catch(() => ({}));
       console.error("🛑 [DISCORD OAUTH EXCEPTION DETAILS]:", JSON.stringify(errorPayload, null, 2));
+      if (tokenResponse.status === 429) {
+        logDiscordRateLimit('oauth token exchange', {
+          ...errorPayload,
+          headers: tokenResponse.headers,
+          status: 429,
+          message: errorPayload.message || tokenResponse.statusText,
+          url: `${discordApi}/oauth2/token`,
+        });
+      }
       throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || tokenResponse.statusText}`);
     }
 
@@ -128,6 +138,7 @@ router.get('/callback', async (req, res) => {
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch guild profile details via REST API:', err.message);
+        logDiscordRateLimit('oauth guild member fetch', err);
       }
     }
 
