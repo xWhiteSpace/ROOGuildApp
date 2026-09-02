@@ -4,6 +4,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
+import { logDiscordRateLimit, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
@@ -100,8 +101,15 @@ router.get('/callback', async (req, res) => {
 
     if (!tokenResponse.ok) {
       const errorPayload = await tokenResponse.json().catch(() => ({}));
-      console.error("🛑 [DISCORD OAUTH EXCEPTION DETAILS]:", JSON.stringify(errorPayload, null, 2));
-      throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || tokenResponse.statusText}`);
+      console.error("🛑 [DISCORD OAUTH EXCEPTION DETAILS]:", JSON.stringify({
+        httpStatus: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        ...errorPayload,
+      }, null, 2));
+      // Always dump wait/headers on OAuth failure — Discord global IP blocks
+      // often omit JSON retry_after and sometimes aren't labeled as 429 in logs.
+      logDiscordHttpFailure('oauth token exchange', tokenResponse, errorPayload);
+      throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || errorPayload.message || tokenResponse.statusText}`);
     }
 
     const tokenData = await tokenResponse.json();
@@ -109,7 +117,11 @@ router.get('/callback', async (req, res) => {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
-    if (!userResponse.ok) throw new Error('Failed to fetch user profiles');
+    if (!userResponse.ok) {
+      const userErrBody = await userResponse.json().catch(() => ({}));
+      logDiscordHttpFailure('oauth users/@me', userResponse, userErrBody);
+      throw new Error('Failed to fetch user profiles');
+    }
 
     const user = await userResponse.json();
     let serverNickname = user.global_name || user.username;
@@ -128,6 +140,7 @@ router.get('/callback', async (req, res) => {
         }
       } catch (err) {
         console.warn('⚠️ Could not fetch guild profile details via REST API:', err.message);
+        logDiscordRateLimit('oauth guild member fetch', err);
       }
     }
 

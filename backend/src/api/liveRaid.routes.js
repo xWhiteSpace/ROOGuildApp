@@ -164,11 +164,14 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
   let s = activeSnap.val();
   const endTs = monitoringEndsAt || s.monitoringEndsAt;
   if (endTs && Date.now() >= endTs) {
-    console.log("⏰ Monitoring window ended. Stopping voice polling ticker.");
-    await db.ref('attendance/live_session').update({
-      monitoringTickerStatus: 'ended',
-      monitoringTickerNote: `Stopped at ${new Date().toISOString()}`,
-    }).catch(() => {});
+    console.log("⏰ Monitoring window ended. Auto-ending the Live Raid and archiving session.");
+    // Auto-end: finalize + archive the raid exactly like the manual "End Raid"
+    // control so officers never leave a session hanging open past its End Time.
+    if (s.status === 'Active') {
+      await endLiveRaidSessionInternal(s).catch((err) => {
+        console.error('[live-raid] auto-end on window close failed:', err.message);
+      });
+    }
     return { stop: true, reason: 'ended' };
   }
 
@@ -341,6 +344,29 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
 }
 
 /**
+ * Restart-safe backstop for auto-ending a Live Raid at its End Time.
+ * Independent of the in-memory ticker: if an Active session's monitoring window
+ * has elapsed, archive it just like the manual "End Raid" control. Safe to call
+ * repeatedly (idempotent via the status === 'Active' guard).
+ */
+export async function maybeAutoEndLiveRaid() {
+  try {
+    const db = getDatabase();
+    const snap = await db.ref('attendance/live_session').once('value');
+    if (!snap.exists()) return;
+
+    const s = snap.val();
+    if (s.status !== 'Active') return;
+    if (!s.monitoringEndsAt || Date.now() < Number(s.monitoringEndsAt)) return;
+
+    console.log('[live-raid] Auto-end backstop: monitoring End Time reached — archiving session.');
+    await endLiveRaidSessionInternal(s);
+  } catch (err) {
+    console.error('[live-raid] maybeAutoEndLiveRaid failed:', err.message);
+  }
+}
+
+/**
  * Re-arm monitoring after backend restart if an Active live_session still has a schedule.
  * Tickers live only in memory — without this, pulses stop permanently after a restart.
  */
@@ -356,7 +382,10 @@ export async function resumeLiveRaidMonitoringIfNeeded() {
       return;
     }
     if (Date.now() > s.monitoringEndsAt) {
-      console.log('[live-raid] Active session monitoring window already ended — not resuming ticker.');
+      console.log('[live-raid] Active session monitoring window already ended while offline — auto-ending + archiving now.');
+      await endLiveRaidSessionInternal(s).catch((err) => {
+        console.error('[live-raid] auto-end on boot failed:', err.message);
+      });
       return;
     }
 

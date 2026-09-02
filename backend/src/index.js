@@ -20,6 +20,7 @@ import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
 import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
+import { getDiscordRateLimitStatus } from './utils/discordRateLimit.js';
 
 import attendanceRoutes from './api/attendance.routes.js';
 
@@ -98,6 +99,11 @@ app.use('/api/live-raid', liveRaidRoutes);
 
 app.get('/', (req, res) => {
   res.send('GuildName backend is online.');
+});
+
+// 📟 Debug: remaining Discord REST/soft-ban cooldown (no secrets)
+app.get('/api/debug/discord-ratelimit', (req, res) => {
+  res.json({ success: true, ...getDiscordRateLimitStatus() });
 });
 
 // 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP

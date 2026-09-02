@@ -605,6 +605,24 @@ router.post('/submit', async (req, res) => {
     const timezone = dynamicConfig.timezone || "Asia/Manila";
     const targetSessionDate = dynamicConfig.targetSessionDate || "";
 
+    // 🩹 SELF-HEAL: if this raider's member record was purged or left nameless
+    // (e.g. deleted while clearing a duplicate), repair it here so the bidding
+    // boards can resolve their name again on the next request. This works even
+    // on mobile clients that reuse a cached x-user-profile token and never
+    // re-hit the OAuth callback. Never touch dummy_ ids and never overwrite an
+    // existing Discord-owned displayName.
+    if (user.id && !String(user.id).startsWith('dummy_')) {
+      const memberSnap = await db.ref(`auction/members/${user.id}`).once('value');
+      const existingMember = memberSnap.exists() ? memberSnap.val() : null;
+      if (!existingMember || !existingMember.displayName) {
+        await db.ref(`auction/members/${user.id}`).update({
+          displayName: playerDisplayName,
+          status: existingMember?.status || 'Active',
+          syncedAt: new Date().toLocaleDateString("en-US", { timeZone: timezone }),
+        });
+      }
+    }
+
     const chosenItemIds = Object.keys(selections);
     // 🚀 INDEXED MEMORY OPTIMIZATION: Query only this specific raider's history to minimize processing latency
     const snapshot = await db.ref('auction/web_requests')
@@ -803,29 +821,23 @@ router.post('/cancel', async (req, res) => {
 });
 
 /**
- * POST /api/requests/commit-session
+ * Shared commit-session ledger writer. Consumed by the POST /commit-session route
+ * and by the automatic auto-commit scheduler so both paths write an identical
+ * atomic bundle (loot_history, past_auctions, web_request status flips) and clear
+ * the active staging session. Throws on failure; callers own the HTTP/logging shell.
  */
-router.post('/commit-session', async (req, res) => {
-  const user = resolveUserIdentity(req);
-  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
-
+export async function performCommitSession({ event, date, allocations, summary }) {
   const db = getDatabase();
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
-  const allowedRoles = dynamicConfig.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"];
   const timezone = dynamicConfig.timezone || "Asia/Manila";
   const itemsList = dynamicConfig.items || [];
 
-  if (!verifyDiscordOfficerRole(user, allowedRoles)) {
-    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
-  }
-
-  const { event, date, allocations, summary } = req.body;
   if (!allocations) {
-    return res.status(400).json({ success: false, error: 'No allocation parameters detected.' });
+    throw new Error('No allocation parameters detected.');
   }
 
-  try {
+  {
     const snapshot = await db.ref('auction/web_requests').once('value');
     const firebaseRequests = snapshot.exists() ? snapshot.val() : {};
 
@@ -973,6 +985,32 @@ router.post('/commit-session', async (req, res) => {
 
     // Fire everything down to Firebase in a single synchronized network pass
     await db.ref().update(atomicUpdates);
+  }
+}
+
+/**
+ * POST /api/requests/commit-session
+ */
+router.post('/commit-session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  const db = getDatabase();
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+  const allowedRoles = dynamicConfig.adminRoles || ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+
+  if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+  }
+
+  const { event, date, allocations, summary } = req.body;
+  if (!allocations) {
+    return res.status(400).json({ success: false, error: 'No allocation parameters detected.' });
+  }
+
+  try {
+    await performCommitSession({ event, date, allocations, summary });
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });

@@ -98,6 +98,9 @@ export function compileLeaderboard(firebaseRequests, itemsList, membersData) {
     rankingsByItem[item.id] = activeApplicants.map(u => u.userId);
     activeApplicants.forEach(u => {
       requestsByItemDetails[item.id][u.userId] = {
+        // Carry the request-time resolved name so consumers can display it even
+        // when the live auction/members record is missing (e.g. purged/vanished).
+        name: u.name,
         quantity: u.netQty,
         priority: u.priority,
         time: u.firstTime || ''

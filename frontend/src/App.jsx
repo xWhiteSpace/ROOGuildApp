@@ -70,6 +70,7 @@ export function MimicBookProvider({ children }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [bookCurrentPage, setBookCurrentPage] = useState(1);
   const [generatedSlots, setGeneratedSlots] = useState([]);
+  const [autoCommitArmed, setAutoCommitArmed] = useState(false);
   const lastLocalWriteTimeRef = useRef(0);
   const clientVersionRef = useRef(0);
 
@@ -87,6 +88,7 @@ export function MimicBookProvider({ children }) {
       initialWinnersByItem, setInitialWinnersByItem, isDiscordGateOpen, setIsDiscordGateOpen,
       sidebarTab, setSidebarTab, sidebarSearch, setSidebarSearch, viewLens, setViewLens,
       searchQuery, setSearchQuery, bookCurrentPage, setBookCurrentPage, generatedSlots, setGeneratedSlots,
+      autoCommitArmed, setAutoCommitArmed,
       lastLocalWriteTimeRef, clientVersionRef
     }}>
       {children}

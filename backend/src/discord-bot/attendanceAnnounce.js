@@ -312,10 +312,23 @@ export async function handleAttendanceInteraction(interaction) {
   const db = admin.database();
   const snowflakeId = interaction.user.id;
 
+  const parts = interaction.customId.split(':');
+  const action = parts[1];
+
+  // ⏱️ ACK-FIRST: acknowledge based on the action (parsed from customId — no I/O)
+  // BEFORE any Firebase read, so slow/cold reads can never expire the interaction
+  // token and surface as "Unknown interaction" (10062). `set` toggles in place
+  // (deferUpdate); confirmall/manage return an ephemeral panel (deferReply).
+  if (action === 'set') {
+    await interaction.deferUpdate();
+  } else {
+    await interaction.deferReply({ ephemeral: true });
+  }
+
   const configSnap = await db.ref('settings/configuration').once('value');
   if (configSnap.exists() && configSnap.val().isForceLocked === true) {
     return await interaction
-      .reply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', ephemeral: true })
+      .editReply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.' })
       .catch(() => {});
   }
 
@@ -323,13 +336,9 @@ export async function handleAttendanceInteraction(interaction) {
   const member = memberSnap.exists() ? memberSnap.val() : {};
   const displayName = member.displayName || member.name || interaction.user.username;
 
-  const parts = interaction.customId.split(':');
-  const action = parts[1];
-
   // att:confirmall:{weekMonday}
   if (action === 'confirmall') {
     const weekMonday = parts.slice(2).join(':');
-    await interaction.deferReply({ ephemeral: true });
 
     const weekEvents = await getWeekEvents(weekMonday);
     if (weekEvents.length === 0) {
@@ -359,15 +368,12 @@ export async function handleAttendanceInteraction(interaction) {
   // att:manage:{weekMonday}
   if (action === 'manage') {
     const weekMonday = parts.slice(2).join(':');
-    await interaction.deferReply({ ephemeral: true });
     const payload = await buildManagePanel(db, snowflakeId, weekMonday);
     return await interaction.editReply(payload);
   }
 
   // att:set:{compositeKey}:{confirm|leave}
   if (action === 'set') {
-    await interaction.deferUpdate();
-
     const target = parts[parts.length - 1];
     const compositeKey = parts.slice(2, parts.length - 1).join(':');
 
