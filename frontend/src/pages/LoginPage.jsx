@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import DiscordSignInButton from '../components/DiscordSignInButton';
+import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
 
 export default function LoginPage() {
   const errorMessage = useMemo(() => {
@@ -16,7 +17,7 @@ export default function LoginPage() {
       return 'Sign-in cannot use the Render server IP. Deploy the Vercel token function and set DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET on Vercel, then try once.';
     }
     if (err === 'oauth_bridge_failed') {
-      return 'Sign-in reached Vercel but Discord token exchange failed. Add DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to Vercel env (same values as Render), redeploy, then try once.';
+      return oauthBridgeUserMessage(params.get('detail'));
     }
     const map = {
       missing_code: 'Discord did not return an authorization code. Try again.',

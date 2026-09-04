@@ -34,18 +34,29 @@ async function exchangeCodeForDiscordUser(code) {
   const exchangeUrl = resolveOAuthExchangeUrl();
 
   if (exchangeUrl) {
+    const secret = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-oauth-bridge': secret,
+      Authorization: `Bearer ${secret}`,
+    };
+    const bypass = String(process.env.VERCEL_PROTECTION_BYPASS || process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+    if (bypass) {
+      headers['x-vercel-protection-bypass'] = bypass;
+    }
+
     const bridgeRes = await fetch(exchangeUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.DISCORD_CLIENT_SECRET}`,
-      },
+      headers,
       body: JSON.stringify({ code, redirect_uri: redirectUri }),
     });
     const payload = await bridgeRes.json().catch(() => ({}));
     if (!bridgeRes.ok) {
-      const err = new Error(payload.error || payload.message || `OAuth bridge failed (${bridgeRes.status})`);
+      const detail = payload.error || payload.message || `http_${bridgeRes.status}`;
+      console.error(`🛑 [OAUTH BRIDGE] ${bridgeRes.status} from ${exchangeUrl}: ${detail}`);
+      const err = new Error(detail);
       err.bridgeStatus = bridgeRes.status;
+      err.bridgeDetail = detail;
       throw err;
     }
     if (!payload.user?.id) {
@@ -265,7 +276,8 @@ router.get('/callback', async (req, res) => {
       return res.redirect(`${targetFrontend}/landing?error=oauth_offload_required`);
     }
     if (error?.bridgeStatus) {
-      return res.redirect(`${targetFrontend}/landing?error=oauth_bridge_failed`);
+      const detail = encodeURIComponent(error.bridgeDetail || error.message || 'unknown');
+      return res.redirect(`${targetFrontend}/landing?error=oauth_bridge_failed&detail=${detail}`);
     }
     if (isDiscordCircuitOpen()) {
       return res.redirect(circuitRedirect(targetFrontend));
