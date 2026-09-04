@@ -9,9 +9,13 @@ export default function LoginPage() {
     if (!err) return null;
     if (err === 'discord_rate_limited') {
       const until = params.get('until');
-      return until
-        ? `Discord is temporarily blocking this server IP. Try again after ${until}.`
-        : 'Discord is temporarily blocking this server IP. Please wait before logging in again.';
+      if (!until || until === 'none' || until === 'later') {
+        return 'That was not a Discord ban — a login gate misfired. Open /landing and try Sign-in once.';
+      }
+      return `Discord is temporarily blocking this server IP. Try again after ${until}.`;
+    }
+    if (err === 'login_busy') {
+      return 'Sign-in was already in progress. Wait a few seconds, then click Sign-in once.';
     }
     if (err === 'oauth_offload_required') {
       return 'Sign-in cannot use the Render server IP. FRONTEND_URL on Render must be your Vercel site URL.';

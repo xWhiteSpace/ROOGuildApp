@@ -183,7 +183,10 @@ router.get('/login', async (req, res) => {
     if (gate.reason === 'oauth-offload-required') {
       return res.redirect(`${targetFrontend}/landing?error=oauth_offload_required`);
     }
-    return res.redirect(circuitRedirect(targetFrontend));
+    if (gate.reason === 'circuit' || gate.reason === 'oauth-lock') {
+      return res.redirect(circuitRedirect(targetFrontend));
+    }
+    return res.redirect(`${targetFrontend}/landing?error=login_busy`);
   }
   const state = req.query.state || 'no_state';
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -203,7 +206,10 @@ router.get('/callback', async (req, res) => {
   await hydrateDiscordCircuit();
   const gate = beginOAuthAttempt();
   if (!gate.allowed) {
-    return res.redirect(circuitRedirect(targetFrontend));
+    if (gate.reason === 'circuit' || gate.reason === 'oauth-lock') {
+      return res.redirect(circuitRedirect(targetFrontend));
+    }
+    return res.redirect(`${targetFrontend}/landing?error=login_busy`);
   }
 
   try {

@@ -212,6 +212,13 @@ function oauthQuietRemainingMs() {
   return Math.max(0, lastDiscordBurstAt + OAUTH_QUIET_AFTER_BURST_MS - Date.now());
 }
 
+function clearStaleOAuthInFlight() {
+  if (!oauthInFlight || !lastOAuthAttemptAt) return;
+  if (Date.now() - lastOAuthAttemptAt > 90_000) {
+    oauthInFlight = false;
+  }
+}
+
 export function getDiscordRateLimitStatus() {
   const remainingMs = Math.max(0, lastCooldownUntil - Date.now());
   const oauthLockMs = Math.max(0, oauthLockUntil - Date.now());
@@ -250,6 +257,7 @@ export function getDiscordRateLimitStatus() {
  * Render IP is what turns Cloudflare 429s into a global block.
  */
 export function beginOAuthAttempt() {
+  clearStaleOAuthInFlight();
   const offRender = isOAuthOffRender();
   if (!offRender && isDiscordCircuitOpen()) {
     return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
@@ -283,6 +291,7 @@ export function endOAuthAttempt() {
 
 /** Debounce Sign-in clicks without blocking the later /callback token exchange. */
 export function markOAuthLoginClick() {
+  clearStaleOAuthInFlight();
   const offRender = isOAuthOffRender();
   if (!offRender && !isLocalOAuthRedirect()) {
     return { allowed: false, reason: 'oauth-offload-required', status: getDiscordRateLimitStatus() };
@@ -303,12 +312,12 @@ export function markOAuthLoginClick() {
     if (oauthRemaining > 0 || oauthQuietRemainingMs() > 0) {
       return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
     }
-  }
-  const clickRemaining = lastLoginRedirectAt
-    ? Math.max(0, lastLoginRedirectAt + LOGIN_CLICK_DEBOUNCE_MS - Date.now())
-    : 0;
-  if (clickRemaining > 0) {
-    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+    const clickRemaining = lastLoginRedirectAt
+      ? Math.max(0, lastLoginRedirectAt + LOGIN_CLICK_DEBOUNCE_MS - Date.now())
+      : 0;
+    if (clickRemaining > 0) {
+      return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+    }
   }
   lastLoginRedirectAt = Date.now();
   return { allowed: true, status: getDiscordRateLimitStatus() };
