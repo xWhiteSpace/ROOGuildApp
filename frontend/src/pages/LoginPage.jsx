@@ -1,17 +1,22 @@
 import { useMemo } from 'react';
-import { getBackendUrl } from '../services/apiClient';
-
-const backendUrl = getBackendUrl();
+import DiscordSignInButton from '../components/DiscordSignInButton';
 
 export default function LoginPage() {
   const errorMessage = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error');
     if (!err) return null;
+    if (err === 'discord_rate_limited') {
+      const until = params.get('until');
+      return until
+        ? `Discord is temporarily blocking this server IP. Try again after ${until}.`
+        : 'Discord is temporarily blocking this server IP. Please wait before logging in again.';
+    }
     const map = {
       missing_code: 'Discord did not return an authorization code. Try again.',
       access_denied: 'Discord login was cancelled.',
       token_exchange_failed: 'Could not complete Discord login. Check OAuth redirect URI on Render.',
+      discord_oauth_failed: 'Discord login failed. Do not spam Sign in — wait a minute, then try once.',
     };
     return map[err] || `Login failed (${err}).`;
   }, []);
@@ -28,12 +33,11 @@ export default function LoginPage() {
       <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
         On mobile, keep this tab open after Discord redirects back. Cross-site cookies may be blocked; the app uses a signed profile fallback automatically.
       </p>
-      <a
-        href={`${backendUrl}/auth/login`}
-        className="mt-6 inline-flex w-max rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
-      >
-        Sign in with Discord
-      </a>
+      <div className="mt-6">
+        <DiscordSignInButton
+          className="inline-flex w-max items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
+        />
+      </div>
     </div>
   );
 }

@@ -118,7 +118,12 @@ app.get('/api/deploy-auction-card', async (req, res) => {
     if (!discordClient || !discordClient.isReady()) {
       return res.status(503).send("❌ Failure: Discord bot client is currently offline or rate-limited. Wait for gateway initialization to finish before running this route.");
     }
-    const targetChannel = await discordClient.channels.fetch(channelId);
+    const { isDiscordCircuitOpen, getDiscordRateLimitStatus, enqueueDiscordCall } = await import('./utils/discordRateLimit.js');
+    if (isDiscordCircuitOpen()) {
+      const status = getDiscordRateLimitStatus();
+      return res.status(503).send(`❌ Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`);
+    }
+    const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
     if (!targetChannel) {
       return res.status(404).send("❌ Failure: Discord gateway client failed to locate matching server channel pointer.");
     }

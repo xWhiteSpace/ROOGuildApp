@@ -2,6 +2,8 @@
 import { Router } from 'express';
 import { getDatabase } from 'firebase-admin/database';
 import { getGateStatusDetails } from '../config/timeWindow.js';
+import { discordClient } from '../discord-bot/client.js';
+import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
 import crypto from 'crypto';
 import { ensureWeekInstances, getWeekInstances, writeCommitment } from '../services/scheduleService.js';
 import {
@@ -76,15 +78,15 @@ router.post('/vanish', async (req, res) => {
     // (no Discord identity) so we skip the kick entirely.
     const isDummyTarget = targetUid.startsWith('dummy_');
     let kicked = false;
-    if (!isDummyTarget && discordClient && discordClient.isReady()) {
+    if (!isDummyTarget && discordClient && discordClient.isReady() && !isDiscordCircuitOpen()) {
       try {
-        const guild = await discordClient.guilds.fetch(process.env.DISCORD_GUILD_ID).catch(() => null);
-        if (guild) {
-          const member = await guild.members.fetch(targetUid).catch(() => null);
-          if (member) {
-            await member.kick('Vanished from guild via administrative dashboard web request');
-            kicked = true;
-          }
+        const guild = discordClient.guilds.cache.get(process.env.DISCORD_GUILD_ID);
+        const member = guild?.members?.cache.get(targetUid);
+        if (member) {
+          await enqueueDiscordCall(() =>
+            member.kick('Vanished from guild via administrative dashboard web request')
+          );
+          kicked = true;
         }
       } catch (kickErr) {
         console.warn(`⚠️ [VANISH]: Discord kick skipped for ${targetUid} (proceeding with DB purge):`, kickErr.message);
@@ -172,13 +174,15 @@ router.post('/begin-raid', async (req, res) => {
 
     await db.ref('attendance/active_session').set(sessionPayload);
 
-    const pollIntervalMs = 5 * 60 * 1000; // 5-minute default for the legacy attendance ticker
+    const pollIntervalMs = 15 * 60 * 1000; // 15-minute floor to avoid Discord REST pressure
 
     // Initialize the low-overhead synchronous connection-state polling routine
     if (global.attendanceIntervalTicker) clearInterval(global.attendanceIntervalTicker);
     
     global.attendanceIntervalTicker = setInterval(async () => {
       try {
+        if (isDiscordCircuitOpen()) return;
+
         const activeSnap = await db.ref('attendance/active_session').once('value');
         if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
           return clearInterval(global.attendanceIntervalTicker);
@@ -196,20 +200,9 @@ router.post('/begin-raid', async (req, res) => {
           process.env.DISCORD_WARROOM_ID_5
         ].filter(Boolean);
 
-        // Scan whitelisted channels purely for connection metadata arrays
-        const presentUserIds = [];
-        for (const channelId of whitelistedRooms) {
-          const channel = await discordClient.channels.fetch(channelId).catch(() => null);
-          if (channel && channel.isVoiceBased()) {
-            channel.members.forEach(member => {
-              if (!member.user.bot) {
-                presentUserIds.push(member.user.id);
-              }
-            });
-          }
-        }
+        const { fetchVoiceChannelPresentUids } = await import('../utils/warRoomResolver.js');
+        const presentUserIds = await fetchVoiceChannelPresentUids(discordClient, whitelistedRooms);
 
-        // Low-overhead incremental indexing pass: Avoids separate document logs per tick
         presentUserIds.forEach(uid => {
           updatedTallies[uid] = (updatedTallies[uid] || 0) + 1;
         });

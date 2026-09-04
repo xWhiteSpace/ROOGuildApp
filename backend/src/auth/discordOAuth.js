@@ -4,7 +4,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
-import { logDiscordRateLimit, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
+import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, enqueueDiscordCall } from '../utils/discordRateLimit.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
@@ -17,15 +17,17 @@ let activeFetchPromise = null;
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
 
+function circuitRedirect(targetFrontend) {
+  const status = getDiscordRateLimitStatus();
+  const until = encodeURIComponent(status.untilHuman || status.remainingHuman || 'later');
+  return `${targetFrontend}/landing?error=discord_rate_limited&until=${until}`;
+}
+
 // 🛡️ REPAIRED ROSTER ENDPOINT
 router.get('/discord-members', async (req, res) => {
   const guildId = process.env.DISCORD_GUILD_ID;
   if (!guildId) {
     return res.status(500).json({ error: 'DISCORD_GUILD_ID is not configured in your backend .env file' });
-  }
-
-  if (!discordClient || !discordClient.isReady()) {
-    return res.status(503).json({ success: false, error: 'Discord bot client is offline or initializing gateway protocols.' });
   }
 
   const now = Date.now();
@@ -41,21 +43,33 @@ router.get('/discord-members', async (req, res) => {
   }
 
   activeFetchPromise = (async () => {
-    const guild = await discordClient.guilds.fetch(guildId);
-    // 🚀 CACHE PRIORITIZATION: Check memory cache first to shield against Discord REST gateway rate limits
-    let membersMap = guild.members.cache;
-    if (!membersMap || membersMap.size === 0) {
-      membersMap = await guild.members.fetch({ limit: 1000 });
+    const guild = discordClient?.guilds?.cache.get(guildId);
+    const membersMap = guild?.members?.cache;
+    if (membersMap && membersMap.size > 0) {
+      return membersMap.map(m => ({
+        id: m.user.id,
+        username: m.user.username,
+        globalName: m.user.globalName || m.user.username,
+        nickname: m.nickname || m.displayName || m.user.username,
+        avatarURL: m.user.displayAvatarURL({ dynamic: true, size: 128 }),
+        joinedAt: m.joinedAt
+      })).sort((a, b) => a.nickname.localeCompare(b.nickname));
     }
-    
-    return membersMap.map(m => ({
-      id: m.user.id,
-      username: m.user.username,
-      globalName: m.user.globalName || m.user.username,
-      nickname: m.nickname || m.displayName || m.user.username,
-      avatarURL: m.user.displayAvatarURL({ dynamic: true, size: 128 }),
-      joinedAt: m.joinedAt
-    })).sort((a, b) => a.nickname.localeCompare(b.nickname));
+
+    // Never REST-fetch 1000 members from the Render IP. Fall back to Firebase roster.
+    const fbSnap = await getDatabase().ref('auction/members').once('value');
+    const rows = fbSnap.exists() ? fbSnap.val() : {};
+    return Object.entries(rows)
+      .filter(([, m]) => m?.displayName)
+      .map(([id, m]) => ({
+        id,
+        username: m.displayName,
+        globalName: m.displayName,
+        nickname: m.displayName,
+        avatarURL: null,
+        joinedAt: null,
+      }))
+      .sort((a, b) => a.nickname.localeCompare(b.nickname));
   })();
 
   try {
@@ -70,7 +84,13 @@ router.get('/discord-members', async (req, res) => {
   }
 });
 
-router.get('/login', (req, res) => {
+router.get('/login', async (req, res) => {
+  const targetFrontend = getFrontendUrl();
+  await hydrateDiscordCircuit();
+  const gate = markOAuthLoginClick();
+  if (!gate.allowed) {
+    return res.redirect(circuitRedirect(targetFrontend));
+  }
   const state = req.query.state || 'no_state';
   const clientId = process.env.DISCORD_CLIENT_ID;
   const redirectUri = encodeURIComponent(process.env.OAUTH_REDIRECT_URI);
@@ -86,8 +106,14 @@ router.get('/callback', async (req, res) => {
     return res.redirect(`${targetFrontend}/landing?error=missing_code`);
   }
 
+  await hydrateDiscordCircuit();
+  const gate = beginOAuthAttempt();
+  if (!gate.allowed) {
+    return res.redirect(circuitRedirect(targetFrontend));
+  }
+
   try {
-    const tokenResponse = await fetch(`${discordApi}/oauth2/token`, {
+    const tokenResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/oauth2/token`, {
       method: 'POST',
       body: new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID,
@@ -97,7 +123,7 @@ router.get('/callback', async (req, res) => {
         redirect_uri: process.env.OAUTH_REDIRECT_URI,
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    });
+    }));
 
     if (!tokenResponse.ok) {
       const errorPayload = await tokenResponse.json().catch(() => ({}));
@@ -113,9 +139,9 @@ router.get('/callback', async (req, res) => {
     }
 
     const tokenData = await tokenResponse.json();
-    const userResponse = await fetch(`${discordApi}/users/@me`, {
+    const userResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/users/@me`, {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
+    }));
 
     if (!userResponse.ok) {
       const userErrBody = await userResponse.json().catch(() => ({}));
@@ -127,24 +153,31 @@ router.get('/callback', async (req, res) => {
     let serverNickname = user.global_name || user.username;
     let memberRolesNames = [];
     const guildId = process.env.DISCORD_GUILD_ID;
+    const db = getDatabase();
 
-    if (discordClient && guildId) {
-      try {
-        const guild = await discordClient.guilds.fetch(guildId);
-        const member = await guild.members.fetch(user.id);
-        if (member) {
-          let rawName = member.nickname || member.displayName || serverNickname;
-          // 🛡️ OAUTH NICKNAME SHIELD: Convert slashes into clean underscores right at the source
-          serverNickname = rawName.replace(/\//g, '_');
-          memberRolesNames = member.roles.cache.map(role => role.name);
-        }
-      } catch (err) {
-        console.warn('⚠️ Could not fetch guild profile details via REST API:', err.message);
-        logDiscordRateLimit('oauth guild member fetch', err);
+    // Nickname/roles: Gateway cache + Firebase only. Never members.fetch on login —
+    // that REST call from the Render IP is what stacked on /oauth2/token and
+    // tripped Cloudflare.
+    let resolvedFromCache = false;
+    if (discordClient?.isReady() && guildId) {
+      const guild = discordClient.guilds.cache.get(guildId);
+      const member = guild?.members?.cache.get(user.id);
+      if (member) {
+        serverNickname = (member.nickname || member.displayName || serverNickname).replace(/\//g, '_');
+        memberRolesNames = member.roles.cache.map((role) => role.name);
+        resolvedFromCache = true;
       }
     }
 
-    const db = getDatabase();
+    const existingMemberSnap = await db.ref(`auction/members/${user.id}`).once('value');
+    const existingMember = existingMemberSnap.exists() ? existingMemberSnap.val() : null;
+    if (!resolvedFromCache && existingMember?.displayName) {
+      serverNickname = String(existingMember.displayName).replace(/\//g, '_');
+    }
+    if (!memberRolesNames.length && Array.isArray(existingMember?.roles)) {
+      memberRolesNames = existingMember.roles;
+    }
+
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicAdminRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
 
@@ -185,7 +218,12 @@ router.get('/callback', async (req, res) => {
     });
   } catch (error) {
     console.error("❌ OAuth callback processing failed:", error);
+    if (isDiscordCircuitOpen()) {
+      return res.redirect(circuitRedirect(targetFrontend));
+    }
     return res.redirect(`${targetFrontend}/landing?error=discord_oauth_failed`);
+  } finally {
+    endOAuthAttempt();
   }
 });
 

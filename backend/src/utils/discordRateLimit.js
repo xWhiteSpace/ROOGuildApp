@@ -5,9 +5,22 @@
  * `retry_after`. The wait (if any) lives on response headers: Retry-After
  * (seconds or HTTP-date), x-ratelimit-reset-after, x-ratelimit-reset.
  */
+import { getDatabase } from 'firebase-admin/database';
+
+const DEFAULT_CIRCUIT_MS = 15 * 60 * 1000;
+const MIN_GAP_MS = 1500;
+const OAUTH_COOLDOWN_MS = 5 * 60 * 1000;
+const LOGIN_CLICK_DEBOUNCE_MS = 45 * 1000;
+const OAUTH_QUIET_AFTER_BURST_MS = 3 * 60 * 1000;
 
 let lastCooldownUntil = 0;
 let lastCooldownMeta = null;
+let queueTail = Promise.resolve();
+let lastCallAt = 0;
+let lastOAuthAttemptAt = 0;
+let lastLoginRedirectAt = 0;
+let lastDiscordBurstAt = 0;
+let oauthInFlight = false;
 
 export function formatDurationMs(ms) {
   if (!Number.isFinite(ms) || ms < 0) return 'unknown';
@@ -120,22 +133,206 @@ function formatUntil(epochMs) {
 }
 
 function rememberCooldown(waitMs, meta) {
-  lastCooldownMeta = { ...meta, waitMs: waitMs ?? null, until: waitMs != null ? Date.now() + waitMs : null };
-  if (waitMs == null) return;
-  const until = Date.now() + waitMs;
-  if (until >= lastCooldownUntil) lastCooldownUntil = until;
+  const resolvedMs = waitMs != null && waitMs > 0 ? waitMs : null;
+  const until = resolvedMs != null ? Date.now() + resolvedMs : null;
+  lastCooldownMeta = { ...meta, waitMs: resolvedMs, until };
+  if (until != null && until >= lastCooldownUntil) lastCooldownUntil = until;
+  persistCircuit();
+}
+
+function persistCircuit() {
+  try {
+    getDatabase().ref('scheduler/discord_circuit').set({
+      until: lastCooldownUntil || null,
+      lastOAuthAttemptAt: lastOAuthAttemptAt || null,
+      lastDiscordBurstAt: lastDiscordBurstAt || null,
+      updatedAt: Date.now(),
+      last: lastCooldownMeta,
+    }).catch((err) => {
+      console.warn('⚠️ [DISCORD CIRCUIT]: persist failed:', err.message);
+    });
+  } catch (err) {
+    console.warn('⚠️ [DISCORD CIRCUIT]: persist skipped:', err.message);
+  }
+}
+
+/** Restore Cloudflare/Discord cooldown after a Render restart so we do not immediately POST /oauth2/token again. */
+export async function hydrateDiscordCircuit() {
+  try {
+    const snap = await getDatabase().ref('scheduler/discord_circuit').once('value');
+    if (!snap.exists()) return;
+    const data = snap.val() || {};
+    const until = Number(data.until) || 0;
+    if (until > Date.now()) {
+      lastCooldownUntil = until;
+      lastCooldownMeta = data.last || { sourceLabel: 'hydrated-from-firebase' };
+      console.warn(`🔌 [DISCORD CIRCUIT] Restored from Firebase — OPEN until ${formatUntil(until)}`);
+    }
+    const priorOauth = Number(data.lastOAuthAttemptAt) || 0;
+    if (priorOauth > lastOAuthAttemptAt) lastOAuthAttemptAt = priorOauth;
+    const priorBurst = Number(data.lastDiscordBurstAt) || 0;
+    if (priorBurst > lastDiscordBurstAt) lastDiscordBurstAt = priorBurst;
+  } catch (err) {
+    console.warn('⚠️ [DISCORD CIRCUIT]: hydrate failed:', err.message);
+  }
+}
+
+export function noteDiscordBurst() {
+  lastDiscordBurstAt = Date.now();
+  persistCircuit();
+}
+
+function oauthQuietRemainingMs() {
+  if (!lastDiscordBurstAt) return 0;
+  return Math.max(0, lastDiscordBurstAt + OAUTH_QUIET_AFTER_BURST_MS - Date.now());
 }
 
 export function getDiscordRateLimitStatus() {
   const remainingMs = Math.max(0, lastCooldownUntil - Date.now());
+  const oauthRemaining = lastOAuthAttemptAt
+    ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
+    : 0;
+  const quietMs = oauthQuietRemainingMs();
+  const blockedMs = Math.max(remainingMs, oauthRemaining, quietMs);
   return {
-    coolingDown: remainingMs > 0,
-    remainingMs,
-    remainingHuman: remainingMs > 0 ? formatDurationMs(remainingMs) : (lastCooldownMeta && lastCooldownMeta.waitMs == null ? 'unknown (Discord sent no Retry-After)' : 'none'),
-    until: lastCooldownUntil || lastCooldownMeta?.until || null,
-    untilHuman: (lastCooldownUntil || lastCooldownMeta?.until) ? formatUntil(lastCooldownUntil || lastCooldownMeta.until) : null,
+    coolingDown: blockedMs > 0,
+    circuitOpen: remainingMs > 0,
+    remainingMs: blockedMs,
+    remainingHuman: blockedMs > 0 ? formatDurationMs(blockedMs) : 'none',
+    until: lastCooldownUntil || (quietMs > 0 ? Date.now() + quietMs : null) || (oauthRemaining > 0 ? Date.now() + oauthRemaining : null),
+    untilHuman: blockedMs > 0 ? formatUntil(Date.now() + blockedMs) : null,
     last: lastCooldownMeta,
+    oauthCooldownMs: oauthRemaining,
+    oauthCooldownHuman: oauthRemaining > 0 ? formatDurationMs(oauthRemaining) : 'none',
+    oauthQuietMs: quietMs,
+    oauthInFlight,
   };
+}
+
+/**
+ * One OAuth token-exchange at a time. Gaps: 5 min between token POSTs, 45s between
+ * Sign-in clicks, 3 min quiet after a snapshot burst. Rapid Sign-in from a
+ * Render IP is what turns Cloudflare 429s into a global block.
+ */
+export function beginOAuthAttempt() {
+  if (isDiscordCircuitOpen()) {
+    return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
+  }
+  if (oauthInFlight) {
+    return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
+  }
+  const oauthRemaining = lastOAuthAttemptAt
+    ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
+    : 0;
+  if (oauthRemaining > 0) {
+    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+  }
+  if (oauthQuietRemainingMs() > 0) {
+    return { allowed: false, reason: 'oauth-quiet', status: getDiscordRateLimitStatus() };
+  }
+  oauthInFlight = true;
+  lastOAuthAttemptAt = Date.now();
+  persistCircuit();
+  return { allowed: true, status: getDiscordRateLimitStatus() };
+}
+
+export function endOAuthAttempt() {
+  oauthInFlight = false;
+}
+
+/** Debounce Sign-in clicks without blocking the later /callback token exchange. */
+export function markOAuthLoginClick() {
+  if (isDiscordCircuitOpen()) {
+    return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
+  }
+  if (oauthInFlight) {
+    return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
+  }
+  const oauthRemaining = lastOAuthAttemptAt
+    ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
+    : 0;
+  if (oauthRemaining > 0 || oauthQuietRemainingMs() > 0) {
+    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+  }
+  const clickRemaining = lastLoginRedirectAt
+    ? Math.max(0, lastLoginRedirectAt + LOGIN_CLICK_DEBOUNCE_MS - Date.now())
+    : 0;
+  if (clickRemaining > 0) {
+    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+  }
+  lastLoginRedirectAt = Date.now();
+  return { allowed: true, status: getDiscordRateLimitStatus() };
+}
+
+/**
+ * Open the process-wide Discord REST circuit. If Discord omitted Retry-After
+ * (typical of a Cloudflare/global IP block), hold for 15 minutes.
+ */
+export function tripDiscordCircuit(infoOrErr, sourceLabel = 'unknown') {
+  let waitMs = extractRetryWaitMs(infoOrErr);
+  let guessed = false;
+  if (waitMs == null || waitMs <= 0) {
+    waitMs = DEFAULT_CIRCUIT_MS;
+    guessed = true;
+  }
+  rememberCooldown(waitMs, {
+    sourceLabel,
+    guessed,
+    message: infoOrErr?.message || '',
+  });
+  const untilHuman = formatUntil(Date.now() + waitMs);
+  console.warn(
+    `🔌 [DISCORD CIRCUIT] OPEN for ${formatDurationMs(waitMs)}` +
+    `${guessed ? ' (default 15m — Discord sent no Retry-After)' : ''} until ${untilHuman}`
+  );
+  return getDiscordRateLimitStatus();
+}
+
+export function isDiscordCircuitOpen() {
+  return Date.now() < lastCooldownUntil;
+}
+
+export function getDiscordCircuitWait() {
+  return getDiscordRateLimitStatus();
+}
+
+export class DiscordCircuitOpenError extends Error {
+  constructor(status) {
+    super(`Discord circuit open — retry after ${status.untilHuman || status.remainingHuman}`);
+    this.name = 'DiscordCircuitOpenError';
+    this.status = status;
+  }
+}
+
+export function assertDiscordAllowed() {
+  if (isDiscordCircuitOpen()) {
+    throw new DiscordCircuitOpenError(getDiscordRateLimitStatus());
+  }
+}
+
+/**
+ * Single-flight outbound Discord REST queue. Enforces ≥1500ms between calls
+ * and refuses work while the 429 circuit is open.
+ */
+export function enqueueDiscordCall(fn) {
+  const run = async () => {
+    assertDiscordAllowed();
+    const wait = Math.max(0, lastCallAt + MIN_GAP_MS - Date.now());
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    assertDiscordAllowed();
+    lastCallAt = Date.now();
+    try {
+      return await fn();
+    } catch (err) {
+      if (looksLikeDiscordRateLimit(err)) {
+        logDiscordRateLimit('queued Discord call', err);
+      }
+      throw err;
+    }
+  };
+  const next = queueTail.then(run, run);
+  queueTail = next.catch(() => {});
+  return next;
 }
 
 export function looksLikeDiscordRateLimit(source) {
@@ -177,11 +374,13 @@ export function logDiscordRateLimit(sourceLabel, infoOrErr) {
   const method = infoOrErr?.method || '';
   const httpStatus = infoOrErr?.status ?? infoOrErr?.httpStatus ?? infoOrErr?.code ?? '';
 
-  rememberCooldown(waitMs, { sourceLabel, isGlobal, route, method, message, httpStatus, headers: interestingHeaders(headerMap) });
+  const circuitWaitMs = waitMs != null && waitMs > 0 ? waitMs : DEFAULT_CIRCUIT_MS;
+  const guessed = waitMs == null || waitMs <= 0;
+  rememberCooldown(circuitWaitMs, { sourceLabel, isGlobal, route, method, message, httpStatus, headers: interestingHeaders(headerMap), guessed });
 
   const remaining = getDiscordRateLimitStatus();
-  const waitHuman = waitMs != null ? formatDurationMs(waitMs) : 'UNKNOWN — Discord did not send Retry-After';
-  const untilHuman = waitMs != null ? formatUntil(Date.now() + waitMs) : null;
+  const waitHuman = !guessed ? formatDurationMs(waitMs) : `UNKNOWN — using default ${formatDurationMs(DEFAULT_CIRCUIT_MS)}`;
+  const untilHuman = formatUntil(Date.now() + circuitWaitMs);
   const shownHeaders = interestingHeaders(headerMap);
   const headerLine = Object.keys(shownHeaders).length
     ? Object.entries(shownHeaders).map(([k, v]) => `${k}=${v}`).join(' | ')
@@ -190,13 +389,12 @@ export function logDiscordRateLimit(sourceLabel, infoOrErr) {
   console.warn('============================================================');
   console.warn(`🛑 DISCORD RATE LIMIT / SOFT-BAN  [${sourceLabel}]`);
   console.warn(`   HTTP: ${httpStatus || 'n/a'}   scope: ${isGlobal ? 'GLOBAL IP BLOCK' : 'route bucket'}`);
-  console.warn(`   WAIT: ${waitHuman}${untilHuman ? `  → retry after ${untilHuman}` : ''}`);
-  if (waitMs == null) {
-    console.warn('   Discord omitted a wait time. Global IP blocks are often 10 min–1 hour+.');
+  console.warn(`   WAIT: ${waitHuman}  → retry after ${untilHuman}`);
+  if (guessed) {
+    console.warn('   Discord omitted a wait time. Circuit held for the default 15 minutes.');
     console.warn('   Do NOT retry login/broadcast until it clears — retries extend the ban.');
-  } else {
-    console.warn(`   cooldown remaining: ${remaining.remainingHuman}  (until ${remaining.untilHuman})`);
   }
+  console.warn(`   CIRCUIT OPEN — outbound Discord REST + OAuth blocked for ${remaining.remainingHuman}`);
   console.warn(`   ${method ? `method=${method} ` : ''}route=${route}`);
   console.warn(`   headers: ${headerLine}`);
   if (message) console.warn(`   message: ${message}`);

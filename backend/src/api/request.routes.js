@@ -5,6 +5,7 @@ import { getGateStatusDetails } from '../config/timeWindow.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 
 import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
+import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
 const router = Router();
 
@@ -508,6 +509,14 @@ router.post('/sync-roster', async (req, res) => {
     return res.status(500).json({ success: false, error: 'Missing Discord credentials inside backend configurations.' });
   }
 
+  if (isDiscordCircuitOpen()) {
+    const status = getDiscordRateLimitStatus();
+    return res.status(503).json({
+      success: false,
+      error: `Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`,
+    });
+  }
+
   try {
     const discordResponse = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members?limit=1000`, {
       method: 'GET',
@@ -519,6 +528,16 @@ router.post('/sync-roster', async (req, res) => {
 
     if (!discordResponse.ok) {
       const errorText = await discordResponse.text();
+      let parsed = null;
+      try { parsed = JSON.parse(errorText); } catch { parsed = { message: errorText }; }
+      logDiscordHttpFailure('sync-roster members fetch', discordResponse, parsed);
+      const status = getDiscordRateLimitStatus();
+      if (isDiscordCircuitOpen()) {
+        return res.status(503).json({
+          success: false,
+          error: `Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`,
+        });
+      }
       return res.status(discordResponse.status).json({ success: false, error: `Discord API communication rejected: ${errorText}` });
     }
 

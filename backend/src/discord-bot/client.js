@@ -4,12 +4,20 @@ import admin from 'firebase-admin'; // 🛰️ Connect absolute database referen
 import { handleSlashCommand, handleComponentInteraction } from './discordSlashcmd.js';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { logDiscordRateLimit, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
+import { logDiscordRateLimit, isDiscordCircuitOpen, hydrateDiscordCircuit, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 
-// 📡 GLOBAL NETWORK TUNNEL OVERRIDE — IMMUNE TO DATACENTER IP BLOCKS
-if (process.env.PROXY_URL) {
-  console.log("🔒 [NETWORKING]: Routing global HTTP/HTTPS engines through secure proxy tunnel...");
-  const proxyAgent = new ProxyAgent({ uri: process.env.PROXY_URL });
+// 📡 GLOBAL NETWORK TUNNEL — honor HTTPS_PROXY, HTTP_PROXY, or PROXY_URL
+const resolvedProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.PROXY_URL;
+const resolvedProxyName = process.env.HTTPS_PROXY
+  ? 'HTTPS_PROXY'
+  : process.env.HTTP_PROXY
+    ? 'HTTP_PROXY'
+    : process.env.PROXY_URL
+      ? 'PROXY_URL'
+      : null;
+if (resolvedProxyUrl) {
+  console.log(`🔒 [NETWORKING]: Routing global HTTP/HTTPS through ${resolvedProxyName} tunnel.`);
+  const proxyAgent = new ProxyAgent({ uri: resolvedProxyUrl });
   setGlobalDispatcher(proxyAgent);
 }
 
@@ -37,6 +45,8 @@ export async function initializeDiscordBot() {
   if (!token) {
     throw new Error('DISCORD_BOT_TOKEN is required to initialize Discord client');
   }
+
+  await hydrateDiscordCircuit();
 
   // 🌟 FIXED: Changed 'clientReady' to 'ready' so discord.js triggers it properly
   discordClient.once('ready', () => {
@@ -145,66 +155,63 @@ export async function initializeDiscordBot() {
     });
 
     // 📢 Automated Modular Announcement Scheduler Ticker (Evaluated every 60 seconds)
-    // Each announcer is self-gated on the force-lock flag and fully idempotent
-    // (backed by Firebase markers), so ticks are safe to fire-and-forget and
-    // announcements self-heal across restarts/redeploys instead of being lost.
+    // First tick skips Discord announcers so identify + first announce do not stack.
+    // Discord-facing jobs also skip while the 429 circuit is open.
+    let skipFirstDiscordTick = true;
     setInterval(() => {
-      // 📅 Weekly attendance auto-announce (Sunday + hour + marker; idempotent)
-      import('./attendanceAnnounce.js')
-        .then((m) => m.maybeAnnounceWeekly())
-        .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
+      const circuitOpen = isDiscordCircuitOpen();
+      if (skipFirstDiscordTick) {
+        skipFirstDiscordTick = false;
+        console.log('⏭️ [SCHEDULER]: Skipping Discord announcers on the first tick after ready.');
+      } else if (circuitOpen) {
+        console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers.');
+      } else {
+        import('./attendanceAnnounce.js')
+          .then((m) => m.maybeAnnounceWeekly())
+          .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
 
-      // 🚀 Event phase announcements (restart-safe + idempotent via Firebase markers)
-      import('./eventAnnounce.js')
-        .then((m) => m.maybeAnnounceEvents())
-        .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
+        import('./eventAnnounce.js')
+          .then((m) => m.maybeAnnounceEvents())
+          .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
+      }
 
-      // ⏰ Auto-end a Live Raid once its monitoring End Time passes (idempotent via status guard)
+      // Firebase-only jobs — safe during a Discord cooldown
       import('../api/liveRaid.routes.js')
         .then((m) => m.maybeAutoEndLiveRaid())
         .catch((err) => console.error('⚠️ Live raid auto-end scheduler warning:', err.message));
 
-      // 🧾 Opt-in auto-commit of the MimicBook auction ~1 min before Phase 3 ends (marker-idempotent)
       import('./autoCommitAuction.js')
         .then((m) => m.maybeAutoCommitAuction())
         .catch((err) => console.error('⚠️ Auto-commit auction scheduler warning:', err.message));
     }, 60000);
   });
 
-  
-  // 📡 DYNAMIC PRE-FLIGHT ROUTE TELEMETRY PROBE
   try {
-    console.log("🔍 [DISCORD PROBE]: Testing raw network path visibility to Discord edge routers...");
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // Strict 6-second hard socket cutoff
-
-    const probeResponse = await fetch("https://discord.com/api/v10/gateway", {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' }
-    });
-    clearTimeout(timeoutId);
-
-    console.log(`📡 [DISCORD PROBE RAW RESULT]: HTTP Status ${probeResponse.status} (${probeResponse.statusText})`);
-    const bodyText = await probeResponse.text();
-    console.log(`📄 [DISCORD PROBE BODY SNIPPET]: ${bodyText.slice(0, 250)}`);
-    if (probeResponse.status !== 200) {
-      let parsed = null;
-      try { parsed = JSON.parse(bodyText); } catch { parsed = { message: bodyText }; }
-      logDiscordHttpFailure('boot gateway probe', probeResponse, parsed);
+    if (isDiscordCircuitOpen()) {
+      const status = getDiscordRateLimitStatus();
+      console.warn(
+        `⏭️ [DISCORD BOT]: Circuit open until ${status.untilHuman} — delaying gateway login (${status.remainingHuman}) so a Render restart cannot deepen the Cloudflare IP ban.`
+      );
+      setTimeout(() => {
+        console.log('⚡ [DISCORD BOT]: Circuit cleared — initiating gateway handshake...');
+        discordClient.login(token).catch((loginErr) => {
+          console.error('🛑 [DISCORD BOT GATEWAY EXCEPTION]:', loginErr.message);
+          if (isDiscordCircuitOpen() || /429|rate limit|too many requests|being blocked/i.test(loginErr.message || '')) {
+            logDiscordRateLimit('gateway login', loginErr);
+          }
+        });
+      }, status.remainingMs + 2000);
+      return;
     }
-  } catch (probeErr) {
-    console.error("🛑 [DISCORD PROBE CRITICAL FAULT]: Raw network route is heavily rate-limited or tarpitted.");
-    console.error(`   Error Reason: ${probeErr.message}`);
-    logDiscordRateLimit('boot gateway probe exception', probeErr);
-  }
 
-  try {
     console.log("⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...");
     await discordClient.login(token);
   } catch (loginErr) {
     console.error("🛑 [DISCORD BOT GATEWAY EXCEPTION]:");
     console.error(`   Error Message: ${loginErr.message}`);
     console.error(`   Error Code: ${loginErr.code || 'N/A'}`);
-    logDiscordRateLimit('gateway login', loginErr);
+    if (/429|rate limit|too many requests|being blocked/i.test(loginErr.message || '') || loginErr.code === 429) {
+      logDiscordRateLimit('gateway login', loginErr);
+    }
   }
 }

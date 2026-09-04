@@ -90,10 +90,10 @@ export default function LiveRaidTab({ user }) {
   // --- Monitoring Schedule (set during Step 2 config, applied on launch) ---
   const [monitoringStartTime, setMonitoringStartTime] = useState('');
   const [monitoringEndTime, setMonitoringEndTime] = useState('');
-  const [monitoringPollInterval, setMonitoringPollInterval] = useState(5);
+  const [monitoringPollInterval, setMonitoringPollInterval] = useState(15);
   const monitoringStartTimeRef = useRef('');
   const monitoringEndTimeRef = useRef('');
-  const monitoringPollIntervalRef = useRef(5);
+  const monitoringPollIntervalRef = useRef(15);
   const monitoringStartInputRef = useRef(null);
   const monitoringEndInputRef = useRef(null);
 
@@ -108,7 +108,7 @@ export default function LiveRaidTab({ user }) {
     setMonitoringEndTime(next);
   };
   const setMonitoringPoll = (val) => {
-    const next = Number(val) || 5;
+    const next = Math.max(15, Number(val) || 15);
     monitoringPollIntervalRef.current = next;
     setMonitoringPollInterval(next);
   };
@@ -188,7 +188,7 @@ export default function LiveRaidTab({ user }) {
     if (s.monitoringStartsAt) {
       setMonitoringStart(msToTimeInput(s.monitoringStartsAt));
       setMonitoringEnd(msToTimeInput(s.monitoringEndsAt));
-      setMonitoringPoll(Number(s.pollIntervalMinutes) || 5);
+      setMonitoringPoll(Math.max(15, Number(s.pollIntervalMinutes) || 15));
     }
   };
 
@@ -575,7 +575,7 @@ export default function LiveRaidTab({ user }) {
       || monitoringEndTimeRef.current
       || monitoringEndTime
     );
-    const pollMins = monitoringPollIntervalRef.current || monitoringPollInterval || 5;
+    const pollMins = Math.max(15, monitoringPollIntervalRef.current || monitoringPollInterval || 15);
     if (!startTime || !endTime) return null;
     const monitoringStartsAt = timeStringToTodayMs(startTime);
     const monitoringEndsAt = timeStringToTodayMs(endTime);
@@ -608,7 +608,7 @@ export default function LiveRaidTab({ user }) {
       || monitoringEndTimeRef.current
       || monitoringEndTime
     );
-    const pollMins = monitoringPollIntervalRef.current || monitoringPollInterval || 5;
+    const pollMins = Math.max(15, monitoringPollIntervalRef.current || monitoringPollInterval || 15);
     if (!startTime || !endTime) return {};
     const monitoringStartsAt = timeStringToTodayMs(startTime);
     const monitoringEndsAt = timeStringToTodayMs(endTime);
@@ -1199,7 +1199,7 @@ export default function LiveRaidTab({ user }) {
                   <div className="flex items-center gap-0 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden h-[38px]">
                     <button
                       type="button"
-                      onClick={() => setMonitoringPoll(Math.max(1, monitoringPollInterval - 1))}
+                      onClick={() => setMonitoringPoll(Math.max(15, monitoringPollInterval - 1))}
                       className="px-3 h-full text-slate-400 hover:text-white hover:bg-slate-800 font-bold text-sm transition cursor-pointer select-none border-r border-slate-800"
                     >−</button>
                     <span className="flex-1 text-center text-xs font-mono font-bold text-amber-300 tabular-nums">

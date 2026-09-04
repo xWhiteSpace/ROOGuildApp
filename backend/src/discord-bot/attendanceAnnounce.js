@@ -12,6 +12,7 @@ import { ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle
 import { ensureWeekInstances, writeCommitment, resolveGuildTimezone } from '../services/scheduleService.js';
 import { getWeekMonday, getGuildNowParts, parseCompositeKey } from '../utils/guildTime.js';
 import { discordClient } from './client.js';
+import { isDiscordCircuitOpen } from '../utils/discordRateLimit.js';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const EMBED_COLOR = '#9333ea';
@@ -279,6 +280,8 @@ export async function postWeeklyAttendance({ force = false } = {}) {
  * The >= plus marker makes a late Sunday boot self-heal while posting exactly once.
  */
 export async function maybeAnnounceWeekly() {
+  if (isDiscordCircuitOpen()) return;
+
   const db = admin.database();
 
   const configSnap = await db.ref('settings/configuration').once('value');
