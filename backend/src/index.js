@@ -20,13 +20,20 @@ import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
 import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
-import { getDiscordRateLimitStatus } from './utils/discordRateLimit.js';
+import { getDiscordRateLimitStatus, resolveOAuthExchangeUrl } from './utils/discordRateLimit.js';
 
 import attendanceRoutes from './api/attendance.routes.js';
 
 initializeEnv();
 initializeFirebase();
-initializeDiscordBot(); 
+initializeDiscordBot();
+
+const oauthBridge = resolveOAuthExchangeUrl();
+if (oauthBridge) {
+  console.log(`🔐 [OAUTH]: Token exchange off Render → ${oauthBridge}`);
+} else {
+  console.warn('🔐 [OAUTH]: Local token exchange (Render will POST /oauth2/token). Production must use FRONTEND_URL on Vercel so Discord never sees this IP.');
+} 
 
 // ✅ REFACTORED: Duplicate gateway interceptor completely removed. 
 // Routing controls are now handled directly within the initialization scope of client.js.

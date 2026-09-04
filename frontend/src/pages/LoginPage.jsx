@@ -12,11 +12,17 @@ export default function LoginPage() {
         ? `Discord is temporarily blocking this server IP. Try again after ${until}.`
         : 'Discord is temporarily blocking this server IP. Please wait before logging in again.';
     }
+    if (err === 'oauth_offload_required') {
+      return 'Sign-in cannot use the Render server IP. Deploy the Vercel token function and set DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET on Vercel, then try once.';
+    }
+    if (err === 'oauth_bridge_failed') {
+      return 'Sign-in reached Vercel but Discord token exchange failed. Add DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET to Vercel env (same values as Render), redeploy, then try once.';
+    }
     const map = {
       missing_code: 'Discord did not return an authorization code. Try again.',
       access_denied: 'Discord login was cancelled.',
       token_exchange_failed: 'Could not complete Discord login. Check OAuth redirect URI on Render.',
-      discord_oauth_failed: 'Discord login failed. Do not spam Sign in — wait a minute, then try once.',
+      discord_oauth_failed: 'Discord login failed. Do not spam Sign in — wait, then try once.',
     };
     return map[err] || `Login failed (${err}).`;
   }, []);

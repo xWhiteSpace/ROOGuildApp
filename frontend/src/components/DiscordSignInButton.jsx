@@ -30,7 +30,9 @@ export default function DiscordSignInButton({ className = '', compact = false })
     return () => { cancelled = true; };
   }, []);
 
-  const blocked = urlBlocked || remote?.circuitOpen === true || remote?.coolingDown === true;
+  const blocked = !remote?.oauthOffRender && (
+    urlBlocked || remote?.circuitOpen === true || remote?.coolingDown === true
+  );
   const until = urlUntil || remote?.untilHuman || remote?.remainingHuman;
   const disabled = blocked || clicked;
 

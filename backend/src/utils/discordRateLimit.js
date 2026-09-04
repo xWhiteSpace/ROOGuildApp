@@ -12,6 +12,8 @@ const MIN_GAP_MS = 1500;
 const OAUTH_COOLDOWN_MS = 5 * 60 * 1000;
 const LOGIN_CLICK_DEBOUNCE_MS = 45 * 1000;
 const OAUTH_QUIET_AFTER_BURST_MS = 3 * 60 * 1000;
+/** After a Cloudflare global OAuth 429, Discord's retry-after is a lie — probing again extends the ban. */
+const OAUTH_GLOBAL_LOCK_MIN_MS = 6 * 60 * 60 * 1000;
 
 let lastCooldownUntil = 0;
 let lastCooldownMeta = null;
@@ -20,7 +22,27 @@ let lastCallAt = 0;
 let lastOAuthAttemptAt = 0;
 let lastLoginRedirectAt = 0;
 let lastDiscordBurstAt = 0;
+let oauthLockUntil = 0;
 let oauthInFlight = false;
+
+export function resolveOAuthExchangeUrl() {
+  const explicit = (process.env.OAUTH_EXCHANGE_URL || '').trim().replace(/\/$/, '');
+  if (explicit) return explicit;
+  const front = (process.env.FRONTEND_URL || '').trim().replace(/\/$/, '');
+  if (front && !/localhost|127\.0\.0\.1/.test(front)) {
+    return `${front}/api/discord-token-exchange`;
+  }
+  return null;
+}
+
+export function isLocalOAuthRedirect() {
+  return /localhost|127\.0\.0\.1/.test(process.env.OAUTH_REDIRECT_URI || '');
+}
+
+/** Token POST happens on Vercel (or similar), not the Render Singapore IP. */
+export function isOAuthOffRender() {
+  return Boolean(resolveOAuthExchangeUrl());
+}
 
 export function formatDurationMs(ms) {
   if (!Number.isFinite(ms) || ms < 0) return 'unknown';
@@ -144,6 +166,7 @@ function persistCircuit() {
   try {
     getDatabase().ref('scheduler/discord_circuit').set({
       until: lastCooldownUntil || null,
+      oauthLockUntil: oauthLockUntil || null,
       lastOAuthAttemptAt: lastOAuthAttemptAt || null,
       lastDiscordBurstAt: lastDiscordBurstAt || null,
       updatedAt: Date.now(),
@@ -172,6 +195,8 @@ export async function hydrateDiscordCircuit() {
     if (priorOauth > lastOAuthAttemptAt) lastOAuthAttemptAt = priorOauth;
     const priorBurst = Number(data.lastDiscordBurstAt) || 0;
     if (priorBurst > lastDiscordBurstAt) lastDiscordBurstAt = priorBurst;
+    const priorOauthLock = Number(data.oauthLockUntil) || 0;
+    if (priorOauthLock > oauthLockUntil) oauthLockUntil = priorOauthLock;
   } catch (err) {
     console.warn('⚠️ [DISCORD CIRCUIT]: hydrate failed:', err.message);
   }
@@ -189,22 +214,32 @@ function oauthQuietRemainingMs() {
 
 export function getDiscordRateLimitStatus() {
   const remainingMs = Math.max(0, lastCooldownUntil - Date.now());
+  const oauthLockMs = Math.max(0, oauthLockUntil - Date.now());
   const oauthRemaining = lastOAuthAttemptAt
     ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
     : 0;
   const quietMs = oauthQuietRemainingMs();
-  const blockedMs = Math.max(remainingMs, oauthRemaining, quietMs);
+  const offRender = isOAuthOffRender();
+  // Render-IP holds must not block Sign-in once token exchange is off this host.
+  const blockedMs = offRender
+    ? 0
+    : Math.max(remainingMs, oauthLockMs, oauthRemaining, quietMs);
+  const untilMs = blockedMs > 0
+    ? Date.now() + blockedMs
+    : null;
   return {
     coolingDown: blockedMs > 0,
     circuitOpen: remainingMs > 0,
     remainingMs: blockedMs,
     remainingHuman: blockedMs > 0 ? formatDurationMs(blockedMs) : 'none',
-    until: lastCooldownUntil || (quietMs > 0 ? Date.now() + quietMs : null) || (oauthRemaining > 0 ? Date.now() + oauthRemaining : null),
-    untilHuman: blockedMs > 0 ? formatUntil(Date.now() + blockedMs) : null,
+    until: untilMs,
+    untilHuman: untilMs ? formatUntil(untilMs) : null,
     last: lastCooldownMeta,
     oauthCooldownMs: oauthRemaining,
     oauthCooldownHuman: oauthRemaining > 0 ? formatDurationMs(oauthRemaining) : 'none',
     oauthQuietMs: quietMs,
+    oauthLockMs,
+    oauthOffRender: offRender,
     oauthInFlight,
   };
 }
@@ -215,20 +250,26 @@ export function getDiscordRateLimitStatus() {
  * Render IP is what turns Cloudflare 429s into a global block.
  */
 export function beginOAuthAttempt() {
-  if (isDiscordCircuitOpen()) {
+  const offRender = isOAuthOffRender();
+  if (!offRender && isDiscordCircuitOpen()) {
     return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
+  }
+  if (!offRender && oauthLockUntil > Date.now()) {
+    return { allowed: false, reason: 'oauth-lock', status: getDiscordRateLimitStatus() };
   }
   if (oauthInFlight) {
     return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
   }
-  const oauthRemaining = lastOAuthAttemptAt
-    ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
-    : 0;
-  if (oauthRemaining > 0) {
-    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
-  }
-  if (oauthQuietRemainingMs() > 0) {
-    return { allowed: false, reason: 'oauth-quiet', status: getDiscordRateLimitStatus() };
+  if (!offRender) {
+    const oauthRemaining = lastOAuthAttemptAt
+      ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
+      : 0;
+    if (oauthRemaining > 0) {
+      return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+    }
+    if (oauthQuietRemainingMs() > 0) {
+      return { allowed: false, reason: 'oauth-quiet', status: getDiscordRateLimitStatus() };
+    }
   }
   oauthInFlight = true;
   lastOAuthAttemptAt = Date.now();
@@ -242,17 +283,26 @@ export function endOAuthAttempt() {
 
 /** Debounce Sign-in clicks without blocking the later /callback token exchange. */
 export function markOAuthLoginClick() {
-  if (isDiscordCircuitOpen()) {
+  const offRender = isOAuthOffRender();
+  if (!offRender && !isLocalOAuthRedirect()) {
+    return { allowed: false, reason: 'oauth-offload-required', status: getDiscordRateLimitStatus() };
+  }
+  if (!offRender && isDiscordCircuitOpen()) {
     return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
+  }
+  if (!offRender && oauthLockUntil > Date.now()) {
+    return { allowed: false, reason: 'oauth-lock', status: getDiscordRateLimitStatus() };
   }
   if (oauthInFlight) {
     return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
   }
-  const oauthRemaining = lastOAuthAttemptAt
-    ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
-    : 0;
-  if (oauthRemaining > 0 || oauthQuietRemainingMs() > 0) {
-    return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+  if (!offRender) {
+    const oauthRemaining = lastOAuthAttemptAt
+      ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
+      : 0;
+    if (oauthRemaining > 0 || oauthQuietRemainingMs() > 0) {
+      return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
+    }
   }
   const clickRemaining = lastLoginRedirectAt
     ? Math.max(0, lastLoginRedirectAt + LOGIN_CLICK_DEBOUNCE_MS - Date.now())
@@ -377,6 +427,12 @@ export function logDiscordRateLimit(sourceLabel, infoOrErr) {
   const circuitWaitMs = waitMs != null && waitMs > 0 ? waitMs : DEFAULT_CIRCUIT_MS;
   const guessed = waitMs == null || waitMs <= 0;
   rememberCooldown(circuitWaitMs, { sourceLabel, isGlobal, route, method, message, httpStatus, headers: interestingHeaders(headerMap), guessed });
+  if (isGlobal && /oauth/i.test(sourceLabel || '')) {
+    const lockMs = Math.max(circuitWaitMs * 2, OAUTH_GLOBAL_LOCK_MIN_MS);
+    oauthLockUntil = Math.max(oauthLockUntil, Date.now() + lockMs);
+    persistCircuit();
+    console.warn(`🔒 [OAUTH LOCK] Render will not POST /oauth2/token for ${formatDurationMs(lockMs)} — probing extends Cloudflare bans.`);
+  }
 
   const remaining = getDiscordRateLimitStatus();
   const waitHuman = !guessed ? formatDurationMs(waitMs) : `UNKNOWN — using default ${formatDurationMs(DEFAULT_CIRCUIT_MS)}`;

@@ -4,7 +4,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
-import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, enqueueDiscordCall } from '../utils/discordRateLimit.js';
+import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, enqueueDiscordCall, resolveOAuthExchangeUrl, isLocalOAuthRedirect } from '../utils/discordRateLimit.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
@@ -21,6 +21,82 @@ function circuitRedirect(targetFrontend) {
   const status = getDiscordRateLimitStatus();
   const until = encodeURIComponent(status.untilHuman || status.remainingHuman || 'later');
   return `${targetFrontend}/landing?error=discord_rate_limited&until=${until}`;
+}
+
+/**
+ * POST /oauth2/token must not run on Render's Singapore IP — Cloudflare treats
+ * that as a global block and each retry extends it. Production sends the code
+ * to the Vercel function (user's FRONTEND_URL). Localhost may still talk to
+ * Discord directly because that is not a shared datacenter IP.
+ */
+async function exchangeCodeForDiscordUser(code) {
+  const redirectUri = process.env.OAUTH_REDIRECT_URI;
+  const exchangeUrl = resolveOAuthExchangeUrl();
+
+  if (exchangeUrl) {
+    const bridgeRes = await fetch(exchangeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.DISCORD_CLIENT_SECRET}`,
+      },
+      body: JSON.stringify({ code, redirect_uri: redirectUri }),
+    });
+    const payload = await bridgeRes.json().catch(() => ({}));
+    if (!bridgeRes.ok) {
+      const err = new Error(payload.error || payload.message || `OAuth bridge failed (${bridgeRes.status})`);
+      err.bridgeStatus = bridgeRes.status;
+      throw err;
+    }
+    if (!payload.user?.id) {
+      const err = new Error('OAuth bridge returned no Discord user');
+      err.bridgeStatus = bridgeRes.status || 502;
+      throw err;
+    }
+    return payload.user;
+  }
+
+  if (!isLocalOAuthRedirect()) {
+    const err = new Error('oauth_offload_required');
+    err.code = 'oauth_offload_required';
+    throw err;
+  }
+
+  const tokenResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/oauth2/token`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      client_id: process.env.DISCORD_CLIENT_ID,
+      client_secret: process.env.DISCORD_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  }));
+
+  if (!tokenResponse.ok) {
+    const errorPayload = await tokenResponse.json().catch(() => ({}));
+    console.error('🛑 [DISCORD OAUTH EXCEPTION DETAILS]:', JSON.stringify({
+      httpStatus: tokenResponse.status,
+      statusText: tokenResponse.statusText,
+      ...errorPayload,
+    }, null, 2));
+    logDiscordHttpFailure('oauth token exchange', tokenResponse, errorPayload);
+    throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || errorPayload.message || tokenResponse.statusText}`);
+  }
+
+  const tokenData = await tokenResponse.json();
+  const userResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/users/@me`, {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` },
+  }));
+
+  if (!userResponse.ok) {
+    const userErrBody = await userResponse.json().catch(() => ({}));
+    logDiscordHttpFailure('oauth users/@me', userResponse, userErrBody);
+    throw new Error('Failed to fetch user profiles');
+  }
+
+  return userResponse.json();
 }
 
 // 🛡️ REPAIRED ROSTER ENDPOINT
@@ -89,6 +165,9 @@ router.get('/login', async (req, res) => {
   await hydrateDiscordCircuit();
   const gate = markOAuthLoginClick();
   if (!gate.allowed) {
+    if (gate.reason === 'oauth-offload-required') {
+      return res.redirect(`${targetFrontend}/landing?error=oauth_offload_required`);
+    }
     return res.redirect(circuitRedirect(targetFrontend));
   }
   const state = req.query.state || 'no_state';
@@ -113,43 +192,7 @@ router.get('/callback', async (req, res) => {
   }
 
   try {
-    const tokenResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/oauth2/token`, {
-      method: 'POST',
-      body: new URLSearchParams({
-        client_id: process.env.DISCORD_CLIENT_ID,
-        client_secret: process.env.DISCORD_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.OAUTH_REDIRECT_URI,
-      }),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    }));
-
-    if (!tokenResponse.ok) {
-      const errorPayload = await tokenResponse.json().catch(() => ({}));
-      console.error("🛑 [DISCORD OAUTH EXCEPTION DETAILS]:", JSON.stringify({
-        httpStatus: tokenResponse.status,
-        statusText: tokenResponse.statusText,
-        ...errorPayload,
-      }, null, 2));
-      // Always dump wait/headers on OAuth failure — Discord global IP blocks
-      // often omit JSON retry_after and sometimes aren't labeled as 429 in logs.
-      logDiscordHttpFailure('oauth token exchange', tokenResponse, errorPayload);
-      throw new Error(`Token exchange failed: ${errorPayload.error_description || errorPayload.error || errorPayload.message || tokenResponse.statusText}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    const userResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/users/@me`, {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    }));
-
-    if (!userResponse.ok) {
-      const userErrBody = await userResponse.json().catch(() => ({}));
-      logDiscordHttpFailure('oauth users/@me', userResponse, userErrBody);
-      throw new Error('Failed to fetch user profiles');
-    }
-
-    const user = await userResponse.json();
+    const user = await exchangeCodeForDiscordUser(code);
     let serverNickname = user.global_name || user.username;
     let memberRolesNames = [];
     const guildId = process.env.DISCORD_GUILD_ID;
@@ -218,6 +261,12 @@ router.get('/callback', async (req, res) => {
     });
   } catch (error) {
     console.error("❌ OAuth callback processing failed:", error);
+    if (error?.code === 'oauth_offload_required') {
+      return res.redirect(`${targetFrontend}/landing?error=oauth_offload_required`);
+    }
+    if (error?.bridgeStatus) {
+      return res.redirect(`${targetFrontend}/landing?error=oauth_bridge_failed`);
+    }
     if (isDiscordCircuitOpen()) {
       return res.redirect(circuitRedirect(targetFrontend));
     }
