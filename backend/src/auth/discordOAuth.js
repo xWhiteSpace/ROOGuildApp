@@ -48,7 +48,11 @@ async function exchangeCodeForDiscordUser(code) {
     const bridgeRes = await fetch(exchangeUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ code, redirect_uri: redirectUri }),
+      body: JSON.stringify({
+        code,
+        redirect_uri: redirectUri,
+        client_id: process.env.DISCORD_CLIENT_ID,
+      }),
     });
     const payload = await bridgeRes.json().catch(() => ({}));
     if (!bridgeRes.ok) {

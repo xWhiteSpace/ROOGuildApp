@@ -1,28 +1,13 @@
 /**
- * Runs on Vercel, not Render. Discord's Cloudflare WAF globally blocks
- * POST /oauth2/token from Render's shared Singapore IP.
+ * Runs on Vercel so POST /oauth2/token does not use Render's Singapore IP.
  *
- * Vercel env (Production + Preview, then Redeploy):
- *   DISCORD_CLIENT_ID
- *   DISCORD_CLIENT_SECRET
- *
- * Render authenticates with header x-oauth-bridge (not Authorization —
- * Vercel Deployment Protection / proxies often strip Authorization).
+ * Credentials come from Render's request (Render already has them in .env).
+ * This function does not require DISCORD_CLIENT_SECRET on Vercel.
  */
-import crypto from 'crypto';
-
 export const config = { runtime: 'nodejs' };
 
 function trimEnv(value) {
   return String(value || '').trim();
-}
-
-function secretsMatch(expected, provided) {
-  if (!expected || !provided) return false;
-  const left = Buffer.from(expected);
-  const right = Buffer.from(provided);
-  if (left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
 }
 
 function headerValue(headers, name) {
@@ -34,8 +19,8 @@ function headerValue(headers, name) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-oauth-bridge, x-vercel-protection-bypass');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-oauth-bridge');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -46,31 +31,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const secret = trimEnv(process.env.DISCORD_CLIENT_SECRET);
-    const clientId = trimEnv(process.env.DISCORD_CLIENT_ID);
-    const bridgeHeader = headerValue(req.headers, 'x-oauth-bridge');
-    const authHeader = headerValue(req.headers, 'authorization');
-    const bearer = authHeader.toLowerCase().startsWith('bearer ')
-      ? trimEnv(authHeader.slice(7))
-      : '';
-    const provided = bridgeHeader || bearer;
-
-    if (!secret) {
-      console.error('[oauth-bridge] DISCORD_CLIENT_SECRET is empty on this Vercel deployment (check Production env + Redeploy)');
-      return res.status(401).json({ error: 'missing_server_secret' });
-    }
-    if (!provided) {
-      console.error('[oauth-bridge] no x-oauth-bridge or Authorization header from Render');
-      return res.status(401).json({ error: 'missing_bridge_auth' });
-    }
-    if (!secretsMatch(secret, provided)) {
-      console.error('[oauth-bridge] secret mismatch (Vercel DISCORD_CLIENT_SECRET !== Render DISCORD_CLIENT_SECRET). Trim spaces; env must be Production, then Redeploy.');
-      return res.status(401).json({ error: 'secret_mismatch' });
-    }
-    if (!clientId) {
-      return res.status(500).json({ error: 'missing_discord_client_id' });
-    }
-
     let body = req.body;
     try {
       if (typeof body === 'string') body = JSON.parse(body || '{}');
@@ -78,7 +38,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_json' });
     }
     body = body || {};
-    const { code, redirect_uri: redirectUri } = body;
+
+    const authHeader = headerValue(req.headers, 'authorization');
+    const bearer = authHeader.toLowerCase().startsWith('bearer ')
+      ? trimEnv(authHeader.slice(7))
+      : '';
+    const secret = headerValue(req.headers, 'x-oauth-bridge') || bearer;
+    const clientId = trimEnv(body.client_id);
+    const code = trimEnv(body.code);
+    const redirectUri = trimEnv(body.redirect_uri);
+
+    if (!secret) {
+      return res.status(401).json({ error: 'missing_bridge_auth' });
+    }
+    if (!clientId) {
+      return res.status(400).json({ error: 'missing_discord_client_id' });
+    }
     if (!code || !redirectUri) {
       return res.status(400).json({ error: 'missing_code_or_redirect_uri' });
     }

@@ -14,7 +14,7 @@ export default function LoginPage() {
         : 'Discord is temporarily blocking this server IP. Please wait before logging in again.';
     }
     if (err === 'oauth_offload_required') {
-      return 'Sign-in cannot use the Render server IP. Deploy the Vercel token function and set DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET on Vercel, then try once.';
+      return 'Sign-in cannot use the Render server IP. FRONTEND_URL on Render must be your Vercel site URL.';
     }
     if (err === 'oauth_bridge_failed') {
       return oauthBridgeUserMessage(params.get('detail'));
