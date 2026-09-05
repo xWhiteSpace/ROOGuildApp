@@ -29,7 +29,7 @@ export default function Profile({ user }) {
     try {
       setLoading(true);
       setError('');
-      const res = await apiFetch(`/api/attendance/members/${targetUid}/profile`);
+      const res = await apiFetch(`/api/attendance/members/${encodeURIComponent(targetUid)}/profile`);
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.error || 'Failed to load profile.');
@@ -40,9 +40,13 @@ export default function Profile({ user }) {
       setJobsCatalog(data.config?.jobs || {});
       setRolesCatalog(data.config?.roles || {});
 
-      const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
-      const histData = await histRes.json();
-      if (histData.success) setSessions(histData.sessions || {});
+      try {
+        const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
+        const histData = await histRes.json();
+        if (histData.success) setSessions(histData.sessions || {});
+      } catch (histErr) {
+        console.error('Profile history load failed:', histErr);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load profile.');
     } finally {
@@ -63,7 +67,7 @@ export default function Profile({ user }) {
     if (!isOfficer || !targetUid || adjusting) return;
     setAdjusting(true);
     try {
-      const res = await apiFetch(`/api/attendance/members/${targetUid}/leave-credits`, {
+      const res = await apiFetch(`/api/attendance/members/${encodeURIComponent(targetUid)}/leave-credits`, {
         method: 'POST',
         body: JSON.stringify({ delta }),
       });
