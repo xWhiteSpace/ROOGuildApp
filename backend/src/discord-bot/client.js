@@ -43,15 +43,52 @@ discordClient.rest.on('rateLimited', (info) => {
 });
 
 export async function initializeDiscordBot() {
-  const token = process.env.DISCORD_BOT_TOKEN;
+  const token = (process.env.DISCORD_BOT_TOKEN || '').trim();
   if (!token) {
     throw new Error('DISCORD_BOT_TOKEN is required to initialize Discord client');
   }
 
   await hydrateDiscordCircuit();
 
-  // 🌟 FIXED: Changed 'clientReady' to 'ready' so discord.js triggers it properly
-  discordClient.once('ready', () => {
+  const bootStatus = getDiscordRateLimitStatus();
+  console.log(
+    `[DISCORD BOT] Boot diagnostics: tokenLength=${token.length} circuitOpen=${bootStatus.circuitOpen} ` +
+    `circuitUntil=${bootStatus.circuitUntilHuman || 'none'} remaining=${bootStatus.circuitRemainingHuman}`
+  );
+  console.log(
+    '[DISCORD BOT] Render "service is live" only means HTTP port 10000 is open — wait for "successfully deployed as" before the bot can ACK buttons.'
+  );
+
+  discordClient.on('error', (err) => {
+    console.error(`🛑 [DISCORD BOT] client error: ${err.message}`);
+  });
+  discordClient.on('warn', (msg) => {
+    console.warn(`⚠️ [DISCORD BOT] warn: ${msg}`);
+  });
+  discordClient.on('invalidated', () => {
+    console.error('🛑 [DISCORD BOT] session invalidated — token was reset or another login kicked this process.');
+  });
+  discordClient.on('shardError', (err, shardId) => {
+    console.error(`🛑 [DISCORD BOT] shard ${shardId} error: ${err.message}`);
+  });
+  discordClient.on('shardDisconnect', (event, shardId) => {
+    console.error(
+      `🛑 [DISCORD BOT] shard ${shardId} disconnected code=${event?.code ?? 'n/a'} reason=${event?.reason || 'none'}`
+    );
+  });
+  discordClient.on('debug', (info) => {
+    if (/Provided token/i.test(info)) return;
+    if (/\[WS|Heartbeat|Identif|Ready|Session|429|Rate|Invalid|Connect|Destroy|Resume|Gateway/i.test(info)) {
+      console.log(`[DISCORD BOT] ${info}`);
+    }
+  });
+
+  let gatewayReadyBound = false;
+  let readyWatch = null;
+  const onGatewayReady = () => {
+    if (gatewayReadyBound) return;
+    gatewayReadyBound = true;
+    if (readyWatch) clearTimeout(readyWatch);
     console.log(`🚀 Discord bot successfully deployed as: ${discordClient.user?.tag}`);
 
    // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
@@ -202,28 +239,33 @@ export async function initializeDiscordBot() {
         .then((m) => m.maybeAutoCommitAuction())
         .catch((err) => console.error('⚠️ Auto-commit auction scheduler warning:', err.message));
     }, 60000);
-  });
+  };
+
+  discordClient.once('ready', onGatewayReady);
+  discordClient.once('clientReady', onGatewayReady);
+
+  readyWatch = setTimeout(() => {
+    if (discordClient.isReady()) return;
+    const wsStatus = discordClient.ws?.status;
+    console.error(
+      '🛑 [DISCORD BOT]: Gateway still not ready after 25s. ' +
+      `isReady=false wsStatus=${wsStatus ?? 'n/a'} user=${discordClient.user?.tag || 'none'}. ` +
+      'HTTP can be live while the bot is offline. Typical causes: another process already using this DISCORD_BOT_TOKEN (local/staging), Discord WebSocket blocked, or privileged intents not enabled.'
+    );
+  }, 25000);
 
   try {
-    if (isDiscordCircuitOpen()) {
-      const status = getDiscordRateLimitStatus();
+    if (bootStatus.circuitOpen) {
       console.warn(
-        `⏭️ [DISCORD BOT]: Circuit open until ${status.untilHuman} — delaying gateway login (${status.remainingHuman}) so a Render restart cannot deepen the Cloudflare IP ban.`
+        `🔌 [DISCORD BOT]: REST circuit is OPEN until ${bootStatus.circuitUntilHuman}. ` +
+        `Gateway login still proceeds so buttons can ACK; card Send may stay blocked until the circuit clears.`
       );
-      setTimeout(() => {
-        console.log('⚡ [DISCORD BOT]: Circuit cleared — initiating gateway handshake...');
-        discordClient.login(token).catch((loginErr) => {
-          console.error('🛑 [DISCORD BOT GATEWAY EXCEPTION]:', loginErr.message);
-          if (isDiscordCircuitOpen() || /429|rate limit|too many requests|being blocked/i.test(loginErr.message || '')) {
-            logDiscordRateLimit('gateway login', loginErr);
-          }
-        });
-      }, status.remainingMs + 2000);
-      return;
     }
-
     console.log("⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...");
     await discordClient.login(token);
+    console.log(
+      `[DISCORD BOT] login() settled. isReady=${discordClient.isReady()} user=${discordClient.user?.tag || 'none'}`
+    );
   } catch (loginErr) {
     console.error("🛑 [DISCORD BOT GATEWAY EXCEPTION]:");
     console.error(`   Error Message: ${loginErr.message}`);
