@@ -2,13 +2,23 @@
 import admin from 'firebase-admin';
 import { discordClient } from '../discord-bot/client.js';
 import { getGateStatusDetails } from '../config/timeWindow.js';
+import { isDiscordCircuitOpen, enqueueDiscordCall, logDiscordRateLimit, noteDiscordBurst } from '../utils/discordRateLimit.js';
 
 /**
  * 📣 REQ024 & REQ025: Live Automated Snapshots Controller
  * Reconciles the connection link with index.js. Builds the leaderboard
  * data matrix and posts it directly to your Discord guild channel.
  */
-export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
+export async function processAndPostDiscordSnapshot(isFinalThreshold = false, existingChannel = null) {
+  if (isDiscordCircuitOpen()) {
+    console.warn('⏭️ [SNAPSHOT]: Discord circuit open — skipping broadcast.');
+    return;
+  }
+
+  // Pause Sign-in before the first Discord REST call so /oauth2/token cannot
+  // ride the same Render IP immediately after (or during) this burst.
+  noteDiscordBurst();
+
   try {
     // Access database instance securely from the firebase-admin module scope
     const db = admin.database();
@@ -121,60 +131,55 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false) {
       return;
     }
 
-    const targetChannel = await discordClient.channels.fetch(auctionChannelId);
+    const targetChannel = existingChannel
+      || await enqueueDiscordCall(() => discordClient.channels.fetch(auctionChannelId));
     if (targetChannel && typeof targetChannel.send === 'function') {
-      
+      // Pause Sign-in for 3 minutes around this burst so /oauth2/token is not
+      // stacked on the same Render IP immediately after the list posts.
+      noteDiscordBurst();
+
       // Handle fallback case where zero items are dropping tonight
       if (embedsPayload.length === 0) {
-        await targetChannel.send({ 
-          content: `${broadcastHeadlineText}\n\n⚠️ *No active items or active bid registrations are mapped for tonight's auction pool cycle.*` 
-        });
+        await enqueueDiscordCall(() => targetChannel.send({
+          content: `${broadcastHeadlineText}\n\n⚠️ *No active items or active bid registrations are mapped for tonight's auction pool cycle.*`
+        }));
+        noteDiscordBurst();
         console.log(`✅ [SNAPSHOT BROADCAST]: Empty state posted to Discord channel.`);
         return;
       }
 
       const EMBED_CHUNK_SIZE = 8; // 🛡️ Safe size buffer (Discord max absolute limit is 10 embeds per single text post)
-      const CHUNK_DELAY_MS = 750; // Gentle spacing so multi-chunk posts don't burst the REST queue
-      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const isRateLimited = (err) => {
-        const status = err?.status ?? err?.httpStatus ?? err?.code;
-        return status === 429 || /rate limit|too many requests|being blocked/i.test(err?.message || '');
-      };
 
       for (let i = 0; i < embedsPayload.length; i += EMBED_CHUNK_SIZE) {
+        if (isDiscordCircuitOpen()) {
+          console.error("⏳ [BROADCAST]: Circuit opened mid-send — aborting remaining chunks.");
+          return;
+        }
         const structuralChunk = embedsPayload.slice(i, i + EMBED_CHUNK_SIZE);
 
         try {
           if (i === 0) {
-            // Send the headline banner strictly inside the first payload frame message
-            await targetChannel.send({ 
-              content: broadcastHeadlineText, 
-              embeds: structuralChunk 
-            });
+            await enqueueDiscordCall(() => targetChannel.send({
+              content: broadcastHeadlineText,
+              embeds: structuralChunk,
+            }));
           } else {
-            // Stream subsequent item blocks cleanly down the tracking feed channel
-            await targetChannel.send({ 
-              embeds: structuralChunk 
-            });
+            await enqueueDiscordCall(() => targetChannel.send({
+              embeds: structuralChunk,
+            }));
           }
         } catch (sendErr) {
-          // 🛑 If Discord rate-limits us mid-broadcast, stop pushing the rest of
-          // the chunks — continuing would only deepen a global soft-ban.
-          if (isRateLimited(sendErr)) {
-            const { logDiscordRateLimit } = await import('../utils/discordRateLimit.js');
+          const status = sendErr?.status ?? sendErr?.httpStatus ?? sendErr?.code;
+          if (status === 429 || /rate limit|too many requests|being blocked/i.test(sendErr?.message || '')) {
             logDiscordRateLimit('snapshot broadcast', sendErr);
             console.error("⏳ [BROADCAST]: Rate-limited mid-send — aborting remaining chunks to avoid deepening the soft-ban.");
             return;
           }
-          throw sendErr; // Non-rate-limit failure → bubble to the outer handler
-        }
-
-        // Space out subsequent chunk posts (no delay needed after the final chunk)
-        if (i + EMBED_CHUNK_SIZE < embedsPayload.length) {
-          await sleep(CHUNK_DELAY_MS);
+          throw sendErr;
         }
       }
       
+      noteDiscordBurst();
       console.log(`✅ [BROADCAST]: List is successfully sent to Discord.`);
     } else {
       console.error("❌ [BROADCAST ERROR]: Target destination is not a valid text guild channel context.");

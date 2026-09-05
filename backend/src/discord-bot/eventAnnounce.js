@@ -19,7 +19,7 @@
 import admin from 'firebase-admin';
 import { discordClient } from './client.js';
 import { getGuildNowParts, formatGuildDate, DEFAULT_TZ } from '../utils/guildTime.js';
-import { logDiscordRateLimit } from '../utils/discordRateLimit.js';
+import { logDiscordRateLimit, isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
 
 const DAY_MINUTES = 1440;
 
@@ -27,7 +27,7 @@ const DAY_MINUTES = 1440;
  * How many recent minutes to re-check each tick. Markers make this safe from
  * duplicates, so this window heals typical restart/deploy gaps without risk.
  */
-const CATCHUP_WINDOW_MINUTES = 20;
+const CATCHUP_WINDOW_MINUTES = 3;
 
 /**
  * Resolve the guild-timezone week-minute (0–10079) and calendar date for a
@@ -72,6 +72,7 @@ const SENDING_TTL_MS = 10 * 60 * 1000;
  */
 function isRateLimitError(err) {
   if (!err) return false;
+  if (err.name === 'DiscordCircuitOpenError') return true;
   const status = err.status ?? err.httpStatus ?? err.code;
   if (status === 429) return true;
   if (err.name === 'RateLimitError' || err.name === 'RateLimitedError') return true;
@@ -107,29 +108,29 @@ async function dispatchAnnouncement(phaseTag, eventName) {
   const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;
   if (!auctionChannelId) throw new Error('DISCORD_AUCTION_CHANNEL_ID is not configured');
 
-  const channel = await discordClient.channels.fetch(auctionChannelId);
+  const channel = discordClient.channels.cache.get(auctionChannelId)
+    || await enqueueDiscordCall(() => discordClient.channels.fetch(auctionChannelId));
   if (!channel || !channel.isTextBased()) {
     throw new Error('Configured auction announcement channel is missing or not text-based');
   }
 
   const { processAndPostDiscordSnapshot } = await import('../services/discordSnapshot.js');
 
-  if (phaseTag === 'p1') {
-    await channel.send(
-      `📢 **${eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`
-    );
-    await processAndPostDiscordSnapshot(false).catch(() => {});
-  } else if (phaseTag === 'p2') {
-    await channel.send(
-      `🔒 **${eventName} Registration Locked**:\nSubmissions are now closed! Bidding selections are frozen for list allocation processing by Management Officers.`
-    );
-    await processAndPostDiscordSnapshot(true).catch(() => {});
-  } else if (phaseTag === 'p3') {
-    await channel.send(
-      `⚡ **${eventName} Auction Arena LIVE**:\nThe raid session has commenced! Stand by for interactive live bidding controls.`
-    );
-    await processAndPostDiscordSnapshot(false).catch(() => {});
-  }
+  const messages = {
+    p1: `📢 **${eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`,
+    p2: `🔒 **${eventName} Registration Locked**:\nSubmissions are now closed! Bidding selections are frozen for list allocation processing by Management Officers.`,
+    p3: `⚡ **${eventName} Auction Arena LIVE**:\nThe raid session has commenced! Stand by for interactive live bidding controls.`,
+  };
+  const text = messages[phaseTag];
+  if (!text) return;
+
+  await enqueueDiscordCall(() => channel.send(text));
+  // Snapshots are a multi-chunk REST burst from the same Render IP that
+  // Cloudflare then treats as OAuth abuse. Only Phase 2 (lock) posts the list;
+  // Phase 1/3 stay text-only so Sign-in is not stacked on a broadcast.
+  if (phaseTag !== 'p2') return;
+  if (isDiscordCircuitOpen()) return;
+  await processAndPostDiscordSnapshot(true, channel).catch(() => {});
 }
 
 /**
@@ -149,6 +150,8 @@ function collectDuePhases(absMinute, announcementMinutes) {
  * the force-lock flag and fully idempotent: safe to call repeatedly.
  */
 export async function maybeAnnounceEvents() {
+  if (isDiscordCircuitOpen()) return;
+
   const db = admin.database();
 
   const configSnap = await db.ref('settings/configuration').once('value');
@@ -172,7 +175,10 @@ export async function maybeAnnounceEvents() {
     const duePhases = collectDuePhases(absMinute, status.announcementMinutes);
     if (duePhases.length === 0) continue;
 
+    if (isDiscordCircuitOpen()) return;
+
     for (const phaseTag of duePhases) {
+      if (isDiscordCircuitOpen()) return;
       // Marker scoping. Phase 1 fires at MULTIPLE times per day, so its marker
       // includes the exact week-minute (absMinute) to keep each occurrence
       // independent — otherwise a single shared daily key would let the first

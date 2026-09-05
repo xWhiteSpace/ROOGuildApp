@@ -8,6 +8,7 @@ import {
   inferWarRoomRelationalIds,
   fetchVoiceChannelPresentUids
 } from '../utils/warRoomResolver.js';
+import { isDiscordCircuitOpen, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 import {
   normalizeComposition,
   buildLiveGridsFromComposition,
@@ -155,6 +156,11 @@ async function pollLiveSessionVoicePresence(session) {
  * One voice-presence pulse: increment totalPulses and tally everyone currently in VC.
  */
 async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
+  if (isDiscordCircuitOpen()) {
+    console.log('⏭️ [live-raid] Discord circuit open — skipping voice pulse.');
+    return { stop: false, skipped: true };
+  }
+
   const db = getDatabase();
   const activeSnap = await db.ref('attendance/live_session').once('value');
   if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
@@ -231,7 +237,7 @@ async function captureFinalMonitoringPulse(db, s) {
   const monStart = Number(s.monitoringStartsAt) || 0;
   if (!monStart || now < monStart) return s; // monitoring never started
 
-  const pollIntervalMs = (Number(s.pollIntervalMinutes) || 5) * 60 * 1000;
+  const pollIntervalMs = Math.max(15, Number(s.pollIntervalMinutes) || 15) * 60 * 1000;
   const minGapMs = Math.max(3000, Math.floor(pollIntervalMs / 2));
   if (s.lastVoicePoll?.timestamp && (now - s.lastVoicePoll.timestamp) < minGapMs) {
     return s; // a pulse was just recorded — don't double count
@@ -258,7 +264,10 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
     global.liveRaidIntervalTicker = undefined;
   }
 
+  let pulseInFlight = false;
   const tick = async () => {
+    if (pulseInFlight) return;
+    pulseInFlight = true;
     try {
       const result = await runPulseOnce(pollIntervalMs, monitoringEndsAt);
       if (result.stop) {
@@ -269,6 +278,8 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
       }
     } catch (err) {
       console.error("⚠️ Ticker error:", err.message);
+    } finally {
+      pulseInFlight = false;
     }
   };
 
@@ -292,7 +303,8 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
     global.monitoringSchedulerTicker = undefined;
   }
 
-  const pollIntervalMs = Number(intervalMins) * 60 * 1000;
+  const safeIntervalMins = Math.max(15, Number(intervalMins) || 15);
+  const pollIntervalMs = safeIntervalMins * 60 * 1000;
   const now = Date.now();
 
   if (now >= endsAt) {
@@ -305,7 +317,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   }
 
   if (now >= startsAt) {
-    console.log(`▶️  Monitoring start reached — starting ticker (interval=${intervalMins}m).`);
+    console.log(`▶️  Monitoring start reached — starting ticker (interval=${safeIntervalMins}m).`);
     db.ref('attendance/live_session').update({
       monitoringTickerStatus: 'running',
       monitoringTickerNote: `Ticker started at ${new Date().toISOString()}`,
@@ -314,7 +326,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
     return { armed: true, reason: 'running' };
   }
 
-  console.log(`⏳ Scheduling monitoring ticker for ${new Date(startsAt).toISOString()} (interval=${intervalMins}m)`);
+  console.log(`⏳ Scheduling monitoring ticker for ${new Date(startsAt).toISOString()} (interval=${safeIntervalMins}m)`);
   db.ref('attendance/live_session').update({
     monitoringTickerStatus: 'scheduled',
     monitoringTickerNote: `Waiting until ${new Date(startsAt).toISOString()}`,
@@ -406,9 +418,9 @@ function parseMonitoringFields(body = {}) {
   }
   const startsAt = Number(monitoringStartsAt);
   const endsAt = Number(monitoringEndsAt);
-  const intervalMins = Number(pollIntervalMinutes);
-  if (isNaN(startsAt) || isNaN(endsAt) || isNaN(intervalMins) || intervalMins < 1) {
-    return { ok: false, error: 'Invalid monitoring time values.' };
+  const intervalMins = Math.max(15, Number(pollIntervalMinutes));
+  if (isNaN(startsAt) || isNaN(endsAt) || isNaN(intervalMins) || intervalMins < 15) {
+    return { ok: false, error: 'Invalid monitoring time values. pollIntervalMinutes must be at least 15.' };
   }
   if (endsAt <= startsAt) {
     return { ok: false, error: 'monitoringEndsAt must be after monitoringStartsAt.' };
@@ -761,6 +773,15 @@ router.get('/voice-presence', async (req, res) => {
     const db = getDatabase();
     const warRooms = await loadWarRoomsCatalog(db);
     const resolvedChannelIds = resolveWarRoomChannelIds(channelIdentifiers, warRooms);
+    if (isDiscordCircuitOpen()) {
+      const status = getDiscordRateLimitStatus();
+      return res.status(503).json({
+        success: false,
+        error: `Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`,
+        presentUids: [],
+      });
+    }
+
     const presentUserIds = await fetchVoiceChannelPresentUids(discordClient, resolvedChannelIds);
 
     return res.json({ success: true, presentUids: presentUserIds });

@@ -1,17 +1,33 @@
 import { useMemo } from 'react';
-import { getBackendUrl } from '../services/apiClient';
-
-const backendUrl = getBackendUrl();
+import DiscordSignInButton from '../components/DiscordSignInButton';
+import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
 
 export default function LoginPage() {
   const errorMessage = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error');
     if (!err) return null;
+    if (err === 'discord_rate_limited') {
+      const until = params.get('until');
+      if (!until || until === 'none' || until === 'later') {
+        return 'That was not a Discord ban — a login gate misfired. Open /landing and try Sign-in once.';
+      }
+      return `Discord is temporarily blocking this server IP. Try again after ${until}.`;
+    }
+    if (err === 'login_busy') {
+      return 'Sign-in was already in progress. Wait a few seconds, then click Sign-in once.';
+    }
+    if (err === 'oauth_offload_required') {
+      return 'Sign-in cannot use the Render server IP. FRONTEND_URL on Render must be your Vercel site URL.';
+    }
+    if (err === 'oauth_bridge_failed') {
+      return oauthBridgeUserMessage(params.get('detail'));
+    }
     const map = {
       missing_code: 'Discord did not return an authorization code. Try again.',
       access_denied: 'Discord login was cancelled.',
       token_exchange_failed: 'Could not complete Discord login. Check OAuth redirect URI on Render.',
+      discord_oauth_failed: 'Discord login failed. Do not spam Sign in — wait, then try once.',
     };
     return map[err] || `Login failed (${err}).`;
   }, []);
@@ -28,12 +44,11 @@ export default function LoginPage() {
       <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
         On mobile, keep this tab open after Discord redirects back. Cross-site cookies may be blocked; the app uses a signed profile fallback automatically.
       </p>
-      <a
-        href={`${backendUrl}/auth/login`}
-        className="mt-6 inline-flex w-max rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
-      >
-        Sign in with Discord
-      </a>
+      <div className="mt-6">
+        <DiscordSignInButton
+          className="inline-flex w-max items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-500"
+        />
+      </div>
     </div>
   );
 }

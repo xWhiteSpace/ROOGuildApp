@@ -76,8 +76,19 @@ export async function fetchVoiceChannelPresentUids(discordClient, channelIds = [
     return presentUserIds;
   }
 
+  const { isDiscordCircuitOpen, enqueueDiscordCall } = await import('./discordRateLimit.js');
+
   for (const channelId of channelIds) {
-    const channel = await discordClient.channels.fetch(channelId).catch(() => null);
+    if (isDiscordCircuitOpen()) break;
+    let channel = discordClient.channels.cache.get(channelId);
+    if (!channel) {
+      try {
+        channel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
+      } catch (err) {
+        if (err?.name === 'DiscordCircuitOpenError') break;
+        channel = null;
+      }
+    }
     if (!channel?.isVoiceBased()) continue;
 
     channel.members.forEach((member) => {

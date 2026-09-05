@@ -20,13 +20,20 @@ import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid
 import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
 import { getGateStatusDetails } from './config/timeWindow.js';
 import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
-import { getDiscordRateLimitStatus } from './utils/discordRateLimit.js';
+import { getDiscordRateLimitStatus, resolveOAuthExchangeUrl } from './utils/discordRateLimit.js';
 
 import attendanceRoutes from './api/attendance.routes.js';
 
 initializeEnv();
 initializeFirebase();
-initializeDiscordBot(); 
+initializeDiscordBot();
+
+const oauthBridge = resolveOAuthExchangeUrl();
+if (oauthBridge) {
+  console.log(`🔐 [OAUTH]: Token exchange off Render → ${oauthBridge}`);
+} else {
+  console.warn('🔐 [OAUTH]: Local token exchange (Render will POST /oauth2/token). Production must use FRONTEND_URL on Vercel so Discord never sees this IP.');
+} 
 
 // ✅ REFACTORED: Duplicate gateway interceptor completely removed. 
 // Routing controls are now handled directly within the initialization scope of client.js.
@@ -118,7 +125,12 @@ app.get('/api/deploy-auction-card', async (req, res) => {
     if (!discordClient || !discordClient.isReady()) {
       return res.status(503).send("❌ Failure: Discord bot client is currently offline or rate-limited. Wait for gateway initialization to finish before running this route.");
     }
-    const targetChannel = await discordClient.channels.fetch(channelId);
+    const { isDiscordCircuitOpen, getDiscordRateLimitStatus, enqueueDiscordCall } = await import('./utils/discordRateLimit.js');
+    if (isDiscordCircuitOpen()) {
+      const status = getDiscordRateLimitStatus();
+      return res.status(503).send(`❌ Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`);
+    }
+    const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
     if (!targetChannel) {
       return res.status(404).send("❌ Failure: Discord gateway client failed to locate matching server channel pointer.");
     }
