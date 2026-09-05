@@ -1,3 +1,4 @@
+import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
@@ -5,8 +6,13 @@ import { handleSlashCommand, handleComponentInteraction } from './discordSlashcm
 import { handleAttendanceCardInteraction } from '../services/discordAttendanceCards.js';
 import { handlePartyCardInteraction } from '../services/partyViewer.js';
 
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { logDiscordRateLimit, isDiscordCircuitOpen, hydrateDiscordCircuit, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
+
+// Render/Node 18+ often tries IPv6 first; Discord's v6 path can hang with no error.
+dns.setDefaultResultOrder('ipv4first');
+
+const discordDispatcher = new Agent({ connect: { timeout: 10_000, family: 4 } });
 
 // 📡 GLOBAL NETWORK TUNNEL — honor HTTPS_PROXY, HTTP_PROXY, or PROXY_URL
 const resolvedProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.PROXY_URL;
@@ -21,6 +27,9 @@ if (resolvedProxyUrl) {
   console.log(`🔒 [NETWORKING]: Routing global HTTP/HTTPS through ${resolvedProxyName} tunnel.`);
   const proxyAgent = new ProxyAgent({ uri: resolvedProxyUrl });
   setGlobalDispatcher(proxyAgent);
+} else {
+  console.log('[DISCORD BOT] Prefer IPv4 for Discord REST + gateway (avoids silent IPv6 hangs on Render).');
+  setGlobalDispatcher(discordDispatcher);
 }
 
 export const discordClient = new Client({
@@ -34,13 +43,39 @@ export const discordClient = new Client({
   partials: [Partials.Channel, Partials.Message],
   // 🛑 RATE-LIMIT SHIELD: cap automatic REST retries so a single 429 can't
   // silently snowball into repeated requests that deepen a global soft-ban.
-  rest: { retries: 1 },
+  rest: { retries: 1, timeout: 15_000, agent: resolvedProxyUrl ? undefined : discordDispatcher },
 });
 
 // 📉 Surface rate-limit hits with a human-readable wait (soft-ban Retry-After).
 discordClient.rest.on('rateLimited', (info) => {
   logDiscordRateLimit('REST bucket', info);
 });
+
+async function preflightDiscordGateway(token) {
+  const started = Date.now();
+  try {
+    const res = await fetch('https://discord.com/api/v10/gateway/bot', {
+      headers: { Authorization: `Bot ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const snippet = (await res.text().catch(() => '')).slice(0, 240).replace(/\s+/g, ' ');
+    console.log(
+      `[DISCORD BOT] Gateway REST preflight: HTTP ${res.status} in ${Date.now() - started}ms` +
+      (res.ok ? '' : ` body=${snippet}`)
+    );
+    if (res.status === 401 || res.status === 403) {
+      console.error('[DISCORD BOT] Token rejected by Discord REST. Re-copy DISCORD_BOT_TOKEN on Render.');
+    }
+    if (res.status === 429) {
+      console.error('[DISCORD BOT] Discord is rate-limiting this host IP. Gateway login will likely hang until the block lifts.');
+    }
+  } catch (err) {
+    console.error(
+      `[DISCORD BOT] Gateway REST preflight failed after ${Date.now() - started}ms: ${err.name}: ${err.message}. ` +
+      'Discord is not answering HTTPS from this host — a new bot token will not fix that.'
+    );
+  }
+}
 
 export async function initializeDiscordBot() {
   const token = (process.env.DISCORD_BOT_TOKEN || '').trim();
@@ -49,6 +84,7 @@ export async function initializeDiscordBot() {
   }
 
   await hydrateDiscordCircuit();
+  await preflightDiscordGateway(token);
 
   const bootStatus = getDiscordRateLimitStatus();
   console.log(
@@ -250,7 +286,8 @@ export async function initializeDiscordBot() {
     console.error(
       '🛑 [DISCORD BOT]: Gateway still not ready after 25s. ' +
       `isReady=false wsStatus=${wsStatus ?? 'n/a'} user=${discordClient.user?.tag || 'none'}. ` +
-      'HTTP can be live while the bot is offline. Typical causes: another process already using this DISCORD_BOT_TOKEN (local/staging), Discord WebSocket blocked, or privileged intents not enabled.'
+      'HTTP can be live while the bot is offline. Token and privileged intents are OK if boot diagnostics showed tokenLength~72. ' +
+      'This hang is Discord TCP/WebSocket from this host (often Render IP blocked or IPv6 stall).'
     );
   }, 25000);
 
