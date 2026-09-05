@@ -242,7 +242,11 @@ export async function deployPublicPartyCardToWarAnnounce() {
   const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../utils/discordRateLimit.js');
 
   if (!discordClient || !discordClient.isReady()) {
-    throw new Error('Discord bot client is currently offline or rate-limited.');
+    throw new Error(
+      'Discord bot gateway is not connected on this backend. ' +
+      'Production, staging, and local cannot share one DISCORD_BOT_TOKEN — only one process can be online. ' +
+      'Stop the other bot (local/staging) or restart this Render service, then Send again.'
+    );
   }
   if (isDiscordCircuitOpen()) {
     const status = getDiscordRateLimitStatus();
@@ -259,7 +263,9 @@ export async function deployPublicPartyCardToWarAnnounce() {
 
 export async function handlePartyCardInteraction(interaction) {
   if (interaction.customId !== 'partycard:open') return;
-  await interaction.deferReply({ ephemeral: true });
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ ephemeral: true });
+  }
 
   const db = admin.database();
   const configSnap = await db.ref('settings/configuration').once('value');

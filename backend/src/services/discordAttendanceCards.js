@@ -70,7 +70,11 @@ export async function deployPublicAttendanceCardToWarAnnounce() {
   const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../utils/discordRateLimit.js');
 
   if (!discordClient || !discordClient.isReady()) {
-    throw new Error('Discord bot client is currently offline or rate-limited.');
+    throw new Error(
+      'Discord bot gateway is not connected on this backend. ' +
+      'Production, staging, and local cannot share one DISCORD_BOT_TOKEN — only one process can be online. ' +
+      'Stop the other bot (local/staging) or restart this Render service, then Send again.'
+    );
   }
   if (isDiscordCircuitOpen()) {
     const status = getDiscordRateLimitStatus();
@@ -141,7 +145,9 @@ export async function handleAttendanceCardInteraction(interaction) {
   const customId = interaction.customId || '';
 
   if (customId === 'attcard:open') {
-    await interaction.deferReply({ ephemeral: true });
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
     const db = admin.database();
     const configSnap = await db.ref('settings/configuration').once('value');
     if (configSnap.exists() && configSnap.val().isForceLocked === true) {
@@ -152,7 +158,9 @@ export async function handleAttendanceCardInteraction(interaction) {
   }
 
   if (customId.startsWith('attcard:set:')) {
-    await interaction.deferUpdate();
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate();
+    }
     const parts = customId.split(':');
     const compositeKey = parts.slice(2, -1).join(':');
     const action = parts[parts.length - 1];
