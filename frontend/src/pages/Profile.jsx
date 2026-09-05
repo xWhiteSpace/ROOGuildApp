@@ -29,7 +29,11 @@ export default function Profile({ user }) {
     try {
       setLoading(true);
       setError('');
-      const res = await apiFetch(`/api/attendance/members/${encodeURIComponent(targetUid)}/profile`);
+      const isSelf = !routeUid || String(routeUid) === String(user?.id);
+      const profilePath = isSelf
+        ? '/api/attendance/profile'
+        : `/api/attendance/profile?uid=${encodeURIComponent(String(targetUid))}`;
+      const res = await apiFetch(profilePath);
       const data = await res.json();
       if (!res.ok || !data.success) {
         setError(data.error || 'Failed to load profile.');

@@ -48,12 +48,21 @@ export async function apiFetch(path, options = {}) {
     ...getAuthHeaders({ json: sendJsonContentType }),
     ...(extraHeaders || {}),
   };
+  if (method === 'GET' || method === 'HEAD') {
+    delete headers['Content-Type'];
+    delete headers['content-type'];
+  }
 
-  return fetch(url, {
-    credentials: 'include',
-    ...rest,
-    headers,
-  });
+  try {
+    return await fetch(url, {
+      credentials: 'include',
+      ...rest,
+      headers,
+    });
+  } catch (err) {
+    const detail = err?.message || String(err);
+    throw new Error(`${detail} [${method} ${url}]`);
+  }
 }
 
 export default { getBackendUrl, getAuthHeaders, apiFetch };

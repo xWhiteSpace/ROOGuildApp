@@ -1020,6 +1020,65 @@ function requireOfficer(user, configSnap) {
   return verifyDiscordOfficerRole(user, roles);
 }
 
+function parseMemberUid(raw) {
+  const uid = String(raw ?? '').trim();
+  if (/^\d{5,22}$/.test(uid) || /^dummy_\d+$/.test(uid)) return uid;
+  return null;
+}
+
+async function buildMemberProfileResponse(db, configSnap, uid) {
+  const memberSnap = await db.ref(`auction/members/${uid}`).once('value');
+  if (!memberSnap.exists()) return { ok: false, status: 404, error: 'Member not found.' };
+  const member = memberSnap.val();
+  const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+  return {
+    ok: true,
+    payload: {
+      success: true,
+      uid,
+      member: {
+        ...member,
+        leaveCreditsRemaining: Number.isInteger(member.leaveCreditsRemaining)
+          ? member.leaveCreditsRemaining
+          : defaultCredits,
+        noConfirmCount: parseInt(member.noConfirmCount, 10) || 0,
+      },
+      config: {
+        jobs: configSnap.val()?.jobs || {},
+        roles: configSnap.val()?.roles || {},
+        defaultLeaveCredits: defaultCredits,
+      },
+    },
+  };
+}
+
+// GET /api/attendance/profile  ?uid= optional. Omit uid to load the signed-in member.
+router.get('/profile', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const uid = parseMemberUid(req.query.uid || user.id);
+    if (!uid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid member id. Expected a Discord snowflake.',
+        received: req.query.uid || user.id || null,
+      });
+    }
+    const isOfficer = requireOfficer(user, configSnap);
+    if (uid !== String(user.id) && !isOfficer) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+    const result = await buildMemberProfileResponse(db, configSnap, uid);
+    if (!result.ok) return res.status(result.status).json({ success: false, error: result.error });
+    return res.json(result.payload);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/attendance/me -> current user leave credits / no-confirm
 router.get('/me', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -1050,31 +1109,21 @@ router.get('/members/:uid/profile', async (req, res) => {
   try {
     const db = getDatabase();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const uid = req.params.uid;
+    const uid = parseMemberUid(req.params.uid);
+    if (!uid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid member id. Expected a Discord snowflake.',
+        received: req.params.uid || null,
+      });
+    }
     const isOfficer = requireOfficer(user, configSnap);
-    if (String(uid) !== String(user.id) && !isOfficer) {
+    if (uid !== String(user.id) && !isOfficer) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
-    const memberSnap = await db.ref(`auction/members/${uid}`).once('value');
-    if (!memberSnap.exists()) {
-      return res.status(404).json({ success: false, error: 'Member not found.' });
-    }
-    const member = memberSnap.val();
-    const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
-    return res.json({
-      success: true,
-      uid,
-      member: {
-        ...member,
-        leaveCreditsRemaining: Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : defaultCredits,
-        noConfirmCount: parseInt(member.noConfirmCount, 10) || 0,
-      },
-      config: {
-        jobs: configSnap.val()?.jobs || {},
-        roles: configSnap.val()?.roles || {},
-        defaultLeaveCredits: defaultCredits,
-      },
-    });
+    const result = await buildMemberProfileResponse(db, configSnap, uid);
+    if (!result.ok) return res.status(result.status).json({ success: false, error: result.error });
+    return res.json(result.payload);
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
