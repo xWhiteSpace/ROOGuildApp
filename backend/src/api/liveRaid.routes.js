@@ -10,8 +10,6 @@ import {
 } from '../utils/warRoomResolver.js';
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 import {
-  normalizeComposition,
-  buildLiveGridsFromComposition,
   findCrossTabDuplicates,
   isSlotCoordKey,
 } from '@guildname/shared/compositionTabs';
@@ -584,23 +582,18 @@ router.post('/create', async (req, res) => {
     }
 
     const {
-      eventKey,
-      eventDate,
-      eventTitle,
-      selectedConfigId,
-      selectedConfigIds,
+      publishedId,
       selectedWarRooms: selectedWarRoomIds,
       monitoringStartsAt,
       monitoringEndsAt,
       pollIntervalMinutes,
     } = req.body;
 
-    // Prefer single config; fall back to first of legacy multi-select
-    const configId = selectedConfigId
-      || (Array.isArray(selectedConfigIds) && selectedConfigIds.length > 0 ? selectedConfigIds[0] : null);
-
-    if (!eventKey || !eventDate || !eventTitle || !configId || !selectedWarRoomIds?.length) {
-      return res.status(400).json({ success: false, error: 'Missing required configuration fields. Select one Raid Config and at least one war room.' });
+    if (!publishedId || !selectedWarRoomIds?.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'Select an Active Composition and at least one war room.',
+      });
     }
 
     const settingsObj = configSnap.exists() ? configSnap.val() : {};
@@ -616,24 +609,26 @@ router.post('/create', async (req, res) => {
       });
     }
 
-    const compSnap = await db.ref(`attendance/compositions/${configId}`).once('value');
-    if (!compSnap.exists()) {
-      return res.status(404).json({ success: false, error: `Raid Config ${configId} not found.` });
+    const publishedSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
+    if (!publishedSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Active composition not found.' });
+    }
+    const published = publishedSnap.val();
+    const gridsPayload = published.grids || {};
+    const selectedGridIds = Array.isArray(published.selectedGridIds) && published.selectedGridIds.length > 0
+      ? published.selectedGridIds
+      : Object.keys(gridsPayload);
+    if (selectedGridIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Selected composition has no Grid Tabs.' });
     }
 
-    const normalized = normalizeComposition(compSnap.val(), configId);
-    const duplicates = findCrossTabDuplicates(normalized.tabs);
+    const duplicates = findCrossTabDuplicates(gridsPayload);
     if (duplicates.length > 0) {
       return res.status(400).json({
         success: false,
-        error: `Cannot start Live Raid: config has ${duplicates.length} member(s) assigned in multiple Grid Tabs.`,
+        error: `Cannot start Live Raid: composition has ${duplicates.length} member(s) assigned in multiple Grid Tabs.`,
         duplicates,
       });
-    }
-
-    const { grids: gridsPayload, selectedGridIds } = buildLiveGridsFromComposition(normalized, configId);
-    if (selectedGridIds.length === 0) {
-      return res.status(400).json({ success: false, error: 'Selected Raid Config has no Grid Tabs.' });
     }
 
     const parsedMon = parseMonitoringFields({ monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes });
@@ -641,11 +636,17 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ success: false, error: parsedMon.error });
     }
 
+    const eventKey = published.eventKey;
+    const eventDate = published.eventDate;
+    const eventTitle = published.eventTitle || published.eventKey || 'Raid Session';
+    const configId = published.configId || selectedGridIds[0];
+
     // Firebase RTDB drops null keys — only include monitoring fields when set
     const sessionPayload = {
       status: 'Active',
       launchedBy: user.displayName || user.username || 'Officer',
       startedAt: Date.now(),
+      publishedId,
       eventKey,
       eventDate,
       eventTitle,

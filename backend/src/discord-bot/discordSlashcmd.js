@@ -1,10 +1,25 @@
 import admin from 'firebase-admin'; // Hooked directly to your backend setup[cite: 1]
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { ensureWeekInstances, writeCommitment } from '../services/scheduleService.js';
+import { ensureWeekInstances, resolveGuildTimezone } from '../services/scheduleService.js';
+import {
+  applyAttendanceDecision,
+  getDefaultLeaveCredits,
+  getEventDeadlineMs,
+} from '../services/attendanceDecision.js';
 import { buildCompositeKey, parseCompositeKey } from '../utils/guildTime.js';
 
 async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
+  const timezone = await resolveGuildTimezone(db);
   const { weekMonday, instances } = await ensureWeekInstances({});
+  const [memberSnap, configSnap] = await Promise.all([
+    db.ref(`auction/members/${snowflakeId}`).once('value'),
+    db.ref('settings/configuration').once('value'),
+  ]);
+  const member = memberSnap.exists() ? memberSnap.val() : {};
+  const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+  const credits = Number.isInteger(member.leaveCreditsRemaining)
+    ? member.leaveCreditsRemaining
+    : defaultCredits;
 
   const sorted = Object.entries(instances || {})
     .map(([key, inst]) => ({ key, ...inst }))
@@ -12,7 +27,10 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
 
   const embed = new EmbedBuilder()
     .setTitle('🗓️ Upcoming Week Sign-Up (7 Days)')
-    .setDescription(`Review active raid deployments for week starting \`${weekMonday}\` (Monday - Sunday). Toggle availability tags seamlessly:`)
+    .setDescription(
+      `Review active raid deployments for week starting \`${weekMonday}\` (Monday - Sunday).\n` +
+        `Leave Credits: **${credits}**  •  RSVP locks 24 hours before start.`
+    )
     .setColor('#9333ea')
     .setTimestamp();
 
@@ -24,6 +42,8 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
     const userStatus = commitmentSnap.exists() ? commitmentSnap.val().status : 'Unanswered';
 
     const isCancelled = ev.isCancelled === true;
+    const deadlineMs = getEventDeadlineMs(ev, timezone);
+    const pastDeadline = Number.isFinite(deadlineMs) && Date.now() > deadlineMs;
     const customTitle = ev.title || ev.eventId;
     const customNotes = ev.notes ? `\n📝 **Notes:** ${ev.notes}` : '';
     const typeLabel = ev.isSpecial ? 'Special' : 'Weekly';
@@ -49,7 +69,7 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
         .setCustomId(`matrsvp:confirm:${compositeKey}:1`)
         .setLabel(userStatus === 'Confirmed' ? '✅ Confirmed' : 'Confirm')
         .setStyle(userStatus === 'Confirmed' ? ButtonStyle.Success : ButtonStyle.Secondary)
-        .setDisabled(isCancelled)
+        .setDisabled(isCancelled || pastDeadline)
     );
 
     row.addComponents(
@@ -57,7 +77,7 @@ async function generateRSVPMatrixDashboard(db, snowflakeId, page = 1) {
         .setCustomId(`matrsvp:leave:${compositeKey}:${page}`)
         .setLabel(userStatus === 'Leave' ? '❌ Leave' : 'Leave')
         .setStyle(userStatus === 'Leave' ? ButtonStyle.Danger : ButtonStyle.Secondary)
-        .setDisabled(isCancelled)
+        .setDisabled(isCancelled || pastDeadline || (credits <= 0 && userStatus !== 'Leave'))
     );
 
     componentRows.push(row);
@@ -302,14 +322,24 @@ export async function handleComponentInteraction(interaction) {
     const displayName = member.displayName || member.name || interaction.user.username;
 
     const parsed = parseCompositeKey(compositeKey);
-    await writeCommitment({
-      userId: snowflakeId,
-      displayName,
-      dateStr: parsed?.dateStr,
-      eventId: parsed?.eventId,
-      status: targetStatus,
-      compositeKey,
-    });
+    const existingSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
+    const current = existingSnap.exists() ? existingSnap.val().status : null;
+    const status = current === targetStatus ? 'None' : targetStatus;
+    try {
+      await applyAttendanceDecision({
+        userId: snowflakeId,
+        displayName,
+        dateStr: parsed?.dateStr,
+        eventId: parsed?.eventId,
+        status,
+        compositeKey,
+      });
+    } catch (err) {
+      return await interaction.editReply({
+        content: `❌ ${err.message || 'Could not update attendance.'}`,
+        components: [],
+      }).catch(() => {});
+    }
 
     // Re-render the matrix instantly to update component visual states
     const updatedPayload = await generateRSVPMatrixDashboard(db, snowflakeId, currentPage);

@@ -41,6 +41,7 @@ export const DEFAULT_CONFIGURATION = {
   liveRaidMaxWarRooms: 2,
   attendancePollInterval: 5,
   attendanceMaxDuration: 40,
+  defaultLeaveCredits: 3,
   warRooms: {
     room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
     room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },

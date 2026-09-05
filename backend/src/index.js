@@ -63,6 +63,8 @@ app.use(cors({
       allowedOrigins.includes(origin) ||
       origin.startsWith('http://192.168.') ||
       origin.includes('ngrok-free.app') ||
+      origin.includes('ngrok-free.dev') ||
+      origin.includes('ngrok.io') ||
       origin.endsWith('.vercel.app')
     ) {
       callback(null, true);
@@ -84,7 +86,7 @@ app.use(cors({
   ]
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'guild_secret_pass',
@@ -145,6 +147,40 @@ app.get('/api/deploy-auction-card', async (req, res) => {
   }
 });
 
+// Per-event Attendance card → DISCORD_WARANNOUNCE_CHANNEL_ID
+app.get('/api/deploy-attendance-card', async (req, res) => {
+  try {
+    const { deployPublicAttendanceCardToWarAnnounce } = await import('./services/discordAttendanceCards.js');
+    await deployPublicAttendanceCardToWarAnnounce();
+    res.send('📟 SUCCESS: Attendance card posted to the war-announce channel.');
+  } catch (err) {
+    console.error('Attendance card deploy failed:', err.message);
+    const msg = err.message || 'Unknown error';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    res.status(status).send(`❌ Server Exception: ${msg}`);
+  }
+});
+
+// Party Viewer card → DISCORD_WARANNOUNCE_CHANNEL_ID
+app.get('/api/deploy-party-card', async (req, res) => {
+  try {
+    const { deployPublicPartyCardToWarAnnounce } = await import('./services/partyViewer.js');
+    await deployPublicPartyCardToWarAnnounce();
+    res.send('📟 SUCCESS: Party card posted to the war-announce channel.');
+  } catch (err) {
+    console.error('Party card deploy failed:', err.message);
+    const msg = err.message || 'Unknown error';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    res.status(status).send(`❌ Server Exception: ${msg}`);
+  }
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
@@ -154,6 +190,10 @@ app.listen(PORT, () => {
   resumeLiveRaidMonitoringIfNeeded().catch((err) => {
     console.error('[live-raid] resume on boot failed:', err.message);
   });
+
+  import('./services/attendanceDecision.js')
+    .then((m) => m.seedMissingLeaveCredits())
+    .catch((err) => console.error('[attendance] leave-credit seed failed:', err.message));
 
   // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
   // Execution tracking has been centralized into the drift-proof engine in client.js.

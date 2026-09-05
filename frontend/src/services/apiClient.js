@@ -10,6 +10,8 @@ export function getBackendUrl() {
 
 /**
  * Build headers with optional JSON content-type and signed mobile session fallback.
+ * Do not send Content-Type on GET/HEAD: WebKit (Safari) throws
+ * "The string did not match the expected pattern."
  */
 export function getAuthHeaders({ json = true } = {}) {
   const headers = {};
@@ -39,16 +41,28 @@ export function getAuthHeaders({ json = true } = {}) {
 export async function apiFetch(path, options = {}) {
   const { json = true, headers: extraHeaders, ...rest } = options;
   const url = path.startsWith('http') ? path : `${backendUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+  const method = String(rest.method || 'GET').toUpperCase();
+  const hasBody = rest.body != null && rest.body !== '';
+  const sendJsonContentType = json && (hasBody || ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method));
   const headers = {
-    ...getAuthHeaders({ json }),
+    ...getAuthHeaders({ json: sendJsonContentType }),
     ...(extraHeaders || {}),
   };
+  if (method === 'GET' || method === 'HEAD') {
+    delete headers['Content-Type'];
+    delete headers['content-type'];
+  }
 
-  return fetch(url, {
-    credentials: 'include',
-    ...rest,
-    headers,
-  });
+  try {
+    return await fetch(url, {
+      credentials: 'include',
+      ...rest,
+      headers,
+    });
+  } catch (err) {
+    const detail = err?.message || String(err);
+    throw new Error(`${detail} [${method} ${url}]`);
+  }
 }
 
 export default { getBackendUrl, getAuthHeaders, apiFetch };

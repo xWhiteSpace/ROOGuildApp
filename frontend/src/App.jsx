@@ -13,6 +13,8 @@ import { logoutUser } from './services/authService';
 import MasterListTab from './pages/MasterListTab';
 
 import RaidPartyTab from './pages/RaidPartyTab';
+import RaidComposeTab from './pages/RaidComposeTab';
+import Profile from './pages/Profile';
 import StatisticsTab from './pages/StatisticsTab';
 import LiveRaidTab from './pages/LiveRaidTab';
 import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
@@ -258,7 +260,10 @@ function AppShell({ authUser, onLogout, macroTab, setMacroTab }) {
 
         {/* 🛡️ Foundational Raid Governance Routes Mapping */}
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
+        <Route path="/attendance/profile" element={<Profile user={authUser} />} />
+        <Route path="/attendance/profile/:uid" element={<Profile user={authUser} />} />
         <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+        <Route path="/attendance/compose" element={<RaidComposeTab user={authUser} />} />
         <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
         <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
         <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />

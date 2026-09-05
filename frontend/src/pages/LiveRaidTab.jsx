@@ -10,7 +10,6 @@ import {
   Settings, 
   MoreVertical, 
   Search, 
-  Calendar, 
   Check, 
   X, 
   UserPlus, 
@@ -38,7 +37,7 @@ import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
-import { upcomingDatesForWeekday, DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
+import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
 import { apiFetch } from '../services/apiClient';
 import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
@@ -57,6 +56,9 @@ export default function LiveRaidTab({ user }) {
   // --- Master Registries Loaded from Settings ---
   const [eventsCatalog, setEventsCatalog] = useState({});
   const [compositions, setCompositions] = useState({});
+  const [publishedCompositions, setPublishedCompositions] = useState({});
+  const [publishedAnchor, setPublishedAnchor] = useState(null);
+  const [selectedPublishedId, setSelectedPublishedId] = useState('');
   const [members, setMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
@@ -182,6 +184,8 @@ export default function LiveRaidTab({ user }) {
     if (s.eventKey) setSelectedEventKey(s.eventKey);
     if (s.eventDate) setSelectedEventDate(s.eventDate);
     if (s.selectedConfigId) setSelectedConfigId(s.selectedConfigId);
+    if (s.publishedId) setSelectedPublishedId(s.publishedId);
+    else if (s.eventDate && s.eventKey) setSelectedPublishedId(`${s.eventDate}_${s.eventKey}`);
     if (Array.isArray(s.selectedWarRoomIds) && s.selectedWarRoomIds.length > 0) {
       setSelectedWarRooms(s.selectedWarRoomIds);
     }
@@ -327,8 +331,23 @@ export default function LiveRaidTab({ user }) {
       if (histData.success) {
         setHistorySessions(histData.sessions || {});
       }
+
+      await loadPublishedCompositions();
     } catch (err) {
       console.error("Error loading master setup lists:", err);
+    }
+  };
+
+  const loadPublishedCompositions = async () => {
+    try {
+      const res = await apiFetch('/api/attendance/published', { method: 'GET' });
+      const data = await res.json();
+      if (data.success) {
+        setPublishedCompositions(data.published || {});
+        setPublishedAnchor(data.anchor || null);
+      }
+    } catch (err) {
+      console.error('Failed to load published compositions:', err);
     }
   };
 
@@ -419,31 +438,47 @@ export default function LiveRaidTab({ user }) {
     };
   }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
-  // Event Date Picker Options Generator
-  const computedEventDates = useMemo(() => {
-    if (!selectedEventKey || !eventsCatalog[selectedEventKey]) return [];
-    const template = eventsCatalog[selectedEventKey];
-    const p3 = template.phases?.[3];
-    if (!p3) return [];
-
-    const targetDayOfWeek = parseInt(p3.dayStart, 10);
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dates = upcomingDatesForWeekday(targetDayOfWeek, guildTimezone || DEFAULT_TZ, 1);
-
-    return dates.map((dateStr) => ({
-      dateVal: dateStr,
-      label: `${dateStr} (${dayNames[targetDayOfWeek]})`
-    }));
-  }, [selectedEventKey, eventsCatalog, guildTimezone]);
-
-  // Automatically select first calculated date when event key changes
   useEffect(() => {
-    if (computedEventDates.length > 0) {
-      setSelectedEventDate(computedEventDates[0].dateVal);
-    } else {
-      setSelectedEventDate('');
+    if (session !== null) return undefined;
+    loadPublishedCompositions();
+    const id = setInterval(loadPublishedCompositions, 5000);
+    return () => clearInterval(id);
+  }, [session]);
+
+  const publishedList = useMemo(() => {
+    return Object.entries(publishedCompositions)
+      .map(([id, rec]) => ({ id, ...rec }))
+      .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+  }, [publishedCompositions]);
+
+  const formatSentAt = (ms) => {
+    if (!Number.isFinite(Number(ms))) return '';
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: guildTimezone || DEFAULT_TZ,
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(new Date(ms));
+    } catch {
+      return '';
     }
-  }, [computedEventDates]);
+  };
+
+  useEffect(() => {
+    if (session) return;
+    if (selectedPublishedId && publishedCompositions[selectedPublishedId]) return;
+    const prefer = publishedAnchor && publishedCompositions[publishedAnchor]
+      ? publishedAnchor
+      : Object.keys(publishedCompositions)[0];
+    if (!prefer) return;
+    setSelectedPublishedId(prefer);
+    const pub = publishedCompositions[prefer];
+    if (pub?.eventKey) setSelectedEventKey(pub.eventKey);
+    if (pub?.eventDate) setSelectedEventDate(pub.eventDate);
+  }, [publishedCompositions, publishedAnchor, session, selectedPublishedId]);
 
   // -------------------------------------------------------------
   // Step 3 layout allocation compiler & sidebar unified filter logic
@@ -546,8 +581,53 @@ export default function LiveRaidTab({ user }) {
   // -------------------------------------------------------------
   // administrative session handlers
   // -------------------------------------------------------------
-  const handleSelectRaidConfig = (id) => {
-    setSelectedConfigId((prev) => (prev === id ? '' : id));
+  const handleSelectPublished = (id) => {
+    if (session) return;
+    const next = selectedPublishedId === id ? '' : id;
+    setSelectedPublishedId(next);
+    const pub = next ? publishedCompositions[next] : null;
+    setSelectedEventKey(pub?.eventKey || '');
+    setSelectedEventDate(pub?.eventDate || '');
+  };
+
+  const handleSetActiveComposition = async (id, active) => {
+    if (!isOfficer) return;
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(id)}/set-active`, {
+        method: 'POST',
+        body: JSON.stringify({ active }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to update Set Active');
+      setPublishedAnchor(data.anchor || null);
+    } catch (err) {
+      alert(err.message || 'Failed to update Set Active');
+    }
+  };
+
+  const handleRemovePublished = async (id) => {
+    if (!isOfficer) return;
+    if (!window.confirm('Remove this composition from Active Compositions?')) return;
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to remove composition');
+      setPublishedCompositions((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      if (publishedAnchor === id) setPublishedAnchor(null);
+      if (selectedPublishedId === id) {
+        setSelectedPublishedId('');
+        setSelectedEventKey('');
+        setSelectedEventDate('');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to remove composition');
+    }
   };
 
   const handleToggleWarRoomSelection = (roomId) => {
@@ -621,11 +701,8 @@ export default function LiveRaidTab({ user }) {
   };
 
   const handleLaunchLiveSession = async () => {
-    if (!selectedEventKey || !selectedEventDate) {
-      return alert("Select target event cycle date.");
-    }
-    if (!selectedConfigId) {
-      return alert("Select one Raid Config (its Grid Tabs will load as live tabs).");
+    if (session === null && (!selectedPublishedId || !publishedCompositions[selectedPublishedId])) {
+      return alert('Select an Active Composition.');
     }
     if (selectedWarRooms.length === 0) {
       return alert("Select at least one Discord War Room.");
@@ -653,62 +730,39 @@ export default function LiveRaidTab({ user }) {
     const monitoringPayload = buildMonitoringCreatePayload();
     if (monitoringPayload.error) return alert(monitoringPayload.error);
 
-    // ── EDIT MODE: session already running ────────────────────────────────────
+    // ── EDIT MODE: session already running — monitoring only ──────────────────
     if (session !== null) {
-      const configChanged = selectedConfigId !== session.selectedConfigId;
-
-      if (!configChanged) {
-        // Non-destructive path — only monitoring may have changed; update it and return to Step 3
-        try {
-          if (!startTime || !endTime) {
-            return alert('Set both Start Time and End Time before applying monitoring.\n\nUse 24h format, e.g. 20:00 and 22:00.');
-          }
-          const monUpdate = await applyMonitoringSchedule(headers);
-          if (monUpdate) {
-            const next = { ...(sessionRef.current || session), ...monUpdate };
-            setSession(next);
-            hydrateSetupFromSession(next);
-            alert(
-              `Monitoring saved to Firebase:\n` +
-              `attendance/live_session\n\n` +
-              `monitoringStartsAt: ${monUpdate.monitoringStartsAt}\n` +
-              `monitoringEndsAt: ${monUpdate.monitoringEndsAt}\n` +
-              `pollIntervalMinutes: ${monUpdate.pollIntervalMinutes}`
-            );
-          }
-          setLocalStep(3);
-        } catch (err) {
-          alert(err.message || 'Failed to update monitoring schedule.');
-        }
-        return;
-      }
-
-      // Destructive path — Raid Config changed; confirm before cancelling the active session
-      const ok = window.confirm(
-        "Changing the Raid Config will cancel the active live session and start a fresh one.\n\nAll current grid assignments and pulse data will be lost.\n\nProceed?"
-      );
-      if (!ok) return;
-
-      // Cancel the existing session first
       try {
-        const cancelRes = await fetch(`${backendUrl}/api/live-raid/cancel`, { method: 'POST', headers, credentials: 'include' });
-        const cancelData = await cancelRes.json();
-        if (!cancelData.success) return alert(cancelData.error || "Failed to cancel the active session.");
+        if (!startTime || !endTime) {
+          return alert('Set both Start Time and End Time before applying monitoring.\n\nUse 24h format, e.g. 20:00 and 22:00.');
+        }
+        const monUpdate = await applyMonitoringSchedule(headers);
+        if (monUpdate) {
+          const next = { ...(sessionRef.current || session), ...monUpdate };
+          setSession(next);
+          hydrateSetupFromSession(next);
+          alert(
+            `Monitoring saved to Firebase:\n` +
+            `attendance/live_session\n\n` +
+            `monitoringStartsAt: ${monUpdate.monitoringStartsAt}\n` +
+            `monitoringEndsAt: ${monUpdate.monitoringEndsAt}\n` +
+            `pollIntervalMinutes: ${monUpdate.pollIntervalMinutes}`
+          );
+        }
+        setLocalStep(3);
       } catch (err) {
-        return alert("Network error cancelling session: " + err.message);
+        alert(err.message || 'Failed to update monitoring schedule.');
       }
+      return;
     }
 
-    // ── CREATE (fresh or after cancel) — monitoring written atomically with session ──
+    // ── CREATE — grids come from the published Active Composition ────────────
     try {
       const res = await fetch(`${backendUrl}/api/live-raid/create`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          eventKey: selectedEventKey,
-          eventDate: selectedEventDate,
-          eventTitle: eventsCatalog[selectedEventKey]?.title || 'Raid Session',
-          selectedConfigId,
+          publishedId: selectedPublishedId,
           selectedWarRooms,
           ...monitoringPayload,
         }),
@@ -1003,34 +1057,108 @@ export default function LiveRaidTab({ user }) {
   return (
     <div className="space-y-4 max-w-[98vw] mx-auto p-1 font-sans text-slate-200 overflow-visible relative">
       
-      {/* -------------------- STEP 1: CREATE SESSION BUTTON -------------------- */}
+      {/* -------------------- STEP 1: ACTIVE COMPOSITIONS + START -------------------- */}
       {session === null && localStep === 1 && (
-        <div className="flex flex-col items-center justify-center min-h-[75vh] select-none text-center">
-          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 max-w-lg shadow-2xl space-y-6">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center animate-pulse">
-              <Play size={32} />
-            </div>
+        <div className="mx-auto max-w-5xl space-y-6 py-6 px-2 select-none">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
               <h1 className="text-xl font-black tracking-wide text-slate-100 uppercase">Live Raid Operations</h1>
-              <p className="text-xs text-slate-400 font-sans mt-2 leading-relaxed">
-                Start a shared live raid event session to synchronize Discord voice attendance, map real-time team lists, and resolve layout overrides interactively.
+              <p className="text-xs text-slate-400 font-sans mt-1.5 leading-relaxed max-w-xl">
+                Compositions sent from Raid Compose land here. Set one Active to drive Party and Attendance Discord cards, then start monitoring.
               </p>
             </div>
-            
             {isOfficer ? (
               <button
                 type="button"
                 onClick={() => setLocalStep(2)}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wider py-3.5 px-6 rounded-2xl transition-all duration-150 shadow-xl shadow-indigo-600/10 cursor-pointer"
+                disabled={publishedList.length === 0}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wider py-3 px-6 rounded-2xl transition-all duration-150 shadow-xl shadow-indigo-600/10 cursor-pointer shrink-0"
               >
-                Create Live Session
+                Start Live Raid
               </button>
             ) : (
-              <div className="text-xs text-rose-400 font-mono bg-rose-950/20 border border-rose-900/30 p-3 rounded-xl">
-                ⚠️ Administrative privileges required to launch operations deck.
+              <div className="text-[10px] text-rose-400 font-mono bg-rose-950/20 border border-rose-900/30 px-3 py-2 rounded-xl">
+                Officers start the monitoring deck.
               </div>
             )}
           </div>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">Active Compositions</h2>
+              <span className="text-[10px] font-mono text-slate-600">{publishedList.length}</span>
+            </div>
+
+            {publishedList.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 px-6 py-10 text-center">
+                <p className="text-xs text-slate-400">No compositions have been sent yet.</p>
+                <p className="text-[10px] text-slate-600 mt-1">Officers send a roster from Raid Compose to publish it here.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {publishedList.map((comp) => {
+                  const isAnchor = publishedAnchor === comp.id;
+                  const tabCount = (comp.selectedGridIds || Object.keys(comp.grids || {})).length;
+                  return (
+                    <div
+                      key={comp.id}
+                      className={`p-4 rounded-2xl border text-left transition ${
+                        isAnchor
+                          ? 'bg-indigo-600/10 border-indigo-500/70'
+                          : 'bg-slate-900/40 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-slate-100 truncate">
+                              {comp.eventTitle || comp.eventKey || 'Raid'}
+                            </span>
+                            {isAnchor && (
+                              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-1.5 py-0.5 rounded-md">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-mono text-slate-400 mt-1">
+                            {comp.eventDate || '—'} · {comp.configTitle || 'Untitled config'}
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-600 mt-1">
+                            {tabCount} tab{tabCount === 1 ? '' : 's'}
+                            {comp.sentAt ? ` · sent ${formatSentAt(comp.sentAt)}` : ''}
+                            {comp.sentBy ? ` · ${comp.sentBy}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      {isOfficer && (
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
+                          <button
+                            type="button"
+                            onClick={() => handleSetActiveComposition(comp.id, !isAnchor)}
+                            className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2 rounded-xl border transition cursor-pointer ${
+                              isAnchor
+                                ? 'border-indigo-500/50 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20'
+                                : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
+                            }`}
+                          >
+                            {isAnchor ? 'Unset Active' : 'Set Active'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePublished(comp.id)}
+                            className="p-2 rounded-xl border border-slate-800 text-slate-500 hover:text-rose-400 hover:border-rose-900/50 transition cursor-pointer"
+                            title="Remove from Active Compositions"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
@@ -1040,18 +1168,22 @@ export default function LiveRaidTab({ user }) {
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 select-none">
             <div className="flex items-center gap-3">
               <button 
-                onClick={() => setLocalStep(1)}
+                onClick={() => setLocalStep(session ? 3 : 1)}
                 className="p-2 rounded-xl bg-slate-950 border border-slate-850 hover:border-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
               >
                 <ArrowLeft size={14} />
               </button>
               <div>
-                <h2 className="text-sm font-black uppercase text-slate-100 tracking-wider">Configure Live Session</h2>
-                <p className="text-[10px] text-slate-500 font-sans">Set cycle boundaries and map blueprints.</p>
+                <h2 className="text-sm font-black uppercase text-slate-100 tracking-wider">
+                  {session ? 'Monitoring Setup' : 'Start Live Raid'}
+                </h2>
+                <p className="text-[10px] text-slate-500 font-sans">
+                  {session ? 'Adjust war rooms and the monitoring window.' : 'Pick an Active Composition, then war rooms and monitoring.'}
+                </p>
               </div>
             </div>
             <button 
-              onClick={() => setLocalStep(1)} 
+              onClick={() => setLocalStep(session ? 3 : 1)} 
               className="text-slate-500 hover:text-slate-350 p-1 transition cursor-pointer"
             >
               <X size={16} />
@@ -1059,74 +1191,59 @@ export default function LiveRaidTab({ user }) {
           </div>
 
           <div className="space-y-5">
-            {/* a. Select Event Cycle & Dates */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">1. Select Target Event</label>
-                <select
-                  value={selectedEventKey}
-                  onChange={(e) => setSelectedEventKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-3.5 py-2.5 text-xs outline-none cursor-pointer focus:border-slate-700 transition"
-                >
-                  <option value="" disabled>-- Select Scheduled Event Template --</option>
-                  {Object.entries(eventsCatalog).map(([key, ev]) => (
-                    <option key={key} value={key} className="bg-slate-950">{ev.title || 'Untitled Event'}</option>
-                  ))}
-                </select>
+            {session ? (
+              <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/40">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">Composition</p>
+                <p className="text-xs font-bold text-slate-200 mt-1">
+                  {session.eventTitle || session.eventKey || 'Raid'}
+                  {session.eventDate ? ` · ${session.eventDate}` : ''}
+                </p>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">2. Event Occurrence Date</label>
-                <select
-                  value={selectedEventDate}
-                  onChange={(e) => setSelectedEventDate(e.target.value)}
-                  disabled={!selectedEventKey}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-3.5 py-2.5 text-xs outline-none cursor-pointer focus:border-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="" disabled>-- Select Target Date --</option>
-                  {computedEventDates.map(opt => (
-                    <option key={opt.dateVal} value={opt.dateVal} className="bg-slate-950">{opt.label}</option>
-                  ))}
-                </select>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
+                  1. Choose Active Composition
+                </label>
+                {publishedList.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">Send a composition from Raid Compose first.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto scrollbar-thin pr-1">
+                    {publishedList.map((comp) => {
+                      const isChecked = selectedPublishedId === comp.id;
+                      const tabCount = (comp.selectedGridIds || Object.keys(comp.grids || {})).length;
+                      return (
+                        <div
+                          key={comp.id}
+                          onClick={() => handleSelectPublished(comp.id)}
+                          className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer select-none transition-all ${
+                            isChecked
+                              ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400 shadow-md'
+                              : 'bg-slate-950/40 border-slate-800 hover:border-slate-750 text-slate-300'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isChecked ? 'bg-indigo-600 border-indigo-500' : 'border-slate-700 bg-slate-950'}`}>
+                            {isChecked && <Check size={11} className="text-white" />}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold font-sans truncate block">
+                              {comp.eventTitle || comp.eventKey || 'Raid'}
+                            </span>
+                            <span className="text-[8px] font-mono text-slate-500">
+                              {comp.eventDate || '—'} · {comp.configTitle || 'config'} · {tabCount} tab{tabCount === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* b. Select one Raid Config (Grid Tabs become live tabs) */}
+            {/* Select War Rooms */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
-                3. Choose Raid Config (one config · its Grid Tabs load as live tabs)
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto scrollbar-thin pr-1">
-                {Object.values(compositions).map((comp) => {
-                  const isChecked = selectedConfigId === comp.id;
-                  const tabCount = (comp.tabOrder || Object.keys(comp.tabs || {})).length;
-                  return (
-                    <div 
-                      key={comp.id}
-                      onClick={() => handleSelectRaidConfig(comp.id)}
-                      className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer select-none transition-all ${
-                        isChecked 
-                          ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400 shadow-md' 
-                          : 'bg-slate-950/40 border-slate-800 hover:border-slate-750 text-slate-300'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isChecked ? 'bg-indigo-600 border-indigo-500' : 'border-slate-700 bg-slate-950'}`}>
-                        {isChecked && <Check size={11} className="text-white" />}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold font-sans truncate block">{comp.title || 'Untitled Config'}</span>
-                        <span className="text-[8px] font-mono text-slate-500">{tabCount} grid tab{tabCount === 1 ? '' : 's'}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* c. Select War Rooms (Max configured limit) */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
-                4. Select Discord War Rooms (Select up to {maxWarRoomsLimit})
+                {session ? '1' : '2'}. Select Discord War Rooms (Select up to {maxWarRoomsLimit})
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {Object.entries(warRoomsCatalog).map(([roomId, roomObj]) => {
@@ -1158,7 +1275,7 @@ export default function LiveRaidTab({ user }) {
             <div className="space-y-2 border-t border-slate-800/60 pt-5">
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">
-                  5. Monitoring Schedule <span className="text-slate-600 font-medium normal-case tracking-normal">(optional)</span>
+                  {session ? '2' : '3'}. Monitoring Schedule <span className="text-slate-600 font-medium normal-case tracking-normal">(optional)</span>
                 </label>
                 <p className="text-[9px] text-slate-600 font-sans mt-0.5">Voice channel presence will be polled between these times. Leave blank to set later.</p>
               </div>
@@ -1219,7 +1336,7 @@ export default function LiveRaidTab({ user }) {
           <div className="border-t border-slate-800/80 pt-4 flex justify-end gap-3 select-none">
             <button
               type="button"
-              onClick={() => setLocalStep(1)}
+              onClick={() => setLocalStep(session ? 3 : 1)}
               className="border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
             >
               Cancel
@@ -1245,7 +1362,7 @@ export default function LiveRaidTab({ user }) {
                 <button 
                   onClick={handleBackToSetup}
                   className="p-2.5 rounded-xl bg-slate-950 border border-slate-850 hover:border-slate-850 text-slate-400 hover:text-slate-200 transition cursor-pointer flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider font-bold"
-                  title="Return to Config Selection"
+                  title="Return to monitoring setup"
                 >
                   <ArrowLeft size={13} /> Back
                 </button>

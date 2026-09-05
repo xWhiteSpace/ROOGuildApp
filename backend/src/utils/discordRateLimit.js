@@ -186,6 +186,12 @@ function persistCircuit() {
 
 /** Restore Cloudflare/Discord cooldown after a Render restart so we do not immediately POST /oauth2/token again. */
 export async function hydrateDiscordCircuit() {
+  // Home/ngrok IP is not Render's Singapore IP — do not inherit a datacenter Cloudflare ban.
+  if (isLocalOAuthRedirect()) {
+    lastCooldownUntil = 0;
+    console.log('🔌 [DISCORD CIRCUIT] Skip Firebase hydrate on local/ngrok — this machine is not the Render IP.');
+    return;
+  }
   try {
     const snap = await getDatabase().ref('scheduler/discord_circuit').once('value');
     if (!snap.exists()) return;
@@ -242,11 +248,15 @@ export function getDiscordRateLimitStatus() {
   const untilMs = blockedMs > 0
     ? Date.now() + blockedMs
     : null;
+  const circuitUntilMs = remainingMs > 0 ? Date.now() + remainingMs : null;
   return {
     coolingDown: blockedMs > 0,
     circuitOpen: remainingMs > 0,
     remainingMs: blockedMs,
     remainingHuman: blockedMs > 0 ? formatDurationMs(blockedMs) : 'none',
+    circuitRemainingMs: remainingMs,
+    circuitRemainingHuman: remainingMs > 0 ? formatDurationMs(remainingMs) : 'none',
+    circuitUntilHuman: circuitUntilMs ? formatUntil(circuitUntilMs) : null,
     until: untilMs,
     untilHuman: untilMs ? formatUntil(untilMs) : null,
     last: lastCooldownMeta,
@@ -336,6 +346,9 @@ export function tripDiscordCircuit(infoOrErr, sourceLabel = 'unknown') {
 }
 
 export function isDiscordCircuitOpen() {
+  // Local/ngrok bot traffic uses this machine's IP, not Render. A Firebase-hydrated
+  // Render 429 must not block ngrok card deploys.
+  if (isLocalOAuthRedirect()) return false;
   return Date.now() < lastCooldownUntil;
 }
 
