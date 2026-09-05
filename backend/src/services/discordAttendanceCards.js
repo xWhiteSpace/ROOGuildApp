@@ -1,13 +1,12 @@
 /**
- * Per-event Attendance Discord card (auction-card pattern) + Raid Compose
- * roster image post to the general room.
+ * Per-event Attendance Discord card (auction-card pattern).
  */
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import admin from 'firebase-admin';
 import {
   applyAttendanceDecision,
   AttendanceDecisionError,
-  resolveNextAttendanceEvent,
+  resolveAttendanceTargetEvent,
   getDefaultLeaveCredits,
 } from './attendanceDecision.js';
 import { enqueueDiscordCall } from '../utils/discordRateLimit.js';
@@ -32,25 +31,19 @@ function formatDeadline(deadlineMs, timezone) {
   return `${parts.month} ${parts.day}, ${parts.year}  ${parts.hour}:${parts.minute}`;
 }
 
+function attendanceEmptyDescription(missing) {
+  return missing
+    ? "The Set Active composition's scheduled event is missing or cancelled."
+    : 'No upcoming raid has an open RSVP window right now.';
+}
+
 export async function sendPublicAttendanceCard(channel) {
-  const { event, timezone, deadlineMs } = await resolveNextAttendanceEvent();
-  const embed = new EmbedBuilder().setColor(EMBED_COLOR).setTimestamp();
-
-  if (!event) {
-    embed
-      .setTitle('Attendance')
-      .setDescription('No upcoming raid has an open RSVP window right now.');
-    await enqueueDiscordCall(() => channel.send({ embeds: [embed], components: [] }));
-    return { posted: true, empty: true };
-  }
-
-  embed
+  const embed = new EmbedBuilder()
     .setTitle('Attendance')
+    .setColor(EMBED_COLOR)
     .setDescription(
-      `**${event.title || event.eventId}**\n` +
-        `\`${event.date}\`  •  \`${event.timeStart || '--:--'}\`\n\n` +
-        `Deadline: **${formatDeadline(deadlineMs, timezone)}**\n` +
-        `Open your personal panel to Confirm or Leave.`
+      'Open your personal panel to Check the Upcoming Event.\n' +
+        'Select Confirm or Leave before the set Deadline.'
     );
 
   const row = new ActionRowBuilder().addComponents(
@@ -61,12 +54,40 @@ export async function sendPublicAttendanceCard(channel) {
   );
 
   await enqueueDiscordCall(() => channel.send({ embeds: [embed], components: [row] }));
-  return { posted: true, eventKey: event.key, deadlineMs };
+  return { posted: true };
+}
+
+/**
+ * Settings Send: post the public launcher into DISCORD_WARANNOUNCE_CHANNEL_ID.
+ */
+export async function deployPublicAttendanceCardToWarAnnounce() {
+  const channelId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
+  if (!channelId) {
+    throw new Error('DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.');
+  }
+
+  const { discordClient } = await import('../discord-bot/client.js');
+  const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../utils/discordRateLimit.js');
+
+  if (!discordClient || !discordClient.isReady()) {
+    throw new Error('Discord bot client is currently offline or rate-limited.');
+  }
+  if (isDiscordCircuitOpen()) {
+    const status = getDiscordRateLimitStatus();
+    const when = status.circuitUntilHuman || status.untilHuman || status.circuitRemainingHuman || status.remainingHuman;
+    throw new Error(`Discord is temporarily blocking this server IP. Try again after ${when}.`);
+  }
+
+  const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
+  if (!targetChannel) {
+    throw new Error('Discord gateway client failed to locate the war-announce channel.');
+  }
+  return await sendPublicAttendanceCard(targetChannel);
 }
 
 async function buildPersonalPanel(snowflakeId) {
   const db = admin.database();
-  const { event, timezone, deadlineMs } = await resolveNextAttendanceEvent();
+  const { event, timezone, deadlineMs, missing } = await resolveAttendanceTargetEvent();
   const memberSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
   const member = memberSnap.exists() ? memberSnap.val() : {};
   const configSnap = await db.ref('settings/configuration').once('value');
@@ -78,7 +99,7 @@ async function buildPersonalPanel(snowflakeId) {
   const embed = new EmbedBuilder().setTitle('Attendance').setColor(EMBED_COLOR).setTimestamp();
 
   if (!event) {
-    embed.setDescription('No upcoming raid has an open RSVP window right now.');
+    embed.setDescription(attendanceEmptyDescription(missing));
     return { embeds: [embed], components: [] };
   }
 
@@ -165,34 +186,4 @@ export async function handleAttendanceCardInteraction(interaction) {
     const payload = await buildPersonalPanel(snowflakeId);
     return await interaction.editReply(payload);
   }
-}
-
-/**
- * Post the compose grid PNG + pointer text into the general room.
- */
-export async function sendComposeRosterToGenRoom(pngBuffer, { eventTitle, eventDate } = {}) {
-  const { discordClient } = await import('../discord-bot/client.js');
-  const genRoomId = process.env.DISCORD_GENROOM_ID_1;
-  const warAnnounceId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
-  if (!genRoomId) throw new Error('DISCORD_GENROOM_ID_1 is not configured.');
-  if (!discordClient?.isReady()) throw new Error('Discord bot client is offline.');
-
-  const channel = await enqueueDiscordCall(() => discordClient.channels.fetch(genRoomId));
-  if (!channel) throw new Error('General room channel not found.');
-
-  const attachment = new AttachmentBuilder(pngBuffer, { name: 'party-roster.png' });
-  const caption = eventTitle
-    ? `**Party Roster** — ${eventTitle}${eventDate ? `  (${eventDate})` : ''}`
-    : '**Party Roster**';
-
-  await enqueueDiscordCall(() =>
-    channel.send({ content: caption, files: [attachment] })
-  );
-
-  const pointer = warAnnounceId
-    ? `please see <#${warAnnounceId}> for your assigned Party.`
-    : 'please see the war-announce channel for your assigned Party.';
-  await enqueueDiscordCall(() => channel.send({ content: pointer }));
-
-  return { posted: true };
 }

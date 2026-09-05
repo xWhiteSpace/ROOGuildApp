@@ -63,6 +63,8 @@ app.use(cors({
       allowedOrigins.includes(origin) ||
       origin.startsWith('http://192.168.') ||
       origin.includes('ngrok-free.app') ||
+      origin.includes('ngrok-free.dev') ||
+      origin.includes('ngrok.io') ||
       origin.endsWith('.vercel.app')
     ) {
       callback(null, true);
@@ -148,31 +150,34 @@ app.get('/api/deploy-auction-card', async (req, res) => {
 // Per-event Attendance card → DISCORD_WARANNOUNCE_CHANNEL_ID
 app.get('/api/deploy-attendance-card', async (req, res) => {
   try {
-    const channelId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
-    if (!channelId) {
-      return res.status(400).send('❌ Failure: System missing DISCORD_WARANNOUNCE_CHANNEL_ID.');
-    }
-
-    if (!discordClient || !discordClient.isReady()) {
-      return res.status(503).send('❌ Failure: Discord bot client is currently offline or rate-limited.');
-    }
-    const { isDiscordCircuitOpen, getDiscordRateLimitStatus, enqueueDiscordCall } = await import('./utils/discordRateLimit.js');
-    if (isDiscordCircuitOpen()) {
-      const status = getDiscordRateLimitStatus();
-      return res.status(503).send(`❌ Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`);
-    }
-    const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
-    if (!targetChannel) {
-      return res.status(404).send('❌ Failure: Discord gateway client failed to locate the war-announce channel.');
-    }
-
-    const { sendPublicAttendanceCard } = await import('./services/discordAttendanceCards.js');
-    await sendPublicAttendanceCard(targetChannel);
-
+    const { deployPublicAttendanceCardToWarAnnounce } = await import('./services/discordAttendanceCards.js');
+    await deployPublicAttendanceCardToWarAnnounce();
     res.send('📟 SUCCESS: Attendance card posted to the war-announce channel.');
   } catch (err) {
     console.error('Attendance card deploy failed:', err.message);
-    res.status(500).send(`❌ Server Exception: ${err.message}`);
+    const msg = err.message || 'Unknown error';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    res.status(status).send(`❌ Server Exception: ${msg}`);
+  }
+});
+
+// Party Viewer card → DISCORD_WARANNOUNCE_CHANNEL_ID
+app.get('/api/deploy-party-card', async (req, res) => {
+  try {
+    const { deployPublicPartyCardToWarAnnounce } = await import('./services/partyViewer.js');
+    await deployPublicPartyCardToWarAnnounce();
+    res.send('📟 SUCCESS: Party card posted to the war-announce channel.');
+  } catch (err) {
+    console.error('Party card deploy failed:', err.message);
+    const msg = err.message || 'Unknown error';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    res.status(status).send(`❌ Server Exception: ${msg}`);
   }
 });
 

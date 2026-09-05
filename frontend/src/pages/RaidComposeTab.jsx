@@ -68,12 +68,14 @@ export default function RaidComposeTab({ user }) {
         setJobsCatalog(configData.config.jobs || {});
         if (configData.config.timezone) setGuildTimezone(configData.config.timezone);
       }
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, {
-        method: 'GET', headers: getHeaders(), credentials: 'include',
-      });
-      const compsData = await compsRes.json();
+      const compsRes = await apiFetch('/api/attendance/compositions', { method: 'GET' });
+      const compsText = await compsRes.text();
+      let compsData = {};
+      try { compsData = JSON.parse(compsText); } catch { compsData = {}; }
       if (compsData.success) {
         setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
+      } else {
+        setCompositions({});
       }
       const composeRes = await apiFetch('/api/attendance/compose');
       const composeData = await composeRes.json();
@@ -223,20 +225,14 @@ export default function RaidComposeTab({ user }) {
     if (!isOfficer || sending) return;
     setSending(true);
     try {
-      const blob = await captureGridBlob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      if (isDirtyRef.current) await persistGrids(localGridsRef.current);
       const res = await apiFetch('/api/attendance/compose/deploy-roster', {
         method: 'POST',
-        body: JSON.stringify({ imageBase64: dataUrl, sessionId: session?.id }),
+        body: JSON.stringify({ sessionId: session?.id, grids: localGridsRef.current }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Send failed');
-      alert('Party roster posted to the general room.');
+      alert('Composition added to Live Raid → Active Compositions.');
     } catch (err) {
       alert(err.message || 'Send failed');
     } finally {
@@ -385,11 +381,11 @@ export default function RaidComposeTab({ user }) {
         {!showCreate ? (
           <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-10 text-center space-y-4 shadow-xl">
             <h1 className="text-sm font-black uppercase tracking-wider text-slate-100">Raid Compose</h1>
-            <p className="text-[11px] text-slate-500">Create a raid from an event, date, and saved raid config. Send posts a grid snapshot to Discord.</p>
+            <p className="text-[11px] text-slate-500">Create a raid from an event, date, and saved raid config. Send publishes it to Live Raid → Active Compositions.</p>
             {isOfficer && (
               <button
                 type="button"
-                onClick={() => setShowCreate(true)}
+                onClick={() => { setShowCreate(true); loadWorkspace(); }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
               >
                 <Plus size={14} /> Create Raid
@@ -426,17 +422,23 @@ export default function RaidComposeTab({ user }) {
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block">3. Raid config</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                {Object.values(compositions).map((comp) => (
-                  <button
-                    key={comp.id}
-                    type="button"
-                    onClick={() => setSelectedConfigId(comp.id)}
-                    className={`p-3 rounded-xl border text-left text-xs cursor-pointer ${selectedConfigId === comp.id ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400' : 'border-slate-800 text-slate-400 hover:border-slate-700'}`}
-                  >
-                    <div className="font-bold uppercase tracking-wider">{comp.title || comp.id}</div>
-                    <div className="text-[10px] text-slate-500 mt-1">{(comp.tabOrder || Object.keys(comp.tabs || {})).length} grid tab(s)</div>
-                  </button>
-                ))}
+                {Object.keys(compositions).length === 0 ? (
+                  <div className="col-span-full p-4 rounded-xl border border-dashed border-slate-800 text-[11px] text-slate-500">
+                    No raid configs yet. Create one on <span className="text-slate-300 font-semibold">Raid Party</span>, then come back here.
+                  </div>
+                ) : (
+                  Object.entries(compositions).map(([id, comp]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setSelectedConfigId(comp.id || id)}
+                      className={`p-3 rounded-xl border text-left text-xs cursor-pointer ${selectedConfigId === (comp.id || id) ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400' : 'border-slate-800 text-slate-400 hover:border-slate-700'}`}
+                    >
+                      <div className="font-bold uppercase tracking-wider">{comp.title || id}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">{(comp.tabOrder || Object.keys(comp.tabs || {})).length} grid tab(s)</div>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
             <button type="button" disabled={creating} onClick={handleCreateRaid} className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50">

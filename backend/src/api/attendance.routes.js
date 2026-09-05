@@ -343,6 +343,54 @@ router.post('/update-expected-rate', async (req, res) => {
   }
 });
 
+// GET /api/attendance/deploy-card — same Send as /api/deploy-attendance-card (session-auth)
+router.get('/deploy-card', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { deployPublicAttendanceCardToWarAnnounce } = await import('../services/discordAttendanceCards.js');
+    const result = await deployPublicAttendanceCardToWarAnnounce();
+    return res.json({ success: true, result });
+  } catch (err) {
+    const msg = err.message || 'Failed to deploy attendance card.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// GET /api/attendance/deploy-party-card
+router.get('/deploy-party-card', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    if (!verifyDiscordOfficerRole(user, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { deployPublicPartyCardToWarAnnounce } = await import('../services/partyViewer.js');
+    const result = await deployPublicPartyCardToWarAnnounce();
+    return res.json({ success: true, result });
+  } catch (err) {
+    const msg = err.message || 'Failed to deploy party card.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
+  }
+});
+
 // 📢 POST /api/attendance/announce-week -> Officer-triggered Attendance card (replaces weekly thread)
 router.post('/announce-week', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -1165,7 +1213,7 @@ router.post('/compose/close', async (req, res) => {
   }
 });
 
-// POST /api/attendance/compose/deploy-roster  { imageBase64 }
+// POST /api/attendance/compose/deploy-roster  { sessionId, grids }
 router.post('/compose/deploy-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
@@ -1175,30 +1223,89 @@ router.post('/compose/deploy-roster', async (req, res) => {
     if (!requireOfficer(user, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
-    const { imageBase64, sessionId } = req.body || {};
-    if (!imageBase64) {
-      return res.status(400).json({ success: false, error: 'imageBase64 is required.' });
-    }
-    const raw = String(imageBase64).replace(/^data:image\/png;base64,/, '');
-    const pngBuffer = Buffer.from(raw, 'base64');
-    if (!pngBuffer.length) {
-      return res.status(400).json({ success: false, error: 'Invalid image payload.' });
-    }
+    const { sessionId, grids } = req.body || {};
 
-    let eventTitle = '';
-    let eventDate = '';
+    let composeSession = null;
     const activeKey = sessionId || (await db.ref('attendance/compose_active').once('value')).val();
     if (activeKey) {
       const sessionSnap = await db.ref(`attendance/compose/${activeKey}`).once('value');
       if (sessionSnap.exists()) {
-        eventTitle = sessionSnap.val().eventTitle || '';
-        eventDate = sessionSnap.val().eventDate || '';
+        composeSession = { id: activeKey, ...sessionSnap.val() };
+        if (grids && typeof grids === 'object') {
+          composeSession.grids = grids;
+        }
       }
     }
+    if (!composeSession) {
+      return res.status(400).json({ success: false, error: 'No compose session to publish.' });
+    }
 
-    const { sendComposeRosterToGenRoom } = await import('../services/discordAttendanceCards.js');
-    const result = await sendComposeRosterToGenRoom(pngBuffer, { eventTitle, eventDate });
-    return res.json({ success: true, result });
+    const { writePublishedSnapshot } = await import('../services/publishedComposition.js');
+    const published = await writePublishedSnapshot({
+      db,
+      session: composeSession,
+      sessionId: composeSession.id,
+      sentBy: user.displayName || user.username || 'Officer',
+    });
+    return res.json({ success: true, published });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/attendance/published
+router.get('/published', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const { listPublished } = await import('../services/publishedComposition.js');
+    const { published, anchor } = await listPublished(getDatabase());
+    return res.json({ success: true, published, anchor });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/published/:id/set-active  { active: true|false }
+router.post('/published/:id/set-active', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    if (typeof req.body?.active !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'active must be a boolean.' });
+    }
+    const active = req.body.active;
+    const { setPublishedAnchor } = await import('../services/publishedComposition.js');
+    const result = await setPublishedAnchor({ db, id, active });
+    if (!result.ok) {
+      return res.status(404).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, anchor: result.id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/attendance/published/:id
+router.delete('/published/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const { deletePublished } = await import('../services/publishedComposition.js');
+    await deletePublished({ db, id });
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

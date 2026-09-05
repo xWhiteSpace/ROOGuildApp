@@ -62,6 +62,11 @@ export async function initializeDiscordBot() {
           return await handleAttendanceCardInteraction(interaction);
         }
 
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('partycard:')) {
+          const { handlePartyCardInteraction } = await import('../services/partyViewer.js');
+          return await handlePartyCardInteraction(interaction);
+        }
+
         // ⚔️ Live Auction panel lives in its own auction-request channel — route by
         // customId so it bypasses the general-room gate (self-service loot claiming).
         if (

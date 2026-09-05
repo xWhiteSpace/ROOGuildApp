@@ -80,6 +80,8 @@ export default function SettingsTab() {
   const [deployCardMsg, setDeployCardMsg] = useState(null);
   const [deployingAttendanceCard, setDeployingAttendanceCard] = useState(false);
   const [deployAttendanceMsg, setDeployAttendanceMsg] = useState(null);
+  const [deployingPartyCard, setDeployingPartyCard] = useState(false);
+  const [deployPartyMsg, setDeployPartyMsg] = useState(null);
   const [deployScriptCopied, setDeployScriptCopied] = useState(false);
   const [clearScriptCopied, setClearScriptCopied] = useState(false);
   
@@ -197,30 +199,39 @@ export default function SettingsTab() {
     }
   };
 
+  const deployCardHeaders = (base) => {
+    const headers = getAuthHeaders({ json: false });
+    if (/ngrok/i.test(base)) headers['ngrok-skip-browser-warning'] = 'true';
+    return headers;
+  };
+
+  const postDeployRoute = async (path) => {
+    const base = (ephemeralBaseUrl || '').trim().replace(/\/$/, '');
+    if (!base) throw new Error('Backend base URL is required.');
+    const res = await fetch(`${base}${path}`, {
+      method: 'GET',
+      headers: deployCardHeaders(base),
+      credentials: 'include',
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      if (/cannot get /i.test(text) || (res.status === 404 && /<!doctype html>/i.test(text))) {
+        throw new Error(`Cannot GET ${path} on ${base}. That ngrok/Render process must be running this repo’s latest backend (route lives next to /api/deploy-auction-card).`);
+      }
+      if (text.startsWith('<')) throw new Error(`Failed (${res.status}) from ${base}${path}`);
+      throw new Error(text || `Failed (${res.status})`);
+    }
+    return text;
+  };
+
   // Posts the interactive public auction card into DISCORD_AUCREQ_CHANNEL_ID via the backend deploy route.
   const handleDeployAuctionCard = async () => {
     if (deployingCard) return;
-    const base = (ephemeralBaseUrl || '').trim().replace(/\/$/, '');
-    if (!base) {
-      setDeployCardMsg({ ok: false, text: 'Backend base URL is required.' });
-      return;
-    }
-
     setDeployingCard(true);
     setDeployCardMsg(null);
     try {
-      const targetUrl = `${base}/api/deploy-auction-card`;
-      const res = await fetch(targetUrl, {
-        method: 'GET',
-        headers: getAuthHeaders({ json: false }),
-        credentials: 'include',
-      });
-      const text = await res.text();
-      if (res.ok) {
-        setDeployCardMsg({ ok: true, text: text || 'Auction card deployed to Discord.' });
-      } else {
-        setDeployCardMsg({ ok: false, text: text || `Failed (${res.status})` });
-      }
+      const text = await postDeployRoute('/api/deploy-auction-card');
+      setDeployCardMsg({ ok: true, text: text || 'Auction card deployed to Discord.' });
     } catch (err) {
       setDeployCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
@@ -231,32 +242,31 @@ export default function SettingsTab() {
 
   const handleDeployAttendanceCard = async () => {
     if (deployingAttendanceCard) return;
-    const base = (ephemeralBaseUrl || '').trim().replace(/\/$/, '');
-    if (!base) {
-      setDeployAttendanceMsg({ ok: false, text: 'Backend base URL is required.' });
-      return;
-    }
-
     setDeployingAttendanceCard(true);
     setDeployAttendanceMsg(null);
     try {
-      const targetUrl = `${base}/api/deploy-attendance-card`;
-      const res = await fetch(targetUrl, {
-        method: 'GET',
-        headers: getAuthHeaders({ json: false }),
-        credentials: 'include',
-      });
-      const text = await res.text();
-      if (res.ok) {
-        setDeployAttendanceMsg({ ok: true, text: text || 'Attendance card deployed to Discord.' });
-      } else {
-        setDeployAttendanceMsg({ ok: false, text: text || `Failed (${res.status})` });
-      }
+      const text = await postDeployRoute('/api/deploy-attendance-card');
+      setDeployAttendanceMsg({ ok: true, text: text || 'Attendance card deployed to Discord.' });
     } catch (err) {
       setDeployAttendanceMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingAttendanceCard(false);
-      setTimeout(() => setDeployAttendanceMsg(null), 8000);
+      setTimeout(() => setDeployAttendanceMsg(null), 12000);
+    }
+  };
+
+  const handleDeployPartyCard = async () => {
+    if (deployingPartyCard) return;
+    setDeployingPartyCard(true);
+    setDeployPartyMsg(null);
+    try {
+      const text = await postDeployRoute('/api/deploy-party-card');
+      setDeployPartyMsg({ ok: true, text: text || 'Party card deployed to Discord.' });
+    } catch (err) {
+      setDeployPartyMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setDeployingPartyCard(false);
+      setTimeout(() => setDeployPartyMsg(null), 12000);
     }
   };
 
@@ -588,81 +598,87 @@ export default function SettingsTab() {
             </div>
           </div>
 
-          {/* EPHEMERAL / AUCTION CARD DEPLOY LINK */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
-            <div className="flex justify-between items-start gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconMegaphone /> Ephemeral Auction Card</div>
-                <p className="text-[11px] text-slate-500 mt-1 font-normal">
-                  Posts the interactive public auction card into your Discord auction-request channel. Use your deployment backend URL (unique per environment).
-                </p>
-              </div>
-              {deployCardMsg && (
-                <span className={`text-[10px] font-mono font-semibold shrink-0 max-w-[45%] text-right ${deployCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {deployCardMsg.text}
-                </span>
-              )}
+          {/* EPHEMERAL DISCORD CARDS — same ngrok/Render backend URL as auction */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconMegaphone /> Ephemeral Discord Cards</div>
+              <p className="text-[11px] text-slate-500 mt-1 font-normal">
+                Both Sends hit this backend (ngrok, Render, or localhost:5001) — the process that runs the Discord bot. Same URL you already use for the auction card.
+              </p>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Backend Base URL</label>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 flex items-stretch rounded-xl border border-slate-800 bg-slate-950 overflow-hidden focus-within:border-slate-700 transition">
-                  <input
-                    type="text"
-                    value={ephemeralBaseUrl}
-                    onChange={(e) => setEphemeralBaseUrl(e.target.value)}
-                    placeholder="https://your-backend.onrender.com"
-                    className="flex-1 min-w-0 bg-transparent px-3 py-2 text-xs text-slate-300 outline-none font-mono"
-                  />
-                  <span className="shrink-0 flex items-center px-2.5 border-l border-slate-800 text-[10px] font-mono font-bold text-indigo-400/80 bg-slate-900/50 select-all">
-                    /api/deploy-auction-card
-                  </span>
-                </div>
+              <input
+                type="text"
+                value={ephemeralBaseUrl}
+                onChange={(e) => setEphemeralBaseUrl(e.target.value)}
+                placeholder="https://your-tunnel.ngrok-free.dev"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none font-mono focus:border-slate-700"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-mono truncate">
+                  {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-auction-card
+                </span>
                 <button
                   type="button"
                   onClick={handleDeployAuctionCard}
                   disabled={deployingCard || !(ephemeralBaseUrl || '').trim()}
                   className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {deployingCard ? 'Sending…' : 'Send'}
+                  {deployingCard ? 'Sending…' : 'Send auction'}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-600 font-mono truncate">
-                Full link: {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-auction-card
-              </p>
-            </div>
-          </div>
-
-          {/* EPHEMERAL ATTENDANCE CARD */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
-            <div className="flex justify-between items-start gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconMegaphone /> Ephemeral Attendance Card</div>
-                <p className="text-[11px] text-slate-500 mt-1 font-normal">
-                  Posts the next-event Attendance launcher into your Discord war-announce channel. Members open a personal Confirm / Leave panel.
-                </p>
-              </div>
-              {deployAttendanceMsg && (
-                <span className={`text-[10px] font-mono font-semibold shrink-0 max-w-[45%] text-right ${deployAttendanceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {deployAttendanceMsg.text}
-                </span>
+              {deployCardMsg && (
+                <p className={`text-[10px] font-mono font-semibold ${deployCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployCardMsg.text}</p>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 flex items-stretch rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
-                <span className="flex-1 min-w-0 px-3 py-2 text-xs text-slate-400 font-mono truncate">
+
+            <div className="space-y-2 border-t border-slate-800/80 pt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-mono truncate">
                   {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-attendance-card
                 </span>
+                <button
+                  type="button"
+                  onClick={handleDeployAttendanceCard}
+                  disabled={deployingAttendanceCard || !(ephemeralBaseUrl || '').trim()}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deployingAttendanceCard ? 'Sending…' : 'Send attendance'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleDeployAttendanceCard}
-                disabled={deployingAttendanceCard || !(ephemeralBaseUrl || '').trim()}
-                className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {deployingAttendanceCard ? 'Sending…' : 'Send'}
-              </button>
+              {deployAttendanceMsg && (
+                <p className={`text-[10px] font-mono font-semibold ${deployAttendanceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployAttendanceMsg.text}</p>
+              )}
+              <p className="text-[10px] text-slate-500">
+                Attendance posts a public launcher into the war-announce channel (<span className="font-mono text-slate-400">DISCORD_WARANNOUNCE_CHANNEL_ID</span>), not the auction-request channel. Click <span className="text-slate-300">Open Attendance</span> on that message for the personal ephemeral Confirm/Leave panel.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-slate-800/80 pt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400 font-mono truncate">
+                  {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-party-card
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDeployPartyCard}
+                  disabled={deployingPartyCard || !(ephemeralBaseUrl || '').trim()}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deployingPartyCard ? 'Sending…' : 'Send party'}
+                </button>
+              </div>
+              {deployPartyMsg && (
+                <p className={`text-[10px] font-mono font-semibold ${deployPartyMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployPartyMsg.text}</p>
+              )}
+              <p className="text-[10px] text-slate-500">
+                Party posts a public launcher into war-announce. Members click <span className="text-slate-300">Open My Party</span> to see their P#-S# column, crown leader, and Class/Role list from the active Raid Compose.
+              </p>
             </div>
           </div>
 

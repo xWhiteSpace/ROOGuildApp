@@ -12,6 +12,7 @@ import {
   getGuildNowParts,
   DEFAULT_TZ,
 } from '../utils/guildTime.js';
+import { resolveAnchoredComposition } from './publishedComposition.js';
 
 export const DEFAULT_LEAVE_CREDITS = 3;
 const DEADLINE_OFFSET_MS = 24 * 60 * 60 * 1000;
@@ -92,6 +93,45 @@ export async function resolveNextAttendanceEvent({ timezone, nowMs = Date.now() 
     return { event: ev, timezone: tz, startMs, deadlineMs };
   }
   return { event: null, timezone: tz, startMs: null, deadlineMs: null };
+}
+
+/**
+ * Attendance card target: Set Active published composition when present,
+ * otherwise the next upcoming event with an open RSVP window.
+ */
+export async function resolveAttendanceTargetEvent({ timezone, nowMs = Date.now() } = {}) {
+  const db = getDatabase();
+  const tz = timezone || (await resolveGuildTimezone(db));
+  const anchored = await resolveAnchoredComposition(db);
+  if (anchored?.eventKey && anchored?.eventDate) {
+    const compositeKey = buildCompositeKey(anchored.eventDate, anchored.eventKey);
+    const instance = await loadInstance(db, compositeKey);
+    if (!instance || instance.isCancelled === true) {
+      return {
+        event: null,
+        timezone: tz,
+        startMs: null,
+        deadlineMs: null,
+        anchored: true,
+        missing: true,
+      };
+    }
+    const startMs = getEventStartMs(instance, tz);
+    const deadlineMs = getEventDeadlineMs(instance, tz);
+    return {
+      event: {
+        ...instance,
+        title: instance.title || anchored.eventTitle || instance.eventId,
+      },
+      timezone: tz,
+      startMs,
+      deadlineMs,
+      anchored: true,
+      missing: false,
+    };
+  }
+  const next = await resolveNextAttendanceEvent({ timezone: tz, nowMs });
+  return { ...next, anchored: false, missing: false };
 }
 
 export class AttendanceDecisionError extends Error {
