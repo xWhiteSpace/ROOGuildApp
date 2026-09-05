@@ -10,7 +10,6 @@ import { getDatabase } from 'firebase-admin/database';
 const DEFAULT_CIRCUIT_MS = 15 * 60 * 1000;
 const MIN_GAP_MS = 1500;
 const OAUTH_COOLDOWN_MS = 5 * 60 * 1000;
-const LOGIN_CLICK_DEBOUNCE_MS = 45 * 1000;
 const OAUTH_QUIET_AFTER_BURST_MS = 3 * 60 * 1000;
 /** After a Cloudflare global OAuth 429, Discord's retry-after is a lie — probing again extends the ban. */
 const OAUTH_GLOBAL_LOCK_MIN_MS = 6 * 60 * 60 * 1000;
@@ -20,7 +19,6 @@ let lastCooldownMeta = null;
 let queueTail = Promise.resolve();
 let lastCallAt = 0;
 let lastOAuthAttemptAt = 0;
-let lastLoginRedirectAt = 0;
 let lastDiscordBurstAt = 0;
 let oauthLockUntil = 0;
 let oauthInFlight = false;
@@ -36,12 +34,19 @@ export function resolveOAuthExchangeUrl() {
 }
 
 export function isLocalOAuthRedirect() {
-  return /localhost|127\.0\.0\.1/.test(process.env.OAUTH_REDIRECT_URI || '');
+  const uri = process.env.OAUTH_REDIRECT_URI || '';
+  // localhost OR a tunnel to this machine (ngrok). Render/Vercel hosts are not local.
+  return /localhost|127\.0\.0\.1|ngrok(-free)?\.(app|dev|io)/i.test(uri);
 }
 
 /** Token POST happens on Vercel (or similar), not the Render Singapore IP. */
 export function isOAuthOffRender() {
   return Boolean(resolveOAuthExchangeUrl());
+}
+
+/** Localhost/ngrok login must not inherit Render's 45s/5m/circuit holds. */
+export function isOAuthLoginExemptFromIpGates() {
+  return isOAuthOffRender() || isLocalOAuthRedirect();
 }
 
 export function formatDurationMs(ms) {
@@ -227,8 +232,11 @@ export function getDiscordRateLimitStatus() {
     : 0;
   const quietMs = oauthQuietRemainingMs();
   const offRender = isOAuthOffRender();
-  // Render-IP holds must not block Sign-in once token exchange is off this host.
-  const blockedMs = offRender
+  const localRedirect = isLocalOAuthRedirect();
+  const loginExempt = offRender || localRedirect;
+  // Render-IP holds must not block Sign-in once token exchange is off this host
+  // or the callback is a local/ngrok tunnel to this machine.
+  const blockedMs = loginExempt
     ? 0
     : Math.max(remainingMs, oauthLockMs, oauthRemaining, quietMs);
   const untilMs = blockedMs > 0
@@ -247,6 +255,8 @@ export function getDiscordRateLimitStatus() {
     oauthQuietMs: quietMs,
     oauthLockMs,
     oauthOffRender: offRender,
+    oauthLocalRedirect: localRedirect,
+    oauthLoginExempt: loginExempt,
     oauthInFlight,
   };
 }
@@ -258,17 +268,17 @@ export function getDiscordRateLimitStatus() {
  */
 export function beginOAuthAttempt() {
   clearStaleOAuthInFlight();
-  const offRender = isOAuthOffRender();
-  if (!offRender && isDiscordCircuitOpen()) {
+  const loginExempt = isOAuthLoginExemptFromIpGates();
+  if (!loginExempt && isDiscordCircuitOpen()) {
     return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
   }
-  if (!offRender && oauthLockUntil > Date.now()) {
+  if (!loginExempt && oauthLockUntil > Date.now()) {
     return { allowed: false, reason: 'oauth-lock', status: getDiscordRateLimitStatus() };
   }
   if (oauthInFlight) {
     return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
   }
-  if (!offRender) {
+  if (!loginExempt) {
     const oauthRemaining = lastOAuthAttemptAt
       ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
       : 0;
@@ -289,37 +299,15 @@ export function endOAuthAttempt() {
   oauthInFlight = false;
 }
 
-/** Debounce Sign-in clicks without blocking the later /callback token exchange. */
+/** Allow Sign-in unless this host would POST /oauth2/token from a datacenter IP. */
 export function markOAuthLoginClick() {
   clearStaleOAuthInFlight();
-  const offRender = isOAuthOffRender();
-  if (!offRender && !isLocalOAuthRedirect()) {
+  if (!isOAuthLoginExemptFromIpGates()) {
     return { allowed: false, reason: 'oauth-offload-required', status: getDiscordRateLimitStatus() };
-  }
-  if (!offRender && isDiscordCircuitOpen()) {
-    return { allowed: false, reason: 'circuit', status: getDiscordRateLimitStatus() };
-  }
-  if (!offRender && oauthLockUntil > Date.now()) {
-    return { allowed: false, reason: 'oauth-lock', status: getDiscordRateLimitStatus() };
   }
   if (oauthInFlight) {
     return { allowed: false, reason: 'inflight', status: getDiscordRateLimitStatus() };
   }
-  if (!offRender) {
-    const oauthRemaining = lastOAuthAttemptAt
-      ? Math.max(0, lastOAuthAttemptAt + OAUTH_COOLDOWN_MS - Date.now())
-      : 0;
-    if (oauthRemaining > 0 || oauthQuietRemainingMs() > 0) {
-      return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
-    }
-    const clickRemaining = lastLoginRedirectAt
-      ? Math.max(0, lastLoginRedirectAt + LOGIN_CLICK_DEBOUNCE_MS - Date.now())
-      : 0;
-    if (clickRemaining > 0) {
-      return { allowed: false, reason: 'oauth-cooldown', status: getDiscordRateLimitStatus() };
-    }
-  }
-  lastLoginRedirectAt = Date.now();
   return { allowed: true, status: getDiscordRateLimitStatus() };
 }
 

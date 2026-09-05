@@ -47,6 +47,7 @@ export default async function handler(req, res) {
     const clientId = trimEnv(body.client_id);
     const code = trimEnv(body.code);
     const redirectUri = trimEnv(body.redirect_uri);
+    const guildId = trimEnv(body.guild_id);
 
     if (!secret) {
       return res.status(401).json({ error: 'missing_bridge_auth' });
@@ -89,6 +90,19 @@ export default async function handler(req, res) {
       });
     }
 
+    let member = null;
+    if (guildId) {
+      const memberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${guildId}/member`, {
+        headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+      });
+      if (memberResponse.ok) {
+        const rawMember = await memberResponse.json().catch(() => null);
+        if (rawMember && Array.isArray(rawMember.roles)) {
+          member = { nick: rawMember.nick || null, roles: rawMember.roles };
+        }
+      }
+    }
+
     return res.status(200).json({
       user: {
         id: user.id,
@@ -97,6 +111,7 @@ export default async function handler(req, res) {
         avatar: user.avatar,
         global_name: user.global_name,
       },
+      member,
     });
   } catch (err) {
     console.error('[oauth-bridge] exception', err);
