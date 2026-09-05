@@ -13,6 +13,8 @@ import { logoutUser } from './services/authService';
 import MasterListTab from './pages/MasterListTab';
 
 import RaidPartyTab from './pages/RaidPartyTab';
+import RaidComposeTab from './pages/RaidComposeTab';
+import Profile from './pages/Profile';
 import StatisticsTab from './pages/StatisticsTab';
 import LiveRaidTab from './pages/LiveRaidTab';
 import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
@@ -111,11 +113,6 @@ export default function App() {
       if (authUserRaw) {
         try {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
-          // #region agent log
-          let roleDebug = null;
-          try { roleDebug = JSON.parse(decodeURIComponent(urlParams.get('role_debug') || '')); } catch { roleDebug = null; }
-          fetch('http://127.0.0.1:7549/ingest/fe8ee865-ad77-4dbd-8635-81be17d73b61',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2f98cb'},body:JSON.stringify({sessionId:'2f98cb',runId:'prod-compare',hypothesisId:'A',location:'App.jsx:auth_user',message:'prod/local session roles',data:{host:window.location.host,roleCount:Array.isArray(parsedUser?.roles)?parsedUser.roles.length:-1,roles:Array.isArray(parsedUser?.roles)?parsedUser.roles:[],isOfficer:parsedUser?.isOfficer===true,roleDebug},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
           setAuthUser(parsedUser);
           localStorage.setItem(SESSION_KEY, JSON.stringify(parsedUser));
           localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -258,7 +255,10 @@ function AppShell({ authUser, onLogout, macroTab, setMacroTab }) {
 
         {/* 🛡️ Foundational Raid Governance Routes Mapping */}
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
+        <Route path="/attendance/profile" element={<Profile user={authUser} />} />
+        <Route path="/attendance/profile/:uid" element={<Profile user={authUser} />} />
         <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
+        <Route path="/attendance/compose" element={<RaidComposeTab user={authUser} />} />
         <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
         <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
         <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />

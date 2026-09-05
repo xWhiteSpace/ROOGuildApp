@@ -1,5 +1,6 @@
 // frontend/src/pages/MasterListTab.jsx
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
 
 const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z" /></svg>;
@@ -203,6 +204,7 @@ export default function MasterListTab({ user }) {
                 <th className="p-3 w-[13%] bg-slate-950">Group Assignment</th>
                 <th className="p-3 w-[16%] bg-slate-950">Date Joined</th>
                 <th className="p-3 w-[14%] bg-slate-950">SnowflakeID</th>
+                <th className="p-3 w-[8%] bg-slate-950 text-center">Credits</th>
                 <th className="p-3 text-center w-[6%] bg-slate-950">Action</th>
               </tr>
             </thead>
@@ -226,7 +228,7 @@ export default function MasterListTab({ user }) {
                       }}
                       className="border-b border-slate-900/20 bg-slate-950/5 border-dashed transition-colors hover:bg-slate-900/5 select-none"
                     >
-                      <td colSpan="7" className="p-3 text-center text-[10px] text-slate-700 italic font-sans font-medium border border-dashed border-slate-900/30 m-1 rounded-xl">
+                      <td colSpan="8" className="p-3 text-center text-[10px] text-slate-700 italic font-sans font-medium border border-dashed border-slate-900/30 m-1 rounded-xl">
                         + Drop identity card here to allocate position slot #{idx + 1}
                       </td>
                     </tr>
@@ -253,9 +255,12 @@ export default function MasterListTab({ user }) {
                             className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-xs font-sans font-bold text-slate-100 outline-none focus:border-indigo-600 w-full"
                           />
                         ) : (
-                          <span className={isFoundMatch ? 'bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 shadow-sm' : 'text-slate-200'}>
+                          <Link
+                            to={`/attendance/profile/${uid}`}
+                            className={`${isFoundMatch ? 'bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 shadow-sm' : 'text-slate-200 hover:text-indigo-300'} transition`}
+                          >
                             {m.displayName}
-                          </span>
+                          </Link>
                         )}
                         {m.isDummy && (
                           <>
@@ -341,6 +346,9 @@ export default function MasterListTab({ user }) {
                     </td>
 
                     <td className="p-3 text-slate-500 tracking-tight text-[10px] select-all">{uid}</td>
+                    <td className={`p-3 text-center font-mono text-xs font-bold tabular-nums ${(m.leaveCreditsRemaining ?? 0) <= 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+                      {Number.isInteger(m.leaveCreditsRemaining) ? m.leaveCreditsRemaining : '—'}
+                    </td>
                     <td className="p-3 text-center">
                       {user?.isOfficer && (
                         <button 

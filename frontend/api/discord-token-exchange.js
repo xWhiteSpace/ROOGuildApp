@@ -91,18 +91,14 @@ export default async function handler(req, res) {
     }
 
     let member = null;
-    let memberStatus = guildId ? 'not_fetched' : 'no_guild_id';
     if (guildId) {
       const memberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${guildId}/member`, {
         headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
       });
-      memberStatus = memberResponse.status;
       if (memberResponse.ok) {
         const rawMember = await memberResponse.json().catch(() => null);
         if (rawMember && Array.isArray(rawMember.roles)) {
           member = { nick: rawMember.nick || null, roles: rawMember.roles };
-        } else {
-          memberStatus = `ok_but_no_roles`;
         }
       }
     }
@@ -116,7 +112,6 @@ export default async function handler(req, res) {
         global_name: user.global_name,
       },
       member,
-      memberStatus,
     });
   } catch (err) {
     console.error('[oauth-bridge] exception', err);

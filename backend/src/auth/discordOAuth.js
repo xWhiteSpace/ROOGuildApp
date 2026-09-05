@@ -90,7 +90,7 @@ async function exchangeCodeForDiscordUser(code) {
       err.bridgeStatus = bridgeRes.status || 502;
       throw err;
     }
-    return { user: payload.user, guildMember: payload.member || null, memberStatus: payload.memberStatus ?? null, usedBridge: true };
+    return { user: payload.user, guildMember: payload.member || null };
   }
 
   if (!isLocalOAuthRedirect()) {
@@ -136,8 +136,6 @@ async function exchangeCodeForDiscordUser(code) {
   return {
     user: await userResponse.json(),
     guildMember: await fetchGuildMemberWithUserToken(tokenData.access_token, process.env.DISCORD_GUILD_ID),
-    memberStatus: 'local-direct',
-    usedBridge: false,
   };
 }
 
@@ -240,7 +238,7 @@ router.get('/callback', async (req, res) => {
   }
 
   try {
-    const { user, guildMember, memberStatus, usedBridge } = await exchangeCodeForDiscordUser(code);
+    const { user, guildMember } = await exchangeCodeForDiscordUser(code);
     let serverNickname = user.global_name || user.username;
     let memberRolesNames = [];
     const guildId = process.env.DISCORD_GUILD_ID;
@@ -289,22 +287,6 @@ router.get('/callback', async (req, res) => {
 
     const isOfficerMatch = memberRolesNames.some(roleName => dynamicAdminRoles.includes(roleName));
 
-    const roleDebug = {
-      usedBridge: Boolean(usedBridge),
-      memberStatus: memberStatus ?? null,
-      hasGuildMember: Boolean(guildMember),
-      oauthRoleIdCount: Array.isArray(guildMember?.roles) ? guildMember.roles.length : 0,
-      botReady,
-      guildCached: Boolean(guild),
-      mappedNameCount: oauthRoleNames.length,
-      cacheMemberHit: Boolean(member),
-      finalRoleCount: memberRolesNames.length,
-      isOfficerMatch,
-    };
-    // #region agent log
-    fetch('http://127.0.0.1:7549/ingest/fe8ee865-ad77-4dbd-8635-81be17d73b61',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2f98cb'},body:JSON.stringify({sessionId:'2f98cb',runId:'prod-compare',hypothesisId:'A',location:'discordOAuth.js:callback',message:'role resolution path',data:roleDebug,timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     req.session.user = {
       id: user.id,
       username: user.username,
@@ -337,8 +319,7 @@ router.get('/callback', async (req, res) => {
         _sig: computedPayloadHash // Attaches the tamper-proof verification seal
       };
       const encodedUser = encodeURIComponent(JSON.stringify(leanOutboundProfile));
-      const encodedDebug = encodeURIComponent(JSON.stringify(roleDebug));
-      res.redirect(`${targetFrontend}/?auth_user=${encodedUser}&role_debug=${encodedDebug}`);
+      res.redirect(`${targetFrontend}/?auth_user=${encodedUser}`);
     });
   } catch (error) {
     console.error("❌ OAuth callback processing failed:", error);

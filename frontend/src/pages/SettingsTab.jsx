@@ -75,11 +75,11 @@ export default function SettingsTab() {
   const [passphrase, setPassphrase] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [announcing, setAnnouncing] = useState(false);
-  const [announceMsg, setAnnounceMsg] = useState(null);
   const [ephemeralBaseUrl, setEphemeralBaseUrl] = useState(() => (backendUrl || '').replace(/\/$/, ''));
   const [deployingCard, setDeployingCard] = useState(false);
   const [deployCardMsg, setDeployCardMsg] = useState(null);
+  const [deployingAttendanceCard, setDeployingAttendanceCard] = useState(false);
+  const [deployAttendanceMsg, setDeployAttendanceMsg] = useState(null);
   const [deployScriptCopied, setDeployScriptCopied] = useState(false);
   const [clearScriptCopied, setClearScriptCopied] = useState(false);
   
@@ -103,6 +103,7 @@ export default function SettingsTab() {
     },
     liveRaidMaxConfigs: 5,
     liveRaidMaxWarRooms: 2,
+    defaultLeaveCredits: 3,
     warRooms: {
       room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
       room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
@@ -141,6 +142,7 @@ export default function SettingsTab() {
           roles: data.config.roles || {},
           liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
           liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
+          defaultLeaveCredits: data.config.defaultLeaveCredits ?? 3,
           warRooms: data.config.warRooms || {
             room_001: { name: 'Guild League Main', envKey: 'DISCORD_WARROOM_ID_1' },
             room_002: { name: 'Guild League Main 2', envKey: 'DISCORD_WARROOM_ID_2' },
@@ -195,29 +197,6 @@ export default function SettingsTab() {
     }
   };
 
-  const handleAnnounceWeek = async () => {
-    if (announcing) return;
-    setAnnouncing(true);
-    setAnnounceMsg(null);
-    try {
-      const res = await apiFetch('/api/attendance/announce-week', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const r = data.result || {};
-        const week = r.weekMonday ? ` (Week of ${r.weekMonday})` : '';
-        const verb = r.reposted ? 'Refreshed existing thread' : r.posted ? 'Posted new thread' : r.skipped ? 'Already posted' : 'Done';
-        setAnnounceMsg({ ok: true, text: `${verb}${week}` });
-      } else {
-        setAnnounceMsg({ ok: false, text: data.error || `Failed (${res.status})` });
-      }
-    } catch (err) {
-      setAnnounceMsg({ ok: false, text: err.message || 'Request failed' });
-    } finally {
-      setAnnouncing(false);
-      setTimeout(() => setAnnounceMsg(null), 6000);
-    }
-  };
-
   // Posts the interactive public auction card into DISCORD_AUCREQ_CHANNEL_ID via the backend deploy route.
   const handleDeployAuctionCard = async () => {
     if (deployingCard) return;
@@ -247,6 +226,37 @@ export default function SettingsTab() {
     } finally {
       setDeployingCard(false);
       setTimeout(() => setDeployCardMsg(null), 8000);
+    }
+  };
+
+  const handleDeployAttendanceCard = async () => {
+    if (deployingAttendanceCard) return;
+    const base = (ephemeralBaseUrl || '').trim().replace(/\/$/, '');
+    if (!base) {
+      setDeployAttendanceMsg({ ok: false, text: 'Backend base URL is required.' });
+      return;
+    }
+
+    setDeployingAttendanceCard(true);
+    setDeployAttendanceMsg(null);
+    try {
+      const targetUrl = `${base}/api/deploy-attendance-card`;
+      const res = await fetch(targetUrl, {
+        method: 'GET',
+        headers: getAuthHeaders({ json: false }),
+        credentials: 'include',
+      });
+      const text = await res.text();
+      if (res.ok) {
+        setDeployAttendanceMsg({ ok: true, text: text || 'Attendance card deployed to Discord.' });
+      } else {
+        setDeployAttendanceMsg({ ok: false, text: text || `Failed (${res.status})` });
+      }
+    } catch (err) {
+      setDeployAttendanceMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setDeployingAttendanceCard(false);
+      setTimeout(() => setDeployAttendanceMsg(null), 8000);
     }
   };
 
@@ -439,7 +449,7 @@ export default function SettingsTab() {
       {errorMsg && <div className="bg-rose-950/30 border border-rose-500/30 text-rose-400 text-xs p-3.5 rounded-xl font-semibold shadow-md animate-slideIn">{errorMsg}</div>}
 
       {/* CORE NAVIGATION STRIP */}
-      <div className="flex bg-slate-950 border border-slate-800 p-1 rounded-xl gap-1 shadow-inner shrink-0">
+      <div className="flex flex-wrap bg-slate-950 border border-slate-800 p-1 rounded-xl gap-1 shadow-inner shrink-0">
         <button 
           type="button"
           onClick={() => setActiveNavTab('system')} 
@@ -474,6 +484,13 @@ export default function SettingsTab() {
           className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'jobs' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           <IconShield /> Job Registry ({Object.keys(config.jobs || {}).length})
+        </button>
+        <button 
+          type="button"
+          onClick={() => setActiveNavTab('members')} 
+          className={`flex items-center justify-center gap-2 flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeNavTab === 'members' ? 'bg-indigo-600 text-white shadow font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <IconShield /> Members
         </button>
       </div>
 
@@ -614,6 +631,38 @@ export default function SettingsTab() {
               <p className="text-[10px] text-slate-600 font-mono truncate">
                 Full link: {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-auction-card
               </p>
+            </div>
+          </div>
+
+          {/* EPHEMERAL ATTENDANCE CARD */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><IconMegaphone /> Ephemeral Attendance Card</div>
+                <p className="text-[11px] text-slate-500 mt-1 font-normal">
+                  Posts the next-event Attendance launcher into your Discord war-announce channel. Members open a personal Confirm / Leave panel.
+                </p>
+              </div>
+              {deployAttendanceMsg && (
+                <span className={`text-[10px] font-mono font-semibold shrink-0 max-w-[45%] text-right ${deployAttendanceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {deployAttendanceMsg.text}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 flex items-stretch rounded-xl border border-slate-800 bg-slate-950 overflow-hidden">
+                <span className="flex-1 min-w-0 px-3 py-2 text-xs text-slate-400 font-mono truncate">
+                  {(ephemeralBaseUrl || '').trim().replace(/\/$/, '') || '—'}/api/deploy-attendance-card
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDeployAttendanceCard}
+                disabled={deployingAttendanceCard || !(ephemeralBaseUrl || '').trim()}
+                className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deployingAttendanceCard ? 'Sending…' : 'Send'}
+              </button>
             </div>
           </div>
 
@@ -1030,36 +1079,6 @@ export default function SettingsTab() {
                   </button>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* 📢 WEEKLY ATTENDANCE DISCORD ANNOUNCEMENT */}
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 mt-6 space-y-4 shadow-md">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <IconMegaphone />
-                  Weekly Attendance Announcement
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5">Post or refresh next week&apos;s attendance thread in Discord.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {announceMsg && (
-                  <span className={`text-[10px] font-mono font-semibold ${announceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {announceMsg.text}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleAnnounceWeek}
-                  disabled={announcing}
-                  title="Post (or refresh) next week's attendance announcement thread in Discord"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-[10px] font-semibold uppercase tracking-wider rounded-xl transition text-white cursor-pointer"
-                >
-                  <IconMegaphone />
-                  {announcing ? 'Announcing…' : 'Announce Week'}
-                </button>
-              </div>
             </div>
           </div>
         </>
@@ -1485,6 +1504,30 @@ export default function SettingsTab() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {activeNavTab === 'members' && (
+        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-md animate-fadeIn">
+          <div className="border-b border-slate-800/60 pb-3.5">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider">Members</div>
+            <p className="text-[10px] text-slate-500 mt-0.5">Monthly leave-credit allotment for raid-roster members. Remaining credits live on each member profile and reset to this number on the 1st of every month (guild timezone).</p>
+          </div>
+          <div className="flex items-center gap-3 bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 max-w-md">
+            <label className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider shrink-0">Default Leave Credits</label>
+            <input
+              type="number"
+              min="0"
+              max="99"
+              value={config.defaultLeaveCredits ?? 3}
+              onChange={(e) => {
+                const parsed = e.target.value === '' ? 3 : parseInt(e.target.value, 10);
+                setConfig((prev) => ({ ...prev, defaultLeaveCredits: Number.isNaN(parsed) ? 3 : Math.max(0, parsed) }));
+              }}
+              className="w-20 bg-slate-900 border border-slate-800 rounded-lg py-1.5 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-slate-700"
+            />
+            <span className="text-[11px] text-slate-400">per member / month</span>
+          </div>
         </div>
       )}
 

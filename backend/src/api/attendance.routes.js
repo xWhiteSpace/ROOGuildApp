@@ -5,11 +5,17 @@ import { getGateStatusDetails } from '../config/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
 import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
 import crypto from 'crypto';
-import { ensureWeekInstances, getWeekInstances, writeCommitment } from '../services/scheduleService.js';
+import { ensureWeekInstances, getWeekInstances } from '../services/scheduleService.js';
+import {
+  applyAttendanceDecision,
+  AttendanceDecisionError,
+  getDefaultLeaveCredits,
+} from '../services/attendanceDecision.js';
 import {
   normalizeComposition,
   compositionForPersist,
   findCrossTabDuplicates,
+  buildLiveGridsFromComposition,
 } from '@guildname/shared/compositionTabs';
 
 const router = Router();
@@ -337,7 +343,7 @@ router.post('/update-expected-rate', async (req, res) => {
   }
 });
 
-// 📢 POST /api/attendance/announce-week -> Officer-triggered weekly attendance post/re-post
+// 📢 POST /api/attendance/announce-week -> Officer-triggered Attendance card (replaces weekly thread)
 router.post('/announce-week', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
@@ -351,9 +357,19 @@ router.post('/announce-week', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
-    // force:true refreshes the existing week thread (no duplicate) or creates it if missing
-    const { postWeeklyAttendance } = await import('../discord-bot/attendanceAnnounce.js');
-    const result = await postWeeklyAttendance({ force: true });
+    const channelId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
+    if (!channelId) {
+      return res.status(400).json({ success: false, error: 'DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.' });
+    }
+    if (!discordClient || !discordClient.isReady()) {
+      return res.status(503).json({ success: false, error: 'Discord bot client is offline.' });
+    }
+    const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
+    if (!targetChannel) {
+      return res.status(404).json({ success: false, error: 'War-announce channel not found.' });
+    }
+    const { sendPublicAttendanceCard } = await import('../services/discordAttendanceCards.js');
+    const result = await sendPublicAttendanceCard(targetChannel);
     return res.json({ success: true, result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -429,7 +445,7 @@ router.post('/commit-availability', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing scheduling configuration vectors.' });
     }
 
-    const result = await writeCommitment({
+    const result = await applyAttendanceDecision({
       userId: user.id,
       displayName: user.displayName || user.username || 'Unknown Raider',
       dateStr,
@@ -438,10 +454,21 @@ router.post('/commit-availability', async (req, res) => {
     });
 
     if (result.removed) {
-      return res.json({ success: true, message: 'Schedule commitment removed successfully.' });
+      return res.json({
+        success: true,
+        message: 'Schedule commitment removed successfully.',
+        leaveCreditsRemaining: result.leaveCreditsRemaining,
+      });
     }
-    return res.json({ success: true, message: 'Schedule commitment logged.' });
+    return res.json({
+      success: true,
+      message: 'Schedule commitment logged.',
+      leaveCreditsRemaining: result.leaveCreditsRemaining,
+    });
   } catch (err) {
+    if (err instanceof AttendanceDecisionError) {
+      return res.status(400).json({ success: false, error: err.message, code: err.code });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -848,6 +875,10 @@ router.post('/roster/save-batch', async (req, res) => {
     const { stagedMembers } = req.body;
     if (!stagedMembers) return res.status(400).json({ success: false, error: 'Omitted staged roster dataset.' });
 
+    const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+    const existingSnap = await db.ref('auction/members').once('value');
+    const existingMembers = existingSnap.exists() ? existingSnap.val() : {};
+
     const batchAtomicUpdates = {};
     Object.entries(stagedMembers).forEach(([uid, m]) => {
       batchAtomicUpdates[`auction/members/${uid}/isRaidRoster`] = m.isRaidRoster === true;
@@ -858,6 +889,13 @@ router.post('/roster/save-batch', async (req, res) => {
       
       if (m.status) {
         batchAtomicUpdates[`auction/members/${uid}/status`] = m.status;
+      }
+
+      if (m.isRaidRoster === true && !Number.isInteger(existingMembers[uid]?.leaveCreditsRemaining)) {
+        batchAtomicUpdates[`auction/members/${uid}/leaveCreditsRemaining`] = defaultCredits;
+      }
+      if (m.isRaidRoster === true && !Number.isInteger(existingMembers[uid]?.noConfirmCount)) {
+        batchAtomicUpdates[`auction/members/${uid}/noConfirmCount`] = 0;
       }
 
       // Dummies own an editable displayName (no Discord source), so persist it here.
@@ -918,10 +956,249 @@ router.post('/dummy/create', async (req, res) => {
       groupTag: groupTag || "",
       joinedAt: joinedAt || "",
       status: "Active",
+      leaveCreditsRemaining: getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {}),
+      noConfirmCount: 0,
     };
 
     await db.ref(`auction/members/${dummyId}`).set(dummyPayload);
     return res.json({ success: true, id: dummyId, member: dummyPayload });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+function requireOfficer(user, configSnap) {
+  const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+  return verifyDiscordOfficerRole(user, roles);
+}
+
+// GET /api/attendance/me -> current user leave credits / no-confirm
+router.get('/me', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const [memberSnap, configSnap] = await Promise.all([
+      db.ref(`auction/members/${user.id}`).once('value'),
+      db.ref('settings/configuration').once('value'),
+    ]);
+    const member = memberSnap.exists() ? memberSnap.val() : {};
+    const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+    return res.json({
+      success: true,
+      leaveCreditsRemaining: Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : defaultCredits,
+      noConfirmCount: parseInt(member.noConfirmCount, 10) || 0,
+      defaultLeaveCredits: defaultCredits,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/attendance/members/:uid/profile
+router.get('/members/:uid/profile', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const uid = req.params.uid;
+    const isOfficer = requireOfficer(user, configSnap);
+    if (String(uid) !== String(user.id) && !isOfficer) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+    const memberSnap = await db.ref(`auction/members/${uid}`).once('value');
+    if (!memberSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Member not found.' });
+    }
+    const member = memberSnap.val();
+    const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+    return res.json({
+      success: true,
+      uid,
+      member: {
+        ...member,
+        leaveCreditsRemaining: Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : defaultCredits,
+        noConfirmCount: parseInt(member.noConfirmCount, 10) || 0,
+      },
+      config: {
+        jobs: configSnap.val()?.jobs || {},
+        roles: configSnap.val()?.roles || {},
+        defaultLeaveCredits: defaultCredits,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/members/:uid/leave-credits  { delta: number }
+router.post('/members/:uid/leave-credits', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const uid = req.params.uid;
+    const delta = parseInt(req.body?.delta, 10);
+    if (!Number.isInteger(delta) || delta === 0) {
+      return res.status(400).json({ success: false, error: 'delta must be a non-zero integer.' });
+    }
+    const memberSnap = await db.ref(`auction/members/${uid}`).once('value');
+    if (!memberSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Member not found.' });
+    }
+    const member = memberSnap.val();
+    const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+    const current = Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : defaultCredits;
+    const next = Math.max(0, current + delta);
+    await db.ref(`auction/members/${uid}/leaveCreditsRemaining`).set(next);
+    return res.json({ success: true, leaveCreditsRemaining: next });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/attendance/compose -> active compose session
+router.get('/compose', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const activeSnap = await db.ref('attendance/compose_active').once('value');
+    const activeKey = activeSnap.exists() ? activeSnap.val() : null;
+    if (!activeKey) return res.json({ success: true, session: null });
+    const sessionSnap = await db.ref(`attendance/compose/${activeKey}`).once('value');
+    return res.json({ success: true, session: sessionSnap.exists() ? { id: activeKey, ...sessionSnap.val() } : null });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/compose/create
+router.post('/compose/create', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { eventKey, eventDate, configId } = req.body || {};
+    if (!eventKey || !eventDate || !configId) {
+      return res.status(400).json({ success: false, error: 'eventKey, eventDate, and configId are required.' });
+    }
+
+    const events = configSnap.exists() ? (configSnap.val().events || {}) : {};
+    const eventTitle = events[eventKey]?.title || eventKey;
+    const compSnap = await db.ref(`attendance/compositions/${configId}`).once('value');
+    if (!compSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Raid config not found.' });
+    }
+    const normalized = normalizeComposition(compSnap.val(), configId);
+    const { grids, selectedGridIds } = buildLiveGridsFromComposition(normalized, configId);
+    const compositeKey = `${eventDate}_${eventKey}`;
+    const payload = {
+      eventKey,
+      eventDate,
+      eventTitle,
+      configId,
+      configTitle: normalized.title || configId,
+      grids,
+      selectedGridIds,
+      createdAt: Date.now(),
+      createdBy: user.displayName || user.username || 'Officer',
+      lastUpdated: Date.now(),
+    };
+    await db.ref(`attendance/compose/${compositeKey}`).set(payload);
+    await db.ref('attendance/compose_active').set(compositeKey);
+    return res.json({ success: true, session: { id: compositeKey, ...payload } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/compose/save
+router.post('/compose/save', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { sessionId, grids } = req.body || {};
+    if (!sessionId || !grids) {
+      return res.status(400).json({ success: false, error: 'sessionId and grids are required.' });
+    }
+    await db.ref(`attendance/compose/${sessionId}`).update({
+      grids,
+      lastUpdated: Date.now(),
+      updatedBy: user.displayName || user.username || 'Officer',
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/compose/close
+router.post('/compose/close', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    await db.ref('attendance/compose_active').remove();
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/compose/deploy-roster  { imageBase64 }
+router.post('/compose/deploy-roster', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { imageBase64, sessionId } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: 'imageBase64 is required.' });
+    }
+    const raw = String(imageBase64).replace(/^data:image\/png;base64,/, '');
+    const pngBuffer = Buffer.from(raw, 'base64');
+    if (!pngBuffer.length) {
+      return res.status(400).json({ success: false, error: 'Invalid image payload.' });
+    }
+
+    let eventTitle = '';
+    let eventDate = '';
+    const activeKey = sessionId || (await db.ref('attendance/compose_active').once('value')).val();
+    if (activeKey) {
+      const sessionSnap = await db.ref(`attendance/compose/${activeKey}`).once('value');
+      if (sessionSnap.exists()) {
+        eventTitle = sessionSnap.val().eventTitle || '';
+        eventDate = sessionSnap.val().eventDate || '';
+      }
+    }
+
+    const { sendComposeRosterToGenRoom } = await import('../services/discordAttendanceCards.js');
+    const result = await sendComposeRosterToGenRoom(pngBuffer, { eventTitle, eventDate });
+    return res.json({ success: true, result });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

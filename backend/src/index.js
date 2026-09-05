@@ -84,7 +84,7 @@ app.use(cors({
   ]
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'guild_secret_pass',
@@ -145,6 +145,37 @@ app.get('/api/deploy-auction-card', async (req, res) => {
   }
 });
 
+// Per-event Attendance card → DISCORD_WARANNOUNCE_CHANNEL_ID
+app.get('/api/deploy-attendance-card', async (req, res) => {
+  try {
+    const channelId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
+    if (!channelId) {
+      return res.status(400).send('❌ Failure: System missing DISCORD_WARANNOUNCE_CHANNEL_ID.');
+    }
+
+    if (!discordClient || !discordClient.isReady()) {
+      return res.status(503).send('❌ Failure: Discord bot client is currently offline or rate-limited.');
+    }
+    const { isDiscordCircuitOpen, getDiscordRateLimitStatus, enqueueDiscordCall } = await import('./utils/discordRateLimit.js');
+    if (isDiscordCircuitOpen()) {
+      const status = getDiscordRateLimitStatus();
+      return res.status(503).send(`❌ Discord is temporarily blocking this server IP. Try again after ${status.untilHuman || status.remainingHuman}.`);
+    }
+    const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
+    if (!targetChannel) {
+      return res.status(404).send('❌ Failure: Discord gateway client failed to locate the war-announce channel.');
+    }
+
+    const { sendPublicAttendanceCard } = await import('./services/discordAttendanceCards.js');
+    await sendPublicAttendanceCard(targetChannel);
+
+    res.send('📟 SUCCESS: Attendance card posted to the war-announce channel.');
+  } catch (err) {
+    console.error('Attendance card deploy failed:', err.message);
+    res.status(500).send(`❌ Server Exception: ${err.message}`);
+  }
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
@@ -154,6 +185,10 @@ app.listen(PORT, () => {
   resumeLiveRaidMonitoringIfNeeded().catch((err) => {
     console.error('[live-raid] resume on boot failed:', err.message);
   });
+
+  import('./services/attendanceDecision.js')
+    .then((m) => m.seedMissingLeaveCredits())
+    .catch((err) => console.error('[attendance] leave-credit seed failed:', err.message));
 
   // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
   // Execution tracking has been centralized into the drift-proof engine in client.js.

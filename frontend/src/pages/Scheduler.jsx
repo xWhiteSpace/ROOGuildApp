@@ -28,6 +28,7 @@ import {
   getWeekMonday,
   buildCompositeKey,
   DEFAULT_TZ,
+  guildWallTimeToUtcMs,
 } from '../utils/guildTime';
 
 const backendUrl = getBackendUrl();
@@ -44,6 +45,7 @@ export default function Scheduler({ user }) {
   const [specialCategoriesList, setSpecialCategoriesList] = useState(['Raid', 'Meeting', 'PVP', 'Casual']);
   const [selectedDayContext, setSelectedDayContext] = useState(null);
   const [refreshingWeek, setRefreshingWeek] = useState(false);
+  const [leaveCreditsRemaining, setLeaveCreditsRemaining] = useState(null);
   
   // Modal Multi-Day States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -96,6 +98,10 @@ export default function Scheduler({ user }) {
       if (specialData.success) setSpecialEvents(specialData.specialEvents || {});
 
       await ensureCurrentWeek(false, nextTz);
+
+      const meRes = await apiFetch('/api/attendance/me', { method: 'GET' });
+      const meData = await meRes.json();
+      if (meData.success) setLeaveCreditsRemaining(meData.leaveCreditsRemaining);
     } catch (err) {
       console.error("Scheduler load failure:", err);
     } finally {
@@ -122,6 +128,19 @@ export default function Scheduler({ user }) {
     if (!bucket) return null;
     const entry = bucket[userId] || bucket[String(userId)];
     return entry?.status || null;
+  };
+
+  const getInstanceDeadlineMs = (item) => {
+    if (!item?.dateStr && !item?.date) return NaN;
+    const dateStr = item.dateStr || item.date;
+    const startMs = guildWallTimeToUtcMs(item.timeStart || '20:55', timezone, dateStr);
+    if (!Number.isFinite(startMs)) return NaN;
+    return startMs - 24 * 60 * 60 * 1000;
+  };
+
+  const isPastDeadline = (item) => {
+    const deadline = getInstanceDeadlineMs(item);
+    return Number.isFinite(deadline) && Date.now() > deadline;
   };
 
   useEffect(() => {
@@ -382,28 +401,28 @@ export default function Scheduler({ user }) {
         return updated;
       });
 
-      await apiFetch('/api/attendance/commit-availability', {
+      const res = await apiFetch('/api/attendance/commit-availability', {
         method: 'POST',
         body: JSON.stringify({ dateStr, eventId, status: statusTarget }),
       });
-      // Refresh from Admin SDK so Discord/web stay in lockstep
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Could not update attendance.');
+        await fetchCommitmentsFromApi();
+        return;
+      }
+      if (Number.isInteger(data.leaveCreditsRemaining)) {
+        setLeaveCreditsRemaining(data.leaveCreditsRemaining);
+      }
       await fetchCommitmentsFromApi();
     } catch (err) {
       console.error(err);
+      alert(err.message || 'Could not update attendance.');
       fetchCommitmentsFromApi();
     }
   };
 
-  const handleConfirmAllWeeks = async () => {
-        const targets = weeklyUpcomingInstances.filter(item => {
-          const compositeKey = buildCompositeKey(item.dateStr, item.id);
-          return getCommitmentStatus(compositeKey, user?.id) !== 'Confirmed';
-        });
-        if (targets.length === 0) return;
-        await Promise.all(targets.map(item => handleLogCommitment(item.dateStr, item.id, 'Confirmed')));
-      };
-
-      const activeDayFocus = selectedDayContext;
+  const activeDayFocus = selectedDayContext;
   const userCurrentStatus = activeDayFocus
     ? getCommitmentStatus(`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`, user?.id)
     : null;
@@ -723,10 +742,10 @@ export default function Scheduler({ user }) {
 
             <div className="space-y-2 pt-1">
               <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest block mb-1">Select Availability:</span>
-              <button type="button" onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer ${userCurrentStatus === 'Confirmed' ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || eventsCatalog[activeDayFocus.eventId]?.phases?.[3]?.timeStart })} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Confirmed' ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
                 <span>Confirm Attendance</span> {userCurrentStatus === 'Confirmed' && <Check size={16} />}
               </button>
-              <button type="button" onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Leave' ? 'None' : 'Leave')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer ${userCurrentStatus === 'Leave' ? 'border-amber-500 bg-amber-950/20 text-amber-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || eventsCatalog[activeDayFocus.eventId]?.phases?.[3]?.timeStart }) || (Number.isInteger(leaveCreditsRemaining) && leaveCreditsRemaining <= 0 && userCurrentStatus !== 'Leave')} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Leave' ? 'None' : 'Leave')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Leave' ? 'border-amber-500 bg-amber-950/20 text-amber-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
                 <span>Request Leave</span> {userCurrentStatus === 'Leave' && <X size={16} />}
               </button>
             </div>
@@ -811,7 +830,7 @@ export default function Scheduler({ user }) {
                           <div className="grid grid-cols-2 gap-1.5 pt-0.5 font-sans">
                             <button
                               type="button"
-                              disabled={isCancelled}
+                              disabled={isCancelled || isPastDeadline(item)}
                               onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Confirmed' ? 'None' : 'Confirmed')}
                               className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                 currentStatus === 'Confirmed'
@@ -823,7 +842,7 @@ export default function Scheduler({ user }) {
                             </button>
                             <button
                               type="button"
-                              disabled={isCancelled}
+                              disabled={isCancelled || isPastDeadline(item) || (Number.isInteger(leaveCreditsRemaining) && leaveCreditsRemaining <= 0 && currentStatus !== 'Leave')}
                               onClick={() => handleLogCommitment(item.dateStr, item.id, currentStatus === 'Leave' ? 'None' : 'Leave')}
                               className={`py-1 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                                 currentStatus === 'Leave'
@@ -839,16 +858,6 @@ export default function Scheduler({ user }) {
                     })
                   )}
                 </div>
-
-                {weeklyUpcomingInstances.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleConfirmAllWeeks}
-                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold uppercase tracking-wider text-white rounded-xl transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 shadow-md mt-2 shrink-0"
-                  >
-                    <Check size={13} strokeWidth={3} /> Confirm this week
-                  </button>
-                )}
               </div>
             )}
       </div>

@@ -55,11 +55,11 @@ export async function initializeDiscordBot() {
    // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
     discordClient.on('interactionCreate', async (interaction) => {
       try {
-        // 📅 Weekly attendance lives in its own channel/thread — route by customId
-        // prefix so it bypasses the general-room gate (buttons fire inside a thread).
-        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('att:')) {
-          const { handleAttendanceInteraction } = await import('./attendanceAnnounce.js');
-          return await handleAttendanceInteraction(interaction);
+        // Attendance card lives in the war-announce channel — route by customId
+        // prefix so it bypasses the general-room gate.
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('attcard:')) {
+          const { handleAttendanceCardInteraction } = await import('../services/discordAttendanceCards.js');
+          return await handleAttendanceCardInteraction(interaction);
         }
 
         // ⚔️ Live Auction panel lives in its own auction-request channel — route by
@@ -166,14 +166,18 @@ export async function initializeDiscordBot() {
       } else if (circuitOpen) {
         console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers.');
       } else {
-        import('./attendanceAnnounce.js')
-          .then((m) => m.maybeAnnounceWeekly())
-          .catch((err) => console.error('⚠️ Weekly attendance auto-announce warning:', err.message));
-
         import('./eventAnnounce.js')
           .then((m) => m.maybeAnnounceEvents())
           .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
       }
+
+      import('../services/attendanceDecision.js')
+        .then((m) => m.closeExpiredDeadlines())
+        .catch((err) => console.error('⚠️ Attendance deadline closer warning:', err.message));
+
+      import('../services/attendanceDecision.js')
+        .then((m) => m.maybeRefreshMonthlyLeaveCredits())
+        .catch((err) => console.error('⚠️ Monthly leave-credit refresh warning:', err.message));
 
       // Firebase-only jobs — safe during a Discord cooldown
       import('../api/liveRaid.routes.js')
