@@ -2,6 +2,8 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
 import { handleSlashCommand, handleComponentInteraction } from './discordSlashcmd.js';
+import { handleAttendanceCardInteraction } from '../services/discordAttendanceCards.js';
+import { handlePartyCardInteraction } from '../services/partyViewer.js';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { logDiscordRateLimit, isDiscordCircuitOpen, hydrateDiscordCircuit, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
@@ -58,12 +60,19 @@ export async function initializeDiscordBot() {
         // Attendance card lives in the war-announce channel — route by customId
         // prefix so it bypasses the general-room gate.
         if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('attcard:')) {
-          const { handleAttendanceCardInteraction } = await import('../services/discordAttendanceCards.js');
+          // ACK within Discord's 3s window before any Firebase / panel work.
+          if (interaction.customId === 'attcard:open') {
+            await interaction.deferReply({ ephemeral: true });
+          } else if (interaction.customId.startsWith('attcard:set:')) {
+            await interaction.deferUpdate();
+          }
           return await handleAttendanceCardInteraction(interaction);
         }
 
         if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('partycard:')) {
-          const { handlePartyCardInteraction } = await import('../services/partyViewer.js');
+          if (interaction.customId === 'partycard:open') {
+            await interaction.deferReply({ ephemeral: true });
+          }
           return await handlePartyCardInteraction(interaction);
         }
 
