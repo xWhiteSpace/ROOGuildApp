@@ -31,7 +31,8 @@ export default function DiscordSignInButton({ className = '', compact = false })
   }, []);
 
   const untilLooksReal = urlUntil && urlUntil !== 'none' && urlUntil !== 'later';
-  const blocked = !remote?.oauthOffRender && (
+  const loginExempt = remote?.oauthOffRender === true || remote?.oauthLocalRedirect === true;
+  const blocked = !loginExempt && (
     (urlBlocked && untilLooksReal) || remote?.circuitOpen === true || remote?.coolingDown === true
   );
   const until = urlUntil || remote?.untilHuman || remote?.remainingHuman;

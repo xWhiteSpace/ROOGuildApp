@@ -4,7 +4,7 @@ import { getDatabase } from 'firebase-admin/database';
 import { discordClient } from '../discord-bot/client.js';
 
 import crypto from 'crypto'; // 🛡️ Native cryptographic signature utility console
-import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, enqueueDiscordCall, resolveOAuthExchangeUrl, isLocalOAuthRedirect } from '../utils/discordRateLimit.js';
+import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, resolveOAuthExchangeUrl, isLocalOAuthRedirect } from '../utils/discordRateLimit.js';
 
 const router = Router();
 const discordApi = 'https://discord.com/api';
@@ -29,6 +29,27 @@ function circuitRedirect(targetFrontend) {
  * to the Vercel function (user's FRONTEND_URL). Localhost may still talk to
  * Discord directly because that is not a shared datacenter IP.
  */
+function mapRoleIdsToNames(guild, roleIds) {
+  if (!guild || !Array.isArray(roleIds) || roleIds.length === 0) return [];
+  const names = roleIds
+    .map((id) => guild.roles.cache.get(String(id))?.name)
+    .filter(Boolean);
+  const everyone = guild.roles.everyone?.name;
+  if (everyone && !names.includes(everyone)) names.unshift(everyone);
+  return names;
+}
+
+async function fetchGuildMemberWithUserToken(accessToken, guildId) {
+  if (!accessToken || !guildId) return null;
+  const memberResponse = await fetch(`${discordApi}/users/@me/guilds/${guildId}/member`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!memberResponse.ok) return null;
+  const member = await memberResponse.json().catch(() => null);
+  if (!member || !Array.isArray(member.roles)) return null;
+  return { nick: member.nick || null, roles: member.roles };
+}
+
 async function exchangeCodeForDiscordUser(code) {
   const redirectUri = process.env.OAUTH_REDIRECT_URI;
   const exchangeUrl = resolveOAuthExchangeUrl();
@@ -52,6 +73,7 @@ async function exchangeCodeForDiscordUser(code) {
         code,
         redirect_uri: redirectUri,
         client_id: process.env.DISCORD_CLIENT_ID,
+        guild_id: process.env.DISCORD_GUILD_ID,
       }),
     });
     const payload = await bridgeRes.json().catch(() => ({}));
@@ -68,7 +90,7 @@ async function exchangeCodeForDiscordUser(code) {
       err.bridgeStatus = bridgeRes.status || 502;
       throw err;
     }
-    return payload.user;
+    return { user: payload.user, guildMember: payload.member || null };
   }
 
   if (!isLocalOAuthRedirect()) {
@@ -77,7 +99,7 @@ async function exchangeCodeForDiscordUser(code) {
     throw err;
   }
 
-  const tokenResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/oauth2/token`, {
+  const tokenResponse = await fetch(`${discordApi}/oauth2/token`, {
     method: 'POST',
     body: new URLSearchParams({
       client_id: process.env.DISCORD_CLIENT_ID,
@@ -87,7 +109,7 @@ async function exchangeCodeForDiscordUser(code) {
       redirect_uri: redirectUri,
     }),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  }));
+  });
 
   if (!tokenResponse.ok) {
     const errorPayload = await tokenResponse.json().catch(() => ({}));
@@ -101,9 +123,9 @@ async function exchangeCodeForDiscordUser(code) {
   }
 
   const tokenData = await tokenResponse.json();
-  const userResponse = await enqueueDiscordCall(() => fetch(`${discordApi}/users/@me`, {
+  const userResponse = await fetch(`${discordApi}/users/@me`, {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
-  }));
+  });
 
   if (!userResponse.ok) {
     const userErrBody = await userResponse.json().catch(() => ({}));
@@ -111,7 +133,10 @@ async function exchangeCodeForDiscordUser(code) {
     throw new Error('Failed to fetch user profiles');
   }
 
-  return userResponse.json();
+  return {
+    user: await userResponse.json(),
+    guildMember: await fetchGuildMemberWithUserToken(tokenData.access_token, process.env.DISCORD_GUILD_ID),
+  };
 }
 
 // 🛡️ REPAIRED ROSTER ENDPOINT
@@ -191,7 +216,7 @@ router.get('/login', async (req, res) => {
   const state = req.query.state || 'no_state';
   const clientId = process.env.DISCORD_CLIENT_ID;
   const redirectUri = encodeURIComponent(process.env.OAUTH_REDIRECT_URI);
-  const scope = encodeURIComponent('identify');
+  const scope = encodeURIComponent('identify guilds.members.read');
   res.redirect(`${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(state)}`);
 });
 
@@ -213,33 +238,48 @@ router.get('/callback', async (req, res) => {
   }
 
   try {
-    const user = await exchangeCodeForDiscordUser(code);
+    const { user, guildMember } = await exchangeCodeForDiscordUser(code);
     let serverNickname = user.global_name || user.username;
     let memberRolesNames = [];
     const guildId = process.env.DISCORD_GUILD_ID;
     const db = getDatabase();
 
-    // Nickname/roles: Gateway cache + Firebase only. Never members.fetch on login —
-    // that REST call from the Render IP is what stacked on /oauth2/token and
-    // tripped Cloudflare.
+    // Nickname/roles: OAuth user-token member (Vercel/local IP) + gateway role
+    // names. Never members.fetch on login — that REST call from the Render IP
+    // is what stacked on /oauth2/token and tripped Cloudflare.
     let resolvedFromCache = false;
+    const botReady = Boolean(discordClient?.isReady());
+    const guild = (botReady && guildId) ? discordClient.guilds.cache.get(guildId) : null;
+    const member = guild?.members?.cache.get(user.id) || null;
+
+    const oauthRoleNames = mapRoleIdsToNames(guild, guildMember?.roles);
+    if (oauthRoleNames.length) {
+      memberRolesNames = oauthRoleNames;
+      if (guildMember?.nick) {
+        serverNickname = String(guildMember.nick).replace(/\//g, '_');
+      }
+    }
+
     if (discordClient?.isReady() && guildId) {
-      const guild = discordClient.guilds.cache.get(guildId);
-      const member = guild?.members?.cache.get(user.id);
       if (member) {
-        serverNickname = (member.nickname || member.displayName || serverNickname).replace(/\//g, '_');
-        memberRolesNames = member.roles.cache.map((role) => role.name);
+        if (!guildMember?.nick) {
+          serverNickname = (member.nickname || member.displayName || serverNickname).replace(/\//g, '_');
+        }
+        if (!memberRolesNames.length) {
+          memberRolesNames = member.roles.cache.map((role) => role.name);
+        }
         resolvedFromCache = true;
       }
     }
 
     const existingMemberSnap = await db.ref(`auction/members/${user.id}`).once('value');
     const existingMember = existingMemberSnap.exists() ? existingMemberSnap.val() : null;
-    if (!resolvedFromCache && existingMember?.displayName) {
+    if (!guildMember?.nick && !resolvedFromCache && existingMember?.displayName) {
       serverNickname = String(existingMember.displayName).replace(/\//g, '_');
     }
-    if (!memberRolesNames.length && Array.isArray(existingMember?.roles)) {
-      memberRolesNames = existingMember.roles;
+    const firebaseRoles = existingMember?.roles;
+    if (!memberRolesNames.length && Array.isArray(firebaseRoles)) {
+      memberRolesNames = firebaseRoles;
     }
 
     const configSnap = await db.ref('settings/configuration').once('value');
@@ -261,6 +301,7 @@ router.get('/callback', async (req, res) => {
 
     await db.ref(`auction/members/${user.id}`).update({
       displayName: serverNickname,
+      ...(memberRolesNames.length ? { roles: memberRolesNames } : {}),
       syncedAt: new Date().toLocaleDateString("en-US", { timeZone: systemTimezone })
     });
 

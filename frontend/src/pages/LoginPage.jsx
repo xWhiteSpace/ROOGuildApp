@@ -18,7 +18,7 @@ export default function LoginPage() {
       return 'Sign-in was already in progress. Wait a few seconds, then click Sign-in once.';
     }
     if (err === 'oauth_offload_required') {
-      return 'Sign-in cannot use the Render server IP. FRONTEND_URL on Render must be your Vercel site URL.';
+      return 'Sign-in is blocked because this backend would call Discord’s token endpoint from a datacenter IP. Local: OAUTH_REDIRECT_URI must be localhost or your ngrok URL. Render: FRONTEND_URL must be your Vercel site.';
     }
     if (err === 'oauth_bridge_failed') {
       return oauthBridgeUserMessage(params.get('detail'));
