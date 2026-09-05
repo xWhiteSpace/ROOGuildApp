@@ -113,6 +113,11 @@ export default function App() {
       if (authUserRaw) {
         try {
           const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
+          // #region agent log
+          let roleDebug = null;
+          try { roleDebug = JSON.parse(decodeURIComponent(urlParams.get('role_debug') || '')); } catch { roleDebug = null; }
+          fetch('http://127.0.0.1:7549/ingest/fe8ee865-ad77-4dbd-8635-81be17d73b61',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2f98cb'},body:JSON.stringify({sessionId:'2f98cb',runId:'prod-compare',hypothesisId:'A',location:'App.jsx:auth_user',message:'prod/local session roles',data:{host:window.location.host,roleCount:Array.isArray(parsedUser?.roles)?parsedUser.roles.length:-1,roles:Array.isArray(parsedUser?.roles)?parsedUser.roles:[],isOfficer:parsedUser?.isOfficer===true,roleDebug},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           setAuthUser(parsedUser);
           localStorage.setItem(SESSION_KEY, JSON.stringify(parsedUser));
           localStorage.removeItem(LEGACY_SESSION_KEY);
