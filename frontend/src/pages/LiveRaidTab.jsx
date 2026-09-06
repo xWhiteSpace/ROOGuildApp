@@ -64,7 +64,8 @@ export default function LiveRaidTab({ user }) {
   const [showAddConfig, setShowAddConfig] = useState(false);
   const [addConfigId, setAddConfigId] = useState('');
   const [addingConfig, setAddingConfig] = useState(false);
-  const [announcingParty, setAnnouncingParty] = useState(false);
+  const [removingConfigId, setRemovingConfigId] = useState('');
+  const [announcing, setAnnouncing] = useState({ id: '', kind: '' });
   const [members, setMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
@@ -366,6 +367,16 @@ export default function LiveRaidTab({ user }) {
     }
   };
 
+  const loadCommitments = async () => {
+    try {
+      const res = await apiFetch('/api/attendance/commitments', { method: 'GET' });
+      const data = await res.json();
+      if (data.success) setCommitments(data.commitments || {});
+    } catch (err) {
+      console.error('Failed to load commitments:', err);
+    }
+  };
+
   // Poll Active Live Session lifecycle
   const fetchActiveLiveSession = async (isInitial = false) => {
     try {
@@ -456,7 +467,11 @@ export default function LiveRaidTab({ user }) {
   useEffect(() => {
     if (session !== null) return undefined;
     loadPublishedCompositions();
-    const id = setInterval(loadPublishedCompositions, 5000);
+    loadCommitments();
+    const id = setInterval(() => {
+      loadPublishedCompositions();
+      loadCommitments();
+    }, 5000);
     return () => clearInterval(id);
   }, [session]);
 
@@ -465,6 +480,41 @@ export default function LiveRaidTab({ user }) {
       .map(([id, rec]) => ({ id, ...rec }))
       .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
   }, [publishedCompositions]);
+
+  const attachedRaidConfigs = useMemo(() => {
+    const published = publishedCompositions[selectedPublishedId];
+    if (!published) return [];
+    const grids = published.grids || {};
+    const byId = new Map();
+    Object.entries(grids).forEach(([gridKey, grid]) => {
+      const sep = String(gridKey).indexOf('__');
+      const configId = sep > 0
+        ? gridKey.slice(0, sep)
+        : (grid?.parentConfigId || published.configId || '');
+      if (!configId) return;
+      if (!byId.has(configId)) {
+        byId.set(configId, {
+          id: configId,
+          title: grid?.parentConfigTitle || compositions[configId]?.title || published.configTitle || configId,
+          tabCount: 0,
+        });
+      }
+      byId.get(configId).tabCount += 1;
+    });
+    if (byId.size === 0 && published.configId) {
+      byId.set(published.configId, {
+        id: published.configId,
+        title: published.configTitle || compositions[published.configId]?.title || published.configId,
+        tabCount: 0,
+      });
+    }
+    return [...byId.values()];
+  }, [publishedCompositions, selectedPublishedId, compositions]);
+
+  const attachedRaidConfigIds = useMemo(
+    () => new Set(attachedRaidConfigs.map((cfg) => cfg.id)),
+    [attachedRaidConfigs]
+  );
 
   const formatSentAt = (ms) => {
     if (!Number.isFinite(Number(ms))) return '';
@@ -681,11 +731,53 @@ export default function LiveRaidTab({ user }) {
     }
   };
 
-  const handleAnnounceParty = async () => {
-    if (!isOfficer || !selectedPublishedId) return;
-    setAnnouncingParty(true);
+  const handleRemoveRaidConfig = async (configId, configTitle) => {
+    if (!isOfficer || !selectedPublishedId || !configId) return;
+    const label = configTitle || configId;
+    const ok = window.confirm(
+      `Remove “${label}” from this composition? Party slots on those tabs will be lost. You can add a different raid config afterward.`
+    );
+    if (!ok) return;
+    setRemovingConfigId(configId);
     try {
-      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(selectedPublishedId)}/announce-party`, {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(selectedPublishedId)}/remove-config`, {
+        method: 'POST',
+        body: JSON.stringify({ configId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to remove raid config');
+      handlePublishedChange(data.published);
+      if (addConfigId === configId) setAddConfigId('');
+    } catch (err) {
+      alert(err.message || 'Failed to remove raid config');
+    } finally {
+      setRemovingConfigId('');
+    }
+  };
+
+  const handleAnnounceAttendance = async (id) => {
+    if (!isOfficer || !id) return;
+    setAnnouncing({ id, kind: 'attendance' });
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(id)}/announce-attendance`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Announce failed');
+      alert('Announced to GEN Room. Members confirm attendance in war-announce.');
+    } catch (err) {
+      alert(err.message || 'Announce failed');
+    } finally {
+      setAnnouncing({ id: '', kind: '' });
+    }
+  };
+
+  const handleAnnounceParty = async (id) => {
+    if (!isOfficer || !id) return;
+    setAnnouncing({ id, kind: 'party' });
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(id)}/announce-party`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
@@ -695,7 +787,7 @@ export default function LiveRaidTab({ user }) {
     } catch (err) {
       alert(err.message || 'Announce failed');
     } finally {
-      setAnnouncingParty(false);
+      setAnnouncing({ id: '', kind: '' });
     }
   };
 
@@ -1180,6 +1272,10 @@ export default function LiveRaidTab({ user }) {
                   const isAnchor = publishedAnchor === comp.id;
                   const isSelected = selectedPublishedId === comp.id;
                   const tabCount = (comp.selectedGridIds || Object.keys(comp.grids || {})).length;
+                  const compositeKey = `${comp.eventDate}_${comp.eventKey}`;
+                  const signedUsers = commitments[compositeKey] ? Object.values(commitments[compositeKey]) : [];
+                  const presentCount = signedUsers.filter((u) => u.status === 'Confirmed' || u.status === 'Confirm').length;
+                  const leaveCount = signedUsers.filter((u) => u.status === 'Leave').length;
                   return (
                     <div
                       key={comp.id}
@@ -1221,9 +1317,43 @@ export default function LiveRaidTab({ user }) {
                             {comp.sentBy ? ` · ${comp.sentBy}` : ''}
                           </p>
                         </div>
+                        <div
+                          className="flex items-center gap-1 shrink-0 font-mono text-[10px] select-none"
+                          title="Confirmed / Leave"
+                        >
+                          <Users size={12} className="text-slate-400" />
+                          <span className="text-emerald-400 font-bold">{presentCount}</span>
+                          <span className="text-slate-600">/</span>
+                          <span className="text-rose-400 font-bold">{leaveCount}</span>
+                        </div>
                       </div>
                       {isOfficer && (
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAnnounceAttendance(comp.id); }}
+                            disabled={announcing.id === comp.id && announcing.kind === 'attendance'}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-700 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-200 hover:text-white cursor-pointer disabled:opacity-50"
+                          >
+                            <Megaphone size={12} />
+                            {announcing.id === comp.id && announcing.kind === 'attendance' ? 'Announcing…' : 'Attendance'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAnnounceParty(comp.id); }}
+                            disabled={
+                              (announcing.id === comp.id && announcing.kind === 'party')
+                              || tabCount === 0
+                            }
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-700 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-200 hover:text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Megaphone size={12} />
+                            {announcing.id === comp.id && announcing.kind === 'party' ? 'Announcing…' : 'Party'}
+                          </button>
+                        </div>
+                      )}
+                      {isOfficer && (
+                        <div className="flex items-center gap-2 mt-2 pt-3 border-t border-slate-800/80">
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleSetActiveComposition(comp.id, !isAnchor); }}
@@ -1265,20 +1395,30 @@ export default function LiveRaidTab({ user }) {
                 </div>
                 {isOfficer && (
                   <div className="flex flex-wrap items-center gap-2">
+                    {attachedRaidConfigs.map((cfg) => (
+                      <span
+                        key={cfg.id}
+                        className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-xl border border-slate-700 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-200"
+                      >
+                        <span className="max-w-[12rem] truncate" title={cfg.title}>{cfg.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRaidConfig(cfg.id, cfg.title)}
+                          disabled={Boolean(removingConfigId)}
+                          className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove raid config"
+                          aria-label={`Remove ${cfg.title}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
                     <button
                       type="button"
                       onClick={() => setShowAddConfig((open) => !open)}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-200 hover:text-white cursor-pointer"
                     >
                       <Plus size={13} /> Add Raid config
-                    </button>
-                    <button
-                      type="button"
-                      disabled={announcingParty || !(publishedCompositions[selectedPublishedId].selectedGridIds || Object.keys(publishedCompositions[selectedPublishedId].grids || {})).length}
-                      onClick={handleAnnounceParty}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
-                    >
-                      <Megaphone size={13} /> {announcingParty ? 'Announcing…' : 'Announce'}
                     </button>
                   </div>
                 )}
@@ -1291,17 +1431,26 @@ export default function LiveRaidTab({ user }) {
                     <p className="text-[11px] text-slate-500">No raid configs yet. Create one on Raid Party, then come back here.</p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                      {Object.entries(compositions).map(([id, comp]) => (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => setAddConfigId(comp.id || id)}
-                          className={`p-3 rounded-xl border text-left text-xs cursor-pointer ${addConfigId === (comp.id || id) ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400' : 'border-slate-800 text-slate-400 hover:border-slate-700'}`}
-                        >
-                          <div className="font-bold uppercase tracking-wider">{comp.title || id}</div>
-                          <div className="text-[10px] text-slate-500 mt-1">{(comp.tabOrder || Object.keys(comp.tabs || {})).length} grid tab(s)</div>
-                        </button>
-                      ))}
+                      {Object.entries(compositions).map(([id, comp]) => {
+                        const optionId = comp.id || id;
+                        const alreadyAdded = attachedRaidConfigIds.has(optionId);
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            disabled={alreadyAdded}
+                            onClick={() => setAddConfigId(optionId)}
+                            className={`p-3 rounded-xl border text-left text-xs ${alreadyAdded ? 'border-slate-900 text-slate-600 cursor-not-allowed' : addConfigId === optionId ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400 cursor-pointer' : 'border-slate-800 text-slate-400 hover:border-slate-700 cursor-pointer'}`}
+                          >
+                            <div className="font-bold uppercase tracking-wider">{comp.title || id}</div>
+                            <div className="text-[10px] text-slate-500 mt-1">
+                              {alreadyAdded
+                                ? 'Already on this composition'
+                                : `${(comp.tabOrder || Object.keys(comp.tabs || {})).length} grid tab(s)`}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                   <div className="flex justify-end gap-2">

@@ -1543,6 +1543,33 @@ router.post('/published/:id/add-config', async (req, res) => {
   }
 });
 
+// POST /api/attendance/published/:id/remove-config  { configId }
+router.post('/published/:id/remove-config', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const configId = String(req.body?.configId || '').trim();
+    if (!configId) {
+      return res.status(400).json({ success: false, error: 'configId is required.' });
+    }
+    const { removeConfigFromPublished } = await import('../services/publishedComposition.js');
+    const result = await removeConfigFromPublished({ db, id, configId });
+    if (!result.ok) {
+      const status = /not found/i.test(result.error) ? 404 : 400;
+      return res.status(status).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, published: result.payload });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/attendance/published/:id/save-grids  { grids }
 router.post('/published/:id/save-grids', async (req, res) => {
   const user = resolveUserIdentity(req);
