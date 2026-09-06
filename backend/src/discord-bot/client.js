@@ -107,6 +107,7 @@ export async function initializeDiscordBot() {
   }
 
   await hydrateDiscordCircuit();
+  await preflightDiscordGateway(token);
 
   const bootStatus = getDiscordRateLimitStatus();
   console.log(
