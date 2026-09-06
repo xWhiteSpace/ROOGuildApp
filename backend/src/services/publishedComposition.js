@@ -136,6 +136,92 @@ export async function addConfigToPublished({ db, id, configId, composition }) {
   return { ok: true, id: key, payload: { id: key, ...current, ...patch } };
 }
 
+export function configIdFromGridKey(gridKey) {
+  const key = String(gridKey || '');
+  const idx = key.indexOf('__');
+  return idx > 0 ? key.slice(0, idx) : null;
+}
+
+function configIdForGrid(gridKey, grid, fallbackConfigId) {
+  return configIdFromGridKey(gridKey) || grid?.parentConfigId || fallbackConfigId || '';
+}
+
+function titleForConfigId(configId, grids, fallbackTitle) {
+  if (!configId) return '';
+  const match = Object.entries(grids).find(([gridKey, grid]) => (
+    configIdForGrid(gridKey, grid, '') === configId
+  ));
+  return match?.[1]?.parentConfigTitle || fallbackTitle || configId;
+}
+
+export async function removeConfigFromPublished({ db, id, configId }) {
+  const database = db || getDatabase();
+  const key = String(id || '');
+  const targetConfigId = String(configId || '').trim();
+  if (!key) return { ok: false, error: 'Composition id is required.' };
+  if (!targetConfigId) return { ok: false, error: 'configId is required.' };
+
+  const snap = await database.ref(`${PUBLISHED_PATH}/${key}`).once('value');
+  if (!snap.exists()) {
+    return { ok: false, error: 'Published composition not found.' };
+  }
+
+  const current = snap.val() || {};
+  const grids = { ...(current.grids || {}) };
+  const selectedGridIds = Array.isArray(current.selectedGridIds)
+    ? [...current.selectedGridIds]
+    : Object.keys(grids);
+
+  const belongsToTarget = (gridKey, grid) => (
+    configIdForGrid(gridKey, grid, current.configId) === targetConfigId
+  );
+
+  let removed = 0;
+  Object.entries(grids).forEach(([gridKey, grid]) => {
+    if (!belongsToTarget(gridKey, grid)) return;
+    delete grids[gridKey];
+    removed += 1;
+  });
+
+  if (removed === 0 && current.configId !== targetConfigId) {
+    return { ok: false, error: 'That raid config is not on this composition.' };
+  }
+
+  const nextIds = selectedGridIds.filter((gridKey) => grids[gridKey]);
+  const remainingConfigIds = [...new Set(
+    Object.entries(grids)
+      .map(([gridKey, grid]) => configIdForGrid(gridKey, grid, ''))
+      .filter(Boolean)
+  )];
+  const nextConfigId = remainingConfigIds.includes(current.configId)
+    ? current.configId
+    : (remainingConfigIds[0] || '');
+  const nextTitle = nextConfigId === current.configId
+    ? (current.configTitle || titleForConfigId(nextConfigId, grids, ''))
+    : titleForConfigId(nextConfigId, grids, '');
+
+  const patch = {
+    configId: nextConfigId,
+    configTitle: nextTitle,
+    lastUpdated: Date.now(),
+  };
+  await database.ref(`${PUBLISHED_PATH}/${key}`).update(patch);
+  await database.ref(`${PUBLISHED_PATH}/${key}/grids`).set(Object.keys(grids).length ? grids : null);
+  await database.ref(`${PUBLISHED_PATH}/${key}/selectedGridIds`).set(nextIds.length ? nextIds : null);
+
+  return {
+    ok: true,
+    id: key,
+    payload: {
+      id: key,
+      ...current,
+      ...patch,
+      grids,
+      selectedGridIds: nextIds,
+    },
+  };
+}
+
 export async function savePublishedGrids({ db, id, grids }) {
   const database = db || getDatabase();
   const key = String(id || '');

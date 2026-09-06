@@ -29,11 +29,23 @@ export default function PublishedPartyGrid({
   const publishedId = published?.id || '';
 
   useEffect(() => {
-    if (isDirtyRef.current) return;
     const grids = published?.grids || {};
+    const serverKeys = Object.keys(grids).sort().join('|');
+    const localKeys = Object.keys(localGridsRef.current).sort().join('|');
+    const structureChanged = serverKeys !== localKeys;
+    if (isDirtyRef.current && !structureChanged) return;
+    if (structureChanged && persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
     setLocalGrids(grids);
     localGridsRef.current = grids;
-    const firstTab = (published?.selectedGridIds || Object.keys(grids))[0] || '';
+    if (structureChanged) {
+      isDirtyRef.current = false;
+      setIsDirty(false);
+    }
+    const orderedIds = Array.isArray(published?.selectedGridIds) ? published.selectedGridIds : Object.keys(grids);
+    const firstTab = orderedIds.find((id) => grids[id]) || Object.keys(grids)[0] || '';
     setActiveTabConfigId((prev) => (prev && grids[prev] ? prev : firstTab));
   }, [publishedId, published?.lastUpdated]);
 
