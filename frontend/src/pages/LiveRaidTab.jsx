@@ -30,11 +30,13 @@ import {
   Flag,
   Crown,
   Timer,
-  Square
+  Square,
+  Megaphone
 } from 'lucide-react';
 
 import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
+import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
@@ -59,6 +61,10 @@ export default function LiveRaidTab({ user }) {
   const [publishedCompositions, setPublishedCompositions] = useState({});
   const [publishedAnchor, setPublishedAnchor] = useState(null);
   const [selectedPublishedId, setSelectedPublishedId] = useState('');
+  const [showAddConfig, setShowAddConfig] = useState(false);
+  const [addConfigId, setAddConfigId] = useState('');
+  const [addingConfig, setAddingConfig] = useState(false);
+  const [announcingParty, setAnnouncingParty] = useState(false);
   const [members, setMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
@@ -343,7 +349,16 @@ export default function LiveRaidTab({ user }) {
       const res = await apiFetch('/api/attendance/published', { method: 'GET' });
       const data = await res.json();
       if (data.success) {
-        setPublishedCompositions(data.published || {});
+        const incoming = data.published || {};
+        setPublishedCompositions((prev) => {
+          const next = { ...incoming };
+          Object.entries(prev).forEach(([id, rec]) => {
+            const incomingTs = Number(incoming[id]?.lastUpdated || incoming[id]?.sentAt || 0);
+            const localTs = Number(rec?.lastUpdated || rec?.sentAt || 0);
+            if (localTs > incomingTs) next[id] = rec;
+          });
+          return next;
+        });
         setPublishedAnchor(data.anchor || null);
       }
     } catch (err) {
@@ -590,6 +605,14 @@ export default function LiveRaidTab({ user }) {
     setSelectedEventDate(pub?.eventDate || '');
   };
 
+  const handleOpenPublishedCard = (id) => {
+    if (session) return;
+    setSelectedPublishedId(id);
+    const pub = publishedCompositions[id];
+    if (pub?.eventKey) setSelectedEventKey(pub.eventKey);
+    if (pub?.eventDate) setSelectedEventDate(pub.eventDate);
+  };
+
   const handleSetActiveComposition = async (id, active) => {
     if (!isOfficer) return;
     try {
@@ -624,9 +647,55 @@ export default function LiveRaidTab({ user }) {
         setSelectedPublishedId('');
         setSelectedEventKey('');
         setSelectedEventDate('');
+        setShowAddConfig(false);
       }
     } catch (err) {
       alert(err.message || 'Failed to remove composition');
+    }
+  };
+
+  const handlePublishedChange = (nextPublished) => {
+    if (!nextPublished?.id) return;
+    setPublishedCompositions((prev) => ({ ...prev, [nextPublished.id]: nextPublished }));
+  };
+
+  const handleAddRaidConfig = async () => {
+    if (!isOfficer || !selectedPublishedId || !addConfigId) {
+      return alert('Select a raid config.');
+    }
+    setAddingConfig(true);
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(selectedPublishedId)}/add-config`, {
+        method: 'POST',
+        body: JSON.stringify({ configId: addConfigId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to add raid config');
+      handlePublishedChange(data.published);
+      setShowAddConfig(false);
+      setAddConfigId('');
+    } catch (err) {
+      alert(err.message || 'Failed to add raid config');
+    } finally {
+      setAddingConfig(false);
+    }
+  };
+
+  const handleAnnounceParty = async () => {
+    if (!isOfficer || !selectedPublishedId) return;
+    setAnnouncingParty(true);
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(selectedPublishedId)}/announce-party`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Announce failed');
+      alert('Announced to GEN Room. Members can see their party in war-announce.');
+    } catch (err) {
+      alert(err.message || 'Announce failed');
+    } finally {
+      setAnnouncingParty(false);
     }
   };
 
@@ -982,15 +1051,26 @@ export default function LiveRaidTab({ user }) {
       if (!configObj) return prev;
       const slotAlloc = { ...configObj.slots_allocation };
       const isAlready = slotAlloc[coordKey]?.isPartyLeader === true;
-      // Clear leader from all slots in this tab
+      slotAlloc[coordKey] = { ...slotAlloc[coordKey], isPartyLeader: !isAlready };
+      configObj.slots_allocation = slotAlloc;
+      return { ...prev, [activeTabConfigId]: configObj };
+    });
+  };
+
+  const handleSetRaidLeader = async (coordKey) => {
+    if (!activeTabConfigId) return;
+    await applyLocalGridsAndPersist((prev) => {
+      const configObj = { ...prev[activeTabConfigId] };
+      if (!configObj) return prev;
+      const slotAlloc = { ...configObj.slots_allocation };
+      const isAlready = slotAlloc[coordKey]?.isRaidLeader === true;
       Object.keys(slotAlloc).forEach((k) => {
-        if (slotAlloc[k]?.isPartyLeader) {
-          slotAlloc[k] = { ...slotAlloc[k], isPartyLeader: false };
+        if (slotAlloc[k]?.isRaidLeader) {
+          slotAlloc[k] = { ...slotAlloc[k], isRaidLeader: false };
         }
       });
-      // Crown this slot if it wasn't already
       if (!isAlready) {
-        slotAlloc[coordKey] = { ...slotAlloc[coordKey], isPartyLeader: true };
+        slotAlloc[coordKey] = { ...slotAlloc[coordKey], isRaidLeader: true };
       }
       configObj.slots_allocation = slotAlloc;
       return { ...prev, [activeTabConfigId]: configObj };
@@ -1059,12 +1139,12 @@ export default function LiveRaidTab({ user }) {
       
       {/* -------------------- STEP 1: ACTIVE COMPOSITIONS + START -------------------- */}
       {session === null && localStep === 1 && (
-        <div className="mx-auto max-w-5xl space-y-6 py-6 px-2 select-none">
+        <div className={`mx-auto space-y-6 py-6 px-2 select-none ${selectedPublishedId ? 'max-w-[98vw]' : 'max-w-5xl'}`}>
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
               <h1 className="text-xl font-black tracking-wide text-slate-100 uppercase">Live Raid Operations</h1>
               <p className="text-xs text-slate-400 font-sans mt-1.5 leading-relaxed max-w-xl">
-                Compositions sent from Raid Compose land here. Set one Active to drive Party and Attendance Discord cards, then start monitoring.
+                Raids sent from Raid Compose land here. Select a card to add a raid config and slot the party, then start monitoring.
               </p>
             </div>
             {isOfficer ? (
@@ -1091,21 +1171,25 @@ export default function LiveRaidTab({ user }) {
 
             {publishedList.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/30 px-6 py-10 text-center">
-                <p className="text-xs text-slate-400">No compositions have been sent yet.</p>
-                <p className="text-[10px] text-slate-600 mt-1">Officers send a roster from Raid Compose to publish it here.</p>
+                <p className="text-xs text-slate-400">No raids have been sent yet.</p>
+                <p className="text-[10px] text-slate-600 mt-1">Officers send a raid from Raid Compose to publish it here.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {publishedList.map((comp) => {
                   const isAnchor = publishedAnchor === comp.id;
+                  const isSelected = selectedPublishedId === comp.id;
                   const tabCount = (comp.selectedGridIds || Object.keys(comp.grids || {})).length;
                   return (
                     <div
                       key={comp.id}
-                      className={`p-4 rounded-2xl border text-left transition ${
-                        isAnchor
+                      onClick={() => handleOpenPublishedCard(comp.id)}
+                      className={`p-4 rounded-2xl border text-left transition cursor-pointer ${
+                        isSelected
                           ? 'bg-indigo-600/10 border-indigo-500/70'
-                          : 'bg-slate-900/40 border-slate-800'
+                          : isAnchor
+                            ? 'bg-slate-900/40 border-indigo-500/40'
+                            : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -1119,9 +1203,17 @@ export default function LiveRaidTab({ user }) {
                                 Active
                               </span>
                             )}
+                            {isSelected && (
+                              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-300 bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-md">
+                                Selected
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] font-mono text-slate-400 mt-1">
-                            {comp.eventDate || '—'} · {comp.configTitle || 'Untitled config'}
+                            {comp.eventDate || '—'}
+                            {comp.timeStart ? ` ${comp.timeStart}` : ''}
+                            {' · '}
+                            {comp.configTitle || 'No raid config'}
                           </p>
                           <p className="text-[10px] font-mono text-slate-600 mt-1">
                             {tabCount} tab{tabCount === 1 ? '' : 's'}
@@ -1134,7 +1226,7 @@ export default function LiveRaidTab({ user }) {
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
                           <button
                             type="button"
-                            onClick={() => handleSetActiveComposition(comp.id, !isAnchor)}
+                            onClick={(e) => { e.stopPropagation(); handleSetActiveComposition(comp.id, !isAnchor); }}
                             className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2 rounded-xl border transition cursor-pointer ${
                               isAnchor
                                 ? 'border-indigo-500/50 text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20'
@@ -1145,7 +1237,7 @@ export default function LiveRaidTab({ user }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleRemovePublished(comp.id)}
+                            onClick={(e) => { e.stopPropagation(); handleRemovePublished(comp.id); }}
                             className="p-2 rounded-xl border border-slate-800 text-slate-500 hover:text-rose-400 hover:border-rose-900/50 transition cursor-pointer"
                             title="Remove from Active Compositions"
                           >
@@ -1159,6 +1251,80 @@ export default function LiveRaidTab({ user }) {
               </div>
             )}
           </section>
+
+          {selectedPublishedId && publishedCompositions[selectedPublishedId] && (
+            <section className="space-y-4 border-t border-slate-800 pt-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">Party setup</h2>
+                  <p className="text-sm font-bold text-slate-100 mt-1">
+                    {publishedCompositions[selectedPublishedId].eventTitle || 'Raid'}
+                    {publishedCompositions[selectedPublishedId].eventDate ? ` · ${publishedCompositions[selectedPublishedId].eventDate}` : ''}
+                    {publishedCompositions[selectedPublishedId].timeStart ? ` ${publishedCompositions[selectedPublishedId].timeStart}` : ''}
+                  </p>
+                </div>
+                {isOfficer && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddConfig((open) => !open)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-200 hover:text-white cursor-pointer"
+                    >
+                      <Plus size={13} /> Add Raid config
+                    </button>
+                    <button
+                      type="button"
+                      disabled={announcingParty || !(publishedCompositions[selectedPublishedId].selectedGridIds || Object.keys(publishedCompositions[selectedPublishedId].grids || {})).length}
+                      onClick={handleAnnounceParty}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                    >
+                      <Megaphone size={13} /> {announcingParty ? 'Announcing…' : 'Announce'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {showAddConfig && isOfficer && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Select raid config</p>
+                  {Object.keys(compositions).length === 0 ? (
+                    <p className="text-[11px] text-slate-500">No raid configs yet. Create one on Raid Party, then come back here.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                      {Object.entries(compositions).map(([id, comp]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setAddConfigId(comp.id || id)}
+                          className={`p-3 rounded-xl border text-left text-xs cursor-pointer ${addConfigId === (comp.id || id) ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400' : 'border-slate-800 text-slate-400 hover:border-slate-700'}`}
+                        >
+                          <div className="font-bold uppercase tracking-wider">{comp.title || id}</div>
+                          <div className="text-[10px] text-slate-500 mt-1">{(comp.tabOrder || Object.keys(comp.tabs || {})).length} grid tab(s)</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => { setShowAddConfig(false); setAddConfigId(''); }} className="px-4 py-2 rounded-xl border border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer">
+                      Cancel
+                    </button>
+                    <button type="button" disabled={addingConfig || !addConfigId} onClick={handleAddRaidConfig} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50">
+                      {addingConfig ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <PublishedPartyGrid
+                published={{ id: selectedPublishedId, ...publishedCompositions[selectedPublishedId] }}
+                members={members}
+                jobsCatalog={jobsCatalog}
+                commitments={commitments}
+                isOfficer={isOfficer}
+                onPublishedChange={handlePublishedChange}
+              />
+            </section>
+          )}
         </div>
       )}
 
@@ -1581,6 +1747,7 @@ export default function LiveRaidTab({ user }) {
                           const lockedJobObj = slotData.roleLock ? jobsCatalog[slotData.roleLock] : null;
                           const isCellRoleLocked = !!slotData.roleLock;
                           const isPartyLeader = !!slotData.isPartyLeader;
+                          const isRaidLeader = !!slotData.isRaidLeader;
                           const cellColorTheme = lockedJobObj?.colorTheme || '#1e293b';
 
                           const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
@@ -1629,7 +1796,9 @@ export default function LiveRaidTab({ user }) {
                                               : (hasPlacementsConflict
                                                   ? 'border-red-500 ring-2 ring-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.4)] z-20'
                                                   : 'border-slate-900 hover:border-slate-800 z-0'))))
-                              } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                              } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                                isRaidLeader ? 'ring-1 ring-red-800/80' : isPartyLeader ? 'ring-1 ring-blue-600/70' : ''
+                              }`}
                               style={{
                                 backgroundColor: undefined, // Let the background breathe freely behind the gradient mask
                                 borderColor: (isSearchHighlighted || isUserOnLeave || hasPlacementsConflict) ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}30` : undefined),
@@ -1722,6 +1891,7 @@ export default function LiveRaidTab({ user }) {
                                     currentStatus={commitments[calendarSignKey]?.[slotData.userId]?.status}
                                     isVoiceActive={liveVoiceUids.includes(slotData.userId)}
                                     isPartyLeader={isPartyLeader}
+                                    isRaidLeader={isRaidLeader}
                                   />
                                 ) : (
                                   <div className="h-full flex flex-col items-center justify-center space-y-1 text-slate-700 group-hover:text-slate-500 transition-colors py-2">
@@ -1751,20 +1921,32 @@ export default function LiveRaidTab({ user }) {
                                 <>
                                   <div className="fixed inset-0 z-[90]" onClick={() => setActivePopover(null)} />
                                   <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-[100] w-56 font-sans space-y-1.5 animate-fadeIn text-left`}>
-                                    {/* Party Leader section */}
+                                    {/* Raid Leader / Sub Leader */}
+                                    <button
+                                      type="button"
+                                      disabled={!slotData.userId}
+                                      onClick={() => handleSetRaidLeader(coordKey)}
+                                      className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                                        isRaidLeader
+                                          ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                          : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
+                                      }`}
+                                    >
+                                      <Crown size={11} className={`shrink-0 ${isRaidLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
+                                      {isRaidLeader ? 'Remove Raid Leader' : 'Set as Raid Leader'}
+                                    </button>
                                     <button
                                       type="button"
                                       disabled={!slotData.userId}
                                       onClick={() => handleSetPartyLeader(coordKey)}
                                       className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                                         isPartyLeader
-                                          ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                          ? 'text-blue-400 bg-blue-950/50 border-blue-800 hover:bg-blue-900/40'
                                           : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
                                       }`}
                                     >
-                                      <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
-                                      {isPartyLeader ? 'Remove Leader' : 'Set as Leader'}
-                                      {isPartyLeader && <Crown size={10} className="ml-auto text-red-400" />}
+                                      <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-blue-500 fill-blue-500' : 'text-slate-500'}`} />
+                                      {isPartyLeader ? 'Remove Sub Leader' : 'Set as Sub Leader'}
                                     </button>
                                     <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1 pt-0.5">Pre-Assign Job Role</div>
                                     <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">

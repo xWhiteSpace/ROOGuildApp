@@ -80,13 +80,27 @@ export async function resolveViewerParty(snowflakeId) {
       row: parsed.row,
       slotLabel: parsed.label,
       isPartyLeader: slot.isPartyLeader === true,
+      isRaidLeader: slot.isRaidLeader === true,
     });
   });
   columnSlots.sort((a, b) => a.row - b.row);
 
-  const leaderSlot = columnSlots.find((s) => s.isPartyLeader) || null;
-  const rest = columnSlots.filter((s) => !leaderSlot || s.userId !== leaderSlot.userId);
-  const ordered = leaderSlot ? [leaderSlot, ...rest] : columnSlots;
+  const subLeaderSlot = columnSlots.find((s) => s.isPartyLeader) || null;
+
+  let raidLeaderSlot = null;
+  Object.entries(found.alloc).forEach(([coordKey, slot]) => {
+    if (!slot?.isRaidLeader || !slot?.userId) return;
+    const parsed = parseCoord(coordKey);
+    if (!parsed) return;
+    raidLeaderSlot = {
+      userId: String(slot.userId),
+      coordKey,
+      slotLabel: parsed.label,
+    };
+  });
+
+  const rest = columnSlots.filter((s) => !subLeaderSlot || s.userId !== subLeaderSlot.userId);
+  const ordered = subLeaderSlot ? [subLeaderSlot, ...rest] : columnSlots;
 
   const [membersSnap, configSnap, instanceSnap] = await Promise.all([
     db.ref('auction/members').once('value'),
@@ -112,6 +126,7 @@ export async function resolveViewerParty(snowflakeId) {
       displayName: memberLabel(members, slot.userId),
       slotLabel: slot.slotLabel,
       isPartyLeader: slot.isPartyLeader,
+      isRaidLeader: slot.isRaidLeader,
       jobName: catalogName(jobs, profile.jobCode),
       roleName: catalogName(roles, profile.roleCode),
     };
@@ -126,11 +141,18 @@ export async function resolveViewerParty(snowflakeId) {
     partyName,
     viewerSlot: found.slotLabel,
     viewerCol: found.col,
-    leader: leaderSlot
+    leader: subLeaderSlot
       ? {
-          userId: leaderSlot.userId,
-          displayName: memberLabel(members, leaderSlot.userId),
-          slotLabel: leaderSlot.slotLabel,
+          userId: subLeaderSlot.userId,
+          displayName: memberLabel(members, subLeaderSlot.userId),
+          slotLabel: subLeaderSlot.slotLabel,
+        }
+      : null,
+    raidLeader: raidLeaderSlot
+      ? {
+          userId: raidLeaderSlot.userId,
+          displayName: memberLabel(members, raidLeaderSlot.userId),
+          slotLabel: raidLeaderSlot.slotLabel,
         }
       : null,
     members: list,
@@ -186,7 +208,10 @@ function buildPartyEmbed(party, viewerId) {
     return embed;
   }
 
-  const leaderLine = party.leader
+  const raidLeaderLine = party.raidLeader
+    ? `${party.raidLeader.displayName} (${party.raidLeader.slotLabel})`
+    : '—';
+  const subLeaderLine = party.leader
     ? `${party.leader.displayName} (${party.leader.slotLabel})`
     : '—';
 
@@ -207,7 +232,8 @@ function buildPartyEmbed(party, viewerId) {
       `**Tab:** ${party.tabName}\n` +
       `**Your slot:** \`${party.viewerSlot}\`\n` +
       `**Party:** ${party.partyName}\n\n` +
-      `**Party Leader:** ${leaderLine}\n\n` +
+      `**Raid Leader:** ${raidLeaderLine}\n` +
+      `**Sub Leader:** ${subLeaderLine}\n\n` +
       `\`\`\`ansi\n${header}\n${rows.join('\n')}\n\`\`\``
   );
 

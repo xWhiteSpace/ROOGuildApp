@@ -1262,6 +1262,75 @@ router.post('/compose/close', async (req, res) => {
   }
 });
 
+function normalizeTimeStart(raw) {
+  const trimmed = String(raw || '').trim();
+  const withColon = trimmed.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (withColon) {
+    const hh = Math.min(23, parseInt(withColon[1], 10));
+    const mm = Math.min(59, parseInt(withColon[2], 10));
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return '';
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 3) {
+    const hh = Math.min(23, parseInt(digits.slice(0, 1), 10));
+    const mm = Math.min(59, parseInt(digits.slice(1), 10));
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+  if (digits.length === 4) {
+    const hh = Math.min(23, parseInt(digits.slice(0, 2), 10));
+    const mm = Math.min(59, parseInt(digits.slice(2), 10));
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+// POST /api/attendance/compose/send  { eventKey, eventDate, timeStart }
+router.post('/compose/send', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const { eventKey, eventDate } = req.body || {};
+    const timeStart = normalizeTimeStart(req.body?.timeStart);
+    if (!eventKey || !eventDate || !timeStart) {
+      return res.status(400).json({ success: false, error: 'eventKey, eventDate, and timeStart are required.' });
+    }
+
+    const events = configSnap.exists() ? (configSnap.val().events || {}) : {};
+    if (!events[eventKey]) {
+      return res.status(404).json({ success: false, error: 'Event not found.' });
+    }
+
+    const eventTitle = events[eventKey].title || eventKey;
+    const { writePublishedSnapshot } = await import('../services/publishedComposition.js');
+    const published = await writePublishedSnapshot({
+      db,
+      session: {
+        eventKey,
+        eventDate,
+        eventTitle,
+        timeStart,
+        grids: {},
+        selectedGridIds: [],
+      },
+      sessionId: `${eventDate}_${eventKey}`,
+      sentBy: user.displayName || user.username || 'Officer',
+    });
+    if (!published.ok) {
+      return res.status(400).json({ success: false, error: published.error });
+    }
+    return res.json({ success: true, published: { id: published.id, ...published.payload } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/attendance/compose/deploy-roster  { sessionId, grids }
 router.post('/compose/deploy-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -1355,6 +1424,143 @@ router.delete('/published/:id', async (req, res) => {
     const { deletePublished } = await import('../services/publishedComposition.js');
     await deletePublished({ db, id });
     return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+async function loadPublishedOr404(db, id) {
+  const { PUBLISHED_PATH } = await import('../services/publishedComposition.js');
+  const snap = await db.ref(`${PUBLISHED_PATH}/${id}`).once('value');
+  if (!snap.exists()) return null;
+  return { id, ...snap.val() };
+}
+
+// POST /api/attendance/published/:id/announce-attendance
+router.post('/published/:id/announce-attendance', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const published = await loadPublishedOr404(db, id);
+    if (!published) {
+      return res.status(404).json({ success: false, error: 'Published composition not found.' });
+    }
+    const {
+      sendGenRoomMessage,
+      buildAttendanceRaidAnnounce,
+    } = await import('../services/discordGenAnnounce.js');
+    const content = buildAttendanceRaidAnnounce({
+      eventTitle: published.eventTitle || published.eventKey,
+      eventDate: published.eventDate,
+      timeStart: published.timeStart,
+    });
+    await sendGenRoomMessage(content);
+    return res.json({ success: true });
+  } catch (err) {
+    const msg = err.message || 'Failed to announce attendance.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|not connected|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /not found/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// POST /api/attendance/published/:id/announce-party
+router.post('/published/:id/announce-party', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const published = await loadPublishedOr404(db, id);
+    if (!published) {
+      return res.status(404).json({ success: false, error: 'Published composition not found.' });
+    }
+    const {
+      sendGenRoomMessage,
+      buildPartyReadyAnnounce,
+    } = await import('../services/discordGenAnnounce.js');
+    const content = buildPartyReadyAnnounce({
+      eventTitle: published.eventTitle || published.eventKey,
+      eventDate: published.eventDate,
+    });
+    await sendGenRoomMessage(content);
+    return res.json({ success: true });
+  } catch (err) {
+    const msg = err.message || 'Failed to announce party.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|not connected|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /not found/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// POST /api/attendance/published/:id/add-config  { configId }
+router.post('/published/:id/add-config', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const configId = String(req.body?.configId || '').trim();
+    if (!configId) {
+      return res.status(400).json({ success: false, error: 'configId is required.' });
+    }
+    const compSnap = await db.ref(`attendance/compositions/${configId}`).once('value');
+    if (!compSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Raid config not found.' });
+    }
+    const { addConfigToPublished } = await import('../services/publishedComposition.js');
+    const result = await addConfigToPublished({
+      db,
+      id,
+      configId,
+      composition: normalizeComposition(compSnap.val(), configId),
+    });
+    if (!result.ok) {
+      const status = /not found/i.test(result.error) ? 404 : 400;
+      return res.status(status).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, published: result.payload });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/attendance/published/:id/save-grids  { grids }
+router.post('/published/:id/save-grids', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getDatabase();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!requireOfficer(user, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const { savePublishedGrids } = await import('../services/publishedComposition.js');
+    const result = await savePublishedGrids({ db, id, grids: req.body?.grids });
+    if (!result.ok) {
+      const status = /not found/i.test(result.error) ? 404 : 400;
+      return res.status(status).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, published: result.payload });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

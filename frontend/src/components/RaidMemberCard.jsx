@@ -1,4 +1,14 @@
-export default function RaidMemberCard({ allocatedUserObj, jobObj, currentStatus, isVoiceActive, isPartyLeader = false, compact = false }) {
+import { Crown, Flag } from 'lucide-react';
+
+export default function RaidMemberCard({
+  allocatedUserObj,
+  jobObj,
+  currentStatus,
+  isVoiceActive,
+  isPartyLeader = false,
+  isRaidLeader = false,
+  compact = false,
+}) {
   const calOpacityClass = currentStatus === 'Confirmed' || currentStatus === 'Confirm' 
     ? 'opacity-100 text-emerald-400' 
     : currentStatus === 'Leave' || currentStatus === 'Absent' 
@@ -6,6 +16,17 @@ export default function RaidMemberCard({ allocatedUserObj, jobObj, currentStatus
       : 'opacity-10 text-slate-400';
   
   const vcOpacityClass = isVoiceActive ? 'opacity-100 text-indigo-400' : 'opacity-10 text-slate-500';
+
+  const leadershipIcons = (
+    <>
+      {isRaidLeader && (
+        <Crown className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-red-500 fill-red-500`} title="Raid Leader" />
+      )}
+      {isPartyLeader && (
+        <Flag className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-500 fill-blue-500`} title="Sub Leader" />
+      )}
+    </>
+  );
 
   if (compact) {
     return (
@@ -39,12 +60,7 @@ export default function RaidMemberCard({ allocatedUserObj, jobObj, currentStatus
             <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
             <line x1="12" y1="19" x2="12" y2="22"></line>
           </svg>
-          {isPartyLeader && (
-            <svg className="w-3 h-3 text-red-500 fill-red-500 stroke-red-600 transition-all" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Party Leader">
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-              <line x1="4" y1="22" x2="4" y2="15"></line>
-            </svg>
-          )}
+          {leadershipIcons}
         </div>
       </div>
     );
@@ -80,12 +96,7 @@ export default function RaidMemberCard({ allocatedUserObj, jobObj, currentStatus
           <path d="M19 10v1a7 7 0 0 1-14 0v-1"></path>
           <line x1="12" y1="19" x2="12" y2="22"></line>
         </svg>
-        {isPartyLeader && (
-          <svg className="w-3.5 h-3.5 text-red-500 fill-red-500 stroke-red-600 transition-all" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Party Leader">
-            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-            <line x1="4" y1="22" x2="4" y2="15"></line>
-          </svg>
-        )}
+        {leadershipIcons}
       </div>
     </div>
   );

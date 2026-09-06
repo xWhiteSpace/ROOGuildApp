@@ -196,43 +196,61 @@ export async function handleSlashCommand(interaction) {
     }
     let locatedSlot = null;
     let raidConfigName = null;
-    let partyLeaderName = null;
+    let raidLeaderName = null;
+    let subLeaderName = null;
 
     if (liveData.grids) {
       for (const [gridId, gridObj] of Object.entries(liveData.grids)) {
-        if (gridObj.slots_allocation) {
-          // Scan this tab for the requesting user AND the party leader simultaneously
-          let foundInThisTab = false;
-          let tabLeaderUid = null;
+        if (!gridObj.slots_allocation) continue;
 
-          for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) {
-            if (!slotData) continue;
-            if (slotData.userId === snowflakeId) {
-              const parts = coordKey.split(/[-_]/);
-              const partyNum = parseInt(parts[0], 10);
-              const slotNum = parseInt(parts[1], 10);
-              locatedSlot = (!Number.isNaN(partyNum) && !Number.isNaN(slotNum))
-                ? `P${partyNum}-S${slotNum}`
-                : coordKey;
-              raidConfigName = gridObj.name || gridObj.title || gridId;
-              foundInThisTab = true;
-            }
-            if (slotData.isPartyLeader && slotData.userId) {
-              tabLeaderUid = slotData.userId;
-            }
+        let viewerCol = null;
+        let viewerSlotLabel = null;
+        let raidLeaderUid = null;
+        let subLeaderUid = null;
+
+        for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) {
+          if (!slotData) continue;
+          const parts = String(coordKey).split('-');
+          const partyNum = parseInt(parts[0], 10);
+          const slotNum = parseInt(parts[1], 10);
+          const isCoord = !Number.isNaN(partyNum) && !Number.isNaN(slotNum);
+
+          if (slotData.userId === snowflakeId && isCoord) {
+            viewerCol = partyNum;
+            viewerSlotLabel = `P${partyNum}-S${slotNum}`;
+            raidConfigName = gridObj.name || gridObj.title || gridId;
           }
+          if (slotData.isRaidLeader && slotData.userId) {
+            raidLeaderUid = slotData.userId;
+          }
+        }
 
-          if (foundInThisTab) {
-            // Resolve the leader's display name from the members list
-            if (tabLeaderUid) {
-              const leaderSnap = await db.ref(`auction/members/${tabLeaderUid}`).once('value');
-              if (leaderSnap.exists()) {
-                partyLeaderName = leaderSnap.val().displayName || leaderSnap.val().username || tabLeaderUid;
-              }
-            }
+        if (!viewerSlotLabel) continue;
+
+        locatedSlot = viewerSlotLabel;
+
+        for (const [coordKey, slotData] of Object.entries(gridObj.slots_allocation)) {
+          if (!slotData?.isPartyLeader || !slotData.userId) continue;
+          const partyNum = parseInt(String(coordKey).split('-')[0], 10);
+          if (partyNum === viewerCol) {
+            subLeaderUid = slotData.userId;
             break;
           }
         }
+
+        if (raidLeaderUid) {
+          const leaderSnap = await db.ref(`auction/members/${raidLeaderUid}`).once('value');
+          if (leaderSnap.exists()) {
+            raidLeaderName = leaderSnap.val().displayName || leaderSnap.val().username || raidLeaderUid;
+          }
+        }
+        if (subLeaderUid) {
+          const leaderSnap = await db.ref(`auction/members/${subLeaderUid}`).once('value');
+          if (leaderSnap.exists()) {
+            subLeaderName = leaderSnap.val().displayName || leaderSnap.val().username || subLeaderUid;
+          }
+        }
+        break;
       }
     }
 
@@ -245,8 +263,11 @@ export async function handleSlashCommand(interaction) {
       { name: 'Roster Placement Slot', value: `**${locatedSlot}**`, inline: true },
     ];
 
-    if (partyLeaderName) {
-      embedFields.push({ name: '🚩 Party Leader', value: `**${partyLeaderName}**`, inline: false });
+    if (raidLeaderName) {
+      embedFields.push({ name: '👑 Raid Leader', value: `**${raidLeaderName}**`, inline: false });
+    }
+    if (subLeaderName) {
+      embedFields.push({ name: '🔵 Sub Leader', value: `**${subLeaderName}**`, inline: false });
     }
 
     const embed = new EmbedBuilder()

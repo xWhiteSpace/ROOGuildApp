@@ -566,13 +566,25 @@ export default function RaidPartyTab({ user }) {
   const handleSetPartyLeader = (coordKey) => {
     const isAlready = localGridMatrix[coordKey]?.isPartyLeader === true;
     setLocalGridMatrix((prev) => {
+      const next = {
+        ...prev,
+        [coordKey]: { ...prev[coordKey], isPartyLeader: !isAlready },
+      };
+      setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
+      return next;
+    });
+    setIsDirty(true);
+    setActivePopover(null);
+  };
+
+  const handleSetRaidLeader = (coordKey) => {
+    const isAlready = localGridMatrix[coordKey]?.isRaidLeader === true;
+    setLocalGridMatrix((prev) => {
       const next = { ...prev };
-      // Clear leader from every slot first (only 1 leader per tab)
       Object.keys(next).forEach((k) => {
-        if (next[k]?.isPartyLeader) next[k] = { ...next[k], isPartyLeader: false };
+        if (next[k]?.isRaidLeader) next[k] = { ...next[k], isRaidLeader: false };
       });
-      // If this slot wasn't the leader, crown it
-      if (!isAlready) next[coordKey] = { ...next[coordKey], isPartyLeader: true };
+      if (!isAlready) next[coordKey] = { ...next[coordKey], isRaidLeader: true };
       setLocalTabs((tabs) => syncMatrixIntoTabs(tabs, activeTabId, next, columnsCount, rowsCount));
       return next;
     });
@@ -1046,6 +1058,7 @@ export default function RaidPartyTab({ user }) {
                     
                     const isCellRoleLocked = !!slotData.roleLock;
                     const isPartyLeader = !!slotData.isPartyLeader;
+                    const isRaidLeader = !!slotData.isRaidLeader;
                     const cellColorTheme = lockedJobObj?.colorTheme || '#1e293b';
 
                     const isAssignPopoverOpen = activePopover?.coordKey === coordKey && activePopover?.type === 'assign';
@@ -1081,7 +1094,9 @@ export default function RaidPartyTab({ user }) {
                                   : (isSearchHighlighted 
                                       ? 'border-amber-500 ring-2 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.3)] bg-slate-900/60 z-10 scale-[1.01]' 
                                       : (isUserOnLeave ? 'z-10 border-2' : 'border-slate-900 hover:border-slate-800 z-0')))
-                          } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                          } ${isOfficer && !!slotData.userId ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                            isRaidLeader ? 'ring-1 ring-red-800/80' : isPartyLeader ? 'ring-1 ring-blue-600/70' : ''
+                          }`}
                           style={{
                             backgroundColor: undefined, // Clears the solid overlay tile fill
                                 borderColor: isSearchHighlighted || isUserOnLeave ? 'transparent' : (isCellRoleLocked ? `${cellColorTheme}30` : undefined),
@@ -1171,6 +1186,7 @@ export default function RaidPartyTab({ user }) {
                               currentStatus={cellAttendanceMap[slotData.userId]}
                               isVoiceActive={allocatedUserObj?.isVoiceActive ?? (cellAttendanceMap[slotData.userId] === 'Confirmed')}
                               isPartyLeader={isPartyLeader}
+                              isRaidLeader={isRaidLeader}
                             />
                           ) : (
                             <div className="h-full flex flex-col items-center justify-center space-y-1 text-slate-700 group-hover:text-slate-500 transition-colors py-2">
@@ -1201,20 +1217,32 @@ export default function RaidPartyTab({ user }) {
                           <>
                             <div className="fixed inset-0 z-[90]" onClick={() => setActivePopover(null)} />
                             <div className={`absolute ${popoverAlignClass} ${popoverVAlignClass} bg-slate-900 border border-slate-800 p-2 rounded-xl shadow-2xl z-[100] w-56 font-sans space-y-1.5 animate-fadeIn text-left`}>
-                              {/* Party Leader section */}
+                              {/* Raid Leader / Sub Leader */}
+                              <button
+                                type="button"
+                                disabled={!slotData.userId}
+                                onClick={() => handleSetRaidLeader(coordKey)}
+                                className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                                  isRaidLeader
+                                    ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                    : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
+                                }`}
+                              >
+                                <Crown size={11} className={`shrink-0 ${isRaidLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
+                                {isRaidLeader ? 'Remove Raid Leader' : 'Set as Raid Leader'}
+                              </button>
                               <button
                                 type="button"
                                 disabled={!slotData.userId}
                                 onClick={() => handleSetPartyLeader(coordKey)}
                                 className={`w-full px-2 py-1.5 rounded-lg text-left text-[10px] font-semibold flex items-center gap-1.5 border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                                   isPartyLeader
-                                    ? 'text-red-400 bg-red-950/50 border-red-800 hover:bg-red-900/40'
+                                    ? 'text-blue-400 bg-blue-950/50 border-blue-800 hover:bg-blue-900/40'
                                     : 'text-slate-300 border-slate-800 hover:text-white hover:bg-slate-800'
                                 }`}
                               >
-                                <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-red-500 fill-red-500' : 'text-slate-500'}`} />
-                                {isPartyLeader ? 'Remove Leader' : 'Set as Leader'}
-                                {isPartyLeader && <Crown size={10} className="ml-auto text-red-400" />}
+                                <Flag size={11} className={`shrink-0 ${isPartyLeader ? 'text-blue-500 fill-blue-500' : 'text-slate-500'}`} />
+                                {isPartyLeader ? 'Remove Sub Leader' : 'Set as Sub Leader'}
                               </button>
                               <div className="text-[9px] font-mono font-bold uppercase text-slate-500 tracking-wider select-none px-1 border-b border-slate-800 pb-1 pt-0.5">Pre-Assign Job Role</div>
                               <div className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin text-left">
