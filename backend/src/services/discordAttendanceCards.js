@@ -9,9 +9,72 @@ import {
   resolveAttendanceTargetEvent,
   getDefaultLeaveCredits,
 } from './attendanceDecision.js';
-import { enqueueDiscordCall } from '../utils/discordRateLimit.js';
+import { enqueueDiscordCall, isDiscordCircuitOpen } from '../utils/discordRateLimit.js';
 
 const EMBED_COLOR = '#9333ea';
+const ANNOUNCE_COOLDOWN_MS = 60 * 1000;
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const userEventLocks = new Map();
+const lastAnnounceAt = new Map();
+
+function withUserEventLock(key, fn) {
+  const prev = userEventLocks.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  userEventLocks.set(key, next);
+  return next.finally(() => {
+    if (userEventLocks.get(key) === next) userEventLocks.delete(key);
+  });
+}
+
+function consumeAnnounceCooldown(key) {
+  const now = Date.now();
+  const last = lastAnnounceAt.get(key) || 0;
+  if (now - last < ANNOUNCE_COOLDOWN_MS) return false;
+  lastAnnounceAt.set(key, now);
+  return true;
+}
+
+function formatEventWhen(dateStr, timeStart) {
+  if (!dateStr) return '—';
+  const [year, month, day] = String(dateStr).split('-').map(Number);
+  const mon = MONTHS_SHORT[(month || 1) - 1] || '—';
+  const dd = Number.isFinite(day) ? String(day).padStart(2, '0') : '—';
+  const time = timeStart || '20:55';
+  return Number.isFinite(year) ? `${mon} ${dd}, ${year}  ${time}` : `${dateStr}  ${time}`;
+}
+
+function buildRsvpAnnounceLine({ displayName, action, eventTitle, whenLabel }) {
+  const name = displayName || 'A raider';
+  const event = eventTitle || 'the raid';
+  const when = whenLabel || '—';
+  const warId = (process.env.DISCORD_WARANNOUNCE_CHANNEL_ID || '').trim();
+  const cta = warId ? ` Confirm yours at <#${warId}>.` : '';
+  if (action === 'Leave') {
+    return `🕊️ **${name}** will **Leave** on **${event}** this coming **${when}.** Rest well — the guild has you covered.${cta}`;
+  }
+  return `⚔️ **${name}** will **Confirm** on **${event}** this coming **${when}.** Locked in — see you there.${cta}`;
+}
+
+async function announceAttendanceToGenRoom({ displayName, action, eventTitle, whenLabel }) {
+  const genRoomId = (process.env.DISCORD_GENROOM_ID_1 || '').trim();
+  if (!genRoomId) return;
+  if (isDiscordCircuitOpen()) return;
+
+  const { discordClient } = await import('../discord-bot/client.js');
+  if (!discordClient?.isReady()) return;
+
+  const content = buildRsvpAnnounceLine({ displayName, action, eventTitle, whenLabel });
+  await enqueueDiscordCall(async () => {
+    if (isDiscordCircuitOpen() || !discordClient.isReady()) return;
+    let channel = discordClient.channels.cache.get(genRoomId);
+    if (!channel) {
+      channel = await discordClient.channels.fetch(genRoomId);
+    }
+    if (!channel) return;
+    await channel.send({ content });
+  });
+}
 
 function formatDeadline(deadlineMs, timezone) {
   if (!Number.isFinite(deadlineMs)) return '—';
@@ -164,34 +227,58 @@ export async function handleAttendanceCardInteraction(interaction) {
     const parts = customId.split(':');
     const compositeKey = parts.slice(2, -1).join(':');
     const action = parts[parts.length - 1];
-    const db = admin.database();
-    const configSnap = await db.ref('settings/configuration').once('value');
-    if (configSnap.exists() && configSnap.val().isForceLocked === true) {
-      return await interaction.editReply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', components: [] }).catch(() => {});
-    }
+    const lockKey = `${snowflakeId}:${compositeKey}`;
 
-    const memberSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
-    const member = memberSnap.exists() ? memberSnap.val() : {};
-    const displayName = member.displayName || member.name || interaction.user.username;
-    const nextStatus = action === 'leave' ? 'Leave' : 'Confirmed';
+    return await withUserEventLock(lockKey, async () => {
+      const db = admin.database();
+      const configSnap = await db.ref('settings/configuration').once('value');
+      if (configSnap.exists() && configSnap.val().isForceLocked === true) {
+        return await interaction.editReply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.', components: [] }).catch(() => {});
+      }
 
-    const existingSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
-    const current = existingSnap.exists() ? existingSnap.val().status : null;
-    const status = current === nextStatus ? 'None' : nextStatus;
+      const memberSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
+      const member = memberSnap.exists() ? memberSnap.val() : {};
+      const displayName = member.displayName || member.name || interaction.user.username;
+      const nextStatus = action === 'leave' ? 'Leave' : 'Confirmed';
 
-    try {
-      await applyAttendanceDecision({
-        userId: snowflakeId,
-        displayName,
-        compositeKey,
-        status,
-      });
-    } catch (err) {
-      const msg = err instanceof AttendanceDecisionError ? err.message : err.message;
-      return await interaction.followUp({ content: `❌ ${msg}`, ephemeral: true }).catch(() => {});
-    }
+      const existingSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
+      const current = existingSnap.exists() ? existingSnap.val().status : null;
+      if (current === nextStatus) {
+        const payload = await buildPersonalPanel(snowflakeId);
+        return await interaction.editReply(payload);
+      }
 
-    const payload = await buildPersonalPanel(snowflakeId);
-    return await interaction.editReply(payload);
+      try {
+        await applyAttendanceDecision({
+          userId: snowflakeId,
+          displayName,
+          compositeKey,
+          status: nextStatus,
+        });
+      } catch (err) {
+        const msg = err instanceof AttendanceDecisionError ? err.message : err.message;
+        return await interaction.followUp({ content: `❌ ${msg}`, ephemeral: true }).catch(() => {});
+      }
+
+      const payload = await buildPersonalPanel(snowflakeId);
+      await interaction.editReply(payload);
+
+      if (nextStatus === 'Confirmed' || nextStatus === 'Leave') {
+        if (consumeAnnounceCooldown(lockKey)) {
+          (async () => {
+            const instSnap = await db.ref(`scheduler/instances/${compositeKey}`).once('value');
+            const inst = instSnap.exists() ? instSnap.val() : {};
+            await announceAttendanceToGenRoom({
+              displayName,
+              action: nextStatus,
+              eventTitle: inst.title || inst.eventId || compositeKey,
+              whenLabel: formatEventWhen(inst.date, inst.timeStart),
+            });
+          })().catch((err) => {
+            console.error('⚠️ Attendance gen-room announce skipped:', err.message);
+          });
+        }
+      }
+    });
   }
 }
