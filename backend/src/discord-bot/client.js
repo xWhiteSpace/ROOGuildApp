@@ -51,6 +51,14 @@ discordClient.rest.on('rateLimited', (info) => {
   logDiscordRateLimit('REST bucket', info);
 });
 
+export function getDiscordBotHealth() {
+  return {
+    botReady: Boolean(discordClient?.isReady()),
+    botUser: discordClient?.user?.tag || null,
+    wsStatus: discordClient?.ws?.status ?? null,
+  };
+}
+
 async function preflightDiscordGateway(token) {
   const started = Date.now();
   try {
@@ -65,15 +73,30 @@ async function preflightDiscordGateway(token) {
     );
     if (res.status === 401 || res.status === 403) {
       console.error('[DISCORD BOT] Token rejected by Discord REST. Re-copy DISCORD_BOT_TOKEN on Render.');
+      return { blocked: false, status: res.status };
     }
     if (res.status === 429) {
-      console.error('[DISCORD BOT] Discord is rate-limiting this host IP. Gateway login will likely hang until the block lifts.');
+      logDiscordRateLimit('gateway preflight', {
+        status: 429,
+        global: true,
+        message: snippet,
+        headers: res.headers,
+        url: '/api/v10/gateway/bot',
+        retryAfterMs: 6 * 60 * 60 * 1000,
+      });
+      console.error(
+        '[DISCORD BOT] Discord is blocking this Render IP. Skipping gateway login. ' +
+        'Do not redeploy or restart — each probe extends the ban. HTTP can stay up; buttons will not ACK until this clears.'
+      );
+      return { blocked: true, status: 429 };
     }
+    return { blocked: false, status: res.status };
   } catch (err) {
     console.error(
       `[DISCORD BOT] Gateway REST preflight failed after ${Date.now() - started}ms: ${err.name}: ${err.message}. ` +
       'Discord is not answering HTTPS from this host — a new bot token will not fix that.'
     );
+    return { blocked: false, status: 0 };
   }
 }
 
@@ -84,7 +107,6 @@ export async function initializeDiscordBot() {
   }
 
   await hydrateDiscordCircuit();
-  await preflightDiscordGateway(token);
 
   const bootStatus = getDiscordRateLimitStatus();
   console.log(
@@ -120,11 +142,9 @@ export async function initializeDiscordBot() {
   });
 
   let gatewayReadyBound = false;
-  let readyWatch = null;
   const onGatewayReady = () => {
     if (gatewayReadyBound) return;
     gatewayReadyBound = true;
-    if (readyWatch) clearTimeout(readyWatch);
     console.log(`🚀 Discord bot successfully deployed as: ${discordClient.user?.tag}`);
 
    // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
@@ -280,35 +300,73 @@ export async function initializeDiscordBot() {
   discordClient.once('ready', onGatewayReady);
   discordClient.once('clientReady', onGatewayReady);
 
-  readyWatch = setTimeout(() => {
-    if (discordClient.isReady()) return;
-    const wsStatus = discordClient.ws?.status;
-    console.error(
-      '🛑 [DISCORD BOT]: Gateway still not ready after 25s. ' +
-      `isReady=false wsStatus=${wsStatus ?? 'n/a'} user=${discordClient.user?.tag || 'none'}. ` +
-      'HTTP can be live while the bot is offline. Token and privileged intents are OK if boot diagnostics showed tokenLength~72. ' +
-      'This hang is Discord TCP/WebSocket from this host (often Render IP blocked or IPv6 stall).'
-    );
-  }, 25000);
+  let connectInFlight = false;
+  let retryTimer = null;
 
-  try {
-    if (bootStatus.circuitOpen) {
-      console.warn(
-        `🔌 [DISCORD BOT]: REST circuit is OPEN until ${bootStatus.circuitUntilHuman}. ` +
-        `Gateway login still proceeds so buttons can ACK; card Send may stay blocked until the circuit clears.`
+  const scheduleRetry = (waitMs, reason) => {
+    const delay = Math.min(Math.max(Number(waitMs) || 15 * 60 * 1000, 60_000), 6 * 60 * 60 * 1000);
+    if (retryTimer) clearTimeout(retryTimer);
+    console.warn(`⏭️ [DISCORD BOT]: ${reason} Next gateway attempt in ${Math.round(delay / 1000)}s.`);
+    retryTimer = setTimeout(() => {
+      attemptLogin().catch((err) => console.error('[DISCORD BOT] retry failed:', err.message));
+    }, delay);
+  };
+
+  const attemptLogin = async () => {
+    if (discordClient.isReady()) return;
+    if (connectInFlight) return;
+
+    const status = getDiscordRateLimitStatus();
+    if (status.circuitOpen) {
+      scheduleRetry(status.circuitRemainingMs + 5000, `Circuit open until ${status.circuitUntilHuman}.`);
+      return;
+    }
+
+    const preflight = await preflightDiscordGateway(token);
+    if (preflight.blocked) {
+      const again = getDiscordRateLimitStatus();
+      scheduleRetry((again.circuitRemainingMs || 6 * 60 * 60 * 1000) + 5000, 'Discord IP block (HTTP 429).');
+      return;
+    }
+    if (preflight.status === 0) {
+      scheduleRetry(15 * 60 * 1000, 'Gateway REST preflight timed out.');
+      return;
+    }
+
+    connectInFlight = true;
+    const readyWatch = setTimeout(() => {
+      if (discordClient.isReady()) return;
+      const wsStatus = discordClient.ws?.status;
+      console.error(
+        '🛑 [DISCORD BOT]: Gateway still not ready after 25s. ' +
+        `isReady=false wsStatus=${wsStatus ?? 'n/a'} user=${discordClient.user?.tag || 'none'}. ` +
+        'HTTP can be live while the bot is offline. Token and privileged intents are OK if boot diagnostics showed tokenLength~72. ' +
+        'This hang is Discord TCP/WebSocket from this host (often Render IP blocked).'
       );
+    }, 25000);
+
+    try {
+      console.log('⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...');
+      await discordClient.login(token);
+      console.log(
+        `[DISCORD BOT] login() settled. isReady=${discordClient.isReady()} user=${discordClient.user?.tag || 'none'}`
+      );
+      if (!discordClient.isReady()) {
+        scheduleRetry(15 * 60 * 1000, 'login() settled but client is not ready.');
+      }
+    } catch (loginErr) {
+      console.error('🛑 [DISCORD BOT GATEWAY EXCEPTION]:');
+      console.error(`   Error Message: ${loginErr.message}`);
+      console.error(`   Error Code: ${loginErr.code || 'N/A'}`);
+      if (/429|rate limit|too many requests|being blocked/i.test(loginErr.message || '') || loginErr.code === 429) {
+        logDiscordRateLimit('gateway login', loginErr);
+      }
+      scheduleRetry(15 * 60 * 1000, `login() failed: ${loginErr.message}`);
+    } finally {
+      clearTimeout(readyWatch);
+      connectInFlight = false;
     }
-    console.log("⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...");
-    await discordClient.login(token);
-    console.log(
-      `[DISCORD BOT] login() settled. isReady=${discordClient.isReady()} user=${discordClient.user?.tag || 'none'}`
-    );
-  } catch (loginErr) {
-    console.error("🛑 [DISCORD BOT GATEWAY EXCEPTION]:");
-    console.error(`   Error Message: ${loginErr.message}`);
-    console.error(`   Error Code: ${loginErr.code || 'N/A'}`);
-    if (/429|rate limit|too many requests|being blocked/i.test(loginErr.message || '') || loginErr.code === 429) {
-      logDiscordRateLimit('gateway login', loginErr);
-    }
-  }
+  };
+
+  await attemptLogin();
 }

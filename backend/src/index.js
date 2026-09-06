@@ -13,7 +13,7 @@ import session from 'express-session';
 import { initializeEnv } from './config/env.js';
 import authRoutes from './auth/discordOAuth.js';
 import { initializeFirebase } from './config/firebase.js';
-import { initializeDiscordBot, discordClient } from './discord-bot/client.js'; 
+import { initializeDiscordBot, discordClient, getDiscordBotHealth } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
 import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid.routes.js';
 
@@ -112,7 +112,7 @@ app.get('/', (req, res) => {
 
 // 📟 Debug: remaining Discord REST/soft-ban cooldown (no secrets)
 app.get('/api/debug/discord-ratelimit', (req, res) => {
-  res.json({ success: true, ...getDiscordRateLimitStatus() });
+  res.json({ success: true, ...getDiscordBotHealth(), ...getDiscordRateLimitStatus() });
 });
 
 // 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP

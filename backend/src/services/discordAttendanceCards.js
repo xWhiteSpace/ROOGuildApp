@@ -72,8 +72,8 @@ export async function deployPublicAttendanceCardToWarAnnounce() {
   if (!discordClient || !discordClient.isReady()) {
     throw new Error(
       'Discord bot gateway is not connected on this backend. ' +
-      'Production, staging, and local cannot share one DISCORD_BOT_TOKEN — only one process can be online. ' +
-      'Stop the other bot (local/staging) or restart this Render service, then Send again.'
+      'Website Sign-in can still work because OAuth is offloaded to Vercel — that does not mean the bot is online. ' +
+      'Check Render for "successfully deployed as" or GET /api/debug/discord-ratelimit (botReady).'
     );
   }
   if (isDiscordCircuitOpen()) {
