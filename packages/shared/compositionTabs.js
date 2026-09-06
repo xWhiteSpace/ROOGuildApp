@@ -254,7 +254,7 @@ export function buildBlankGridMatrix(cols = 8, rows = 5) {
 
 /**
  * Expand a slots_allocation object into the flat matrix format used by the
- * RaidPartyTab grid renderer. Preserves all slot fields (roleLock, isPartyLeader…).
+ * RaidPartyTab grid renderer. Preserves all slot fields (roleLock, isPartyLeader, isRaidLeader…).
  */
 export function hydrateMatrixFromAllocation(rawAllocation = {}, fallbackCols = 8, fallbackRows = 5) {
   const loadedCols = parseInt(rawAllocation.meta_columnsCount, 10) || fallbackCols;
@@ -270,6 +270,7 @@ export function hydrateMatrixFromAllocation(rawAllocation = {}, fallbackCols = 8
         userId: loadedSlot?.userId || '',
         roleLock: loadedSlot?.roleLock || '',
         ...(loadedSlot?.isPartyLeader ? { isPartyLeader: true } : {}),
+        ...(loadedSlot?.isRaidLeader ? { isRaidLeader: true } : {}),
       };
     }
   }
