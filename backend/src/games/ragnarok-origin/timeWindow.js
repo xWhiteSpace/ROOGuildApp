@@ -1,12 +1,12 @@
 // backend/src/config/timeWindow.js
 /**
  * ⏳ DYNAMIC TIME MATRIX SYSTEM (REAL-TIME CACHED)
- * Listens to Firebase real-time nodes on boot to maintain a localized memory cache.
+ * Loads tenant configuration from Postgres on refresh to maintain a localized memory cache.
  * Keeps function execution synchronous to protect background system loops against promise crashes.
  */
-import { getDatabase } from '../db/database.js';
-import { DEFAULT_CONFIGURATION } from './defaultConfiguration.js';
-import { getCachedConfig, getCurrentTenantId, setCachedConfig } from '../db/tenantContext.js';
+import { getTenantStore } from '../../db/database.js';
+import { DEFAULT_CONFIGURATION } from '../../config/defaultConfiguration.js';
+import { getCachedConfig, getCurrentTenantId, setCachedConfig } from '../../db/tenantContext.js';
 
 const DAYS_OF_WEEK_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAYS_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -17,7 +17,7 @@ function activeConfig() {
 
 export async function refreshTenantConfigCache() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const data = configSnap.exists() ? configSnap.val() : { ...DEFAULT_CONFIGURATION };
     const merged = {

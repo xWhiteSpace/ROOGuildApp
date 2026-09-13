@@ -1488,7 +1488,7 @@ export default function SettingsTab({ user, onSessionUser }) {
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 right-0 left-[var(--valhalla-sidebar-width,16rem)] border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
         <div className="mx-auto max-w-5xl flex items-center justify-end gap-4">
           <button 
             type="button"

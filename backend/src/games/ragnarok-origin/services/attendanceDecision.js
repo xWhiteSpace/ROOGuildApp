@@ -2,7 +2,7 @@
  * Attendance RSVP SSOT: leave credits, deadline lock, next-event targeting,
  * deadline closer, and monthly leave-credit refresh.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import { writeCommitment, ensureWeekInstances, resolveGuildTimezone } from './scheduleService.js';
 import {
   getWeekMonday,
@@ -11,7 +11,7 @@ import {
   guildWallTimeToUtcMs,
   getGuildNowParts,
   DEFAULT_TZ,
-} from '../utils/guildTime.js';
+} from '../../../utils/guildTime.js';
 import { resolveAnchoredComposition } from './publishedComposition.js';
 
 export const DEFAULT_LEAVE_CREDITS = 3;
@@ -53,7 +53,7 @@ async function loadInstance(db, compositeKey) {
  * includePreviousWeek: also load last week (deadline closer catch-up).
  */
 export async function listUpcomingInstances({ timezone, includePreviousWeek = false } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const tz = timezone || (await resolveGuildTimezone(db));
   const thisMonday = getWeekMonday(tz);
   const shiftMonday = (base, days) => {
@@ -82,7 +82,7 @@ export async function listUpcomingInstances({ timezone, includePreviousWeek = fa
  * Next event whose Phase-3 start is in the future AND whose RSVP deadline has not passed.
  */
 export async function resolveNextAttendanceEvent({ timezone, nowMs = Date.now() } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const tz = timezone || (await resolveGuildTimezone(db));
   const upcoming = await listUpcomingInstances({ timezone: tz });
   for (const ev of upcoming) {
@@ -100,7 +100,7 @@ export async function resolveNextAttendanceEvent({ timezone, nowMs = Date.now() 
  * otherwise the next upcoming event with an open RSVP window.
  */
 export async function resolveAttendanceTargetEvent({ timezone, nowMs = Date.now() } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const tz = timezone || (await resolveGuildTimezone(db));
   const anchored = await resolveAnchoredComposition(db);
   if (anchored?.eventKey && anchored?.eventDate) {
@@ -153,7 +153,7 @@ export async function applyAttendanceDecision({
   status,
   compositeKey: rawKey,
 }) {
-  const db = getDatabase();
+  const db = getTenantStore();
   let date = dateStr;
   let eid = eventId;
   if (rawKey && (!date || !eid)) {
@@ -237,7 +237,7 @@ export async function applyAttendanceDecision({
  * Idempotent per event/member.
  */
 export async function closeExpiredDeadlines({ nowMs = Date.now() } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const upcoming = await listUpcomingInstances({ timezone, includePreviousWeek: true });
   const membersSnap = await db.ref('auction/members').once('value');
@@ -283,7 +283,7 @@ export async function closeExpiredDeadlines({ nowMs = Date.now() } = {}) {
  * Guild-TZ 1st of month: reset every raid-roster member to defaultLeaveCredits.
  */
 export async function maybeRefreshMonthlyLeaveCredits({ now = new Date() } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const parts = getGuildNowParts(timezone, now);
   if (parseInt(parts.day, 10) !== 1) return { skipped: true, reason: 'not-first' };
@@ -318,7 +318,7 @@ export async function maybeRefreshMonthlyLeaveCredits({ now = new Date() } = {})
 }
 
 export async function seedMissingLeaveCredits() {
-  const db = getDatabase();
+  const db = getTenantStore();
   const [configSnap, membersSnap] = await Promise.all([
     db.ref('settings/configuration').once('value'),
     db.ref('auction/members').once('value'),

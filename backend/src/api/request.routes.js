@@ -1,17 +1,18 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
-import { getDatabase } from '../db/database.js';
-import { getGateStatusDetails } from '../config/timeWindow.js';
+import { getTenantStore } from '../db/database.js';
+import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { getCurrentTenantId } from '../db/tenantContext.js';
 import { checkOfficer, configNeedsSetup, publicSettingsView, helpSettingsView } from '../auth/officer.js';
 import { loadTenantSettings, saveTenantDiscordChannels } from '../db/tenants.js';
 import { signUserProfile } from '../auth/identity.js';
+import { discordEnv } from '../config/discordEnv.js';
 
 import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
-const WORKSPACE_CONFIG_KEYS = ['guildDisplayName', 'timezone', 'adminRoles', 'guildLogoUrl'];
+import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
 
 function pickKeys(source, keys) {
   const out = {};
@@ -95,7 +96,7 @@ function resolveUserIdentity(req) {
         const profileToVerify = { ...decodedPayload };
         delete profileToVerify._sig;
 
-        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+        const tokenSigningSecret = discordEnv().clientSecret || 'backup_fallback_secret_key';
         const expectedSignature = crypto
           .createHmac('sha256', tokenSigningSecret)
           .update(JSON.stringify(profileToVerify))
@@ -220,7 +221,7 @@ let isMatch = false;
  */
 router.post('/settings/unlock', async (req, res) => {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const config = configSnap.exists() ? configSnap.val() : {};
     const { user, ok } = await checkOfficer(req, config);
@@ -251,7 +252,7 @@ router.post('/settings/unlock', async (req, res) => {
  */
 router.get('/settings/help', async (req, res) => {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const config = configSnap.exists() ? configSnap.val() : { ...DEFAULT_CONFIGURATION };
     return res.json({ success: true, ...helpSettingsView(config) });
@@ -265,7 +266,7 @@ router.get('/settings/help', async (req, res) => {
  */
 router.get('/settings/get', async (req, res) => {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const config = configSnap.exists() ? configSnap.val() : { ...DEFAULT_CONFIGURATION };
     const needsSetup = configNeedsSetup(config);
@@ -297,7 +298,7 @@ router.post('/settings/save', async (req, res) => {
     const { config } = req.body;
     if (!config) return res.status(400).json({ success: false, error: 'Omitted payload configuration parameter maps.' });
 
-    const db = getDatabase();
+    const db = getTenantStore();
     const storedSnap = await db.ref('settings/configuration').once('value');
     const storedConfig = storedSnap.exists() ? storedSnap.val() : {};
     const { user, ok } = await checkOfficer(req, storedConfig);
@@ -340,7 +341,7 @@ router.get('/active-session', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : { items: [] };
     const itemsList = dynamicConfig.items || [];
@@ -408,7 +409,7 @@ router.post('/update-session', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -455,7 +456,7 @@ router.get('/init', async (req, res) => {
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
     
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
     const itemsList = dynamicConfig.items || [];
@@ -533,7 +534,7 @@ router.get('/init', async (req, res) => {
     // Phase 4 Clean Up: Query explicit administrative active instances to pipe down to the frontend
     const instancesSnap = await db.ref('scheduler/active_instances').once('value');
     const activeInstancesData = instancesSnap.exists() ? instancesSnap.val() : {};
-    const { compileLeaderboard } = await import('../utils/sortingEngine.js');
+    const { compileLeaderboard } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
     const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
     
     Object.assign(rankingsByItem, computedLists.rankingsByItem);
@@ -575,12 +576,12 @@ router.post('/sync-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const { ok } = await checkOfficer(req, configSnap.exists() ? configSnap.val() : {});
   if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
 
-  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const botToken = discordEnv().botToken;
   const guildId = getCurrentTenantId();
 
   if (!botToken || !guildId) {
@@ -620,7 +621,7 @@ router.post('/sync-roster', async (req, res) => {
     }
 
     const discordMembers = await discordResponse.json();
-    const db = getDatabase();
+    const db = getTenantStore();
     
     const configSnap = await db.ref('settings/configuration').once('value');
     const timezone = configSnap.exists() ? (configSnap.val().timezone || "Asia/Manila") : "Asia/Manila";
@@ -694,7 +695,7 @@ router.post('/submit', async (req, res) => {
     const playerDisplayName = user.displayName || user.username;
     // ✅ FIXED: Declared playerLower locally to prevent the ReferenceError crash during ledger compilation
     const playerLower = playerDisplayName.trim().toLowerCase();
-    const db = getDatabase();
+    const db = getTenantStore();
 
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
@@ -824,7 +825,7 @@ router.post('/cancel', async (req, res) => {
   try {
     const playerDisplayName = user.displayName || user.username;
     const playerLower = playerDisplayName.trim().toLowerCase();
-    const db = getDatabase();
+    const db = getTenantStore();
     
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
@@ -924,7 +925,7 @@ router.post('/cancel', async (req, res) => {
  * the active staging session. Throws on failure; callers own the HTTP/logging shell.
  */
 export async function performCommitSession({ event, date, allocations, summary }) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const timezone = dynamicConfig.timezone || "Asia/Manila";
@@ -1092,7 +1093,7 @@ router.post('/commit-session', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const allowedRoles = dynamicConfig.adminRoles || [];
@@ -1124,7 +1125,7 @@ router.post('/reset-priority', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const allowedRoles = dynamicConfig.adminRoles || [];
@@ -1176,7 +1177,7 @@ router.post('/clear-history', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const allowedRoles = dynamicConfig.adminRoles || [];
@@ -1228,7 +1229,7 @@ router.get('/loot-history', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const lootHistorySnap = await db.ref('auction/loot_history').once('value');
     if (!lootHistorySnap.exists()) return res.json({ success: true, history: [] });
 
@@ -1259,7 +1260,7 @@ router.get('/past-auctions', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const pastAuctionsSnap = await db.ref('auction/past_auctions').once('value');
     const membersSnap = await db.ref('auction/members').once('value');
     const membersMap = membersSnap.exists() ? membersSnap.val() : {};
@@ -1294,7 +1295,7 @@ router.get('/request-history', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const historySnap = await db.ref('auction/web_requests').once('value');
     if (!historySnap.exists()) return res.json({ success: true, history: [] });
 

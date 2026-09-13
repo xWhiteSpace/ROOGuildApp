@@ -2,10 +2,17 @@
  * Shared frontend API client — credentials + x-user-profile on every request.
  */
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+function isBrowserLocalhost() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
 
 export function getBackendUrl() {
-  return backendUrl;
+  // Laptop SPA uses Vite's /api and /auth proxy so a stale VITE_BACKEND_API_URL
+  // (ngrok) cannot send Sign-in to the interstitial.
+  if (isBrowserLocalhost()) return '';
+  return import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 }
 
 /**
@@ -17,7 +24,7 @@ export function getAuthHeaders({ json = true } = {}) {
   const headers = {};
   if (json) headers['Content-Type'] = 'application/json';
 
-  if (backendUrl.includes('ngrok')) {
+  if (getBackendUrl().includes('ngrok')) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }
 
@@ -46,6 +53,7 @@ export function getAuthHeaders({ json = true } = {}) {
  */
 export async function apiFetch(path, options = {}) {
   const { json = true, headers: extraHeaders, ...rest } = options;
+  const backendUrl = getBackendUrl();
   const url = path.startsWith('http') ? path : `${backendUrl}${path.startsWith('/') ? '' : '/'}${path}`;
   const method = String(rest.method || 'GET').toUpperCase();
   const hasBody = rest.body != null && rest.body !== '';

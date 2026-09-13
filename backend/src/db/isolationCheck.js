@@ -10,7 +10,8 @@ import { migrate } from './migrate.js';
 import { query } from './pool.js';
 import { createTenant } from './tenants.js';
 import { runWithTenant } from './tenantContext.js';
-import { getDatabase } from './database.js';
+import { getTenantStore } from './database.js';
+import { postgresEnv } from '../config/postgresEnv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -23,7 +24,7 @@ async function cleanup() {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
+  if (!postgresEnv().databaseUrl) {
     console.log('SKIP: DATABASE_URL is not set');
     return;
   }
@@ -35,13 +36,13 @@ async function main() {
   await createTenant({ id: TENANT_B, displayName: 'Guild B', onboarded: true, plan: 'free' });
 
   await runWithTenant(TENANT_A, async () => {
-    const db = getDatabase();
+    const db = getTenantStore();
     await db.ref('auction/members/user-a').set({ displayName: 'SecretA', status: 'Active' });
     await db.ref('auction/web_requests/req-a').set({ userId: 'user-a', item: 'Puppet' });
   });
 
   const leaked = await runWithTenant(TENANT_B, async () => {
-    const db = getDatabase();
+    const db = getTenantStore();
     const members = (await db.ref('auction/members').once('value')).val() || {};
     const requests = (await db.ref('auction/web_requests').once('value')).val() || {};
     return { members, requests };

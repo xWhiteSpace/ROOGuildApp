@@ -1,19 +1,19 @@
 /**
  * Schedule SSOT: materialize weekly instances + shared commitment writes.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import {
   getWeekMonday,
   enumerateWeekDates,
   buildCompositeKey,
   parseCompositeKey,
   DEFAULT_TZ,
-} from '../utils/guildTime.js';
+} from '../../../utils/guildTime.js';
 
 /**
  * Resolve guild timezone from settings (or default).
  */
-export async function resolveGuildTimezone(db = getDatabase()) {
+export async function resolveGuildTimezone(db = getTenantStore()) {
   const snap = await db.ref('settings/configuration/timezone').once('value');
   return snap.exists() ? (snap.val() || DEFAULT_TZ) : DEFAULT_TZ;
 }
@@ -96,7 +96,7 @@ export function buildWeekInstanceMap({ weekMonday, events, specialEvents, existi
  * @returns {{ weekMonday: string, instances: object }}
  */
 export async function ensureWeekInstances({ weekMonday: requestedMonday, force = false } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const weekMonday = requestedMonday || getWeekMonday(timezone);
 
@@ -163,7 +163,7 @@ export async function writeCommitment({
   status,
   compositeKey: rawKey,
 }) {
-  const db = getDatabase();
+  const db = getTenantStore();
   let date = dateStr;
   let eid = eventId;
 
@@ -199,7 +199,7 @@ export async function writeCommitment({
  * Load instances for a week (ensure first if empty).
  */
 export async function getWeekInstances(weekMonday) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const monday = weekMonday || getWeekMonday(timezone);
 

@@ -20,6 +20,7 @@ export default function WorkspaceSettingsPage({ user, onSessionUser }) {
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [savingId, setSavingId] = useState('');
   const [discordRoles, setDiscordRoles] = useState([]);
   const [inviteUrl, setInviteUrl] = useState('');
   const [newRoleStr, setNewRoleStr] = useState('');
@@ -148,6 +149,30 @@ export default function WorkspaceSettingsPage({ user, onSessionUser }) {
     }
   };
 
+  const hideGame = async (gameId) => {
+    setSavingId(gameId);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await apiFetch('/api/tenants/disable-game', {
+        method: 'POST',
+        body: JSON.stringify({ gameId }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Could not hide that game.');
+        return;
+      }
+      applySession(data.user);
+      setForm((prev) => ({ ...prev, enabledGames: data.enabledGames || [] }));
+      setSuccess('Game hidden from this workspace. You can enable it again from Choose games.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId('');
+    }
+  };
+
   const enabledGames = gamesForEnabled(form.enabledGames);
 
   return (
@@ -260,12 +285,23 @@ export default function WorkspaceSettingsPage({ user, onSessionUser }) {
         {enabledGames.length === 0 ? (
           <p className="text-sm text-slate-500">No game enabled yet.</p>
         ) : (
-          <ul className="text-sm text-slate-200 space-y-1">
+          <ul className="text-sm text-slate-200 space-y-2">
             {enabledGames.map((game) => (
-              <li key={game.id}>{game.label}</li>
+              <li key={game.id} className="flex items-center justify-between gap-3">
+                <span>{game.label}</span>
+                <button
+                  type="button"
+                  disabled={Boolean(savingId)}
+                  onClick={() => hideGame(game.id)}
+                  className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-rose-300 disabled:opacity-40"
+                >
+                  {savingId === game.id ? 'Hiding…' : 'Hide'}
+                </button>
+              </li>
             ))}
           </ul>
         )}
+        <p className="text-[11px] text-slate-500">Hide removes the tab. Auction, raid, and hall data stay in this guild.</p>
         <Link to="/workspace/games" className="inline-flex text-[11px] text-indigo-400 hover:text-indigo-300">
           Choose games
         </Link>

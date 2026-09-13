@@ -1,13 +1,14 @@
 // backend/src/api/liveRaid.routes.js
 import { Router } from 'express';
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
 import { discordClient } from '../discord-bot/client.js';
 import crypto from 'crypto';
+import { discordEnv } from '../config/discordEnv.js';
 import {
   resolveWarRoomChannelIds,
   inferWarRoomRelationalIds,
   fetchVoiceChannelPresentUids
-} from '../utils/warRoomResolver.js';
+} from '../games/ragnarok-origin/utils/warRoomResolver.js';
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 import {
   findCrossTabDuplicates,
@@ -29,7 +30,7 @@ function resolveUserIdentity(req) {
         const profileToVerify = { ...decodedPayload };
         delete profileToVerify._sig;
 
-        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+        const tokenSigningSecret = discordEnv().clientSecret || 'backup_fallback_secret_key';
         const expectedSignature = crypto
           .createHmac('sha256', tokenSigningSecret)
           .update(JSON.stringify(profileToVerify))
@@ -130,7 +131,7 @@ async function normalizeLiveSessionWarRooms(db, session) {
 }
 
 async function pollLiveSessionVoicePresence(session) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const warRooms = await loadWarRoomsCatalog(db);
   // Same SSOT resolution as Live UI / normalizeLiveSessionWarRooms — never poll only one field
   const sourceIdentifiers = [
@@ -157,7 +158,7 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
     return { stop: false, skipped: true };
   }
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const activeSnap = await db.ref('attendance/live_session').once('value');
   if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
     return { stop: true, reason: 'inactive' };
@@ -288,7 +289,7 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
  *  Writes monitoringTickerStatus to Firebase so the UI can show armed/scheduled/ended from DB.
  */
 function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
-  const db = getDatabase();
+  const db = getTenantStore();
 
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
@@ -359,7 +360,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
  */
 export async function maybeAutoEndLiveRaid() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/live_session').once('value');
     if (!snap.exists()) return;
 
@@ -380,7 +381,7 @@ export async function maybeAutoEndLiveRaid() {
  */
 export async function resumeLiveRaidMonitoringIfNeeded() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/live_session').once('value');
     if (!snap.exists() || snap.val().status !== 'Active') return;
 
@@ -433,7 +434,7 @@ function parseMonitoringFields(body = {}) {
 
 // Internal end live raid handler
 async function endLiveRaidSessionInternal(s) {
-  const db = getDatabase();
+  const db = getTenantStore();
   
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
@@ -546,7 +547,7 @@ router.get('/session', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const sessionSnap = await db.ref('attendance/live_session').once('value');
     if (!sessionSnap.exists()) {
       return res.json({ success: true, session: null });
@@ -566,7 +567,7 @@ router.post('/create', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -683,7 +684,7 @@ router.post('/update', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -721,7 +722,7 @@ router.post('/cell-update', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
     if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
@@ -774,7 +775,7 @@ router.get('/voice-presence', async (req, res) => {
   try {
     const channelsParam = req.query.channels || '';
     const channelIdentifiers = channelsParam.split(',').filter(Boolean);
-    const db = getDatabase();
+    const db = getTenantStore();
     const warRooms = await loadWarRoomsCatalog(db);
     const resolvedChannelIds = resolveWarRoomChannelIds(channelIdentifiers, warRooms);
     if (isDiscordCircuitOpen()) {
@@ -799,7 +800,7 @@ router.post('/end', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -826,7 +827,7 @@ router.post('/cancel', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -855,7 +856,7 @@ router.delete('/history/:sessionId', async (req, res) => {
   if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId is required' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     await db.ref(`attendance/session_archive/${sessionId}`).remove();
     return res.json({ success: true, message: `Session ${sessionId} deleted.` });
   } catch (err) {
@@ -880,7 +881,7 @@ router.patch('/history/:sessionId/in-game', async (req, res) => {
   }
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const sessionRef = db.ref(`attendance/session_archive/${sessionId}`);
     const sessionSnap = await sessionRef.once('value');
     if (!sessionSnap.exists()) {
@@ -900,7 +901,7 @@ router.get('/history/all', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const archiveSnap = await db.ref('attendance/session_archive').once('value');
     return res.json({
       success: true,
@@ -917,7 +918,7 @@ router.post('/set-monitoring-time', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
@@ -961,7 +962,7 @@ router.post('/set-monitoring-time', async (req, res) => {
     if (verified.monitoringStartsAt !== startsAt) {
       return res.status(500).json({
         success: false,
-        error: 'Monitoring write did not persist to Firebase. Check FIREBASE_DATABASE_URL matches the console you are viewing.',
+        error: 'Monitoring write did not persist. Check the database connection.',
       });
     }
 

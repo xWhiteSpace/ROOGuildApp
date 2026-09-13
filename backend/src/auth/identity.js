@@ -1,7 +1,8 @@
 import crypto from 'crypto';
+import { discordEnv } from '../config/discordEnv.js';
 
 function signingSecret() {
-  return process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
+  return discordEnv().clientSecret || 'backup_fallback_secret_key';
 }
 
 function hmacHex(payload) {

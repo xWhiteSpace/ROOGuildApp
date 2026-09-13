@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
 import { PRODUCT_NAME } from '../brand';
@@ -9,6 +9,7 @@ export default function OnboardGuildPage({ onSessionUser }) {
   const guild = location.state?.guild || null;
   const [inviteUrl, setInviteUrl] = useState('');
   const [error, setError] = useState('');
+  const [roleHint, setRoleHint] = useState('');
   const [saving, setSaving] = useState(false);
   const [discordRoles, setDiscordRoles] = useState([]);
   const [adminRoles, setAdminRoles] = useState([]);
@@ -16,23 +17,49 @@ export default function OnboardGuildPage({ onSessionUser }) {
     guildName: guild?.name || '',
     timezone: 'Asia/Manila',
   });
+  const gotRoles = useRef(false);
 
   const guildId = guild?.id;
 
   useEffect(() => {
     if (!guildId) return undefined;
+    gotRoles.current = false;
     apiFetch(`/api/tenants/invite-url?guildId=${encodeURIComponent(guildId)}`, { method: 'GET' })
       .then((r) => r.json())
       .then((data) => { if (data.url) setInviteUrl(data.url); })
       .catch(() => {});
-    apiFetch(`/api/tenants/discord-roles?guildId=${encodeURIComponent(guildId)}`, { method: 'GET' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setDiscordRoles(data.roles || []);
-        if (data.inviteUrl) setInviteUrl(data.inviteUrl);
-      })
-      .catch(() => {});
-    return undefined;
+
+    const loadRoles = () => {
+      if (gotRoles.current) return Promise.resolve();
+      return apiFetch(`/api/tenants/discord-roles?guildId=${encodeURIComponent(guildId)}`, { method: 'GET' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.inviteUrl) setInviteUrl(data.inviteUrl);
+          if (data.success && (data.roles || []).length > 0) {
+            gotRoles.current = true;
+            setDiscordRoles(data.roles);
+            setRoleHint('');
+            return;
+          }
+          setRoleHint(data.error || 'Waiting for the bot to join this server. After you authorize it, come back to this tab.');
+        })
+        .catch((err) => {
+          setRoleHint(err.message || 'Could not load Discord roles.');
+        });
+    };
+
+    loadRoles();
+    const id = setInterval(loadRoles, 3000);
+    const onShow = () => loadRoles();
+    window.addEventListener('focus', onShow);
+    document.addEventListener('visibilitychange', onShow);
+    const stop = setTimeout(() => clearInterval(id), 120000);
+    return () => {
+      clearInterval(id);
+      clearTimeout(stop);
+      window.removeEventListener('focus', onShow);
+      document.removeEventListener('visibilitychange', onShow);
+    };
   }, [guildId]);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
@@ -115,7 +142,9 @@ export default function OnboardGuildPage({ onSessionUser }) {
         <div>
           <div className="text-xs text-slate-400 mb-2">Officer Discord roles</div>
           {discordRoles.length === 0 && (
-            <p className="text-[11px] text-slate-500">Invite the bot first so we can list this server’s roles.</p>
+            <p className="text-[11px] text-slate-500">
+              {roleHint || 'Invite the bot, then return to this tab. Role chips load from the live bot — pausing Render does not refresh this page.'}
+            </p>
           )}
           <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
             {discordRoles.map((role) => (

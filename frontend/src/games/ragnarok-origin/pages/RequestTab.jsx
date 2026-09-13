@@ -507,7 +507,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
       </div>
 
       {/* STICKY BAR ACTIONS BOTTOM CONTROL FLUID RUNNER */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-40 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 right-0 left-[var(--valhalla-sidebar-width,16rem)] border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-40 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
         <div className="mx-auto max-w-6xl flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 shadow-inner hidden sm:block">

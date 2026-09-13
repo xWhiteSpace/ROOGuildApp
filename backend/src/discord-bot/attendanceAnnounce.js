@@ -7,11 +7,12 @@
  * event via a private ephemeral panel. All writes go through the SSOT
  * `writeCommitment`; the public message shows live Confirmed/Leave/Pending counts.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
 import { ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { ensureWeekInstances, writeCommitment, resolveGuildTimezone } from '../services/scheduleService.js';
+import { ensureWeekInstances, writeCommitment, resolveGuildTimezone } from '../games/ragnarok-origin/services/scheduleService.js';
 import { getWeekMonday, getGuildNowParts, parseCompositeKey } from '../utils/guildTime.js';
 import { discordClient } from './client.js';
+import { discordEnv } from '../config/discordEnv.js';
 import { isDiscordCircuitOpen } from '../utils/discordRateLimit.js';
 import { discordChannel } from '../db/channels.js';
 
@@ -20,7 +21,7 @@ const EMBED_COLOR = '#9333ea';
 const MAX_PANEL_EVENTS = 5; // Discord: max 5 action rows per message
 
 function getPostHour() {
-  const parsed = parseInt(process.env.ATTENDANCE_POST_HOUR, 10);
+  const parsed = parseInt(discordEnv().attendancePostHour, 10);
   if (!Number.isInteger(parsed)) return 10;
   return Math.max(0, Math.min(23, parsed));
 }
@@ -28,7 +29,7 @@ function getPostHour() {
 const pad = (n) => String(n).padStart(2, '0');
 
 function markerRef(weekMonday) {
-  return getDatabase().ref(`scheduler/attendance_announcements/${weekMonday}`);
+  return getTenantStore().ref(`scheduler/attendance_announcements/${weekMonday}`);
 }
 
 function weekdayName(dateStr) {
@@ -212,7 +213,7 @@ async function editAnnouncementMessage(marker, payload) {
  * Recompute counts and refresh the live announcement message.
  */
 export async function refreshAnnouncement(weekMonday) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const markerSnap = await markerRef(weekMonday).once('value');
   if (!markerSnap.exists()) return;
 
@@ -229,7 +230,7 @@ export async function refreshAnnouncement(weekMonday) {
  * force=true re-posts: refresh the existing thread message, or recreate if gone.
  */
 export async function postWeeklyAttendance({ force = false } = {}) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const weekMonday = computeNextWeekMonday(timezone);
 
@@ -283,7 +284,7 @@ export async function postWeeklyAttendance({ force = false } = {}) {
 export async function maybeAnnounceWeekly() {
   if (isDiscordCircuitOpen()) return;
 
-  const db = getDatabase();
+  const db = getTenantStore();
 
   const configSnap = await db.ref('settings/configuration').once('value');
   if (configSnap.exists() && configSnap.val().isForceLocked === true) return;
@@ -313,7 +314,7 @@ export async function maybeAnnounceWeekly() {
  * Route att:* button interactions (fired inside the weekly thread).
  */
 export async function handleAttendanceInteraction(interaction) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const snowflakeId = interaction.user.id;
 
   const parts = interaction.customId.split(':');

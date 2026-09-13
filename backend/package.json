@@ -10,7 +10,6 @@
     "clear-commands": "node src/discord-bot/deploy.js",
     "uninstall-commands": "node src/discord-bot/uninstall.js",
     "migrate": "node src/db/migrate.js",
-    "import-rtdb": "node src/db/importRtdb.js",
     "test:isolation": "node src/db/isolationCheck.js"
   },
   "dependencies": {

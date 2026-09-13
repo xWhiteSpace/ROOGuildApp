@@ -2,7 +2,7 @@
  * Published (sent) Raid Compose snapshots + Set Active anchor.
  * Party / Attendance Discord cards read the anchor; Live Raid starts from a snapshot.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import { buildLiveGridsFromComposition } from '@guildname/shared/compositionTabs';
 
 export const PUBLISHED_PATH = 'attendance/published';
@@ -25,7 +25,7 @@ function snapshotGrids(grids) {
 }
 
 export async function resolveAnchoredComposition(dbArg) {
-  const db = dbArg || getDatabase();
+  const db = dbArg || getTenantStore();
   const anchorSnap = await db.ref(ANCHOR_PATH).once('value');
   const id = anchorSnap.exists() ? anchorSnap.val() : null;
   if (!id) return null;
@@ -35,7 +35,7 @@ export async function resolveAnchoredComposition(dbArg) {
 }
 
 export async function listPublished(dbArg) {
-  const db = dbArg || getDatabase();
+  const db = dbArg || getTenantStore();
   const [listSnap, anchorSnap] = await Promise.all([
     db.ref(PUBLISHED_PATH).once('value'),
     db.ref(ANCHOR_PATH).once('value'),
@@ -51,7 +51,7 @@ export async function listPublished(dbArg) {
  * Re-send of the same id keeps existing grids unless the caller sends a non-empty grid map.
  */
 export async function writePublishedSnapshot({ db, session, sessionId, sentBy }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const id = publishedIdFromSession(session, sessionId);
   if (!id || !session) {
     return { ok: false, error: 'No compose session to publish.' };
@@ -93,7 +93,7 @@ export async function writePublishedSnapshot({ db, session, sessionId, sentBy })
 }
 
 export async function addConfigToPublished({ db, id, configId, composition }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const key = String(id || '');
   if (!key) return { ok: false, error: 'Composition id is required.' };
   if (!configId || !composition) {
@@ -155,7 +155,7 @@ function titleForConfigId(configId, grids, fallbackTitle) {
 }
 
 export async function removeConfigFromPublished({ db, id, configId }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const key = String(id || '');
   const targetConfigId = String(configId || '').trim();
   if (!key) return { ok: false, error: 'Composition id is required.' };
@@ -223,7 +223,7 @@ export async function removeConfigFromPublished({ db, id, configId }) {
 }
 
 export async function savePublishedGrids({ db, id, grids }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const key = String(id || '');
   if (!key) return { ok: false, error: 'Composition id is required.' };
   if (!grids || typeof grids !== 'object') {
@@ -246,7 +246,7 @@ export async function savePublishedGrids({ db, id, grids }) {
 }
 
 export async function setPublishedAnchor({ db, id, active }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const key = String(id || '');
   if (!key) return { ok: false, error: 'Composition id is required.' };
 
@@ -267,7 +267,7 @@ export async function setPublishedAnchor({ db, id, active }) {
 }
 
 export async function deletePublished({ db, id }) {
-  const database = db || getDatabase();
+  const database = db || getTenantStore();
   const key = String(id || '');
   if (!key) return { ok: false, error: 'Composition id is required.' };
   await database.ref(`${PUBLISHED_PATH}/${key}`).remove();

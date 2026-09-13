@@ -59,7 +59,7 @@ export default function DiscordSignInButton({
 
   if (disabled) {
     return (
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex w-full flex-col items-center gap-2">
         <button
           type="button"
           disabled

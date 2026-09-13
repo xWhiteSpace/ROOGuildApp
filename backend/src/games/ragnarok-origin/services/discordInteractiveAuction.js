@@ -1,7 +1,7 @@
 // backend/src/services/discordInteractiveAuction.js
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { getGateStatusDetails } from '../config/timeWindow.js'; // ⏰ Timeline Intersector: Imports master clock calculations
+import { getGateStatusDetails } from '../timeWindow.js'; // ⏰ Timeline Intersector: Imports master clock calculations
 
 // Pure message text block formatting the in-game display alignment rule
 const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
@@ -101,7 +101,7 @@ export async function sendPublicAuctionCard(channel) {
  * 🛰️ HELPER: Generates the Master Item Category Selection View (Step 2)
  */
 async function renderItemCategoryView(interaction, finalRosterName, prefixMessage = "") {
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const sessionSnap = await db.ref('auction/active_session').once('value');
 
@@ -186,7 +186,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
  * 🛰️ HELPER: Generates the Fast-Tap Button Grid Matrix (Step 3 Upgraded)
  */
 async function renderSpecificSlotView(interaction, itemId, finalRosterName, prefixMessage = "") {
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const sessionSnap = await db.ref('auction/active_session').once('value');
 
@@ -261,7 +261,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
  * ⚡ CORE INTERACTION INTERCEPT ROUTINE
  */
 export async function handleAuctionInteraction(interaction) {
-  const db = getDatabase();
+  const db = getTenantStore();
 
   // ⏱️ ACK-FIRST: acknowledge based on the component (customId — no I/O) BEFORE
   // any Firebase read, so slow/cold reads can never expire the interaction token

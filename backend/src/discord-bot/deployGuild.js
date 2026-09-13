@@ -1,9 +1,10 @@
 import { REST, Routes } from 'discord.js';
+import { discordEnv } from '../config/discordEnv.js';
 
 export const BOT_INVITE_PERMISSIONS = '311520775232';
 
 export function botInviteUrl(guildId) {
-  const clientId = process.env.DISCORD_CLIENT_ID;
+  const { clientId } = discordEnv();
   const params = new URLSearchParams({
     client_id: clientId,
     permissions: BOT_INVITE_PERMISSIONS,
@@ -17,12 +18,13 @@ export function botInviteUrl(guildId) {
 }
 
 export async function clearGuildCommands(guildId) {
-  if (!guildId || !process.env.DISCORD_BOT_TOKEN || !process.env.DISCORD_CLIENT_ID) {
+  const { botToken, clientId } = discordEnv();
+  if (!guildId || !botToken || !clientId) {
     throw new Error('Missing Discord credentials to clear guild commands');
   }
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+  const rest = new REST({ version: '10' }).setToken(botToken);
   const data = await rest.put(
-    Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, guildId),
+    Routes.applicationGuildCommands(clientId, guildId),
     { body: [] }
   );
   return data;

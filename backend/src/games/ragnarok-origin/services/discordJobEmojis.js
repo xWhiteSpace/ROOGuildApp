@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PermissionFlagsBits } from 'discord.js';
-import { enqueueDiscordCall } from '../utils/discordRateLimit.js';
-import { getCurrentTenantId } from '../db/tenantContext.js';
+import { enqueueDiscordCall } from '../../../utils/discordRateLimit.js';
+import { getCurrentTenantId } from '../../../db/tenantContext.js';
 
 const ICONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../assets/job-icons');
 const EMOJI_PREFIX = 'dgjob_';

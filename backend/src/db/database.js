@@ -502,11 +502,11 @@ class DatabaseHandle {
   }
 }
 
-export function getDatabase() {
+export function getTenantStore() {
   return new DatabaseHandle(resolveTenantId(null));
 }
 
-export function getDatabaseFor(tenantId) {
+export function getTenantStoreFor(tenantId) {
   return new DatabaseHandle(resolveTenantId(tenantId));
 }
 

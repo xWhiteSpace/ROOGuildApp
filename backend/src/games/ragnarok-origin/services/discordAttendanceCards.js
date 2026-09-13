@@ -8,16 +8,16 @@ import {
   EmbedBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import {
   applyAttendanceDecision,
   AttendanceDecisionError,
   resolveAttendanceTargetEvent,
   getDefaultLeaveCredits,
 } from './attendanceDecision.js';
-import { enqueueDiscordCall, isDiscordCircuitOpen } from '../utils/discordRateLimit.js';
+import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { jobIconEmoji, withJobIcon } from './discordJobEmojis.js';
-import { discordChannel } from '../db/channels.js';
+import { discordChannel } from '../../../db/channels.js';
 
 const EMBED_COLOR = '#9333ea';
 const ANNOUNCE_COOLDOWN_MS = 60 * 1000;
@@ -76,7 +76,7 @@ async function announceAttendanceToGenRoom({ displayName, action, eventTitle, wh
   if (!genRoomId) return;
   if (isDiscordCircuitOpen()) return;
 
-  const { discordClient } = await import('../discord-bot/client.js');
+  const { discordClient } = await import('../../../discord-bot/client.js');
   if (!discordClient?.isReady()) return;
 
   const content = buildRsvpAnnounceLine({ displayName, action, eventTitle, whenLabel });
@@ -247,8 +247,8 @@ export async function deployPublicAttendanceCardToWarAnnounce() {
     throw new Error('DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.');
   }
 
-  const { discordClient } = await import('../discord-bot/client.js');
-  const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../utils/discordRateLimit.js');
+  const { discordClient } = await import('../../../discord-bot/client.js');
+  const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../../../utils/discordRateLimit.js');
 
   if (!discordClient || !discordClient.isReady()) {
     throw new Error(
@@ -271,7 +271,7 @@ export async function deployPublicAttendanceCardToWarAnnounce() {
 }
 
 async function buildPersonalPanel(snowflakeId) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const { event, timezone, deadlineMs, missing } = await resolveAttendanceTargetEvent();
   const [memberSnap, configSnap] = await Promise.all([
     db.ref(`auction/members/${snowflakeId}`).once('value'),
@@ -353,7 +353,7 @@ async function replyIfLocked(db, interaction) {
 export async function handleAttendanceCardInteraction(interaction) {
   const snowflakeId = interaction.user.id;
   const customId = interaction.customId || '';
-  const db = getDatabase();
+  const db = getTenantStore();
 
   if (customId === 'attcard:open') {
     if (!interaction.deferred && !interaction.replied) {

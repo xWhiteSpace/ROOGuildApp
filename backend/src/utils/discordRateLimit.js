@@ -5,7 +5,9 @@
  * `retry_after`. The wait (if any) lives on response headers: Retry-After
  * (seconds or HTTP-date), x-ratelimit-reset-after, x-ratelimit-reset.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
+import { discordEnv } from '../config/discordEnv.js';
+import { valhallaEnv } from '../config/valhallaEnv.js';
 
 const DEFAULT_CIRCUIT_MS = 15 * 60 * 1000;
 const MIN_GAP_MS = 1500;
@@ -24,9 +26,9 @@ let oauthLockUntil = 0;
 let oauthInFlight = false;
 
 export function resolveOAuthExchangeUrl() {
-  const explicit = (process.env.OAUTH_EXCHANGE_URL || '').trim().replace(/\/$/, '');
-  if (explicit) return explicit;
-  const front = (process.env.FRONTEND_URL || '').trim().replace(/\/$/, '');
+  const { oauthExchangeUrl } = discordEnv();
+  if (oauthExchangeUrl) return oauthExchangeUrl;
+  const { frontendUrl: front } = valhallaEnv();
   if (front && !/localhost|127\.0\.0\.1/.test(front)) {
     return `${front}/api/discord-token-exchange`;
   }
@@ -34,7 +36,7 @@ export function resolveOAuthExchangeUrl() {
 }
 
 export function isLocalOAuthRedirect() {
-  const uri = process.env.OAUTH_REDIRECT_URI || '';
+  const uri = discordEnv().oauthRedirectUri || '';
   // localhost OR a tunnel to this machine (ngrok). Render/Vercel hosts are not local.
   return /localhost|127\.0\.0\.1|ngrok(-free)?\.(app|dev|io)/i.test(uri);
 }
@@ -169,7 +171,7 @@ function rememberCooldown(waitMs, meta) {
 
 function persistCircuit() {
   try {
-    getDatabase().ref('scheduler/discord_circuit').set({
+    getTenantStore().ref('scheduler/discord_circuit').set({
       until: lastCooldownUntil || null,
       oauthLockUntil: oauthLockUntil || null,
       lastOAuthAttemptAt: lastOAuthAttemptAt || null,
@@ -189,18 +191,18 @@ export async function hydrateDiscordCircuit() {
   // Home/ngrok IP is not Render's Singapore IP — do not inherit a datacenter Cloudflare ban.
   if (isLocalOAuthRedirect()) {
     lastCooldownUntil = 0;
-    console.log('🔌 [DISCORD CIRCUIT] Skip Firebase hydrate on local/ngrok — this machine is not the Render IP.');
+    console.log('🔌 [DISCORD CIRCUIT] Skip store hydrate on local/ngrok — this machine is not the Render IP.');
     return;
   }
   try {
-    const snap = await getDatabase().ref('scheduler/discord_circuit').once('value');
+    const snap = await getTenantStore().ref('scheduler/discord_circuit').once('value');
     if (!snap.exists()) return;
     const data = snap.val() || {};
     const until = Number(data.until) || 0;
     if (until > Date.now()) {
       lastCooldownUntil = until;
-      lastCooldownMeta = data.last || { sourceLabel: 'hydrated-from-firebase' };
-      console.warn(`🔌 [DISCORD CIRCUIT] Restored from Firebase — OPEN until ${formatUntil(until)}`);
+      lastCooldownMeta = data.last || { sourceLabel: 'hydrated-from-store' };
+      console.warn(`🔌 [DISCORD CIRCUIT] Restored from store — OPEN until ${formatUntil(until)}`);
     }
     const priorOauth = Number(data.lastOAuthAttemptAt) || 0;
     if (priorOauth > lastOAuthAttemptAt) lastOAuthAttemptAt = priorOauth;
@@ -346,7 +348,7 @@ export function tripDiscordCircuit(infoOrErr, sourceLabel = 'unknown') {
 }
 
 export function isDiscordCircuitOpen() {
-  // Local/ngrok bot traffic uses this machine's IP, not Render. A Firebase-hydrated
+  // Local/ngrok bot traffic uses this machine's IP, not Render. A store-hydrated
   // Render 429 must not block ngrok card deploys.
   if (isLocalOAuthRedirect()) return false;
   return Date.now() < lastCooldownUntil;

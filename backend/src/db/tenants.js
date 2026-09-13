@@ -191,25 +191,6 @@ export async function setTenantDisplayName(tenantId, displayName) {
   return getTenant(id);
 }
 
-export function envFallbackChannels() {
-  // One-time JSON import CLI only (importRtdb.js). Runtime Discord posts must not use this.
-  return {
-    guildId: process.env.DISCORD_GUILD_ID || '',
-    auctionChannelId: process.env.DISCORD_AUCTION_CHANNEL_ID || '',
-    aucreqChannelId: process.env.DISCORD_AUCREQ_CHANNEL_ID || '',
-    genroomId: process.env.DISCORD_GENROOM_ID_1 || '',
-    attendanceId: process.env.DISCORD_ATTENDANCE_ID || '',
-    warAnnounceChannelId: process.env.DISCORD_WARANNOUNCE_CHANNEL_ID || '',
-    warRooms: {
-      DISCORD_WARROOM_ID_1: process.env.DISCORD_WARROOM_ID_1 || '',
-      DISCORD_WARROOM_ID_2: process.env.DISCORD_WARROOM_ID_2 || '',
-      DISCORD_WARROOM_ID_3: process.env.DISCORD_WARROOM_ID_3 || '',
-      DISCORD_WARROOM_ID_4: process.env.DISCORD_WARROOM_ID_4 || '',
-      DISCORD_WARROOM_ID_5: process.env.DISCORD_WARROOM_ID_5 || '',
-    },
-  };
-}
-
 export async function forEachOnboardedTenant(fn) {
   const tenants = await listOnboardedTenants();
   for (const tenant of tenants) {

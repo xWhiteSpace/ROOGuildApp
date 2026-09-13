@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
-import { GAMES } from '../games/catalog';
+import { GAMES, isGameSetupComplete, resolvePostLoginPath } from '../games/catalog';
 import { PRODUCT_NAME } from '../brand';
 
 export default function ChooseGamePage({ user, onSessionUser }) {
@@ -10,22 +10,56 @@ export default function ChooseGamePage({ user, onSessionUser }) {
   const [savingId, setSavingId] = useState('');
   const enabled = new Set(user?.enabledGames || []);
 
-  const enableGame = async (gameId, setupPath) => {
-    setSavingId(gameId);
+  const applySession = (nextUser) => {
+    onSessionUser?.(nextUser);
+    if (nextUser) localStorage.setItem('guild_raid_session', JSON.stringify(nextUser));
+  };
+
+  const openGame = (game) => {
+    const needsSetup = Boolean(game.setupPath) && !isGameSetupComplete(game.id, user?.gameSetup);
+    navigate(needsSetup ? game.setupPath : game.homePath || '/');
+  };
+
+  const enableGame = async (game) => {
+    if (enabled.has(game.id)) {
+      openGame(game);
+      return;
+    }
+    setSavingId(game.id);
     setError('');
     try {
       const res = await apiFetch('/api/tenants/enable-game', {
         method: 'POST',
-        body: JSON.stringify({ gameId }),
+        body: JSON.stringify({ gameId: game.id }),
       });
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Could not enable that game.');
         return;
       }
-      onSessionUser?.(data.user);
-      if (data.user) localStorage.setItem('guild_raid_session', JSON.stringify(data.user));
-      navigate(setupPath || data.setupPath || '/');
+      applySession(data.user);
+      navigate(data.setupPath || game.homePath || '/');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId('');
+    }
+  };
+
+  const hideGame = async (game) => {
+    setSavingId(`hide-${game.id}`);
+    setError('');
+    try {
+      const res = await apiFetch('/api/tenants/disable-game', {
+        method: 'POST',
+        body: JSON.stringify({ gameId: game.id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Could not hide that game.');
+        return;
+      }
+      applySession(data.user);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -39,35 +73,60 @@ export default function ChooseGamePage({ user, onSessionUser }) {
         <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">{PRODUCT_NAME}</div>
         <h1 className="text-2xl font-semibold">Choose a game</h1>
         <p className="text-sm text-slate-400">
-          Workspace is ready. Enable a game pack to get its pages, Discord channels, and settings.
+          Enable a pack to show it in the top bar. Hide it anytime — the guild’s data stays.
         </p>
         {error && <p className="text-xs text-rose-300 font-mono">{error}</p>}
         <div className="space-y-3">
           {GAMES.map((game) => {
             const already = enabled.has(game.id);
+            const needsSetup = already && Boolean(game.setupPath) && !isGameSetupComplete(game.id, user?.gameSetup);
+            const hiding = savingId === `hide-${game.id}`;
             return (
-              <button
+              <div
                 key={game.id}
-                type="button"
-                disabled={Boolean(savingId)}
-                onClick={() => enableGame(game.id, game.setupPath)}
-                className="w-full text-left rounded-2xl border border-indigo-500/40 bg-indigo-950/20 px-4 py-4 hover:border-indigo-400 transition disabled:opacity-50"
+                className="rounded-2xl border border-indigo-500/40 bg-indigo-950/20 px-4 py-4"
               >
                 <div className="text-base font-semibold text-white">{game.label}</div>
                 <div className="text-[11px] text-slate-400 mt-1">
-                  {already ? 'Enabled — continue setup' : 'Auction, raid attendance, party grids, Mimic Book'}
+                  {needsSetup
+                    ? 'Enabled — continue setup'
+                    : already
+                      ? 'Shown on this workspace'
+                      : game.description}
                 </div>
-                <div className="text-[10px] font-mono uppercase tracking-widest text-indigo-300 mt-3">
-                  {savingId === game.id ? 'Enabling…' : already ? 'Continue' : 'Enable'}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={Boolean(savingId)}
+                    onClick={() => enableGame(game)}
+                    className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white disabled:opacity-50"
+                  >
+                    {savingId === game.id ? 'Enabling…' : needsSetup ? 'Continue' : already ? 'Open' : 'Enable'}
+                  </button>
+                  {already && (
+                    <button
+                      type="button"
+                      disabled={Boolean(savingId)}
+                      onClick={() => hideGame(game)}
+                      className="rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-rose-300 disabled:opacity-50"
+                    >
+                      {hiding ? 'Hiding…' : 'Hide'}
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
             );
           })}
-          <div className="rounded-2xl border border-dashed border-slate-800 px-4 py-4 opacity-60">
-            <div className="text-base font-semibold text-slate-300">More games later</div>
-            <div className="text-[11px] text-slate-500 mt-1">Additional titles will show up here when they ship.</div>
-          </div>
         </div>
+        {(user?.enabledGames || []).length > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate(resolvePostLoginPath(user))}
+            className="text-[11px] text-slate-500 hover:text-slate-300"
+          >
+            Back to workspace
+          </button>
+        )}
       </div>
     </div>
   );

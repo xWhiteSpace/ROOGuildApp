@@ -3,11 +3,11 @@
  * plus the public Discord launcher / personal ephemeral panel.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../../../db/database.js';
 import { isSlotCoordKey } from '@guildname/shared/compositionTabs';
-import { enqueueDiscordCall } from '../utils/discordRateLimit.js';
+import { enqueueDiscordCall } from '../../../utils/discordRateLimit.js';
 import { resolveAnchoredComposition } from './publishedComposition.js';
-import { discordChannel } from '../db/channels.js';
+import { discordChannel } from '../../../db/channels.js';
 
 const EMBED_COLOR = '#9333ea';
 
@@ -32,7 +32,7 @@ function memberLabel(members, uid) {
  * Find the viewer on the Set Active published composition grid and build their column party.
  */
 export async function resolveViewerParty(snowflakeId) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const uid = String(snowflakeId);
   const session = await resolveAnchoredComposition(db);
   if (!session) {
@@ -265,8 +265,8 @@ export async function deployPublicPartyCardToWarAnnounce() {
     throw new Error('DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.');
   }
 
-  const { discordClient } = await import('../discord-bot/client.js');
-  const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../utils/discordRateLimit.js');
+  const { discordClient } = await import('../../../discord-bot/client.js');
+  const { isDiscordCircuitOpen, getDiscordRateLimitStatus } = await import('../../../utils/discordRateLimit.js');
 
   if (!discordClient || !discordClient.isReady()) {
     throw new Error(
@@ -294,7 +294,7 @@ export async function handlePartyCardInteraction(interaction) {
     await interaction.deferReply({ ephemeral: true });
   }
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   if (configSnap.exists() && configSnap.val().isForceLocked === true) {
     return await interaction.editReply({ content: '🔒 Interaction Rejected: System under administrative lockdown freeze.' });

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { postgresEnv } from '../config/postgresEnv.js';
 
 export const LOGO_BUCKET = 'guild-assets';
 export const LOGO_MAX_BYTES = 512 * 1024;
@@ -6,8 +7,7 @@ export const LOGO_MAX_BYTES = 512 * 1024;
 let cachedClient = null;
 
 export function getSupabaseAdmin() {
-  const url = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const { supabaseUrl: url, supabaseServiceRoleKey: key } = postgresEnv();
   if (!url || !key) return null;
   if (!cachedClient) {
     cachedClient = createClient(url, key, {

@@ -1,34 +1,28 @@
 import LeftNavBar from '../components/LeftNavBar';
-import UserPanel from '../components/UserPanel';
-import { useEffect, useRef, useState } from 'react';
+import ValhallaToolbar from '../components/ValhallaToolbar';
+import ValhallaLockup from '../components/ValhallaLockup';
 import { useNavigate } from 'react-router-dom';
-import { gamesForEnabled, getGame } from '../games/catalog';
+import { gamesForEnabled, getGame, firstEnabledGameId, resolvePostLoginPath } from '../games/catalog';
 
 export default function MainLayout({ children, user, onLogout, onSessionUser, activeGameId, setActiveGameId }) {
-  const [macroBarVisible, setMacroBarVisible] = useState(true);
-  const lastScrollY = useRef(0);
   const navigate = useNavigate();
   const enabledGames = gamesForEnabled(user?.enabledGames);
 
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY || document.documentElement.scrollTop;
-      const delta = y - lastScrollY.current;
-
-      if (y < 24) {
-        setMacroBarVisible(true);
-      } else if (delta > 8) {
-        setMacroBarVisible(false);
-      } else if (delta < -8) {
-        setMacroBarVisible(true);
-      }
-
-      lastScrollY.current = y;
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  const goHome = () => {
+    const current = getGame(activeGameId);
+    const enabled = user?.enabledGames || [];
+    if (current && enabled.includes(current.id) && current.homePath) {
+      navigate(current.homePath);
+      return;
+    }
+    const first = getGame(firstEnabledGameId(enabled));
+    if (first?.homePath) {
+      setActiveGameId(first.id);
+      navigate(first.homePath);
+      return;
+    }
+    navigate(resolvePostLoginPath(user));
+  };
 
   const selectGame = (gameId) => {
     setActiveGameId(gameId);
@@ -37,34 +31,38 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <div
-        className={`w-full bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-6 py-2.5 flex gap-5 text-xs font-mono select-none sticky top-0 z-[80] transition-transform duration-300 ${
-          macroBarVisible ? 'translate-y-0' : '-translate-y-full'
-        }`}
-      >
-        {enabledGames.length === 0 && (
-          <span className="text-slate-500">[No game]</span>
-        )}
-        {enabledGames.map((game) => (
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
+      <div className="w-full shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs font-mono select-none z-[80]">
+        <div className="flex items-center gap-4 min-w-0">
           <button
-            key={game.id}
             type="button"
-            onClick={() => selectGame(game.id)}
-            className={`hover:text-white transition-colors duration-100 cursor-pointer ${
-              activeGameId === game.id ? 'text-indigo-400 font-bold' : 'text-slate-400'
-            }`}
+            onClick={goHome}
+            title="Home"
+            className="flex items-center shrink-0 rounded-lg px-1 py-0.5 hover:bg-slate-800/80 cursor-pointer"
           >
-            [{game.shortLabel}]
+            <ValhallaLockup size="sm" />
           </button>
-        ))}
+          {enabledGames.length === 0 && (
+            <span className="text-slate-500">[No game]</span>
+          )}
+          {enabledGames.map((game) => (
+            <button
+              key={game.id}
+              type="button"
+              onClick={() => selectGame(game.id)}
+              className={`hover:text-white transition-colors duration-100 cursor-pointer ${
+                activeGameId === game.id ? 'text-indigo-400 font-bold' : 'text-slate-400'
+              }`}
+            >
+              [{game.shortLabel}]
+            </button>
+          ))}
+        </div>
+        <ValhallaToolbar user={user} onLogout={onLogout} onSessionUser={onSessionUser} />
       </div>
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-h-0">
         <LeftNavBar activeGameId={activeGameId} user={user} />
-        <main className="flex-1 p-6 lg:p-8">
-          <div className="mb-6">
-            <UserPanel user={user} onLogout={onLogout} onSessionUser={onSessionUser} />
-          </div>
+        <main className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
           {children}
         </main>
       </div>

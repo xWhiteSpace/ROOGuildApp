@@ -2,8 +2,8 @@
  * Officer GEN Room text pings (Attendance open / Party ready).
  * War-announce launchers stay separate; this only posts channel text.
  */
-import { enqueueDiscordCall, isDiscordCircuitOpen } from '../utils/discordRateLimit.js';
-import { discordChannel } from '../db/channels.js';
+import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
+import { discordChannel } from '../../../db/channels.js';
 
 function warAnnounceMention() {
   const warId = (discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID') || '').trim();
@@ -32,7 +32,7 @@ export async function sendGenRoomMessage(content) {
     throw new Error('Discord is rate-limited. Try again shortly.');
   }
 
-  const { discordClient } = await import('../discord-bot/client.js');
+  const { discordClient } = await import('../../../discord-bot/client.js');
   if (!discordClient?.isReady()) {
     throw new Error(
       'Discord bot gateway is not connected on this backend. ' +

@@ -1,7 +1,25 @@
 import { useMemo } from 'react';
 import DiscordSignInButton from '../components/DiscordSignInButton';
 import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
-import { PRODUCT_LOGO_SRC, PRODUCT_NAME } from '../brand';
+import { PRODUCT_NAME } from '../brand';
+import ValhallaLockup from '../components/ValhallaLockup';
+
+const CTA_CLASS = 'inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-black/40 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
+
+function AuthCard({ kicker, kickerClass, title, body, accent, children }) {
+  return (
+    <div
+      className={`flex h-full min-h-[220px] flex-col rounded-2xl border bg-slate-950/70 p-5 text-left shadow-xl ${
+        accent ? 'border-indigo-500/30' : 'border-slate-800'
+      }`}
+    >
+      <div className={`text-[10px] font-mono uppercase tracking-widest ${kickerClass}`}>{kicker}</div>
+      <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
+      <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-400">{body}</p>
+      <div className="mt-5 w-full shrink-0">{children}</div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const errorMessage = useMemo(() => {
@@ -33,8 +51,6 @@ export default function LandingPage() {
     return map[err] || `Login failed (${err}).`;
   }, []);
 
-  const ctaClass = 'inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-black/40 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
-
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-950">
       <video
@@ -52,13 +68,10 @@ export default function LandingPage() {
 
       <div className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 text-center">
         <h1 className="sr-only">{PRODUCT_NAME}</h1>
-        <img
-          src={PRODUCT_LOGO_SRC}
-          alt={PRODUCT_NAME}
-          className="h-28 w-auto object-contain drop-shadow-lg sm:h-36"
-        />
+        <ValhallaLockup size="lg" />
         <p className="mx-auto max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
-          Guild ops for Discord — auctions, raid attendance, and cards, private to each server. Pick a game after you create a workspace.
+          One Discord server is one private {PRODUCT_NAME} workspace. Members open a guild that is already here.
+          Officers with Manage Server add their server, invite the bot, and pick a game.
         </p>
 
         {errorMessage && (
@@ -67,35 +80,32 @@ export default function LandingPage() {
           </div>
         )}
 
-        <div className="grid w-full gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 text-left shadow-xl">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Sign in</div>
-            <h2 className="mt-1 text-base font-semibold text-white">My guild already uses this</h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Open the workspace for a Discord server that is already on {PRODUCT_NAME}. Members never pay.
-            </p>
-            <div className="mt-4">
-              <DiscordSignInButton
-                intent="signin"
-                label="Sign in with Discord"
-                className={`${ctaClass} bg-[#5865F2] hover:bg-[#4752C4]`}
-              />
-            </div>
-          </div>
-          <div className="rounded-2xl border border-indigo-500/30 bg-slate-950/70 p-5 text-left shadow-xl">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-indigo-400">Get started</div>
-            <h2 className="mt-1 text-base font-semibold text-white">Add my Discord server</h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Create a workspace for your server. You need Manage Server. This is the account payments will use later.
-            </p>
-            <div className="mt-4">
-              <DiscordSignInButton
-                intent="signup"
-                label="Get started with Discord"
-                className={`${ctaClass} bg-indigo-600 hover:bg-indigo-500`}
-              />
-            </div>
-          </div>
+        <div className="grid w-full items-stretch gap-4 sm:grid-cols-2">
+          <AuthCard
+            kicker="Sign in"
+            kickerClass="text-slate-500"
+            title="My guild is already here"
+            body={`Open the workspace for a Discord server that is already on ${PRODUCT_NAME}. You do not need Manage Server.`}
+          >
+            <DiscordSignInButton
+              intent="signin"
+              label="Sign in with Discord"
+              className={`${CTA_CLASS} bg-[#5865F2] hover:bg-[#4752C4]`}
+            />
+          </AuthCard>
+          <AuthCard
+            kicker="Get started"
+            kickerClass="text-indigo-400"
+            title="Add my Discord server"
+            accent
+            body="Create a workspace for a server you can manage. Invite the bot, then pick a game. This is the account payments will use later."
+          >
+            <DiscordSignInButton
+              intent="signup"
+              label="Get started with Discord"
+              className={`${CTA_CLASS} bg-indigo-600 hover:bg-indigo-500`}
+            />
+          </AuthCard>
         </div>
 
         <p className="max-w-md text-[11px] leading-relaxed text-slate-500">

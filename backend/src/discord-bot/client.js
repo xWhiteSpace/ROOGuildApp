@@ -1,14 +1,15 @@
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
+import { handleAuctionInteraction } from '../games/ragnarok-origin/services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
 import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
-import { refreshTenantConfigCache } from '../config/timeWindow.js';
-import { handleAttendanceCardInteraction } from '../services/discordAttendanceCards.js';
-import { syncJobIconEmojis } from '../services/discordJobEmojis.js';
-import { handlePartyCardInteraction } from '../services/partyViewer.js';
+import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
+import { handleAttendanceCardInteraction } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
+import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
+import { handlePartyCardInteraction } from '../games/ragnarok-origin/services/partyViewer.js';
 import { clearGuildCommands } from './deployGuild.js';
 
+import { discordEnv } from '../config/discordEnv.js';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { logDiscordRateLimit, isDiscordCircuitOpen, hydrateDiscordCircuit, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 
@@ -18,14 +19,7 @@ dns.setDefaultResultOrder('ipv4first');
 const discordDispatcher = new Agent({ connect: { timeout: 10_000, family: 4 } });
 
 // 📡 GLOBAL NETWORK TUNNEL — honor HTTPS_PROXY, HTTP_PROXY, or PROXY_URL
-const resolvedProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.PROXY_URL;
-const resolvedProxyName = process.env.HTTPS_PROXY
-  ? 'HTTPS_PROXY'
-  : process.env.HTTP_PROXY
-    ? 'HTTP_PROXY'
-    : process.env.PROXY_URL
-      ? 'PROXY_URL'
-      : null;
+const { httpsProxy: resolvedProxyUrl, proxyName: resolvedProxyName } = discordEnv();
 if (resolvedProxyUrl) {
   console.log(`🔒 [NETWORKING]: Routing global HTTP/HTTPS through ${resolvedProxyName} tunnel.`);
   const proxyAgent = new ProxyAgent({ uri: resolvedProxyUrl });
@@ -104,7 +98,7 @@ async function preflightDiscordGateway(token) {
 }
 
 export async function initializeDiscordBot() {
-  const token = (process.env.DISCORD_BOT_TOKEN || '').trim();
+  const token = discordEnv().botToken;
   if (!token) {
     throw new Error('DISCORD_BOT_TOKEN is required to initialize Discord client');
   }
@@ -251,7 +245,7 @@ async function withGuildTenant(guildId, fn) {
           const { maybeAnnounceEvents } = await import('./eventAnnounce.js');
           await maybeAnnounceEvents();
         }
-        const attendanceDecision = await import('../services/attendanceDecision.js');
+        const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
         await attendanceDecision.closeExpiredDeadlines();
         await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
         const liveRaid = await import('../api/liveRaid.routes.js');

@@ -1,10 +1,13 @@
 // backend/src/auth/discordOAuth.js
 import { Router } from 'express';
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
 import { discordClient } from '../discord-bot/client.js';
 import { getCurrentTenantId } from '../db/tenantContext.js';
 import { resolveUserIdentity, signUserProfile } from './identity.js';
 import { attachTenantLogo, buildSessionUser, listVisibleTenants } from '../api/tenant.routes.js';
+import { compactDiscordGuilds, saveOAuthGuilds } from '../db/oauthGuilds.js';
+import { discordEnv } from '../config/discordEnv.js';
+import { valhallaEnv } from '../config/valhallaEnv.js';
 
 import { logDiscordHttpFailure, isDiscordCircuitOpen, getDiscordRateLimitStatus, beginOAuthAttempt, endOAuthAttempt, markOAuthLoginClick, hydrateDiscordCircuit, resolveOAuthExchangeUrl, isLocalOAuthRedirect } from '../utils/discordRateLimit.js';
 
@@ -16,7 +19,7 @@ const CACHE_DURATION = 2 * 60 * 1000;
 
 let activeFetchPromise = null;
 
-const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:3000';
+const getFrontendUrl = () => valhallaEnv().frontendUrl;
 
 function circuitRedirect(targetFrontend) {
   const status = getDiscordRateLimitStatus();
@@ -52,17 +55,17 @@ async function fetchGuildMemberWithUserToken(accessToken, guildId) {
 }
 
 async function exchangeCodeForDiscordUser(code) {
-  const redirectUri = process.env.OAUTH_REDIRECT_URI;
+  const redirectUri = discordEnv().oauthRedirectUri;
   const exchangeUrl = resolveOAuthExchangeUrl();
 
   if (exchangeUrl) {
-    const secret = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
+    const secret = discordEnv().clientSecret;
     const headers = {
       'Content-Type': 'application/json',
       'x-oauth-bridge': secret,
       Authorization: `Bearer ${secret}`,
     };
-    const bypass = String(process.env.VERCEL_PROTECTION_BYPASS || process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+    const bypass = discordEnv().vercelProtectionBypass;
     if (bypass) {
       headers['x-vercel-protection-bypass'] = bypass;
     }
@@ -73,7 +76,7 @@ async function exchangeCodeForDiscordUser(code) {
       body: JSON.stringify({
         code,
         redirect_uri: redirectUri,
-        client_id: process.env.DISCORD_CLIENT_ID,
+        client_id: discordEnv().clientId,
         guild_id: getCurrentTenantId() || undefined,
       }),
     });
@@ -109,8 +112,8 @@ async function exchangeCodeForDiscordUser(code) {
   const tokenResponse = await fetch(`${discordApi}/oauth2/token`, {
     method: 'POST',
     body: new URLSearchParams({
-      client_id: process.env.DISCORD_CLIENT_ID,
-      client_secret: process.env.DISCORD_CLIENT_SECRET,
+      client_id: discordEnv().clientId,
+      client_secret: discordEnv().clientSecret,
       grant_type: 'authorization_code',
       code,
       redirect_uri: redirectUri,
@@ -143,6 +146,11 @@ async function exchangeCodeForDiscordUser(code) {
   const guildsResponse = await fetch(`${discordApi}/users/@me/guilds`, {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
   });
+  if (!guildsResponse.ok) {
+    const guildsErr = await guildsResponse.json().catch(() => ({}));
+    logDiscordHttpFailure('oauth users/@me/guilds', guildsResponse, guildsErr);
+    console.warn('⚠️ [OAUTH]: Discord guild list was empty — Create a workspace will have nothing to show until they Get started again.');
+  }
   const guilds = guildsResponse.ok ? await guildsResponse.json().catch(() => []) : [];
 
   return {
@@ -189,7 +197,7 @@ router.get('/discord-members', async (req, res) => {
     }
 
     // Never REST-fetch 1000 members from the Render IP. Fall back to Postgres roster.
-    const fbSnap = await getDatabase().ref('auction/members').once('value');
+    const fbSnap = await getTenantStore().ref('auction/members').once('value');
     const rows = fbSnap.exists() ? fbSnap.val() : {};
     return Object.entries(rows)
       .filter(([, m]) => m?.displayName)
@@ -233,8 +241,10 @@ router.get('/login', async (req, res) => {
     return res.redirect(`${targetFrontend}/landing?error=login_busy`);
   }
   const intent = normalizeAuthIntent(req.query.intent);
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const redirectUri = encodeURIComponent(process.env.OAUTH_REDIRECT_URI);
+  const clientId = discordEnv().clientId;
+  const redirectUriRaw = discordEnv().oauthRedirectUri;
+  console.log(`🔐 [OAUTH] /auth/login redirect_uri=${redirectUriRaw}`);
+  const redirectUri = encodeURIComponent(redirectUriRaw);
   const scope = encodeURIComponent('identify guilds guilds.members.read');
   res.redirect(`${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(intent)}`);
 });
@@ -259,14 +269,9 @@ router.get('/callback', async (req, res) => {
 
   try {
     const { user, guilds: rawGuilds } = await exchangeCodeForDiscordUser(code);
-    const discordGuilds = (Array.isArray(rawGuilds) ? rawGuilds : []).map((g) => ({
-      id: String(g.id),
-      name: g.name,
-      icon: g.icon || null,
-      owner: Boolean(g.owner),
-      permissions: String(g.permissions || '0'),
-    }));
+    const discordGuilds = compactDiscordGuilds(rawGuilds);
     req.session.discordGuilds = discordGuilds;
+    await saveOAuthGuilds(user.id, discordGuilds);
 
     const tenantRows = await listVisibleTenants(user.id, discordGuilds);
     const onboarded = tenantRows.filter((t) => t.onboarded);
@@ -307,6 +312,10 @@ router.get('/callback', async (req, res) => {
     }
     if (isDiscordCircuitOpen()) {
       return res.redirect(circuitRedirect(targetFrontend));
+    }
+    if (isLocalOAuthRedirect()) {
+      const detail = encodeURIComponent(String(error?.message || 'unknown').slice(0, 180));
+      return res.redirect(`${targetFrontend}/landing?error=discord_oauth_failed&detail=${detail}`);
     }
     return res.redirect(`${targetFrontend}/landing?error=discord_oauth_failed`);
   } finally {

@@ -28,7 +28,9 @@ import RagnarokSetupPage from './games/ragnarok-origin/pages/RagnarokSetupPage';
 import { apiFetch } from './services/apiClient';
 import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
 import { PRODUCT_NAME, productTitle } from './brand';
-import { firstEnabledGameId, getGame, RAGNAROK_ORIGIN_ID } from './games/catalog';
+import { GAMES, firstEnabledGameId, gameIdForPath, RAGNAROK_ORIGIN_ID, resolvePostLoginPath } from './games/catalog';
+import HighlightsPage from './games/adventurer-guild/pages/HighlightsPage';
+import GuildEventsPage from './games/adventurer-guild/pages/GuildEventsPage';
 
 export const MimicBookContext = createContext(null);
 
@@ -245,13 +247,7 @@ export default function App() {
 
 /** Landing is full-bleed (no nav chrome); everything else stays in MainLayout. */
 function postLoginPath(user) {
-  if (!user?.currentTenantId) return '/select-guild';
-  const enabled = user.enabledGames || [];
-  if (!enabled.length) return '/workspace/games';
-  if (enabled.includes(RAGNAROK_ORIGIN_ID) && !user.gameSetup?.[RAGNAROK_ORIGIN_ID]) {
-    return getGame(RAGNAROK_ORIGIN_ID).setupPath;
-  }
-  return getGame(firstEnabledGameId(enabled))?.homePath || '/';
+  return resolvePostLoginPath(user);
 }
 
 /** Landing is full-bleed (no nav chrome); everything else stays in MainLayout. */
@@ -263,6 +259,17 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
     '/workspace/games',
     '/games/ragnarok-origin/setup',
   ]);
+
+  const pathGameId = gameIdForPath(pathname);
+  const effectiveGameId = pathGameId && (authUser?.enabledGames || []).includes(pathGameId)
+    ? pathGameId
+    : activeGameId;
+
+  useEffect(() => {
+    if (effectiveGameId && effectiveGameId !== activeGameId) {
+      setActiveGameId(effectiveGameId);
+    }
+  }, [effectiveGameId, activeGameId, setActiveGameId]);
 
   if (pathname === '/login') {
     return <Navigate to={`/landing${search}`} replace />;
@@ -303,17 +310,25 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
   if (authUser?.currentTenantId) {
     const next = postLoginPath(authUser);
     const needsChoose = next === '/workspace/games';
-    const needsSetup = next === '/games/ragnarok-origin/setup';
+    const needsSetup = GAMES.some((game) => game.setupPath && next === game.setupPath);
     if (needsChoose && pathname !== '/workspace/games' && pathname !== '/onboard' && pathname !== '/select-guild') {
       return <Navigate to="/workspace/games" replace />;
     }
-    if (needsSetup && pathname !== '/games/ragnarok-origin/setup' && pathname !== '/workspace/games' && pathname !== '/onboard') {
-      return <Navigate to="/games/ragnarok-origin/setup" replace />;
+    if (needsSetup && pathname !== next && pathname !== '/workspace/games' && pathname !== '/onboard') {
+      return <Navigate to={next} replace />;
+    }
+    if (
+      pathGameId
+      && !(authUser.enabledGames || []).includes(pathGameId)
+      && pathname !== '/workspace'
+      && pathname !== '/workspace/games'
+    ) {
+      return <Navigate to={next} replace />;
     }
   }
 
   return (
-    <MainLayout user={authUser} onLogout={onLogout} onSessionUser={onSessionUser} activeGameId={activeGameId} setActiveGameId={setActiveGameId}>
+    <MainLayout user={authUser} onLogout={onLogout} onSessionUser={onSessionUser} activeGameId={effectiveGameId} setActiveGameId={setActiveGameId}>
       <Routes>
         <Route path="/" element={<RequestTab user={authUser} />} />
         <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
@@ -321,6 +336,9 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/past-auction" element={<PastAuctionTab />} />
         <Route path="/submit-evidence" element={<Navigate to="/" replace />} />
         <Route path="/workspace" element={<WorkspaceSettingsPage user={authUser} onSessionUser={onSessionUser} />} />
+        <Route path="/games/adventurer-guild" element={<HighlightsPage user={authUser} />} />
+        <Route path="/games/adventurer-guild/highlights" element={<Navigate to="/games/adventurer-guild" replace />} />
+        <Route path="/games/adventurer-guild/events" element={<GuildEventsPage user={authUser} />} />
         <Route path="/games/ragnarok-origin/settings" element={<SettingsTab user={authUser} onSessionUser={onSessionUser} />} />
         <Route path="/settings-configuration" element={<Navigate to="/games/ragnarok-origin/settings" replace />} />
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />

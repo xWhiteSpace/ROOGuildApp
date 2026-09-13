@@ -4,15 +4,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { listOnboardedTenants } from '../db/tenants.js';
 import { migrate } from '../db/migrate.js';
+import { discordEnv } from '../config/discordEnv.js';
+import { postgresEnv } from '../config/postgresEnv.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+const rest = new REST({ version: '10' }).setToken(discordEnv().botToken);
 
 (async () => {
   try {
-    if (!process.env.DATABASE_URL) {
+    if (!postgresEnv().databaseUrl) {
       console.log('DATABASE_URL is required to clear slash commands.');
       process.exit(1);
     }
@@ -21,7 +23,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
     console.log('Clearing slash commands on onboarded guilds...');
     for (const tenant of tenants) {
       const data = await rest.put(
-        Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, tenant.id),
+        Routes.applicationGuildCommands(discordEnv().clientId, tenant.id),
         { body: [] },
       );
       console.log(`Cleared ${tenant.id} (${data.length} remaining).`);

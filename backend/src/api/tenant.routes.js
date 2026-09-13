@@ -4,12 +4,13 @@ import { canManageGuild, resolveUserIdentity, signUserProfile } from '../auth/id
 import { checkOfficer, rolesGrantOfficer } from '../auth/officer.js';
 import { claimTenantOwner, createTenant, getTenant, getTenantsByIds, getTenantsForMember, markTenantOnboarded, loadTenantSettings, setTenantLogoUrl, setTenantEnabledGames, setTenantDisplayName, saveTenantDiscordChannels } from '../db/tenants.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
-import { gameSetupMap, isKnownGame, parseEnabledGames, RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
+import { gameSetupMap, isKnownGame, parseEnabledGames, RAGNAROK_ORIGIN_ID, setupPathForGame } from '../games/catalog.js';
 import { botInviteUrl, clearGuildCommands } from '../discord-bot/deployGuild.js';
 import { discordClient } from '../discord-bot/client.js';
 import { runWithTenant } from '../db/tenantContext.js';
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
 import { deleteGuildLogo, LOGO_MAX_BYTES, resolveGuildLogoUrl, uploadGuildLogo } from '../services/guildLogo.js';
+import { discordGuildsForRequest } from '../db/oauthGuilds.js';
 
 const router = Router();
 
@@ -113,7 +114,7 @@ async function buildSessionUser(req, tenantId, baseUser) {
   };
 
   await runWithTenant(tenantId, async () => {
-    const db = getDatabase();
+    const db = getTenantStore();
     await db.ref(`auction/members/${user.id}`).update({
       displayName: user.displayName,
       ...(roleNames.length ? { roles: roleNames } : {}),
@@ -139,7 +140,7 @@ router.post('/select', async (req, res) => {
   const tenant = await getTenant(tenantId);
   if (!tenant) return res.status(404).json({ success: false, error: 'Guild is not on this app yet' });
 
-  const visible = await listVisibleTenants(identity.id, req.session?.discordGuilds || []);
+  const visible = await listVisibleTenants(identity.id, await discordGuildsForRequest(req, identity));
   if (!visible.some((t) => String(t.id) === tenantId)) {
     return res.status(403).json({ success: false, error: 'You are not a member of that Discord server' });
   }
@@ -160,7 +161,15 @@ router.get('/discord-roles', async (req, res) => {
   if (!guild) {
     return res.status(409).json({ success: false, error: 'Invite the bot into this Discord server first', inviteUrl: botInviteUrl(guildId) });
   }
-  await guild.roles.fetch().catch(() => {});
+  try {
+    await guild.roles.fetch();
+  } catch (err) {
+    return res.status(502).json({
+      success: false,
+      error: err.message || 'Could not read Discord roles',
+      inviteUrl: botInviteUrl(guildId),
+    });
+  }
   const roles = [...guild.roles.cache.values()]
     .filter((role) => role.name !== '@everyone')
     .sort((a, b) => b.position - a.position)
@@ -186,12 +195,15 @@ router.post('/onboard', async (req, res) => {
     return res.status(409).json({ success: false, error: 'This Discord server is already set up' });
   }
 
-  const cachedGuilds = req.session?.discordGuilds || [];
+  const cachedGuilds = await discordGuildsForRequest(req, identity);
   const listed = cachedGuilds.find((g) => String(g.id) === String(guildId));
-  if (listed && !listed.owner && !canManageGuild(listed.permissions) && listed.owner_discord_id !== identity.id) {
-    if (!canManageGuild(listed.permissions)) {
-      return res.status(403).json({ success: false, error: 'You must have Manage Server on that Discord server' });
-    }
+  if (!listed?.owner && !canManageGuild(listed?.permissions)) {
+    return res.status(403).json({
+      success: false,
+      error: listed
+        ? 'You must have Manage Server on that Discord server'
+        : 'Discord did not list that server for this login. Get started again after you create or join it.',
+    });
   }
 
   const botInGuild = discordClient?.guilds?.cache?.has(String(guildId));
@@ -284,7 +296,36 @@ router.post('/enable-game', async (req, res) => {
       success: true,
       user: signed,
       enabledGames: enabled,
-      setupPath: gameId === RAGNAROK_ORIGIN_ID ? '/games/ragnarok-origin/setup' : '/',
+      setupPath: setupPathForGame(gameId),
+    });
+  });
+});
+
+router.post('/disable-game', async (req, res) => {
+  const identity = resolveUserIdentity(req);
+  if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
+  if (!tenantId) {
+    return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
+  }
+  const gameId = String(req.body?.gameId || '');
+  if (!isKnownGame(gameId)) {
+    return res.status(400).json({ success: false, error: 'Unknown game.' });
+  }
+  const { ok } = await checkOfficer(req);
+  if (!ok) {
+    return res.status(403).json({ success: false, error: 'Officer access required to hide a game.' });
+  }
+  const tenant = await getTenant(tenantId);
+  const enabled = parseEnabledGames(tenant?.enabled_games).filter((id) => id !== gameId);
+  await setTenantEnabledGames(tenantId, enabled);
+  const user = await buildSessionUser(req, tenantId, identity);
+  const signed = signUserProfile(user);
+  return req.session.save(() => {
+    res.json({
+      success: true,
+      user: signed,
+      enabledGames: enabled,
     });
   });
 });
@@ -356,7 +397,7 @@ router.post('/workspace', async (req, res) => {
       .filter(Boolean);
   }
 
-  const db = getDatabase();
+  const db = getTenantStore();
   await runWithTenant(tenantId, async () => {
     await db.ref('settings/configuration').set(nextConfig);
   });
@@ -503,7 +544,7 @@ export async function listVisibleTenants(discordUserId, sessionGuilds = []) {
 router.get('/mine', async (req, res) => {
   const identity = resolveUserIdentity(req);
   if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
-  const discordGuilds = req.session?.discordGuilds || [];
+  const discordGuilds = await discordGuildsForRequest(req, identity);
   const tenants = await listVisibleTenants(identity.id, discordGuilds);
   const onboardable = discordGuilds.filter((g) => {
     const already = tenants.some((t) => t.id === g.id && t.onboarded);

@@ -14,7 +14,7 @@
  *  - SKIP-IF-EMPTY: never archives an empty/half-done board (zero winners).
  *  - A short catch-up window absorbs tick jitter around the trigger minute.
  */
-import { getDatabase } from '../db/database.js';
+import { getTenantStore } from '../db/database.js';
 import { getGuildWeekMinute, DEFAULT_TZ } from '../utils/guildTime.js';
 
 const WEEK_MINUTES = 10080;
@@ -60,13 +60,13 @@ function toArray(node) {
  */
 export async function maybeAutoCommitAuction() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
 
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
     if (dynamicConfig.isForceLocked === true) return;
 
-    const { getGateStatusDetails } = await import('../config/timeWindow.js');
+    const { getGateStatusDetails } = await import('../games/ragnarok-origin/timeWindow.js');
     const status = getGateStatusDetails();
     if (!status || !status.activeEventId) return;
 
@@ -109,7 +109,7 @@ export async function maybeAutoCommitAuction() {
     const requestsSnap = await db.ref('auction/web_requests').once('value');
     const firebaseRequests = requestsSnap.exists() ? Object.values(requestsSnap.val()) : [];
 
-    const { compileLeaderboard } = await import('../utils/sortingEngine.js');
+    const { compileLeaderboard } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
     const { rankingsByItem } = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
     const categoryAllocations = session.categoryAllocations || {};

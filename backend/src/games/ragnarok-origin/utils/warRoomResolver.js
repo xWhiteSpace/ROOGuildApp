@@ -3,7 +3,7 @@
  * SSOT: settings/configuration/warRooms (relational ID + envKey) → Render process.env
  */
 
-import { currentDiscordChannels, discordChannel } from '../db/channels.js';
+import { currentDiscordChannels, discordChannel } from '../../../db/channels.js';
 
 const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 
@@ -91,7 +91,7 @@ export async function fetchVoiceChannelPresentUids(discordClient, channelIds = [
     return presentUserIds;
   }
 
-  const { isDiscordCircuitOpen, enqueueDiscordCall } = await import('./discordRateLimit.js');
+  const { isDiscordCircuitOpen, enqueueDiscordCall } = await import('../../../utils/discordRateLimit.js');
 
   for (const channelId of channelIds) {
     if (isDiscordCircuitOpen()) break;

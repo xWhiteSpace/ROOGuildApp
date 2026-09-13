@@ -4,7 +4,9 @@ export const RAGNAROK_ORIGIN = {
   id: RAGNAROK_ORIGIN_ID,
   label: 'Ragnarok Origin',
   shortLabel: 'Ragnarok',
+  description: 'Auction, raid attendance, party grids, Mimic Book',
   homePath: '/',
+  pathPrefix: '',
   setupPath: '/games/ragnarok-origin/setup',
   settingsPath: '/games/ragnarok-origin/settings',
   modules: [
