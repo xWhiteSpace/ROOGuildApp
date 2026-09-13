@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
-
-const emptyRooms = {
-  DISCORD_WARROOM_ID_1: '',
-  DISCORD_WARROOM_ID_2: '',
-  DISCORD_WARROOM_ID_3: '',
-  DISCORD_WARROOM_ID_4: '',
-  DISCORD_WARROOM_ID_5: '',
-};
+import { PRODUCT_NAME } from '../brand';
 
 export default function OnboardGuildPage({ onSessionUser }) {
   const navigate = useNavigate();
@@ -22,12 +15,6 @@ export default function OnboardGuildPage({ onSessionUser }) {
   const [form, setForm] = useState({
     guildName: guild?.name || '',
     timezone: 'Asia/Manila',
-    auctionChannelId: '',
-    aucreqChannelId: '',
-    genroomId: '',
-    attendanceId: '',
-    warAnnounceChannelId: '',
-    warRooms: { ...emptyRooms },
   });
 
   const guildId = guild?.id;
@@ -73,7 +60,8 @@ export default function OnboardGuildPage({ onSessionUser }) {
         method: 'POST',
         body: JSON.stringify({
           guildId,
-          ...form,
+          guildName: form.guildName,
+          timezone: form.timezone,
           adminRoles,
         }),
       });
@@ -85,7 +73,7 @@ export default function OnboardGuildPage({ onSessionUser }) {
       }
       onSessionUser(data.user);
       localStorage.setItem('guild_raid_session', JSON.stringify(data.user));
-      navigate('/');
+      navigate('/workspace/games');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -93,25 +81,12 @@ export default function OnboardGuildPage({ onSessionUser }) {
     }
   };
 
-  const field = (label, key, placeholder) => (
-    <label className="block text-xs text-slate-400">
-      {label}
-      <input
-        value={form[key]}
-        onChange={(e) => setField(key, e.target.value.trim())}
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white"
-      />
-    </label>
-  );
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <form onSubmit={submit} className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl space-y-4">
         <h1 className="text-2xl font-semibold">Create a workspace for {guild?.name || 'your Discord server'}</h1>
         <p className="text-sm text-slate-400">
-          This creates the RO Guild App workspace for that Discord server. It stays on the free plan until payments exist.
-          Invite the bot, pick officer Discord roles, then paste channel IDs (Developer Mode → right-click channel → Copy Channel ID).
+          This creates the {PRODUCT_NAME} workspace for that Discord server. Invite the bot, pick officer roles and a timezone. You will choose a game next.
         </p>
         {inviteUrl && (
           <a href={inviteUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-full bg-[#5865F2] px-5 py-2 text-sm font-semibold">
@@ -119,8 +94,24 @@ export default function OnboardGuildPage({ onSessionUser }) {
           </a>
         )}
         {error && <p className="text-xs text-rose-300 font-mono">{error}</p>}
-        {field('Guild display name', 'guildName', 'Your guild name')}
-        {field('Timezone', 'timezone', 'Asia/Manila')}
+        <label className="block text-xs text-slate-400">
+          Guild display name
+          <input
+            value={form.guildName}
+            onChange={(e) => setField('guildName', e.target.value)}
+            placeholder="Your guild name"
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
+        </label>
+        <label className="block text-xs text-slate-400">
+          Timezone
+          <input
+            value={form.timezone}
+            onChange={(e) => setField('timezone', e.target.value.trim())}
+            placeholder="Asia/Manila"
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
+        </label>
         <div>
           <div className="text-xs text-slate-400 mb-2">Officer Discord roles</div>
           {discordRoles.length === 0 && (
@@ -142,26 +133,6 @@ export default function OnboardGuildPage({ onSessionUser }) {
               </button>
             ))}
           </div>
-        </div>
-        {field('Auction announce channel ID', 'auctionChannelId', 'numbers only')}
-        {field('Auction request / claim card channel ID', 'aucreqChannelId', '')}
-        {field('General room channel ID', 'genroomId', '')}
-        {field('Weekly attendance thread parent (one text channel)', 'attendanceId', '')}
-        {field('War-announce (one text channel for cards)', 'warAnnounceChannelId', '')}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Object.keys(emptyRooms).map((key, idx) => (
-            <label key={key} className="block text-xs text-slate-400">
-              Voice war room {idx + 1}
-              <input
-                value={form.warRooms[key]}
-                onChange={(e) => setForm((prev) => ({
-                  ...prev,
-                  warRooms: { ...prev.warRooms, [key]: e.target.value.trim() },
-                }))}
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white"
-              />
-            </label>
-          ))}
         </div>
         <button
           type="submit"

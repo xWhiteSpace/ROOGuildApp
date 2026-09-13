@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Minus, Plus, User } from 'lucide-react';
-import { apiFetch } from '../services/apiClient';
+import { apiFetch } from '../../../services/apiClient';
 import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 
 export default function Profile({ user }) {

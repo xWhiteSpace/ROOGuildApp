@@ -28,8 +28,8 @@ import RaidMemberCard from '../components/RaidMemberCard';
 import RosterSidebar from '../components/RosterSidebar';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
-import { formatGuildDate, DEFAULT_TZ } from '../utils/guildTime';
-import { apiFetch } from '../services/apiClient';
+import { formatGuildDate, DEFAULT_TZ } from '../../../utils/guildTime';
+import { apiFetch } from '../../../services/apiClient';
 import {
   normalizeComposition,
   normalizeCompositionsMap,

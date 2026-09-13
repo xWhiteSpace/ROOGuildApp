@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import RaidMemberCard from './RaidMemberCard';
 import RosterSidebar from './RosterSidebar';
-import { apiFetch } from '../services/apiClient';
+import { apiFetch } from '../../../services/apiClient';
 import { isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 export default function PublishedPartyGrid({

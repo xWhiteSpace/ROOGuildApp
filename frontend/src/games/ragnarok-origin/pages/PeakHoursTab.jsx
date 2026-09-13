@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { apiFetch } from '../services/apiClient';
+import { apiFetch } from '../../../services/apiClient';
 
 const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -318,9 +318,9 @@ export default function PeakHoursTab({ user }) {
           {missing.length === 0 ? (
             <p className="text-sm text-slate-500">Everyone on MasterList has set Peak Hours.</p>
           ) : (
-            <ol className="list-decimal list-inside space-y-1 text-sm text-slate-200">
+            <ol className="list-decimal list-inside max-h-48 overflow-y-auto pr-1 space-y-0.5 text-sm text-slate-200 scrollbar-thin">
               {missing.map((m) => (
-                <li key={m.uid}>{m.displayName}</li>
+                <li key={m.uid} className="truncate">{m.displayName}</li>
               ))}
             </ol>
           )}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VALHALLA">
+  <rect width="64" height="64" rx="16" fill="#020617"/>
+  <path d="M32 8 54 19.5v23L32 54 10 42.5v-23Z" fill="#1e1b4b" stroke="#818cf8" stroke-width="2.4" stroke-linejoin="round"/>
+  <text x="32" y="38" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700" fill="#c7d2fe">V</text>
+</svg>

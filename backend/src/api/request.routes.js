@@ -11,6 +11,25 @@ import { signUserProfile } from '../auth/identity.js';
 import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
+const WORKSPACE_CONFIG_KEYS = ['guildDisplayName', 'timezone', 'adminRoles', 'guildLogoUrl'];
+
+function pickKeys(source, keys) {
+  const out = {};
+  for (const key of keys) {
+    if (source && Object.prototype.hasOwnProperty.call(source, key)) out[key] = source[key];
+  }
+  return out;
+}
+
+function omitKeys(source, keys) {
+  const skip = new Set(keys);
+  const out = {};
+  for (const [key, value] of Object.entries(source || {})) {
+    if (!skip.has(key)) out[key] = value;
+  }
+  return out;
+}
+
 const router = Router();
 
 // 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
@@ -287,16 +306,27 @@ router.post('/settings/save', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Officer access required to save Settings.' });
     }
 
-    const nextConfig = {
-      ...config,
-      guildLogoUrl: storedConfig.guildLogoUrl || '',
-    };
+    const scope = req.body.scope === 'workspace' ? 'workspace' : 'game';
+    let nextConfig;
+    if (scope === 'workspace') {
+      nextConfig = {
+        ...storedConfig,
+        ...pickKeys(config, WORKSPACE_CONFIG_KEYS),
+        guildLogoUrl: storedConfig.guildLogoUrl || '',
+      };
+    } else {
+      nextConfig = {
+        ...storedConfig,
+        ...omitKeys(config, WORKSPACE_CONFIG_KEYS),
+        guildLogoUrl: storedConfig.guildLogoUrl || '',
+      };
+    }
     await db.ref('settings/configuration').set(nextConfig);
-    if (req.body.discordChannels) {
+    if (scope === 'game' && req.body.discordChannels) {
       const tenantId = req.tenantId || getCurrentTenantId();
       if (tenantId) await saveTenantDiscordChannels(tenantId, req.body.discordChannels);
     }
-    return res.json({ success: true, message: 'Guild settings saved.' });
+    return res.json({ success: true, message: scope === 'workspace' ? 'Workspace saved.' : 'Game settings saved.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

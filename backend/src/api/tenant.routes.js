@@ -2,8 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import { canManageGuild, resolveUserIdentity, signUserProfile } from '../auth/identity.js';
 import { checkOfficer, rolesGrantOfficer } from '../auth/officer.js';
-import { claimTenantOwner, createTenant, getTenant, getTenantsByIds, getTenantsForMember, markTenantOnboarded, loadTenantSettings, setTenantLogoUrl } from '../db/tenants.js';
+import { claimTenantOwner, createTenant, getTenant, getTenantsByIds, getTenantsForMember, markTenantOnboarded, loadTenantSettings, setTenantLogoUrl, setTenantEnabledGames, setTenantDisplayName, saveTenantDiscordChannels } from '../db/tenants.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
+import { gameSetupMap, isKnownGame, parseEnabledGames, RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
 import { botInviteUrl, clearGuildCommands } from '../discord-bot/deployGuild.js';
 import { discordClient } from '../discord-bot/client.js';
 import { runWithTenant } from '../db/tenantContext.js';
@@ -49,7 +50,7 @@ function mapRoleIdsToNames(guild, roleIds) {
 async function buildSessionUser(req, tenantId, baseUser) {
   const tenant = await getTenant(tenantId);
   if (!tenant) throw new Error('Unknown tenant');
-  const { configuration } = await loadTenantSettings(tenantId);
+  const { configuration, discordChannels } = await loadTenantSettings(tenantId);
   const guild = discordClient?.isReady() ? discordClient.guilds.cache.get(String(tenantId)) : null;
   let member = guild?.members?.cache.get(String(baseUser.id)) || null;
   if (guild && !member) {
@@ -91,6 +92,7 @@ async function buildSessionUser(req, tenantId, baseUser) {
   const isOfficer = String(ownerDiscordId || '') === String(baseUser.id)
     || rolesGrantOfficer(matchTokens, adminRoles);
 
+  const enabledGames = parseEnabledGames(tenant.enabled_games);
   const user = {
     id: baseUser.id,
     username: baseUser.username,
@@ -103,7 +105,11 @@ async function buildSessionUser(req, tenantId, baseUser) {
     tenantName: tenant.display_name || configuration.guildDisplayName || 'Guild',
     tenantLogoUrl: effectiveLogoUrl(req, tenant, configuration),
     tenantOnboarded: Boolean(tenant.onboarded),
+    tenantTimezone: configuration.timezone || DEFAULT_CONFIGURATION.timezone,
     isPlatformOwner: Boolean(tenant.is_platform_owner),
+    enabledGames,
+    gameSetup: gameSetupMap(enabledGames, discordChannels),
+    activeGameId: enabledGames[0] || null,
   };
 
   await runWithTenant(tenantId, async () => {
@@ -170,12 +176,6 @@ router.post('/onboard', async (req, res) => {
     guildId,
     guildName,
     timezone,
-    auctionChannelId,
-    aucreqChannelId,
-    genroomId,
-    attendanceId,
-    warAnnounceChannelId,
-    warRooms = {},
     adminRoles = [],
   } = req.body || {};
 
@@ -213,18 +213,12 @@ router.post('/onboard', async (req, res) => {
 
   const discordChannels = {
     guildId: String(guildId),
-    auctionChannelId: auctionChannelId || '',
-    aucreqChannelId: aucreqChannelId || '',
-    genroomId: genroomId || '',
-    attendanceId: attendanceId || '',
-    warAnnounceChannelId: warAnnounceChannelId || '',
-    warRooms: {
-      DISCORD_WARROOM_ID_1: warRooms.DISCORD_WARROOM_ID_1 || warRooms.room_001 || '',
-      DISCORD_WARROOM_ID_2: warRooms.DISCORD_WARROOM_ID_2 || warRooms.room_002 || '',
-      DISCORD_WARROOM_ID_3: warRooms.DISCORD_WARROOM_ID_3 || warRooms.room_003 || '',
-      DISCORD_WARROOM_ID_4: warRooms.DISCORD_WARROOM_ID_4 || warRooms.room_004 || '',
-      DISCORD_WARROOM_ID_5: warRooms.DISCORD_WARROOM_ID_5 || warRooms.room_005 || '',
-    },
+    auctionChannelId: '',
+    aucreqChannelId: '',
+    genroomId: '',
+    attendanceId: '',
+    warAnnounceChannelId: '',
+    warRooms: {},
   };
 
   const configuration = {
@@ -258,6 +252,157 @@ router.post('/onboard', async (req, res) => {
   }
 
   const user = await buildSessionUser(req, guildId, identity);
+  const signed = signUserProfile(user);
+  return req.session.save(() => {
+    res.json({ success: true, user: signed });
+  });
+});
+
+router.post('/enable-game', async (req, res) => {
+  const identity = resolveUserIdentity(req);
+  if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
+  if (!tenantId) {
+    return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
+  }
+  const gameId = String(req.body?.gameId || '');
+  if (!isKnownGame(gameId)) {
+    return res.status(400).json({ success: false, error: 'Unknown game.' });
+  }
+  const { ok } = await checkOfficer(req);
+  if (!ok) {
+    return res.status(403).json({ success: false, error: 'Officer access required to enable a game.' });
+  }
+  const tenant = await getTenant(tenantId);
+  const enabled = parseEnabledGames(tenant?.enabled_games);
+  if (!enabled.includes(gameId)) enabled.push(gameId);
+  await setTenantEnabledGames(tenantId, enabled);
+  const user = await buildSessionUser(req, tenantId, identity);
+  const signed = signUserProfile(user);
+  return req.session.save(() => {
+    res.json({
+      success: true,
+      user: signed,
+      enabledGames: enabled,
+      setupPath: gameId === RAGNAROK_ORIGIN_ID ? '/games/ragnarok-origin/setup' : '/',
+    });
+  });
+});
+
+router.get('/workspace', async (req, res) => {
+  const identity = resolveUserIdentity(req);
+  if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
+  if (!tenantId) {
+    return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
+  }
+  const tenant = await getTenant(tenantId);
+  if (!tenant) return res.status(404).json({ success: false, error: 'Unknown tenant' });
+  const { configuration, discordChannels } = await loadTenantSettings(tenantId);
+  const { ok } = await checkOfficer(req, configuration);
+  if (!ok) {
+    return res.status(403).json({ success: false, error: 'Officer access required.' });
+  }
+  const guild = discordClient?.guilds?.cache?.get(String(tenantId));
+  let roles = [];
+  if (guild) {
+    await guild.roles.fetch().catch(() => {});
+    roles = [...guild.roles.cache.values()]
+      .filter((role) => role.name !== '@everyone')
+      .sort((a, b) => b.position - a.position)
+      .map((role) => ({ id: role.id, name: role.name }));
+  }
+  return res.json({
+    success: true,
+    workspace: {
+      guildDisplayName: tenant.display_name || configuration.guildDisplayName || '',
+      timezone: configuration.timezone || DEFAULT_CONFIGURATION.timezone,
+      adminRoles: Array.isArray(configuration.adminRoles) ? configuration.adminRoles : [],
+      guildLogoUrl: tenant.logo_url || configuration.guildLogoUrl || '',
+      enabledGames: parseEnabledGames(tenant.enabled_games),
+      inviteUrl: botInviteUrl(tenantId),
+      discordGuildId: String(tenantId),
+      discordChannels: discordChannels || {},
+    },
+    discordRoles: roles,
+  });
+});
+
+router.post('/workspace', async (req, res) => {
+  const identity = resolveUserIdentity(req);
+  if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
+  if (!tenantId) {
+    return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
+  }
+  const { configuration } = await loadTenantSettings(tenantId);
+  const { ok } = await checkOfficer(req, configuration);
+  if (!ok) {
+    return res.status(403).json({ success: false, error: 'Officer access required to change workspace settings.' });
+  }
+
+  const nextConfig = { ...configuration };
+  if (req.body?.guildDisplayName !== undefined) {
+    nextConfig.guildDisplayName = String(req.body.guildDisplayName || '').trim();
+    await setTenantDisplayName(tenantId, nextConfig.guildDisplayName);
+  }
+  if (req.body?.timezone !== undefined) {
+    const zone = String(req.body.timezone || '').trim();
+    if (zone) nextConfig.timezone = zone;
+  }
+  if (req.body?.adminRoles !== undefined) {
+    nextConfig.adminRoles = (Array.isArray(req.body.adminRoles) ? req.body.adminRoles : [])
+      .map((name) => String(name || '').trim())
+      .filter(Boolean);
+  }
+
+  const db = getDatabase();
+  await runWithTenant(tenantId, async () => {
+    await db.ref('settings/configuration').set(nextConfig);
+  });
+
+  const user = await buildSessionUser(req, tenantId, identity);
+  const signed = signUserProfile(user);
+  return req.session.save(() => {
+    res.json({ success: true, user: signed, message: 'Workspace saved.' });
+  });
+});
+
+router.post('/game-setup', async (req, res) => {
+  const identity = resolveUserIdentity(req);
+  if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
+  const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
+  if (!tenantId) {
+    return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
+  }
+  const { ok } = await checkOfficer(req);
+  if (!ok) {
+    return res.status(403).json({ success: false, error: 'Officer access required to finish game setup.' });
+  }
+  const tenant = await getTenant(tenantId);
+  const enabled = parseEnabledGames(tenant?.enabled_games);
+  if (!enabled.includes(RAGNAROK_ORIGIN_ID)) {
+    return res.status(403).json({ success: false, error: 'Enable Ragnarok Origin first.', code: 'game_required', gameId: RAGNAROK_ORIGIN_ID });
+  }
+  const { discordChannels } = await loadTenantSettings(tenantId);
+  const incoming = req.body?.discordChannels || {};
+  const nextChannels = {
+    guildId: String(tenantId),
+    auctionChannelId: incoming.auctionChannelId || '',
+    aucreqChannelId: incoming.aucreqChannelId || '',
+    genroomId: incoming.genroomId || '',
+    attendanceId: incoming.attendanceId || '',
+    warAnnounceChannelId: incoming.warAnnounceChannelId || '',
+    warRooms: {
+      DISCORD_WARROOM_ID_1: incoming.warRooms?.DISCORD_WARROOM_ID_1 || '',
+      DISCORD_WARROOM_ID_2: incoming.warRooms?.DISCORD_WARROOM_ID_2 || '',
+      DISCORD_WARROOM_ID_3: incoming.warRooms?.DISCORD_WARROOM_ID_3 || '',
+      DISCORD_WARROOM_ID_4: incoming.warRooms?.DISCORD_WARROOM_ID_4 || '',
+      DISCORD_WARROOM_ID_5: incoming.warRooms?.DISCORD_WARROOM_ID_5 || '',
+    },
+  };
+  await saveTenantDiscordChannels(tenantId, { ...discordChannels, ...nextChannels, warRooms: nextChannels.warRooms });
+  const user = await buildSessionUser(req, tenantId, identity);
   const signed = signUserProfile(user);
   return req.session.save(() => {
     res.json({ success: true, user: signed });
@@ -327,12 +472,16 @@ export async function attachTenantLogo(req, user) {
   if (!user || !tenantId) return user;
   const tenant = await getTenant(tenantId);
   if (!tenant) return { ...user, currentTenantId: String(tenantId) };
-  const { configuration } = await loadTenantSettings(tenantId);
+  const { configuration, discordChannels } = await loadTenantSettings(tenantId);
+  const enabledGames = parseEnabledGames(tenant.enabled_games);
   return {
     ...user,
     currentTenantId: String(tenantId),
     tenantName: user.tenantName || tenant.display_name || configuration.guildDisplayName || 'Guild',
     tenantLogoUrl: effectiveLogoUrl(req, tenant, configuration),
+    tenantTimezone: configuration.timezone || DEFAULT_CONFIGURATION.timezone,
+    enabledGames,
+    gameSetup: gameSetupMap(enabledGames, discordChannels),
   };
 }
 
@@ -371,6 +520,7 @@ router.get('/mine', async (req, res) => {
         onboarded: t.onboarded,
         plan: t.plan,
         isPlatformOwner: t.is_platform_owner,
+        enabledGames: parseEnabledGames(t.enabled_games),
         logoUrl: t.logo_url || '',
         icon: listed?.icon || live?.icon || null,
       };

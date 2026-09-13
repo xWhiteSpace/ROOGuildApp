@@ -1,8 +1,9 @@
 import { query } from './pool.js';
 import { getCurrentTenantId, runWithTenant, setCachedConfig, setCachedChannels } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
+import { parseEnabledGames } from '../games/catalog.js';
 
-const TENANT_COLUMNS = 'id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, created_at, logo_url';
+const TENANT_COLUMNS = 'id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, created_at, logo_url, enabled_games';
 
 export async function listTenants() {
   const { rows } = await query(
@@ -40,7 +41,7 @@ export async function getTenantsByIds(ids) {
 export async function getTenantsForMember(discordUserId) {
   if (!discordUserId) return [];
   const { rows } = await query(
-    `SELECT DISTINCT t.id, t.display_name, t.owner_discord_id, t.plan, t.is_platform_owner, t.onboarded, t.created_at, t.logo_url
+    `SELECT DISTINCT t.id, t.display_name, t.owner_discord_id, t.plan, t.is_platform_owner, t.onboarded, t.created_at, t.logo_url, t.enabled_games
      FROM tenants t
      INNER JOIN members m ON m.tenant_id = t.id
      WHERE m.discord_id = $1`,
@@ -61,8 +62,8 @@ export async function createTenant({
 }) {
   const tenantId = String(id);
   await query(
-    `INSERT INTO tenants (id, display_name, owner_discord_id, plan, is_platform_owner, onboarded)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO tenants (id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, enabled_games)
+     VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb)
      ON CONFLICT (id) DO UPDATE SET
        display_name = EXCLUDED.display_name,
        owner_discord_id = COALESCE(EXCLUDED.owner_discord_id, tenants.owner_discord_id),
@@ -171,6 +172,23 @@ export async function saveTenantDiscordChannels(tenantId, discordChannels) {
   );
   setCachedChannels(id, payload);
   return payload;
+}
+
+export async function setTenantEnabledGames(tenantId, gameIds) {
+  const id = String(tenantId);
+  const enabled = parseEnabledGames(gameIds);
+  await query(
+    'UPDATE tenants SET enabled_games = $2::jsonb WHERE id = $1',
+    [id, JSON.stringify(enabled)]
+  );
+  return getTenant(id);
+}
+
+export async function setTenantDisplayName(tenantId, displayName) {
+  const id = String(tenantId);
+  const name = String(displayName || '').trim();
+  await query('UPDATE tenants SET display_name = $2 WHERE id = $1', [id, name]);
+  return getTenant(id);
 }
 
 export function envFallbackChannels() {

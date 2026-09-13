@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
 import { guildMarkSrc, onGuildMarkError } from '../utils/guildLogo';
+import { PRODUCT_MARK_SRC, PRODUCT_NAME } from '../brand';
+import { firstEnabledGameId, getGame, RAGNAROK_ORIGIN_ID } from '../games/catalog';
+
+function afterSelectPath(data) {
+  if (!data.onboarded) return '/onboard';
+  const user = data.user || {};
+  const enabled = user.enabledGames || [];
+  if (!enabled.length) return '/workspace/games';
+  if (enabled.includes(RAGNAROK_ORIGIN_ID) && !user.gameSetup?.[RAGNAROK_ORIGIN_ID]) {
+    return getGame(RAGNAROK_ORIGIN_ID).setupPath;
+  }
+  return getGame(firstEnabledGameId(enabled))?.homePath || '/';
+}
 
 function readAuthIntent() {
   const fromQuery = new URLSearchParams(window.location.search).get('intent');
@@ -69,7 +82,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
     }
     onSessionUser(data.user);
     localStorage.setItem('guild_raid_session', JSON.stringify(data.user));
-    navigate(data.onboarded ? '/' : '/onboard');
+    navigate(afterSelectPath(data));
   };
 
   const startOnboard = (guild) => {
@@ -84,7 +97,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl">
-        <img src="/assets/brand/ro-guild-mark.png" alt="" className="h-10 w-10 mb-4" />
+        <img src={PRODUCT_MARK_SRC} alt="" className="h-10 w-10 mb-4" />
         <h1 className="text-2xl font-semibold text-white">
           {highlightSignup ? 'Create a workspace' : 'Open a guild'}
         </h1>
@@ -96,7 +109,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
 
         {signInEmpty && (
           <p className="mt-4 text-sm text-slate-400">
-            None of your Discord servers are on RO Guild App yet. Create a workspace below if you have Manage Server, or ask an officer of your guild to Get started.
+            None of your Discord servers are on {PRODUCT_NAME} yet. Create a workspace below if you have Manage Server, or ask an officer of your guild to Get started.
           </p>
         )}
         {signupEmpty && (
@@ -136,7 +149,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
               Create a workspace
             </div>
             <p className="text-[11px] text-slate-500">
-              Set up this Discord server as an RO Guild App workspace. Payments will attach here later.
+              Set up this Discord server as a {PRODUCT_NAME} workspace. Payments will attach here later.
             </p>
             {onboardable.map((g) => (
               <button
@@ -155,7 +168,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
                 />
                 <div className="min-w-0">
                   <div className="font-semibold truncate">{g.name}</div>
-                  <div className="text-[10px] font-mono text-slate-500 mt-1">Invite the bot, then map channels</div>
+                  <div className="text-[10px] font-mono text-slate-500 mt-1">Invite the bot, then pick a game</div>
                 </div>
               </button>
             ))}
@@ -168,7 +181,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
               Discord did not return any servers for this account. Create or join a Discord server, then try again.
             </p>
             <p>
-              Ask an officer of your guild to Get started, or Sign in after you join a server that already uses RO Guild App.
+              Ask an officer of your guild to Get started, or Sign in after you join a server that already uses {PRODUCT_NAME}.
             </p>
           </div>
         )}

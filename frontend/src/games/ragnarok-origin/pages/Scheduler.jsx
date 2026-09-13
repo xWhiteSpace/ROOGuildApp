@@ -20,14 +20,14 @@ import {
   Sword,
   RefreshCw
 } from 'lucide-react';
-import { apiFetch, getBackendUrl } from '../services/apiClient';
+import { apiFetch, getBackendUrl } from '../../../services/apiClient';
 import {
   formatGuildDate,
   getWeekMonday,
   buildCompositeKey,
   DEFAULT_TZ,
   guildWallTimeToUtcMs,
-} from '../utils/guildTime';
+} from '../../../utils/guildTime';
 
 const backendUrl = getBackendUrl();
 

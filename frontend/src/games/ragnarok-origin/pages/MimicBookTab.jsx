@@ -1,6 +1,6 @@
 // frontend/src/pages/MimicBookTab.jsx
 import { useState, useEffect, useRef, useContext } from 'react';
-import { MimicBookContext } from '../App';
+import { MimicBookContext } from '../../../App';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';

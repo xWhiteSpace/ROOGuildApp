@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" role="img" aria-label="VALHALLA">
+  <rect width="520" height="120" rx="20" fill="#020617"/>
+  <path d="M48 22 78 37.5v31L48 84 18 68.5v-31Z" fill="#1e1b4b" stroke="#818cf8" stroke-width="2.2" stroke-linejoin="round"/>
+  <text x="48" y="66" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700" fill="#c7d2fe">V</text>
+  <text x="108" y="76" font-family="ui-sans-serif, system-ui, sans-serif" font-size="52" font-weight="700" letter-spacing="8" fill="#e2e8f0">VALHALLA</text>
+</svg>

@@ -1,4 +1,6 @@
-const RO_MARK = '/assets/brand/ro-guild-mark.png';
+import { PRODUCT_MARK_SRC } from '../brand';
+
+const VALHALLA_MARK = PRODUCT_MARK_SRC;
 
 export function discordGuildIconUrl(guildId, iconHash) {
   if (!guildId || !iconHash) return '';
@@ -7,18 +9,18 @@ export function discordGuildIconUrl(guildId, iconHash) {
   return `https://cdn.discordapp.com/icons/${guildId}/${hash}.${ext}?size=128`;
 }
 
-/** Imported logo, else Discord server icon, else RO Guild App mark. */
+/** Imported logo, else Discord server icon, else VALHALLA mark. */
 export function guildMarkSrc({ logoUrl, guildId, icon } = {}) {
   const imported = String(logoUrl || '').trim();
   if (imported) return imported;
-  return discordGuildIconUrl(guildId, icon) || RO_MARK;
+  return discordGuildIconUrl(guildId, icon) || VALHALLA_MARK;
 }
 
 export function onGuildMarkError(event) {
   const el = event.currentTarget;
   if (!el || el.dataset.fallbackApplied) return;
   el.dataset.fallbackApplied = '1';
-  el.src = RO_MARK;
+  el.src = VALHALLA_MARK;
 }
 
 export default { discordGuildIconUrl, guildMarkSrc, onGuildMarkError };

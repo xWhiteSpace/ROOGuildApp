@@ -61,11 +61,18 @@ export async function apiFetch(path, options = {}) {
   }
 
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       credentials: 'include',
       ...rest,
       headers,
     });
+    if (res.status === 403) {
+      const peek = await res.clone().json().catch(() => null);
+      if (peek?.code === 'game_required') {
+        throw new Error(peek.error || 'This game is not enabled for this workspace.');
+      }
+    }
+    return res;
   } catch (err) {
     const detail = err?.message || String(err);
     throw new Error(`${detail} [${method} ${url}]`);

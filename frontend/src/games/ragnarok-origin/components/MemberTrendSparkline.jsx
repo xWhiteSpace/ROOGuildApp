@@ -2,7 +2,7 @@
  * Pure SVG sparkline for a member's attendance reliability trend.
  * Uses the shared attendanceScore SSOT (max 4.0 including In-game Status).
  */
-import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
+import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
 
 /**
  * Build chronological trend points (last N lockouts) for one member.

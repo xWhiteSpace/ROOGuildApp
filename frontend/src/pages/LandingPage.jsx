@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import DiscordSignInButton from '../components/DiscordSignInButton';
 import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
+import { PRODUCT_LOGO_SRC, PRODUCT_NAME } from '../brand';
 
 export default function LandingPage() {
   const errorMessage = useMemo(() => {
@@ -50,14 +51,14 @@ export default function LandingPage() {
       <div className="pointer-events-none absolute inset-0 bg-slate-950/55" aria-hidden="true" />
 
       <div className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 text-center">
-        <h1 className="sr-only">RO Guild App</h1>
+        <h1 className="sr-only">{PRODUCT_NAME}</h1>
         <img
-          src="/assets/brand/ro-guild-logo.png"
-          alt="RO Guild App"
+          src={PRODUCT_LOGO_SRC}
+          alt={PRODUCT_NAME}
           className="h-28 w-auto object-contain drop-shadow-lg sm:h-36"
         />
         <p className="mx-auto max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
-          Auctions, raid attendance, and Discord cards for your Ragnarok guild — private to each Discord server.
+          Guild ops for Discord — auctions, raid attendance, and cards, private to each server. Pick a game after you create a workspace.
         </p>
 
         {errorMessage && (
@@ -71,7 +72,7 @@ export default function LandingPage() {
             <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Sign in</div>
             <h2 className="mt-1 text-base font-semibold text-white">My guild already uses this</h2>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Open the workspace for a Discord server that is already on RO Guild App. Members never pay.
+              Open the workspace for a Discord server that is already on {PRODUCT_NAME}. Members never pay.
             </p>
             <div className="mt-4">
               <DiscordSignInButton

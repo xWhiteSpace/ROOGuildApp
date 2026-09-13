@@ -15,6 +15,8 @@ import authRoutes from './auth/discordOAuth.js';
 import { migrate } from './db/migrate.js';
 import { query } from './db/pool.js';
 import { attachTenantContext, requireTenant } from './middleware/tenantContext.js';
+import { requireGame } from './middleware/requireGame.js';
+import { RAGNAROK_ORIGIN_ID } from './games/catalog.js';
 import tenantRoutes from './api/tenant.routes.js';
 import { discordChannel } from './db/channels.js';
 import { forEachOnboardedTenant } from './db/tenants.js';
@@ -111,10 +113,10 @@ app.use(
 app.use(attachTenantContext);
 app.use('/auth', authRoutes);
 app.use('/api/tenants', tenantRoutes);
-app.use('/api/requests', requireTenant, requestRoutes);
+app.use('/api/requests', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), requestRoutes);
 
-app.use('/api/attendance', requireTenant, attendanceRoutes);
-app.use('/api/live-raid', requireTenant, liveRaidRoutes);
+app.use('/api/attendance', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), attendanceRoutes);
+app.use('/api/live-raid', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
 
 app.get('/', async (req, res) => {
   try {

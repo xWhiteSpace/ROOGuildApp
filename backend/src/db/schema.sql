@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 );
 
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enabled_games JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS tenant_settings (
   tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
@@ -87,3 +88,16 @@ CREATE TABLE IF NOT EXISTS platform_state (
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Existing workspaces that already mapped Ragnarok Origin Discord channels stay on that pack.
+UPDATE tenants t
+SET enabled_games = '["ragnarok-origin"]'::jsonb
+FROM tenant_settings s
+WHERE t.id = s.tenant_id
+  AND t.onboarded = TRUE
+  AND (
+    COALESCE(s.discord_channels->>'aucreqChannelId', '') <> ''
+    OR COALESCE(s.discord_channels->>'auctionChannelId', '') <> ''
+    OR COALESCE(s.discord_channels->>'warAnnounceChannelId', '') <> ''
+  )
+  AND (t.enabled_games IS NULL OR t.enabled_games = '[]'::jsonb);

@@ -39,8 +39,8 @@ import RosterSidebar from '../components/RosterSidebar';
 import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
-import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../utils/guildTime';
-import { apiFetch } from '../services/apiClient';
+import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../../../utils/guildTime';
+import { apiFetch } from '../../../services/apiClient';
 import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';

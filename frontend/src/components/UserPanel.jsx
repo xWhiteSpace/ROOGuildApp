@@ -25,7 +25,7 @@ export default function UserPanel({ user, onLogout, onSessionUser }) {
   const [clockDisplay, setClockDisplay] = useState('');
   const [tenants, setTenants] = useState([]);
   const [onboardable, setOnboardable] = useState([]);
-  const [guildTz, setGuildTz] = useState(DEFAULT_TZ);
+  const [guildTz, setGuildTz] = useState(user?.tenantTimezone || DEFAULT_TZ);
 
   useEffect(() => {
     const tick = () => {
@@ -56,6 +56,7 @@ export default function UserPanel({ user, onLogout, onSessionUser }) {
         }
       })
       .catch(() => {});
+    if (user?.tenantTimezone) setGuildTz(user.tenantTimezone);
     apiFetch('/api/requests/settings/help', { method: 'GET' })
       .then((r) => r.json())
       .then((data) => {
@@ -109,6 +110,15 @@ export default function UserPanel({ user, onLogout, onSessionUser }) {
                 className="mt-2 text-[10px] font-mono uppercase tracking-wider text-indigo-400 hover:text-indigo-300"
               >
                 Add Discord server
+              </button>
+            )}
+            {user?.isOfficer && (
+              <button
+                type="button"
+                onClick={() => navigate('/workspace')}
+                className="mt-2 block text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:text-white"
+              >
+                Workspace
               </button>
             )}
             

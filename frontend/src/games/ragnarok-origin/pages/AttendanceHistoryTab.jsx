@@ -17,7 +17,7 @@ import {
   Trash2,
   Swords
 } from 'lucide-react';
-import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
+import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 

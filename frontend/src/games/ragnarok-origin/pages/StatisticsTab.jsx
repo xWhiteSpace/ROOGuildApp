@@ -1,7 +1,7 @@
 // frontend/src/pages/StatisticsTab.jsx
 import { useState, useEffect, useMemo } from 'react';
-import { apiFetch } from '../services/apiClient';
-import { calculatePoints, MAX_RAID_SCORE } from '../utils/attendanceScore';
+import { apiFetch } from '../../../services/apiClient';
+import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
 import AttendanceTrendChart from '../components/AttendanceTrendChart';
 
 const IconLayers = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polygon points="2 17 12 22 22 17"/><polygon points="2 12 12 17 22 12"/></svg>;

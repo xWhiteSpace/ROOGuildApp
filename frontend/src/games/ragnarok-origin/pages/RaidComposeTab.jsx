@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Megaphone, Send } from 'lucide-react';
-import { upcomingDatesForWeekday, DEFAULT_TZ } from '../utils/guildTime';
-import { apiFetch } from '../services/apiClient';
+import { upcomingDatesForWeekday, DEFAULT_TZ } from '../../../utils/guildTime';
+import { apiFetch } from '../../../services/apiClient';
 
 function formatTimeDigits(raw) {
   const digits = String(raw || '').replace(/\D/g, '').slice(0, 4);
