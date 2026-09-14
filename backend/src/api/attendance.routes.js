@@ -4,8 +4,6 @@ import { getTenantStore } from '../db/database.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
 import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
-import crypto from 'crypto';
-import { discordEnv } from '../config/discordEnv.js';
 import { ensureWeekInstances, getWeekInstances } from '../games/ragnarok-origin/services/scheduleService.js';
 import {
   applyAttendanceDecision,
@@ -21,39 +19,10 @@ import {
 import { getCurrentTenantId } from '../db/tenantContext.js';
 import { discordChannel } from '../db/channels.js';
 import { checkOfficer } from '../auth/officer.js';
+import { resolveUserIdentity } from '../auth/identity.js';
 import { aggregatePeakHours, normalizePlaySchedule } from '../games/ragnarok-origin/services/peakHours.js';
 
 const router = Router();
-
-function resolveUserIdentity(req) {
-  if (req.session?.user) return req.session.user;
-  const mobileHeaderToken = req.headers['x-user-profile'];
-  if (mobileHeaderToken) {
-    try {
-      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
-      if (decodedPayload && decodedPayload._sig) {
-        const clientSignature = decodedPayload._sig;
-        const profileToVerify = { ...decodedPayload };
-        delete profileToVerify._sig;
-
-        const tokenSigningSecret = discordEnv().clientSecret || 'backup_fallback_secret_key';
-        const expectedSignature = crypto
-          .createHmac('sha256', tokenSigningSecret)
-          .update(JSON.stringify(profileToVerify))
-          .digest('hex');
-
-        if (clientSignature === expectedSignature) {
-          return profileToVerify;
-        } else {
-          console.error("🛑 [API ROUTE INTERCEPT]: Detected forged header signature tamper attempt!");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse mobile authorization header token:", e.message);
-    }
-  }
-  return null;
-}
 
 async function verifyDiscordOfficerRole(req, allowedRoles = []) {
   const { user, ok } = await checkOfficer(req, { adminRoles: allowedRoles });

@@ -2,8 +2,7 @@
 import { Router } from 'express';
 import { getTenantStore } from '../db/database.js';
 import { discordClient } from '../discord-bot/client.js';
-import crypto from 'crypto';
-import { discordEnv } from '../config/discordEnv.js';
+import { resolveUserIdentity } from '../auth/identity.js';
 import {
   resolveWarRoomChannelIds,
   inferWarRoomRelationalIds,
@@ -17,37 +16,6 @@ import {
 import { checkOfficer } from '../auth/officer.js';
 
 const router = Router();
-
-// Helper definitions for user token authentication
-function resolveUserIdentity(req) {
-  if (req.session?.user) return req.session.user;
-  const mobileHeaderToken = req.headers['x-user-profile'];
-  if (mobileHeaderToken) {
-    try {
-      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
-      if (decodedPayload && decodedPayload._sig) {
-        const clientSignature = decodedPayload._sig;
-        const profileToVerify = { ...decodedPayload };
-        delete profileToVerify._sig;
-
-        const tokenSigningSecret = discordEnv().clientSecret || 'backup_fallback_secret_key';
-        const expectedSignature = crypto
-          .createHmac('sha256', tokenSigningSecret)
-          .update(JSON.stringify(profileToVerify))
-          .digest('hex');
-
-        if (clientSignature === expectedSignature) {
-          return profileToVerify;
-        } else {
-          console.error("🛑 [LIVE RAID INTERCEPT]: Detected forged header signature tamper attempt!");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse mobile authorization header token:", e.message);
-    }
-  }
-  return null;
-}
 
 async function verifyDiscordOfficerRole(req, allowedRoles = []) {
   const { user, ok } = await checkOfficer(req, { adminRoles: allowedRoles });

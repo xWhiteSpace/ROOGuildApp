@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../services/apiClient';
 import { PRODUCT_NAME } from '../brand';
+import OfficerRolePicker from '../components/OfficerRolePicker';
 
 export default function OnboardGuildPage({ onSessionUser }) {
   const navigate = useNavigate();
@@ -139,37 +140,23 @@ export default function OnboardGuildPage({ onSessionUser }) {
             className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-white"
           />
         </label>
-        <div>
-          <div className="text-xs text-slate-400 mb-2">Officer Discord roles</div>
-          {discordRoles.length === 0 && (
-            <p className="text-[11px] text-slate-500">
-              {roleHint || 'Invite the bot, then return to this tab. Role chips load from the live bot — pausing Render does not refresh this page.'}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-            {discordRoles.map((role) => (
-              <button
-                key={role.id}
-                type="button"
-                onClick={() => toggleRole(role.name)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] border ${
-                  adminRoles.includes(role.name)
-                    ? 'border-indigo-500 bg-indigo-600 text-white'
-                    : 'border-slate-800 bg-slate-950 text-slate-300'
-                }`}
-              >
-                {role.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        <OfficerRolePicker
+          roles={discordRoles}
+          selectedNames={adminRoles}
+          onToggle={toggleRole}
+          emptyHint={roleHint || 'Invite the bot, then return to this tab. Role chips load from the live bot — pausing Render does not refresh this page.'}
+        />
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || adminRoles.length === 0}
+          title={adminRoles.length === 0 ? 'Click at least one officer role above' : undefined}
           className="rounded-full bg-indigo-600 px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
         >
           {saving ? 'Saving…' : '2. Create workspace'}
         </button>
+        {discordRoles.length > 0 && adminRoles.length === 0 && (
+          <p className="text-[11px] text-amber-400">Create workspace stays off until you click a role.</p>
+        )}
       </form>
     </div>
   );

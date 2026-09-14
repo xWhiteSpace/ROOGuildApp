@@ -1,8 +1,7 @@
 // frontend/src/pages/RequestHistoryTab.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+import { apiFetch } from '../../../services/apiClient';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconSearch = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
@@ -61,24 +60,17 @@ export default function RequestHistoryTab({ user }) {
       setAuthError(false);
 
       const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      
       if (savedUserSession) {
         try {
           const parsedUser = JSON.parse(savedUserSession);
           setCurrentUserName(parsedUser.displayName || parsedUser.username || '');
           setCurrentUserId(parsedUser.id || '');
-          customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
         } catch (e) {
           console.error("Failed to extract cached session criteria:", e.message);
         }
       }
 
-      const res = await fetch(`${backendUrl}/api/requests/request-history`, {
-        method: 'GET',
-        headers: customHeaders,
-        credentials: 'include'
-      });
+      const res = await apiFetch('/api/requests/request-history', { method: 'GET' });
 
       if (res.status === 401) {
         setAuthError(true);
@@ -92,10 +84,7 @@ export default function RequestHistoryTab({ user }) {
 
         // Query dynamic item mapping tables to link relational styling indexes inline
         try {
-          const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
-            headers: customHeaders,
-            credentials: 'include'
-          });
+          const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
           const configData = await configRes.json();
           if (configData.success && configData.config?.items) {
             setConfigItems(configData.config.items);
@@ -142,15 +131,9 @@ export default function RequestHistoryTab({ user }) {
 
     try {
       setResettingKey(resetKey);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const res = await fetch(`${backendUrl}/api/requests/reset-priority`, {
+      const res = await apiFetch('/api/requests/reset-priority', {
         method: 'POST',
-        headers: customHeaders,
         body: JSON.stringify({ userId: targetUserId, itemId }),
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
@@ -176,15 +159,9 @@ export default function RequestHistoryTab({ user }) {
 
     try {
       setClearingHistory(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const res = await fetch(`${backendUrl}/api/requests/clear-history`, {
+      const res = await apiFetch('/api/requests/clear-history', {
         method: 'POST',
-        headers: customHeaders,
         body: JSON.stringify({ startDate: clearRangeStart, endDate: clearRangeEnd }),
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {

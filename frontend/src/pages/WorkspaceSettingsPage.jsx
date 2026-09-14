@@ -4,6 +4,7 @@ import { apiFetch } from '../services/apiClient';
 import { guildMarkSrc, onGuildMarkError } from '../utils/guildLogo';
 import { gamesForEnabled } from '../games/catalog';
 import { PRODUCT_NAME, productTitle } from '../brand';
+import OfficerRolePicker from '../components/OfficerRolePicker';
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -257,27 +258,15 @@ export default function WorkspaceSettingsPage({ user, onSessionUser }) {
             placeholder="Or type a role name…"
             className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 flex-1"
           />
-          <button type="button" onClick={addTypedRole} className="px-3 py-1.5 bg-indigo-600 rounded-xl text-[10px] font-semibold uppercase">
+          <button type="button" onClick={addTypedRole} className="px-3 py-1.5 bg-indigo-600 rounded-xl text-[10px] font-semibold uppercase cursor-pointer">
             Authorize
           </button>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {discordRoles.map((role) => {
-            const selected = (form.adminRoles || []).some((name) => name.toLowerCase() === role.name.toLowerCase());
-            return (
-              <button
-                key={role.id}
-                type="button"
-                onClick={() => toggleRole(role.name)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] border ${
-                  selected ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-slate-800 bg-slate-950 text-slate-300'
-                }`}
-              >
-                {role.name}
-              </button>
-            );
-          })}
-        </div>
+        <OfficerRolePicker
+          roles={discordRoles}
+          selectedNames={form.adminRoles}
+          onToggle={toggleRole}
+        />
       </div>
 
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 space-y-3">

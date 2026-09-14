@@ -6,10 +6,9 @@ import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { getCurrentTenantId } from '../db/tenantContext.js';
 import { checkOfficer, configNeedsSetup, publicSettingsView, helpSettingsView } from '../auth/officer.js';
 import { loadTenantSettings, saveTenantDiscordChannels } from '../db/tenants.js';
-import { signUserProfile } from '../auth/identity.js';
+import { resolveUserIdentity, signUserProfile } from '../auth/identity.js';
 import { discordEnv } from '../config/discordEnv.js';
 
-import crypto from 'crypto'; // 🛡️ Cryptographic token verification module
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
 import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
@@ -81,38 +80,6 @@ function parseCSVToRawArrays(csvText, headerMatchKeyword) {
     dataRows.push(cells);
   }
   return dataRows;
-}
-
-function resolveUserIdentity(req) {
-  if (req.session?.user) return req.session.user;
-  const mobileHeaderToken = req.headers['x-user-profile'];
-  if (mobileHeaderToken) {
-    try {
-      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
-      
-      // 🔒 TAMPER-PROOF VERIFICATION GATEWAY: Re-hash profile and assert cryptographic signature matching
-      if (decodedPayload && decodedPayload._sig) {
-        const clientSignature = decodedPayload._sig;
-        const profileToVerify = { ...decodedPayload };
-        delete profileToVerify._sig;
-
-        const tokenSigningSecret = discordEnv().clientSecret || 'backup_fallback_secret_key';
-        const expectedSignature = crypto
-          .createHmac('sha256', tokenSigningSecret)
-          .update(JSON.stringify(profileToVerify))
-          .digest('hex');
-
-        if (clientSignature === expectedSignature) {
-          return profileToVerify; // Clear authorization verified successfully
-        } else {
-          console.error("🛑 [API ROUTE INTERCEPT]: Detected forged header signature tamper attempt!");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse mobile authorization header token:", e.message);
-    }
-  }
-  return null;
 }
 
 /**

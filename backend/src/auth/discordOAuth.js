@@ -340,7 +340,9 @@ router.get('/me', async (req, res) => {
     // keep the session user if logo lookup fails
   }
 
-  return res.json({ authenticated: true, user });
+  // Re-sign so mobile clients that cannot keep the session cookie still have a
+  // valid x-user-profile token after /auth/me overwrites localStorage.
+  return res.json({ authenticated: true, user: signUserProfile(user) });
 });
 
 router.post('/logout', (req, res) => {

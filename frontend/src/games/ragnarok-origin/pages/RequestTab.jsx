@@ -1,7 +1,6 @@
 // frontend/src/pages/RequestTab.jsx
 import { useState, useEffect } from 'react';
-
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+import { apiFetch } from '../../../services/apiClient';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconLock = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
@@ -43,17 +42,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
       setLoading(true);
       setAuthError(false);
 
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-
-      const res = await fetch(`${backendUrl}/api/requests/init`, { 
-        method: 'GET',
-        headers: customHeaders,
-        credentials: 'include' 
-      });
+      const res = await apiFetch('/api/requests/init', { method: 'GET' });
 
       if (res.status === 401) {
         setAuthError(true);
@@ -140,17 +129,9 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
 
     try {
       setProcessing(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-
-      const res = await fetch(`${backendUrl}/api/requests/submit`, {
+      const res = await apiFetch('/api/requests/submit', {
         method: 'POST',
-        headers: customHeaders,
         body: JSON.stringify({ selections: batchPayload }),
-        credentials: 'include'
       });
       const data = await res.json();
       if (data.success) {
@@ -166,17 +147,9 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
   const handleExecuteCancel = async (itemId, itemName, activeQty) => {
     try {
       setProcessing(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-
-      const res = await fetch(`${backendUrl}/api/requests/cancel`, {
+      const res = await apiFetch('/api/requests/cancel', {
         method: 'POST',
-        headers: customHeaders,
-        body: JSON.stringify({ itemId, itemName, cancelQty: activeQty }), 
-        credentials: 'include'
+        body: JSON.stringify({ itemId, itemName, cancelQty: activeQty }),
       });
       const data = await res.json();
       if (data.success) {
