@@ -31,7 +31,7 @@ function tzShortLabel(timezone) {
   }
 }
 
-export default function ValhallaToolbar({ user, onLogout, onSessionUser }) {
+export default function ValhallaToolbar({ user, onLogout, onSessionUser, forceCloseMenu = false }) {
   const navigate = useNavigate();
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -69,6 +69,10 @@ export default function ValhallaToolbar({ user, onLogout, onSessionUser }) {
       .catch(() => {});
     return undefined;
   }, [user]);
+
+  useEffect(() => {
+    if (forceCloseMenu) setOpen(false);
+  }, [forceCloseMenu]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -121,7 +125,7 @@ export default function ValhallaToolbar({ user, onLogout, onSessionUser }) {
 
   return (
     <div className="flex items-center justify-end gap-x-3 text-slate-200">
-      <div className="flex items-center gap-1.5 select-none shrink-0" title={`Guild time · ${guildTz}`}>
+      <div className="hidden md:flex items-center gap-1.5 select-none shrink-0" title={`Guild time · ${guildTz}`}>
         <IconClock />
         <span className="text-[11px] font-mono font-bold tabular-nums text-slate-200">{clockDisplay || '--:--:--'}</span>
         <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">{tzShortLabel(guildTz)}</span>
@@ -133,7 +137,7 @@ export default function ValhallaToolbar({ user, onLogout, onSessionUser }) {
           onClick={() => setOpen((prev) => !prev)}
           aria-expanded={open}
           aria-haspopup="menu"
-          className="flex items-center gap-1.5 min-w-0 max-w-[12rem] px-2 py-1 rounded-lg hover:bg-slate-800 text-slate-200"
+          className="flex items-center gap-1.5 min-w-0 max-w-[12rem] max-md:max-w-[7.5rem] px-2 py-1 rounded-lg hover:bg-slate-800 text-slate-200"
         >
           <span className="text-[11px] font-semibold truncate">[{displayName}]</span>
           <IconChevron open={open} />
@@ -149,6 +153,11 @@ export default function ValhallaToolbar({ user, onLogout, onSessionUser }) {
               {user.tenantName && (
                 <div className="text-[10px] font-mono text-slate-500 truncate mt-0.5">{user.tenantName}</div>
               )}
+              <div className="flex md:hidden items-center gap-1.5 mt-1.5 text-slate-400" title={`Guild time · ${guildTz}`}>
+                <IconClock />
+                <span className="text-[10px] font-mono font-bold tabular-nums text-slate-300">{clockDisplay || '--:--:--'}</span>
+                <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">{tzShortLabel(guildTz)}</span>
+              </div>
             </div>
 
             {user.isOfficer && (
