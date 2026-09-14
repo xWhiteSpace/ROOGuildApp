@@ -86,10 +86,6 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
   const asideRef = useRef(null);
   const swipeStartX = useRef(0);
   const swipeStartY = useRef(0);
-  const swipeAxis = useRef(null);
-  const dragXRef = useRef(0);
-  const [dragX, setDragX] = useState(0);
-  const [isSwipeDragging, setIsSwipeDragging] = useState(false);
 
   const game = getGame(activeGameId);
   const helpUrls = { auction: auctionHelpUrl, raid: raidHelpUrl };
@@ -123,13 +119,6 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
   }, [mdUp, onMobileClose]);
 
   useEffect(() => {
-    dragXRef.current = 0;
-    setDragX(0);
-    setIsSwipeDragging(false);
-    swipeAxis.current = null;
-  }, [mobileOpen]);
-
-  useEffect(() => {
     const el = asideRef.current;
     if (!el || mdUp || !mobileOpen) return undefined;
 
@@ -138,47 +127,21 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
       if (!touch) return;
       swipeStartX.current = touch.clientX;
       swipeStartY.current = touch.clientY;
-      swipeAxis.current = null;
-      dragXRef.current = 0;
     };
 
-    const onTouchMove = (event) => {
-      const touch = event.touches[0];
+    const onTouchEnd = (event) => {
+      const touch = event.changedTouches[0];
       if (!touch) return;
       const dx = touch.clientX - swipeStartX.current;
       const dy = touch.clientY - swipeStartY.current;
-      if (swipeAxis.current == null) {
-        if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-        swipeAxis.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-        if (swipeAxis.current === 'x') setIsSwipeDragging(true);
-      }
-      if (swipeAxis.current !== 'x') return;
-      event.preventDefault();
-      const next = Math.min(0, dx);
-      dragXRef.current = next;
-      setDragX(next);
-    };
-
-    const onTouchEnd = () => {
-      const offset = dragXRef.current;
-      const close = swipeAxis.current === 'x' && offset < -64;
-      swipeAxis.current = null;
-      setIsSwipeDragging(false);
-      if (close) {
-        onMobileClose?.();
-        return;
-      }
-      dragXRef.current = 0;
-      setDragX(0);
+      if (dx < -64 && Math.abs(dx) > Math.abs(dy)) onMobileClose?.();
     };
 
     el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd);
-    el.addEventListener('touchcancel', onTouchEnd);
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
     };
@@ -226,14 +189,9 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
     <aside
       ref={asideRef}
       aria-hidden={!mdUp && !mobileOpen}
-      className={`border-r border-slate-900 bg-slate-950 p-4 shadow-2xl select-none z-[60] flex flex-col min-h-0 max-md:absolute max-md:inset-0 max-md:w-full md:relative md:h-full md:shrink-0 md:transition-all ${
+      className={`border-r border-slate-900 bg-slate-950 p-4 max-md:pt-16 shadow-2xl select-none z-[60] flex flex-col min-h-0 max-md:absolute max-md:inset-0 max-md:w-full max-md:transition-transform max-md:duration-300 md:relative md:h-full md:shrink-0 md:transition-all ${
         showIconsOnly ? 'md:w-20' : 'md:w-64'
-      } ${mobileOpen ? '' : 'max-md:pointer-events-none'}`}
-      style={mdUp ? undefined : {
-        transform: mobileOpen ? `translateX(${dragX}px)` : 'translateX(-100%)',
-        transition: isSwipeDragging ? 'none' : 'transform 300ms ease-out',
-        touchAction: 'pan-y',
-      }}
+      } ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full max-md:pointer-events-none'}`}
     >
       <button
         type="button"

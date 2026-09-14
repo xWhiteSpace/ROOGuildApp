@@ -65,8 +65,8 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
         setMobileHeaderHidden(false);
         return;
       }
-      if (delta > 8) setMobileHeaderHidden(true);
-      else if (delta < -8) setMobileHeaderHidden(false);
+      if (delta > 16) setMobileHeaderHidden(true);
+      else if (delta < -16) setMobileHeaderHidden(false);
     };
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
@@ -78,10 +78,8 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
   return (
     <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
       <div
-        className={`w-full shrink-0 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-3 sm:px-6 py-2.5 flex items-center justify-between gap-x-3 text-xs font-mono select-none z-[80] transition-[max-height,padding,border-color,opacity] duration-300 ease-out max-md:flex-nowrap ${
-          mobileHeaderHidden
-            ? 'max-md:max-h-0 max-md:py-0 max-md:border-transparent max-md:opacity-0 max-md:overflow-hidden max-md:pointer-events-none'
-            : 'max-md:max-h-16'
+        className={`w-full bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-3 sm:px-6 py-2.5 flex items-center justify-between gap-x-3 text-xs font-mono select-none z-[80] max-md:absolute max-md:top-0 max-md:inset-x-0 max-md:flex-nowrap max-md:transition-transform max-md:duration-300 md:relative md:shrink-0 ${
+          mobileHeaderHidden ? 'max-md:-translate-y-full max-md:pointer-events-none' : ''
         }`}
       >
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -155,7 +153,7 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
           onMobileOpen={openMobileNav}
           onMobileClose={closeMobileNav}
         />
-        <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
+        <main ref={mainRef} className="flex-1 min-h-0 overflow-y-auto p-6 max-md:pt-16 lg:p-8">
           {children}
         </main>
       </div>
