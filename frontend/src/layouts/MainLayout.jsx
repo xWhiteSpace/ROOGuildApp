@@ -1,12 +1,22 @@
+import { useCallback, useState } from 'react';
 import LeftNavBar from '../components/LeftNavBar';
 import ValhallaToolbar from '../components/ValhallaToolbar';
 import ValhallaLockup from '../components/ValhallaLockup';
 import { useNavigate } from 'react-router-dom';
 import { gamesForEnabled, getGame, firstEnabledGameId, resolvePostLoginPath } from '../games/catalog';
 
+const IconBack = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 18l-6-6 6-6" />
+  </svg>
+);
+
 export default function MainLayout({ children, user, onLogout, onSessionUser, activeGameId, setActiveGameId }) {
   const navigate = useNavigate();
   const enabledGames = gamesForEnabled(user?.enabledGames);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const openMobileNav = useCallback(() => setMobileNavOpen(true), []);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   const goHome = () => {
     const current = getGame(activeGameId);
@@ -36,6 +46,17 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
         <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
+            onClick={openMobileNav}
+            title="Open menu"
+            aria-label="Open menu"
+            className={`md:hidden shrink-0 rounded-lg p-1.5 text-slate-300 hover:text-white hover:bg-slate-800/80 cursor-pointer ${
+              mobileNavOpen ? 'invisible pointer-events-none' : ''
+            }`}
+          >
+            <IconBack />
+          </button>
+          <button
+            type="button"
             onClick={goHome}
             title="Home"
             className="flex items-center shrink-0 rounded-lg px-1 py-0.5 hover:bg-slate-800/80 cursor-pointer"
@@ -60,8 +81,14 @@ export default function MainLayout({ children, user, onLogout, onSessionUser, ac
         </div>
         <ValhallaToolbar user={user} onLogout={onLogout} onSessionUser={onSessionUser} />
       </div>
-      <div className="flex flex-1 min-h-0">
-        <LeftNavBar activeGameId={activeGameId} user={user} />
+      <div className={`flex flex-1 min-h-0 relative ${mobileNavOpen ? 'max-md:overflow-hidden' : ''}`}>
+        <LeftNavBar
+          activeGameId={activeGameId}
+          user={user}
+          mobileOpen={mobileNavOpen}
+          onMobileOpen={openMobileNav}
+          onMobileClose={closeMobileNav}
+        />
         <main className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
           {children}
         </main>

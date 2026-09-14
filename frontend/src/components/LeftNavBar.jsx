@@ -56,15 +56,33 @@ function navClass(isActive, isCollapsed) {
   } ${isCollapsed ? 'justify-center' : ''}`;
 }
 
-export default function LeftNavBar({ user, activeGameId }) {
+function useMdUp() {
+  const [mdUp, setMdUp] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true
+  ));
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setMdUp(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  return mdUp;
+}
+
+export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onMobileOpen, onMobileClose }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const mdUp = useMdUp();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [helpView, setHelpView] = useState('list');
   const [auctionHelpUrl, setAuctionHelpUrl] = useState('');
   const [raidHelpUrl, setRaidHelpUrl] = useState('');
   const [openSections, setOpenSections] = useState({});
+  const showIconsOnly = mdUp && isCollapsed;
 
   const game = getGame(activeGameId);
   const helpUrls = { auction: auctionHelpUrl, raid: raidHelpUrl };
@@ -82,12 +100,20 @@ export default function LeftNavBar({ user, activeGameId }) {
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--valhalla-sidebar-width',
-      isCollapsed ? '5rem' : '16rem',
+      mdUp ? (isCollapsed ? '5rem' : '16rem') : '0px',
     );
     return () => {
       document.documentElement.style.removeProperty('--valhalla-sidebar-width');
     };
-  }, [isCollapsed]);
+  }, [isCollapsed, mdUp]);
+
+  useEffect(() => {
+    onMobileClose?.();
+  }, [pathname, onMobileClose]);
+
+  useEffect(() => {
+    if (mdUp) onMobileClose?.();
+  }, [mdUp, onMobileClose]);
 
   useEffect(() => {
     if (!game || helpGuides.length === 0) return undefined;
@@ -121,23 +147,41 @@ export default function LeftNavBar({ user, activeGameId }) {
     setHelpView('list');
   };
 
+  const goHome = () => {
+    onMobileClose?.();
+    navigate(getGame(activeGameId)?.homePath || resolvePostLoginPath(user));
+  };
+
   return (
-    <aside className={`h-full border-r border-slate-900 bg-slate-950 p-4 transition-all duration-300 relative shrink-0 shadow-2xl select-none z-[60] flex flex-col ${
-      isCollapsed ? 'w-20' : 'w-64'
-    }`}>
+    <>
+    <aside
+      aria-hidden={!mdUp && !mobileOpen}
+      className={`border-r border-slate-900 bg-slate-950 p-4 shadow-2xl select-none z-[60] flex flex-col min-h-0 max-md:absolute max-md:inset-0 max-md:w-full max-md:transition-transform max-md:duration-300 md:relative md:h-full md:shrink-0 md:transition-all ${
+        showIconsOnly ? 'md:w-20' : 'md:w-64'
+      } ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full max-md:pointer-events-none'}`}
+    >
       <button
         type="button"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute top-7 -right-3 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg w-6 h-6 flex items-center justify-center z-50 shadow-md transition cursor-pointer"
+        className="hidden md:flex absolute top-7 -right-3 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg w-6 h-6 items-center justify-center z-50 shadow-md transition cursor-pointer"
         title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
       >
         <IconChevron collapsed={isCollapsed} />
+      </button>
+      <button
+        type="button"
+        onClick={onMobileClose}
+        className="md:hidden absolute top-7 right-3 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg w-8 h-8 flex items-center justify-center z-50 shadow-md transition cursor-pointer"
+        title="Close menu"
+        aria-label="Close menu"
+      >
+        <IconChevron collapsed={false} />
       </button>
 
       <div className="mb-6 px-2 py-3 font-sans shrink-0">
         <button
           type="button"
-          onClick={() => navigate(getGame(activeGameId)?.homePath || resolvePostLoginPath(user))}
+          onClick={goHome}
           title="Home"
           className="block w-full cursor-pointer"
         >
@@ -149,10 +193,10 @@ export default function LeftNavBar({ user, activeGameId }) {
               event.currentTarget.src = PRODUCT_MARK_SRC;
               event.currentTarget.classList.add('brightness-0', 'invert');
             }}
-            className={`object-contain rounded-xl hover:ring-2 hover:ring-indigo-500/40 ${isCollapsed ? 'mx-auto h-12 w-12' : 'h-28 w-28'} ${user?.tenantLogoUrl ? '' : PRODUCT_ON_DARK_CLASS}`}
+            className={`object-contain rounded-xl hover:ring-2 hover:ring-indigo-500/40 ${showIconsOnly ? 'mx-auto h-12 w-12' : 'h-28 w-28'} ${user?.tenantLogoUrl ? '' : PRODUCT_ON_DARK_CLASS}`}
           />
         </button>
-        {isCollapsed ? (
+        {showIconsOnly ? (
           game && (
             <div className="mt-3 flex justify-center text-indigo-400" title={game.label}>
               <IconController />
@@ -180,7 +224,7 @@ export default function LeftNavBar({ user, activeGameId }) {
           const open = sectionOpen(mod.id);
           return (
             <div key={mod.id} className="space-y-1">
-              {isCollapsed ? (
+              {showIconsOnly ? (
                 <button
                   type="button"
                   onClick={() => toggleSection(mod.id)}
@@ -206,10 +250,11 @@ export default function LeftNavBar({ user, activeGameId }) {
                     key={item.path}
                     to={item.path}
                     end={item.end === true || item.path === '/'}
-                    className={({ isActive }) => navClass(isActive, isCollapsed)}
+                    onClick={onMobileClose}
+                    className={({ isActive }) => navClass(isActive, showIconsOnly)}
                     title={item.label}
                   >
-                    {isCollapsed ? (
+                    {showIconsOnly ? (
                       <span className="flex items-center justify-center" title={item.label}>
                         <Icon />
                       </span>
@@ -236,10 +281,10 @@ export default function LeftNavBar({ user, activeGameId }) {
             <button
               type="button"
               onClick={openHelp}
-              className={`w-full flex items-center rounded-xl px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 ${isCollapsed ? 'justify-center' : ''}`}
+              className={`w-full flex items-center rounded-xl px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-all duration-150 text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 ${showIconsOnly ? 'justify-center' : ''}`}
               title="Help Guide"
             >
-              {isCollapsed ? (
+              {showIconsOnly ? (
                 <span className="flex items-center justify-center" title="Help Guide">
                   <IconHelp />
                 </span>
@@ -255,10 +300,11 @@ export default function LeftNavBar({ user, activeGameId }) {
             {game.settingsPath ? (
             <NavLink
               to={game.settingsPath}
-              className={({ isActive }) => navClass(isActive || pathname === '/settings-configuration', isCollapsed)}
+              onClick={onMobileClose}
+              className={({ isActive }) => navClass(isActive || pathname === '/settings-configuration', showIconsOnly)}
               title="Game Settings"
             >
-              {isCollapsed ? (
+              {showIconsOnly ? (
                 <span className="flex items-center justify-center" title="Game Settings">
                   <IconSettings />
                 </span>
@@ -272,8 +318,8 @@ export default function LeftNavBar({ user, activeGameId }) {
             ) : null}
         </div>
       ) : null}
-
-      {isHelpOpen && (
+    </aside>
+    {isHelpOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[100] p-4 font-sans animate-fadeIn">
           <div className="fixed inset-0 z-0" onClick={closeHelp} />
           <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-3xl shadow-2xl p-6 flex flex-col h-[80vh] justify-between text-white relative z-10 space-y-4">
@@ -346,6 +392,17 @@ export default function LeftNavBar({ user, activeGameId }) {
           </div>
         </div>
       )}
-    </aside>
+    {!mobileOpen && (
+      <button
+        type="button"
+        onClick={onMobileOpen}
+        title="Open menu"
+        aria-label="Open menu"
+        className="md:hidden absolute left-0 top-1/2 z-[70] -translate-y-1/2 bg-slate-900 border border-l-0 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white rounded-r-lg w-7 h-11 flex items-center justify-center shadow-md cursor-pointer"
+      >
+        <IconChevron collapsed />
+      </button>
+    )}
+    </>
   );
 }
