@@ -1,58 +1,25 @@
 // backend/src/api/liveRaid.routes.js
 import { Router } from 'express';
-import { getDatabase } from 'firebase-admin/database';
+import { getTenantStore } from '../db/database.js';
 import { discordClient } from '../discord-bot/client.js';
-import crypto from 'crypto';
+import { resolveUserIdentity } from '../auth/identity.js';
 import {
   resolveWarRoomChannelIds,
   inferWarRoomRelationalIds,
   fetchVoiceChannelPresentUids
-} from '../utils/warRoomResolver.js';
+} from '../games/ragnarok-origin/utils/warRoomResolver.js';
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 import {
   findCrossTabDuplicates,
   isSlotCoordKey,
 } from '@guildname/shared/compositionTabs';
+import { checkOfficer } from '../auth/officer.js';
 
 const router = Router();
 
-// Helper definitions for user token authentication
-function resolveUserIdentity(req) {
-  if (req.session?.user) return req.session.user;
-  const mobileHeaderToken = req.headers['x-user-profile'];
-  if (mobileHeaderToken) {
-    try {
-      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
-      if (decodedPayload && decodedPayload._sig) {
-        const clientSignature = decodedPayload._sig;
-        const profileToVerify = { ...decodedPayload };
-        delete profileToVerify._sig;
-
-        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
-        const expectedSignature = crypto
-          .createHmac('sha256', tokenSigningSecret)
-          .update(JSON.stringify(profileToVerify))
-          .digest('hex');
-
-        if (clientSignature === expectedSignature) {
-          return profileToVerify;
-        } else {
-          console.error("🛑 [LIVE RAID INTERCEPT]: Detected forged header signature tamper attempt!");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse mobile authorization header token:", e.message);
-    }
-  }
-  return null;
-}
-
-function verifyDiscordOfficerRole(user, allowedRoles = []) {
-  if (!user) return false;
-  if (user.roles && Array.isArray(user.roles)) {
-    return user.roles.some(r => allowedRoles.includes(r));
-  }
-  return user.isOfficer === true;
+async function verifyDiscordOfficerRole(req, allowedRoles = []) {
+  const { user, ok } = await checkOfficer(req, { adminRoles: allowedRoles });
+  return Boolean(user && ok);
 }
 
 // Timezone End Timestamp Parser
@@ -132,7 +99,7 @@ async function normalizeLiveSessionWarRooms(db, session) {
 }
 
 async function pollLiveSessionVoicePresence(session) {
-  const db = getDatabase();
+  const db = getTenantStore();
   const warRooms = await loadWarRoomsCatalog(db);
   // Same SSOT resolution as Live UI / normalizeLiveSessionWarRooms — never poll only one field
   const sourceIdentifiers = [
@@ -159,7 +126,7 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
     return { stop: false, skipped: true };
   }
 
-  const db = getDatabase();
+  const db = getTenantStore();
   const activeSnap = await db.ref('attendance/live_session').once('value');
   if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
     return { stop: true, reason: 'inactive' };
@@ -290,7 +257,7 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
  *  Writes monitoringTickerStatus to Firebase so the UI can show armed/scheduled/ended from DB.
  */
 function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
-  const db = getDatabase();
+  const db = getTenantStore();
 
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
@@ -361,7 +328,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
  */
 export async function maybeAutoEndLiveRaid() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/live_session').once('value');
     if (!snap.exists()) return;
 
@@ -382,7 +349,7 @@ export async function maybeAutoEndLiveRaid() {
  */
 export async function resumeLiveRaidMonitoringIfNeeded() {
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/live_session').once('value');
     if (!snap.exists() || snap.val().status !== 'Active') return;
 
@@ -435,7 +402,7 @@ function parseMonitoringFields(body = {}) {
 
 // Internal end live raid handler
 async function endLiveRaidSessionInternal(s) {
-  const db = getDatabase();
+  const db = getTenantStore();
   
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
@@ -548,7 +515,7 @@ router.get('/session', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const sessionSnap = await db.ref('attendance/live_session').once('value');
     if (!sessionSnap.exists()) {
       return res.json({ success: true, session: null });
@@ -568,11 +535,11 @@ router.post('/create', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -605,7 +572,7 @@ router.post('/create', async (req, res) => {
     if (resolvedWarRoomChannelIds.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'No valid Discord war room channels resolved. Verify Settings war room registry and backend DISCORD_WARROOM_ID_* environment variables.'
+        error: 'No valid Discord war room channels resolved. Map voice channel IDs in Settings.'
       });
     }
 
@@ -685,11 +652,11 @@ router.post('/update', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -723,7 +690,12 @@ router.post('/cell-update', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
     const { configId, coordKey, userId } = req.body;
     if (!configId || !coordKey) {
       return res.status(400).json({ success: false, error: 'Missing configId or coordKey.' });
@@ -771,7 +743,7 @@ router.get('/voice-presence', async (req, res) => {
   try {
     const channelsParam = req.query.channels || '';
     const channelIdentifiers = channelsParam.split(',').filter(Boolean);
-    const db = getDatabase();
+    const db = getTenantStore();
     const warRooms = await loadWarRoomsCatalog(db);
     const resolvedChannelIds = resolveWarRoomChannelIds(channelIdentifiers, warRooms);
     if (isDiscordCircuitOpen()) {
@@ -796,11 +768,11 @@ router.post('/end', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -823,11 +795,11 @@ router.post('/cancel', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -844,15 +816,15 @@ router.post('/cancel', async (req, res) => {
 });
 
 router.delete('/history/:sessionId', async (req, res) => {
-  const user = resolveUserIdentity(req);
+  const { user, ok } = await checkOfficer(req);
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
-  if (!user.isOfficer) return res.status(403).json({ success: false, error: 'Officer access required' });
+  if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
 
   const { sessionId } = req.params;
   if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId is required' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     await db.ref(`attendance/session_archive/${sessionId}`).remove();
     return res.json({ success: true, message: `Session ${sessionId} deleted.` });
   } catch (err) {
@@ -866,9 +838,9 @@ router.delete('/history/:sessionId', async (req, res) => {
  * Writes attendance/session_archive/{sessionId}/inGameStatus/{userId} = true | null
  */
 router.patch('/history/:sessionId/in-game', async (req, res) => {
-  const user = resolveUserIdentity(req);
+  const { user, ok } = await checkOfficer(req);
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
-  if (!user.isOfficer) return res.status(403).json({ success: false, error: 'Officer access required' });
+  if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
 
   const { sessionId } = req.params;
   const { userId, confirmed } = req.body || {};
@@ -877,7 +849,7 @@ router.patch('/history/:sessionId/in-game', async (req, res) => {
   }
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const sessionRef = db.ref(`attendance/session_archive/${sessionId}`);
     const sessionSnap = await sessionRef.once('value');
     if (!sessionSnap.exists()) {
@@ -897,7 +869,7 @@ router.get('/history/all', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const archiveSnap = await db.ref('attendance/session_archive').once('value');
     return res.json({
       success: true,
@@ -914,11 +886,11 @@ router.post('/set-monitoring-time', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Officer access required' });
     }
 
@@ -958,7 +930,7 @@ router.post('/set-monitoring-time', async (req, res) => {
     if (verified.monitoringStartsAt !== startsAt) {
       return res.status(500).json({
         success: false,
-        error: 'Monitoring write did not persist to Firebase. Check FIREBASE_DATABASE_URL matches the console you are viewing.',
+        error: 'Monitoring write did not persist. Check the database connection.',
       });
     }
 

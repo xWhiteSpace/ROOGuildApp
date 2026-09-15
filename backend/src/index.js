@@ -1,31 +1,35 @@
 // backend/src/index.js
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
+import './config/loadEnv.js';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { initializeEnv } from './config/env.js';
+import { valhallaEnv } from './config/valhallaEnv.js';
 import authRoutes from './auth/discordOAuth.js';
-import { initializeFirebase } from './config/firebase.js';
+import { migrate } from './db/migrate.js';
+import { query } from './db/pool.js';
+import { attachTenantContext, requireTenant } from './middleware/tenantContext.js';
+import { requireGame } from './middleware/requireGame.js';
+import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from './games/catalog.js';
+import tenantRoutes from './api/tenant.routes.js';
+import { discordChannel } from './db/channels.js';
+import { forEachOnboardedTenant } from './db/tenants.js';
+import { getTenantStore } from './db/database.js';
+import { checkOfficer } from './auth/officer.js';
 import { initializeDiscordBot, discordClient, getDiscordBotHealth } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
 import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid.routes.js';
 
-import { processAndPostDiscordSnapshot } from './services/discordSnapshot.js';
-import { getGateStatusDetails } from './config/timeWindow.js';
-import { handleAuctionInteraction } from './services/discordInteractiveAuction.js';
+import { processAndPostDiscordSnapshot } from './games/ragnarok-origin/services/discordSnapshot.js';
+import { getGateStatusDetails } from './games/ragnarok-origin/timeWindow.js';
+import { handleAuctionInteraction } from './games/ragnarok-origin/services/discordInteractiveAuction.js';
 import { getDiscordRateLimitStatus, resolveOAuthExchangeUrl } from './utils/discordRateLimit.js';
 
 import attendanceRoutes from './api/attendance.routes.js';
+import adventurerGuildRoutes from './api/adventurerGuild.routes.js';
 
 initializeEnv();
-initializeFirebase();
+await migrate();
 initializeDiscordBot();
 
 const oauthBridge = resolveOAuthExchangeUrl();
@@ -42,8 +46,7 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-const rawFrontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-const sanitizedFrontendUrl = rawFrontendUrl.replace(/\/$/, '');
+const { frontendUrl: sanitizedFrontendUrl, sessionSecret, port: PORT, localHttp } = valhallaEnv();
 
 const allowedOrigins = [
   sanitizedFrontendUrl,
@@ -82,32 +85,42 @@ app.use(cors({
     'Origin',
     'x-user-profile',
     'x-authorized-user',
+    'x-tenant-id',
     'ngrok-skip-browser-warning'
   ]
 }));
 
 app.use(express.json({ limit: '12mb' }));
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'guild_secret_pass',
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true, 
-      sameSite: 'none',
+      secure: !localHttp,
+      sameSite: localHttp ? 'lax' : 'none',
     },
   })
 );
 
+app.use(attachTenantContext);
 app.use('/auth', authRoutes);
-app.use('/api/requests', requestRoutes);
+app.use('/api/tenants', tenantRoutes);
+app.use('/api/requests', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), requestRoutes);
 
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/live-raid', liveRaidRoutes);
+app.use('/api/attendance', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), attendanceRoutes);
+app.use('/api/live-raid', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
+app.use('/api/adventurer-guild', requireTenant, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
 
-app.get('/', (req, res) => {
-  res.send('GuildName backend is online.');
+app.get('/', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.send('GuildName backend is online.');
+  } catch {
+    res.status(503).send('GuildName backend is online (database warming).');
+  }
 });
 
 // 📟 Debug: remaining Discord REST/soft-ban cooldown (no secrets)
@@ -116,12 +129,25 @@ app.get('/api/debug/discord-ratelimit', (req, res) => {
 });
 
 // 📟 TEMPORARY WEB PANEL TRIGGER FOR INTERACTIVE CARD DROP
-app.get('/api/deploy-auction-card', async (req, res) => {
+function requireOfficerTenant(req, res, next) {
+  requireTenant(req, res, () => {
+    (async () => {
+      const db = getTenantStore();
+      const snap = await db.ref('settings/configuration').once('value');
+      const { user, ok } = await checkOfficer(req, snap.exists() ? snap.val() : {});
+      if (!user) return res.status(401).send('Login required');
+      if (!ok) return res.status(403).send('Officer access required');
+      next();
+    })().catch((err) => res.status(500).send(err.message));
+  });
+}
+
+app.get('/api/deploy-auction-card', requireOfficerTenant, async (req, res) => {
   try {
     // 🛡️ Secure Channel Separation: Directs the initialization card straight into your clean Auction Request lobby space
-    const channelId = process.env.DISCORD_AUCREQ_CHANNEL_ID;
+    const channelId = discordChannel('DISCORD_AUCREQ_CHANNEL_ID');
     if (!channelId) {
-      return res.status(400).send("❌ Failure: System missing the structural DISCORD_AUCREQ_CHANNEL_ID environment setup.");
+      return res.status(400).send("❌ Failure: Auction request channel is not mapped for this guild.");
     }
 
     if (!discordClient || !discordClient.isReady()) {
@@ -137,7 +163,7 @@ app.get('/api/deploy-auction-card', async (req, res) => {
       return res.status(404).send("❌ Failure: Discord gateway client failed to locate matching server channel pointer.");
     }
 
-    const { sendPublicAuctionCard } = await import('./services/discordInteractiveAuction.js');
+    const { sendPublicAuctionCard } = await import('./games/ragnarok-origin/services/discordInteractiveAuction.js');
     await sendPublicAuctionCard(targetChannel);
 
     res.send("📟 SUCCESS: The Interactive Public Auction Card layout has dropped into your channel!");
@@ -148,9 +174,9 @@ app.get('/api/deploy-auction-card', async (req, res) => {
 });
 
 // Per-event Attendance card → DISCORD_WARANNOUNCE_CHANNEL_ID
-app.get('/api/deploy-attendance-card', async (req, res) => {
+app.get('/api/deploy-attendance-card', requireOfficerTenant, async (req, res) => {
   try {
-    const { deployPublicAttendanceCardToWarAnnounce } = await import('./services/discordAttendanceCards.js');
+    const { deployPublicAttendanceCardToWarAnnounce } = await import('./games/ragnarok-origin/services/discordAttendanceCards.js');
     await deployPublicAttendanceCardToWarAnnounce();
     res.send('📟 SUCCESS: Attendance card posted to the war-announce channel.');
   } catch (err) {
@@ -165,9 +191,9 @@ app.get('/api/deploy-attendance-card', async (req, res) => {
 });
 
 // Party Viewer card → DISCORD_WARANNOUNCE_CHANNEL_ID
-app.get('/api/deploy-party-card', async (req, res) => {
+app.get('/api/deploy-party-card', requireOfficerTenant, async (req, res) => {
   try {
-    const { deployPublicPartyCardToWarAnnounce } = await import('./services/partyViewer.js');
+    const { deployPublicPartyCardToWarAnnounce } = await import('./games/ragnarok-origin/services/partyViewer.js');
     await deployPublicPartyCardToWarAnnounce();
     res.send('📟 SUCCESS: Party card posted to the war-announce channel.');
   } catch (err) {
@@ -181,19 +207,15 @@ app.get('/api/deploy-party-card', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
   console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
 
-  // Re-arm in-memory monitoring ticker if a live session was left Active across restart
-  resumeLiveRaidMonitoringIfNeeded().catch((err) => {
-    console.error('[live-raid] resume on boot failed:', err.message);
-  });
-
-  import('./services/attendanceDecision.js')
-    .then((m) => m.seedMissingLeaveCredits())
-    .catch((err) => console.error('[attendance] leave-credit seed failed:', err.message));
+  forEachOnboardedTenant(async () => {
+    const { seedMissingLeaveCredits } = await import('./games/ragnarok-origin/services/attendanceDecision.js');
+    await seedMissingLeaveCredits();
+    await resumeLiveRaidMonitoringIfNeeded();
+  }).catch((err) => console.error('[boot] tenant seed failed:', err.message));
 
   // ✅ REFACTORED: Extraneous text scheduler loop completely removed to prevent double-posting.
   // Execution tracking has been centralized into the drift-proof engine in client.js.

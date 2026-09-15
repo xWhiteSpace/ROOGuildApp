@@ -1,55 +1,58 @@
-# Guild Name
+# VALHALLA
 
-Guild tooling for auction requests, Mimic Book allocation, attendance / raid parties, live raid voice tracking, and Discord slash commands.
+Guild tooling for auction requests, Mimic Book allocation, attendance / raid parties, live raid voice tracking, Discord cards, and Adventurer Guild hall.
 
-**Requirements / SRS:** [Requirements/Requirements.md](Requirements/Requirements.md)
+**Requirements / SRS:** [Requirements/Requirements.md](Requirements/Requirements.md) is a historical RTDB-era spec, not the live install guide.
 
-This README is the **how to install and run** guide. It assumes you have never used the Discord Developer Portal, Firebase, Render, or Vercel before.
+This README is the **how to install and run** guide. It assumes you have never used the Discord Developer Portal, Supabase, Render, or Vercel before.
+
+**Two jobs**
+
+| Who | What they do |
+| :--- | :--- |
+| **You (platform operator)** | Clone this repo. Create **one** Discord application, **one** Supabase project, deploy **one** Render backend and **one** Vercel site. Sections 1–7. |
+| **A tenant (one Discord guild)** | Open the live site. No GitHub, Node, Supabase, Render, or Vercel. Invite the **same** bot into *their* server, pick officers and games, map channels in the app. [Section 8](#8-tenants-guilds-using-the-live-site). |
+
+One Discord server is one private workspace. Members of that server Sign in; they never pay. The person who creates the workspace needs **Manage Server** on that Discord server.
 
 ---
 
-## What you will set up
+## What you will set up (operator)
 
 | Piece | Role |
 | :--- | :--- |
-| **Discord** | User login (OAuth) + bot (slash commands, announcements, auction card, voice) |
-| **Firebase Realtime Database** | Shared data store |
+| **Discord** | User login (OAuth) + bot (announcements, auction / attendance / party cards, voice) |
+| **Postgres / Supabase** | Shared data store (and optional Storage for logos / highlights) |
 | **Render** | Hosts the **backend** (API + Discord bot, one Node process) |
 | **Vercel** | Hosts the **frontend** (React site) |
 
 ```text
 Browser  →  Vercel (frontend)
                 │
-                ├── API / login  →  Render (backend + Discord bot)
-                │                        │
-                │                        ├── Firebase Admin SDK → Realtime Database
-                │                        └── Discord API / Gateway
-                │
-                └── (optional) Firebase client → Realtime Database
+                └── API / login  →  Render (backend + Discord bot)
+                                       ├── Postgres (Supabase)
+                                       ├── Supabase Storage (optional: logos / highlights)
+                                       └── Discord API / Gateway
 ```
 
-**Recommended order**
+**Recommended order (operator)**
 
-1. Discord application (OAuth + Bot)
-2. Firebase project (Realtime Database + Web app + service account)
-3. Discord server channels + invite bot + copy IDs
-4. Local `.env` files (optional smoke test)
-5. Deploy backend on Render
-6. Deploy frontend on Vercel
-7. Wire URLs (OAuth redirect, `FRONTEND_URL`, `VITE_BACKEND_API_URL`)
-8. Register slash commands
-9. First login → unlock Settings → match Discord admin role names
+1. Discord application (OAuth + Bot) — one app for every tenant
+2. Supabase project (Postgres URI; Storage bucket if you want logos / highlights)
+3. Local `.env` files (optional smoke test)
+4. Deploy backend on Render
+5. Deploy frontend on Vercel
+6. Wire URLs (OAuth redirect, `FRONTEND_URL`, `VITE_BACKEND_API_URL`)
+7. First tenant: open the Vercel site → Get started → invite bot → choose a game (section 8)
 
 ---
 
 ## Prerequisites
 
-- A computer with [Node.js LTS](https://nodejs.org/) installed (for local run and slash-command deploy)
+- A computer with [Node.js LTS](https://nodejs.org/) installed (for local run)
 - A GitHub account (to connect Render / Vercel to this repo)
 - A Discord account and a Discord **server** you admin
-- Free accounts on [Firebase](https://console.firebase.google.com/), [Render](https://render.com/), and [Vercel](https://vercel.com/)
-
-Enable **Developer Mode** in Discord (User Settings → App Settings → Advanced → Developer Mode) so you can **Copy Server ID** and **Copy Channel ID**.
+- Free accounts on [Supabase](https://supabase.com/), [Render](https://render.com/), and [Vercel](https://vercel.com/)
 
 ---
 
@@ -58,7 +61,7 @@ Enable **Developer Mode** in Discord (User Settings → App Settings → Advance
 ### 1.1 Create an application
 
 1. Open [https://discord.com/developers/applications](https://discord.com/developers/applications)
-2. Click **New Application**, name it (e.g. `GuildName`), accept terms, **Create**
+2. Click **New Application**, name it (e.g. `VALHALLA`), accept terms, **Create**
 3. On **General Information**, copy **Application ID** → this is `DISCORD_CLIENT_ID` (and `VITE_DISCORD_CLIENT_ID` if you set it)
 
 ### 1.2 Create a bot
@@ -87,7 +90,9 @@ Exact match is required (no trailing slash after `callback`).
 
 The app requests Discord scope **`identify` only** (login). Slash commands use the bot token separately.
 
-### 1.4 Invite the bot to your server
+### 1.4 Bot invite (one bot, every tenant)
+
+You do **not** put each guild’s channel IDs in env. Tenants invite this same bot from the app (section 8). To generate the invite URL yourself (local smoke test):
 
 1. OAuth2 → **URL Generator**
 2. Scopes: check **`bot`** and **`applications.commands`**
@@ -103,111 +108,31 @@ The app requests Discord scope **`identify` only** (login). Slash commands use t
    - Send Messages in Threads  
    - Connect (helps with voice / war rooms; voice **state** tracking also needs the Voice States intent, which is not privileged)
 
-4. Copy the generated URL, open it, pick your server, authorize
-
-### 1.5 Create channels and copy IDs
-
-In your Discord server, create (or reuse) channels. Right-click → **Copy Channel ID**. Right-click the server name → **Copy Server ID** → `DISCORD_GUILD_ID`.
-
-| Env variable | What to put |
-| :--- | :--- |
-| `DISCORD_GUILD_ID` | Server ID |
-| `DISCORD_GENROOM_ID_1` | Text channel where slash commands are allowed |
-| `DISCORD_AUCTION_CHANNEL_ID` | Channel for phase announcements / request snapshots |
-| `DISCORD_AUCREQ_CHANNEL_ID` | Channel for the interactive auction claim card |
-| `DISCORD_ATTENDANCE_ID` | Channel where the weekly attendance thread is created |
-| `DISCORD_WARROOM_ID_1` … `_5` | **Voice** channel IDs used as war rooms (all five are required at boot — reuse the same voice ID if you only need fewer rooms) |
+4. Copy the generated URL. Tenants should use the in-app **Invite bot** link so permissions stay in sync with the code.
 
 ---
 
-## 2. Firebase (Realtime Database only)
-
-Do **not** create Firestore for this project. Use **Realtime Database**.
+## 2. Postgres (Supabase)
 
 ### 2.1 Create a project
 
-1. Open [Firebase Console](https://console.firebase.google.com/)
-2. **Add project** → name it → continue (Google Analytics optional)
-3. Open the project
+1. Open [Supabase Dashboard](https://supabase.com/dashboard)
+2. **New project** → name it, set a database password, pick a region → **Create**
+3. Wait until the project is ready
 
-### 2.2 Create Realtime Database
+### 2.2 Database URL (required at boot)
 
-1. Build → **Realtime Database** → **Create Database**
-2. Pick a region → start in **locked mode** (you will paste rules next)
-3. Copy the database URL (looks like `https://YOUR-PROJECT-ID-default-rtdb.REGION.firebasedatabase.app` or `https://YOUR-PROJECT-ID.firebaseio.com`) → `FIREBASE_DATABASE_URL` and `VITE_FIREBASE_DATABASE_URL`
+1. Project → **Connect** (or Project Settings → Database)
+2. Copy the **URI** (pooler is fine for Render) → `DATABASE_URL`
+3. Never commit the real value. Tables are created on backend boot via migrate — no manual SQL seed is required.
 
-### 2.3 Security rules
+### 2.3 Storage (optional, logos / highlights)
 
-Realtime Database → **Rules** → replace with:
+Needed only if you upload guild logos or Adventurer Guild highlights.
 
-```json
-{
-  "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null",
-    "auction": {
-      "web_requests": {
-        ".indexOn": ["userId", "selectionStatus"]
-      }
-    }
-  }
-}
-```
-
-Click **Publish**.
-
-**Important:** This app logs users in with **Discord**, not Firebase Auth. The **backend** uses the Firebase **Admin SDK**, which **bypasses** these rules. Most reads/writes go through Render. Browser Firebase listeners only work if rules allow them; with `auth != null` and no Firebase Auth, client listeners may fail and the UI falls back to API polling (this is expected).
-
-### 2.4 Register a Web app (Project settings → Your apps)
-
-This is where the frontend `VITE_FIREBASE_*` values come from.
-
-1. Gear icon → **Project settings**
-2. Scroll to **Your apps**
-3. Click the **Web** icon (`</>`)
-4. Register app nickname (e.g. `guild-web`) → **Register app**
-5. Copy the `firebaseConfig` fields into frontend env:
-
-| Firebase config key | Frontend env |
-| :--- | :--- |
-| `apiKey` | `VITE_FIREBASE_API_KEY` |
-| `authDomain` | `VITE_FIREBASE_AUTH_DOMAIN` |
-| `databaseURL` | `VITE_FIREBASE_DATABASE_URL` |
-| `projectId` | `VITE_FIREBASE_PROJECT_ID` |
-| `storageBucket` | `VITE_FIREBASE_STORAGE_BUCKET` |
-| `messagingSenderId` | `VITE_FIREBASE_MESSAGING_SENDER_ID` |
-| `appId` | `VITE_FIREBASE_APP_ID` |
-
-You do **not** need Firebase Authentication product enabled for Discord login.
-
-### 2.5 Service account (backend Admin SDK)
-
-1. Project settings → **Service accounts**
-2. **Generate new private key** → download JSON
-3. Map into backend env:
-
-| JSON field | Backend env |
-| :--- | :--- |
-| `project_id` | `FIREBASE_PROJECT_ID` |
-| `client_email` | `FIREBASE_CLIENT_EMAIL` |
-| `private_key` | `FIREBASE_PRIVATE_KEY` |
-
-On Render, paste the private key as one line with literal `\n` for newlines, usually wrapped in double quotes, e.g.:
-
-```text
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"
-```
-
-### 2.6 Do beginners need to seed data?
-
-**No manual seed.** The first successful `GET /api/requests/settings/get` (opening **Settings** in the app) writes default configuration to `settings/configuration` if the node is empty.
-
-You **should** still:
-
-1. Set `SETTINGS_MASTER_KEY` (any strong passphrase you choose)
-2. Unlock Settings in the UI and confirm defaults loaded
-3. Create Discord roles whose **names** match `adminRoles` (defaults: `GUILD LEADER`, `Vice Guild Leader`, `Commander`) — names must match exactly
-4. Fill **Jobs** / **Roles** catalogs in Settings before `/jobchange` and `/rolechange` are useful
+1. Project Settings → **API** → copy **Project URL** → `SUPABASE_URL`
+2. Copy the **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (backend only; never put this in the frontend)
+3. Storage → create a **public** bucket named `guild-assets`
 
 ---
 
@@ -224,29 +149,26 @@ cp frontend/.env.example frontend/.env
 
 See `backend/.env.example`. Required by `backend/src/config/env.js`:
 
-- Discord: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`, channel IDs listed above  
-- OAuth: `OAUTH_REDIRECT_URI`  
-- Session: `SESSION_SECRET` (any long random string)  
-- Firebase Admin: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_DATABASE_URL`
+- Discord: `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`
+- OAuth: `OAUTH_REDIRECT_URI`
+- Session: `SESSION_SECRET` (any long random string)
+- Postgres: `DATABASE_URL`
 
 **Strongly recommended (not in the fatal list, but needed for real use):**
 
 - `FRONTEND_URL` — exact SPA origin, no trailing slash (`http://localhost:3000` or your Vercel URL)
-- `DISCORD_GUILD_ID`
-- `SETTINGS_MASTER_KEY`
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — logos / highlights
 
 **Optional:** `ATTENDANCE_POST_HOUR` (default `10`), `PROXY_URL` (if Discord blocks Render IPs), `PORT` (Render sets this).
-
-Ignore Google Sheets variables if present — sync is not mounted.
 
 ### Frontend (`frontend/.env`)
 
 See `frontend/.env.example`:
 
-- All `VITE_FIREBASE_*` from the Web app config
-- `VITE_BACKEND_API_URL` — backend origin **without** `/auth/callback`  
-  - Local: `http://localhost:5001`  
+- `VITE_BACKEND_API_URL` — backend origin **without** `/auth/callback`
+  - Local: `http://localhost:5001`
   - Prod: `https://YOUR-RENDER-SERVICE.onrender.com`
+- Optional: `VITE_DISCORD_CLIENT_ID` (Sign-in uses the backend `DISCORD_CLIENT_ID` if this is unset)
 
 ---
 
@@ -272,16 +194,11 @@ npm run dev
 | Frontend (Vite) | [http://localhost:3000](http://localhost:3000) |
 | Backend | [http://localhost:5001](http://localhost:5001) — open `/` and expect `GuildName backend is online.` |
 
-Vite proxies `/api` and `/auth` to port 5001.
+Vite proxies `/api` and `/auth` to port 5001. `/login` redirects to `/landing`.
 
-**Cookies note:** Sessions use `secure: true` and `sameSite: 'none'`. On plain `http://localhost`, cookies can be flaky; the app also keeps a signed profile in `localStorage` / `x-user-profile` as a fallback. Prefer testing OAuth against a deployed HTTPS backend when possible.
+**Cookies:** On HTTP localhost, sessions use `secure: false` and `sameSite: 'lax'`. Deployed HTTPS uses `secure: true` and `sameSite: 'none'`. The app also keeps a signed profile in `localStorage` / `x-user-profile` as a fallback.
 
-Register slash commands locally (with the same Discord env vars):
-
-```bash
-cd backend
-npm run deploy-commands
-```
+The Discord bot clears leftover slash-command menus on startup. Job and role changes are on the attendance card.
 
 ---
 
@@ -326,7 +243,7 @@ If Discord API calls fail from Render with network/block errors, set optional `P
 
 `frontend/vercel.json` already rewrites SPA routes to `index.html`.
 
-3. **Environment Variables** — add all `VITE_*` from section 3  
+3. **Environment Variables** — add `VITE_*` from section 3  
    - `VITE_BACKEND_API_URL=https://YOUR-SERVICE.onrender.com`
 4. Deploy. Copy the site URL (e.g. `https://your-app.vercel.app`)
 
@@ -365,33 +282,81 @@ After both deploys exist:
 1. **Render** → set `FRONTEND_URL=https://your-app.vercel.app` (no trailing slash) → redeploy if needed  
 2. **Discord OAuth2 Redirects** → production `https://YOUR-SERVICE.onrender.com/auth/callback`  
 3. **Vercel** → `VITE_BACKEND_API_URL` points at Render (redeploy so Vite rebuilds with the env)  
-4. From a machine with prod Discord credentials in `backend/.env`:
+4. From a machine with prod Discord credentials in `backend/.env`, the bot clears old slash menus on ready (or run `npm --prefix backend run clear-commands`)
 
-```bash
-cd backend
-npm run deploy-commands
-```
-
-5. Open the Vercel site → **Login with Discord**  
-6. Open **Settings**, unlock with `SETTINGS_MASTER_KEY`, confirm config seeded  
-7. Optional: open `https://YOUR-SERVICE.onrender.com/api/deploy-auction-card` once (while the bot is online) to post the auction card  
-8. In `DISCORD_GENROOM_ID_1`, try `/myparty` or `/jobchange`
+5. Open the Vercel site and follow [section 8](#8-tenants-guilds-using-the-live-site) for the first guild.
 
 ---
 
-## 8. Post-setup checklist
+## 8. Tenants (guilds using the live site)
+
+A tenant is **one Discord server**. They do not clone this repo and they do not create Supabase / Render / Vercel accounts. They only need:
+
+- A Discord server they belong to
+- For **creating** a workspace: **Manage Server** on that Discord server
+
+They do **not** paste Discord channel IDs unless they enable **Ragnarok Origin**. Adventurer Guild never asks for them.
+
+Hand them the Vercel URL. The bot they invite is the one you created in section 1.
+
+### 8.1 Members (guild already on VALHALLA)
+
+1. Open the site → **Sign in with Discord**
+2. Pick that Discord server under **Your guilds**
+3. Use whichever games officers enabled (Ragnarok Origin, Adventurer Guild, or both)
+
+If Discord returns no servers, they must join a server first, then sign in again.
+
+### 8.2 Create a workspace (first officer)
+
+1. Open the site → **Get started with Discord** (needs Manage Server)
+2. Under **Create a workspace**, pick the Discord server
+3. **Invite bot to this server** (opens Discord). Until the bot is in, officer roles cannot load.
+4. Guild display name, timezone, and at least one **officer Discord role**
+5. **Choose a game** (this is when the paths split)
+   - **Adventurer Guild** — done. No channel IDs. Home is Highlights; Events is a separate page. Officers can hide it later; data stays.
+   - **Ragnarok Origin** — the next screen asks for Discord channel IDs so the bot knows where to post auction / attendance / war cards. Skip this entire step if you did not enable that game.
+
+     Turn on **Developer Mode** only for this: Discord **gear** (bottom left) → left list **Advanced** (under the App Settings heading) → Developer Mode. Then right-click a channel → **Copy Channel ID**. On phone: avatar → gear → **Advanced** (some builds: **Appearance**).
+
+     | Field | What to paste |
+     | :--- | :--- |
+     | Auction announce | Phase announcements / request snapshots |
+     | Auction request / claim card | Interactive auction card |
+     | General room | General text |
+     | Weekly attendance thread parent | One text channel (thread is created here) |
+     | War-announce | One text channel for war cards |
+     | Voice war rooms 1–5 | Voice channel IDs |
+
+     Change these later in **Game Settings**. Catalogs (jobs, items, events) and **Send** (post cards into mapped channels) are also Game Settings, not env.
+
+6. **Workspace** (toolbar) — logo, timezone, officer roles, hide/enable games, **Re-invite bot**
+
+**Who is an officer in that guild:** the Discord user who created the workspace, plus anyone whose Discord role is listed under officer roles. If no officer roles are saved, only the onboarder is an officer. **Manage Server** is for creating the workspace, not for day-to-day officer tools.
+
+### 8.3 Another guild later
+
+Same live site. Same bot. Get started → pick a *different* Discord server. That becomes a second tenant with its own data. Do not add a second Discord application or a second Supabase project for it.
+
+---
+
+## 9. Post-setup checklist
+
+**Operator**
 
 - [ ] Render `/` returns online text  
-- [ ] Discord bot appears online in the server  
 - [ ] Vercel site loads and Discord login returns you to the app  
-- [ ] Settings unlock works and configuration exists in Firebase  
-- [ ] Discord role names match `adminRoles` for officer tools  
-- [ ] Slash commands appear in the general room  
-- [ ] War room voice IDs match real voice channels  
+
+**First tenant**
+
+- [ ] Bot appears online in that Discord server  
+- [ ] Onboarder / listed officer roles can open Workspace and Game Settings  
+- [ ] Discord role names in Workspace match live server roles  
+- [ ] If Ragnarok Origin is enabled: auction / attendance / party cards post into mapped channels; war room voice IDs match real voice channels  
 
 ---
 
-## 9. Project scripts (quick reference)
+## 10. Project scripts (quick reference)
 
 | Location | Command | Purpose |
 | :--- | :--- | :--- |
@@ -399,27 +364,28 @@ npm run deploy-commands
 | Repo root | `npm run dev` | Frontend + backend together |
 | `frontend` | `npm run build` | Production build |
 | `backend` | `npm start` | Production API + bot |
-| `backend` | `npm run deploy-commands` | Register Discord slash commands |
+| `backend` | `npm run migrate` | Apply Postgres schema |
+| `backend` | `npm run test:isolation` | Tenant A/B isolation check |
+| `backend` | `npm run clear-commands` | Clear leftover Discord slash-command menus |
 | `scripts/` | `./scripts/configure-vercel-deploy-hygiene.sh` | Set Vercel retention (needs `VERCEL_TOKEN`) |
 | `scripts/` | `./scripts/cleanup-github-deployments.sh --keep 1` | Delete old GitHub deployment records |
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Problem | What to check |
 | :--- | :--- |
-| Backend crashes on boot | Missing env from the required list in section 3 |
+| Backend crashes on boot | Missing env from the required list in section 3 (`DATABASE_URL` + Discord OAuth + `SESSION_SECRET`) |
 | OAuth “redirect_uri mismatch” | Discord Redirects must **exactly** equal `OAUTH_REDIRECT_URI` |
 | Login works but API CORS errors | `FRONTEND_URL` must match the browser origin (scheme + host, no trailing slash) |
-| Slash commands missing | Run `npm run deploy-commands`; commands only work in `DISCORD_GENROOM_ID_1` |
-| `/namechange` fails | Bot role must be **above** the member; needs Manage Nicknames |
-| Settings unlock fails | `SETTINGS_MASTER_KEY` set on Render and typed exactly |
-| Firebase permission errors in browser console | Expected with `auth != null` rules; use API-backed UI paths |
+| Settings / officer tools locked | You must be the Discord user who created that workspace, or hold a Discord role listed under Workspace → officer roles |
+| Create a workspace list is empty | You need **Manage Server** on a Discord server that is not onboarded yet |
+| Officer role list empty on onboard | Invite the bot first, then reload |
 | Bot offline on Render | Service sleeping / crashed; check Render logs; optional `PROXY_URL` |
 
 ---
 
 ## License / requirements
 
-Functional requirements live in [Requirements/Requirements.md](Requirements/Requirements.md). This README intentionally covers setup only.
+Functional requirements live in [Requirements/Requirements.md](Requirements/Requirements.md) (historical). This README covers platform install (sections 1–7) and tenant onboard (section 8).

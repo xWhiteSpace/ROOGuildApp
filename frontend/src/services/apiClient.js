@@ -2,10 +2,17 @@
  * Shared frontend API client — credentials + x-user-profile on every request.
  */
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+function isBrowserLocalhost() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
 
 export function getBackendUrl() {
-  return backendUrl;
+  // Laptop SPA uses Vite's /api and /auth proxy so a stale VITE_BACKEND_API_URL
+  // (ngrok) cannot send Sign-in to the interstitial.
+  if (isBrowserLocalhost()) return '';
+  return import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 }
 
 /**
@@ -17,7 +24,7 @@ export function getAuthHeaders({ json = true } = {}) {
   const headers = {};
   if (json) headers['Content-Type'] = 'application/json';
 
-  if (backendUrl.includes('ngrok')) {
+  if (getBackendUrl().includes('ngrok')) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }
 
@@ -25,6 +32,12 @@ export function getAuthHeaders({ json = true } = {}) {
     const savedUserSession = localStorage.getItem('guild_raid_session');
     if (savedUserSession) {
       headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+      try {
+        const parsed = JSON.parse(savedUserSession);
+        if (parsed?.currentTenantId) headers['x-tenant-id'] = String(parsed.currentTenantId);
+      } catch {
+        // ignore
+      }
     }
   } catch {
     // localStorage unavailable
@@ -40,25 +53,34 @@ export function getAuthHeaders({ json = true } = {}) {
  */
 export async function apiFetch(path, options = {}) {
   const { json = true, headers: extraHeaders, ...rest } = options;
+  const backendUrl = getBackendUrl();
   const url = path.startsWith('http') ? path : `${backendUrl}${path.startsWith('/') ? '' : '/'}${path}`;
   const method = String(rest.method || 'GET').toUpperCase();
   const hasBody = rest.body != null && rest.body !== '';
-  const sendJsonContentType = json && (hasBody || ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method));
+  const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData;
+  const sendJsonContentType = json && !isFormData && (hasBody || ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method));
   const headers = {
     ...getAuthHeaders({ json: sendJsonContentType }),
     ...(extraHeaders || {}),
   };
-  if (method === 'GET' || method === 'HEAD') {
+  if (method === 'GET' || method === 'HEAD' || isFormData) {
     delete headers['Content-Type'];
     delete headers['content-type'];
   }
 
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       credentials: 'include',
       ...rest,
       headers,
     });
+    if (res.status === 403) {
+      const peek = await res.clone().json().catch(() => null);
+      if (peek?.code === 'game_required') {
+        throw new Error(peek.error || 'This game is not enabled for this workspace.');
+      }
+    }
+    return res;
   } catch (err) {
     const detail = err?.message || String(err);
     throw new Error(`${detail} [${method} ${url}]`);

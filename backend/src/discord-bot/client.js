@@ -1,12 +1,15 @@
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import { handleAuctionInteraction } from '../services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
-import admin from 'firebase-admin'; // 🛰️ Connect absolute database reference paths
-import { handleSlashCommand, handleComponentInteraction } from './discordSlashcmd.js';
-import { handleAttendanceCardInteraction } from '../services/discordAttendanceCards.js';
-import { syncJobIconEmojis } from '../services/discordJobEmojis.js';
-import { handlePartyCardInteraction } from '../services/partyViewer.js';
+import { handleAuctionInteraction } from '../games/ragnarok-origin/services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
+import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
+import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
+import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
+import { handleAttendanceCardInteraction } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
+import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
+import { handlePartyCardInteraction } from '../games/ragnarok-origin/services/partyViewer.js';
+import { clearGuildCommands } from './deployGuild.js';
 
+import { discordEnv } from '../config/discordEnv.js';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { logDiscordRateLimit, isDiscordCircuitOpen, hydrateDiscordCircuit, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
 
@@ -16,14 +19,7 @@ dns.setDefaultResultOrder('ipv4first');
 const discordDispatcher = new Agent({ connect: { timeout: 10_000, family: 4 } });
 
 // 📡 GLOBAL NETWORK TUNNEL — honor HTTPS_PROXY, HTTP_PROXY, or PROXY_URL
-const resolvedProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.PROXY_URL;
-const resolvedProxyName = process.env.HTTPS_PROXY
-  ? 'HTTPS_PROXY'
-  : process.env.HTTP_PROXY
-    ? 'HTTP_PROXY'
-    : process.env.PROXY_URL
-      ? 'PROXY_URL'
-      : null;
+const { httpsProxy: resolvedProxyUrl, proxyName: resolvedProxyName } = discordEnv();
 if (resolvedProxyUrl) {
   console.log(`🔒 [NETWORKING]: Routing global HTTP/HTTPS through ${resolvedProxyName} tunnel.`);
   const proxyAgent = new ProxyAgent({ uri: resolvedProxyUrl });
@@ -102,7 +98,7 @@ async function preflightDiscordGateway(token) {
 }
 
 export async function initializeDiscordBot() {
-  const token = (process.env.DISCORD_BOT_TOKEN || '').trim();
+  const token = discordEnv().botToken;
   if (!token) {
     throw new Error('DISCORD_BOT_TOKEN is required to initialize Discord client');
   }
@@ -151,9 +147,29 @@ export async function initializeDiscordBot() {
     syncJobIconEmojis(discordClient).catch((err) => {
       console.warn('[JOB ICONS] Sync skipped:', err.message);
     });
+    forEachOnboardedTenant(async (tenant) => {
+      try {
+        await clearGuildCommands(tenant.id);
+        console.log(`[SLASH] Cleared guild commands for ${tenant.id}`);
+      } catch (err) {
+        console.warn(`[SLASH] Could not clear commands for ${tenant.id}:`, err.message);
+      }
+    }).catch((err) => console.warn('[SLASH] Command clear skipped:', err.message));
 
-   // 🕹️ LIVE INTERACTION ROUTER: Gated exclusively to general room for slash commands and interactive boards[cite: 1]
+async function withGuildTenant(guildId, fn) {
+  if (!guildId) return fn();
+  const tenant = await getTenant(guildId).catch(() => null);
+  if (tenant) {
+    const settings = await loadTenantSettings(guildId);
+    setCachedConfig(guildId, settings.configuration);
+    setCachedChannels(guildId, mergeChannelFallback(settings.discordChannels));
+  }
+  return runWithTenant(guildId, fn);
+}
+
+   // Card interactions (auction, attendance, party) plus a notice if an old slash command is invoked
     discordClient.on('interactionCreate', async (interaction) => {
+      await withGuildTenant(interaction.guildId, async () => {
       try {
         // Attendance card lives in the war-announce channel — route by customId
         // prefix so it bypasses the general-room gate.
@@ -188,17 +204,11 @@ export async function initializeDiscordBot() {
           return await handleAuctionInteraction(interaction);
         }
 
-        if (interaction.channelId !== process.env.DISCORD_GENROOM_ID_1) {
-          return await interaction.reply({
-            content: '❌ System commands are strictly locked to the designated general room channel.',
-            ephemeral: true
-          }).catch(() => {});
-        }
-
         if (interaction.isChatInputCommand()) {
-          await handleSlashCommand(interaction);
-        } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
-          await handleComponentInteraction(interaction);
+          return await interaction.reply({
+            content: 'Slash commands were removed. Use the auction, attendance, or party cards in your mapped Discord channels.',
+            ephemeral: true,
+          }).catch(() => {});
         }
       } catch (err) {
         console.error("❌ [GATEWAY INTERACTION ROUTE ERROR]: Failed to resolve command event:", err.message);
@@ -217,53 +227,7 @@ export async function initializeDiscordBot() {
           }).catch(() => {});
         }
       }
-    });
-
-    // 🛡️ Foundational Job Assignment Message Interceptor
-    discordClient.on('messageCreate', async (message) => {
-      try {
-        if (message.author.bot) return;
-        if (message.channelId !== process.env.DISCORD_GENROOM_ID_1) return;
-
-        const content = message.content.trim();
-        if (content.startsWith('/job ') || content.startsWith('/jobchange ')) {
-          const parts = content.split(' ');
-          const inputJobName = parts.slice(1).join(' ').trim();
-          
-          if (!inputJobName) {
-            return await message.reply("❌ Please provide a job name. Example: `/job High Priest`").catch(() => {});
-          }
-
-          const db = admin.database();
-          const configSnap = await db.ref('settings/configuration/jobs').once('value');
-          let matchedJobCode = null;
-          let matchedJobName = "";
-
-          if (configSnap.exists()) {
-            const jobsData = configSnap.val();
-            for (const [code, jobObj] of Object.entries(jobsData)) {
-              if (jobObj?.name?.toLowerCase() === inputJobName.toLowerCase()) {
-                matchedJobCode = code;
-                matchedJobName = jobObj.name;
-                break;
-              }
-            }
-          }
-
-          if (!matchedJobCode) {
-            return await message.reply(`❌ Job \`${inputJobName}\` is not registered in the system settings catalog by officers.`).catch(() => {});
-          }
-
-          // Atomically append property straight into the core global profile SSOT row
-          await db.ref(`auction/members/${message.author.id}`).update({
-            jobCode: matchedJobCode
-          });
-
-          await message.reply(`✅ Success! Your job specialization has been successfully updated to **${matchedJobName}** (\`${matchedJobCode}\`).`).catch(() => {});
-        }
-      } catch (err) {
-        console.error("⚠️ Error handling job text command trigger:", err.message);
-      }
+      });
     });
 
     // 📢 Automated Modular Announcement Scheduler Ticker (Evaluated every 60 seconds)
@@ -272,33 +236,30 @@ export async function initializeDiscordBot() {
     let skipFirstDiscordTick = true;
     setInterval(() => {
       const circuitOpen = isDiscordCircuitOpen();
+      forEachOnboardedTenant(async () => {
+        await refreshTenantConfigCache().catch(() => {});
+        if (skipFirstDiscordTick) {
+          return;
+        }
+        if (!circuitOpen) {
+          const { maybeAnnounceEvents } = await import('./eventAnnounce.js');
+          await maybeAnnounceEvents();
+        }
+        const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
+        await attendanceDecision.closeExpiredDeadlines();
+        await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
+        const liveRaid = await import('../api/liveRaid.routes.js');
+        await liveRaid.maybeAutoEndLiveRaid();
+        const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
+        await maybeAutoCommitAuction();
+      }).catch((err) => console.error('⚠️ Tenant scheduler warning:', err.message));
+
       if (skipFirstDiscordTick) {
         skipFirstDiscordTick = false;
         console.log('⏭️ [SCHEDULER]: Skipping Discord announcers on the first tick after ready.');
       } else if (circuitOpen) {
         console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers.');
-      } else {
-        import('./eventAnnounce.js')
-          .then((m) => m.maybeAnnounceEvents())
-          .catch((err) => console.error('⚠️ Event announcement scheduler warning:', err.message));
       }
-
-      import('../services/attendanceDecision.js')
-        .then((m) => m.closeExpiredDeadlines())
-        .catch((err) => console.error('⚠️ Attendance deadline closer warning:', err.message));
-
-      import('../services/attendanceDecision.js')
-        .then((m) => m.maybeRefreshMonthlyLeaveCredits())
-        .catch((err) => console.error('⚠️ Monthly leave-credit refresh warning:', err.message));
-
-      // Firebase-only jobs — safe during a Discord cooldown
-      import('../api/liveRaid.routes.js')
-        .then((m) => m.maybeAutoEndLiveRaid())
-        .catch((err) => console.error('⚠️ Live raid auto-end scheduler warning:', err.message));
-
-      import('./autoCommitAuction.js')
-        .then((m) => m.maybeAutoCommitAuction())
-        .catch((err) => console.error('⚠️ Auto-commit auction scheduler warning:', err.message));
     }, 60000);
   };
 

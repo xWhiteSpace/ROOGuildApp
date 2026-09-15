@@ -2,26 +2,35 @@
 import { useEffect, useState, createContext, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
-import RequestTab from './pages/RequestTab';
-import MimicBookTab from './pages/MimicBookTab';
-import RequestHistoryTab from './pages/RequestHistoryTab';
-import PastAuctionTab from './pages/PastAuctionTab';
-import SubmitEvidenceTab from './pages/SubmitEvidenceTab';
+import RequestTab from './games/ragnarok-origin/pages/RequestTab';
+import MimicBookTab from './games/ragnarok-origin/pages/MimicBookTab';
+import RequestHistoryTab from './games/ragnarok-origin/pages/RequestHistoryTab';
+import PastAuctionTab from './games/ragnarok-origin/pages/PastAuctionTab';
 import LandingPage from './pages/LandingPage';
-import SettingsTab from './pages/SettingsTab'; // ◄ 1. ENSURE THIS IMPORT IS UNCOMMENTED
+import SettingsTab from './games/ragnarok-origin/pages/SettingsTab';
 import { logoutUser } from './services/authService';
-import MasterListTab from './pages/MasterListTab';
+import MasterListTab from './games/ragnarok-origin/pages/MasterListTab';
 
-import RaidPartyTab from './pages/RaidPartyTab';
-import RaidComposeTab from './pages/RaidComposeTab';
-import Profile from './pages/Profile';
-import StatisticsTab from './pages/StatisticsTab';
-import LiveRaidTab from './pages/LiveRaidTab';
-import AttendanceHistoryTab from './pages/AttendanceHistoryTab';
+import RaidPartyTab from './games/ragnarok-origin/pages/RaidPartyTab';
+import RaidComposeTab from './games/ragnarok-origin/pages/RaidComposeTab';
+import Profile from './games/ragnarok-origin/pages/Profile';
+import StatisticsTab from './games/ragnarok-origin/pages/StatisticsTab';
+import LiveRaidTab from './games/ragnarok-origin/pages/LiveRaidTab';
+import AttendanceHistoryTab from './games/ragnarok-origin/pages/AttendanceHistoryTab';
 
-import Scheduler from './pages/Scheduler';
+import Scheduler from './games/ragnarok-origin/pages/Scheduler';
+import PeakHoursTab from './games/ragnarok-origin/pages/PeakHoursTab';
+import SelectGuildPage from './pages/SelectGuildPage';
+import OnboardGuildPage from './pages/OnboardGuildPage';
+import ChooseGamePage from './pages/ChooseGamePage';
+import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage';
+import RagnarokSetupPage from './games/ragnarok-origin/pages/RagnarokSetupPage';
 import { apiFetch } from './services/apiClient';
 import { formatGuildDate, DEFAULT_TZ } from './utils/guildTime';
+import { PRODUCT_NAME, productTitle } from './brand';
+import { GAMES, firstEnabledGameId, gameIdForPath, RAGNAROK_ORIGIN_ID, resolvePostLoginPath } from './games/catalog';
+import HighlightsPage from './games/adventurer-guild/pages/HighlightsPage';
+import GuildEventsPage from './games/adventurer-guild/pages/GuildEventsPage';
 
 export const MimicBookContext = createContext(null);
 
@@ -48,7 +57,7 @@ export function MimicBookProvider({ children }) {
   const [loadingLootHistory, setLoadingLootHistory] = useState(false);
   const [lootHistoryData, setLootHistoryData] = useState([]);
   const [expandedGroups, setExpandedGroups] = useState({}); 
-  const [commitEvent, setCommitEvent] = useState('GuildLeague');
+  const [commitEvent, setCommitEvent] = useState('');
   const [availableEvents, setAvailableEvents] = useState({});
   const [commitDate, setCommitDate] = useState(() => formatGuildDate(new Date(), DEFAULT_TZ));
   const [committing, setCommittingSetting] = useState(false);
@@ -101,8 +110,29 @@ export function MimicBookProvider({ children }) {
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [activeGameId, setActiveGameId] = useState(() => {
+    try {
+      return localStorage.getItem('valhalla_active_game') || RAGNAROK_ORIGIN_ID;
+    } catch {
+      return RAGNAROK_ORIGIN_ID;
+    }
+  });
 
-  const [macroTab, setMacroTab] = useState('auction');
+  useEffect(() => {
+    const enabled = firstEnabledGameId(authUser?.enabledGames);
+    if (!enabled) return;
+    if (!(authUser.enabledGames || []).includes(activeGameId)) {
+      setActiveGameId(enabled);
+    }
+  }, [authUser?.enabledGames, activeGameId, authUser]);
+
+  useEffect(() => {
+    try {
+      if (activeGameId) localStorage.setItem('valhalla_active_game', activeGameId);
+    } catch {
+      /* ignore */
+    }
+  }, [activeGameId]);
 
   useEffect(() => {
     async function loadUser() {
@@ -112,12 +142,12 @@ export default function App() {
 
       if (authUserRaw) {
         try {
-          const parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
-          // #region agent log
-          let roleDebug = null;
-          try { roleDebug = JSON.parse(decodeURIComponent(urlParams.get('role_debug') || '')); } catch { roleDebug = null; }
-          fetch('http://127.0.0.1:7549/ingest/fe8ee865-ad77-4dbd-8635-81be17d73b61',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2f98cb'},body:JSON.stringify({sessionId:'2f98cb',runId:'prod-compare',hypothesisId:'A',location:'App.jsx:auth_user',message:'prod/local session roles',data:{host:window.location.host,roleCount:Array.isArray(parsedUser?.roles)?parsedUser.roles.length:-1,roles:Array.isArray(parsedUser?.roles)?parsedUser.roles:[],isOfficer:parsedUser?.isOfficer===true,roleDebug},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
+          let parsedUser;
+          try {
+            parsedUser = JSON.parse(decodeURIComponent(authUserRaw));
+          } catch {
+            parsedUser = JSON.parse(authUserRaw);
+          }
           setAuthUser(parsedUser);
           localStorage.setItem(SESSION_KEY, JSON.stringify(parsedUser));
           localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -149,17 +179,14 @@ export default function App() {
         const result = await response.json();
         
         if (result.authenticated && result.user) {
-          // Sync state and local storage with fresh information from the server
           setAuthUser(result.user);
           localStorage.setItem(SESSION_KEY, JSON.stringify(result.user));
           localStorage.removeItem(LEGACY_SESSION_KEY);
-        } else if (!initialInMemoryUser) {
-          // Only clear if we had no local fallback — mobile Safari often blocks cookies
+        } else {
           setAuthUser(null);
           localStorage.removeItem(SESSION_KEY);
           localStorage.removeItem(LEGACY_SESSION_KEY);
         }
-        // If /auth/me fails cookie but local signed profile exists, keep local session
       } catch (err) {
         // Fallback: If your server is briefly unreachable, trust local cache to prevent offline lockouts
         if (!initialInMemoryUser) {
@@ -172,25 +199,13 @@ export default function App() {
     loadUser();
   }, []);
 
-  // Browser tab: "Sign in" while logged out; "{Guild} Guild App" after auth
+  // Browser tab: VALHALLA while logged out; "{Guild} · VALHALLA" after auth
   useEffect(() => {
     if (!authUser) {
-      document.title = 'Sign in';
+      document.title = PRODUCT_NAME;
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
-        const data = await res.json();
-        if (cancelled) return;
-        const name = (data?.config?.guildDisplayName || '').trim();
-        document.title = `${name || 'Guild'} Guild App`;
-      } catch {
-        if (!cancelled) document.title = 'Guild App';
-      }
-    })();
-    return () => { cancelled = true; };
+    document.title = productTitle(authUser.tenantName);
   }, [authUser]);
 
   const handleLogout = async () => {
@@ -199,6 +214,11 @@ export default function App() {
     await logoutUser();
     setAuthUser(null);
     window.location.assign('/landing');
+  };
+
+  const handleSessionUser = (nextUser) => {
+    setAuthUser(nextUser);
+    if (nextUser) localStorage.setItem(SESSION_KEY, JSON.stringify(nextUser));
   };
 
   // Landing is public — don't block it behind session sync
@@ -216,8 +236,9 @@ export default function App() {
         <AppShell
           authUser={authUser}
           onLogout={handleLogout}
-          macroTab={macroTab}
-          setMacroTab={setMacroTab}
+          onSessionUser={handleSessionUser}
+          activeGameId={activeGameId}
+          setActiveGameId={setActiveGameId}
         />
       </MimicBookProvider>
     </BrowserRouter>
@@ -225,20 +246,56 @@ export default function App() {
 }
 
 /** Landing is full-bleed (no nav chrome); everything else stays in MainLayout. */
-function AppShell({ authUser, onLogout, macroTab, setMacroTab }) {
-  const { pathname, search } = useLocation();
+function postLoginPath(user) {
+  return resolvePostLoginPath(user);
+}
 
-  // Old /login URLs (and OAuth error redirects) → landing, keep ?error=...
+/** Landing is full-bleed (no nav chrome); everything else stays in MainLayout. */
+function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGameId }) {
+  const { pathname, search } = useLocation();
+  const standalone = new Set([
+    '/select-guild',
+    '/onboard',
+    '/workspace/games',
+    '/games/ragnarok-origin/setup',
+  ]);
+
+  const pathGameId = gameIdForPath(pathname);
+  const effectiveGameId = pathGameId && (authUser?.enabledGames || []).includes(pathGameId)
+    ? pathGameId
+    : activeGameId;
+
+  useEffect(() => {
+    if (effectiveGameId && effectiveGameId !== activeGameId) {
+      setActiveGameId(effectiveGameId);
+    }
+  }, [effectiveGameId, activeGameId, setActiveGameId]);
+
   if (pathname === '/login') {
     return <Navigate to={`/landing${search}`} replace />;
   }
 
-  // Signed-in users skip landing
-  if (pathname === '/landing' && authUser) {
-    return <Navigate to="/" replace />;
+  if (!authUser && (standalone.has(pathname) || pathname.startsWith('/workspace'))) {
+    return <Navigate to="/landing" replace />;
   }
 
-  // Logged-out users: landing is the front door
+  if (pathname === '/select-guild' && authUser) {
+    return <SelectGuildPage user={authUser} onSessionUser={onSessionUser} />;
+  }
+  if (pathname === '/onboard' && authUser) {
+    return <OnboardGuildPage onSessionUser={onSessionUser} />;
+  }
+  if (pathname === '/workspace/games' && authUser) {
+    return <ChooseGamePage user={authUser} onSessionUser={onSessionUser} />;
+  }
+  if (pathname === '/games/ragnarok-origin/setup' && authUser) {
+    return <RagnarokSetupPage onSessionUser={onSessionUser} />;
+  }
+
+  if (pathname === '/landing' && authUser) {
+    return <Navigate to={postLoginPath(authUser)} replace />;
+  }
+
   if (pathname === '/landing' && !authUser) {
     return <LandingPage />;
   }
@@ -246,22 +303,48 @@ function AppShell({ authUser, onLogout, macroTab, setMacroTab }) {
     return <Navigate to="/landing" replace />;
   }
 
+  if (authUser && !authUser.currentTenantId && !standalone.has(pathname)) {
+    return <Navigate to="/select-guild" replace />;
+  }
+
+  if (authUser?.currentTenantId) {
+    const next = postLoginPath(authUser);
+    const needsChoose = next === '/workspace/games';
+    const needsSetup = GAMES.some((game) => game.setupPath && next === game.setupPath);
+    if (needsChoose && pathname !== '/workspace/games' && pathname !== '/onboard' && pathname !== '/select-guild') {
+      return <Navigate to="/workspace/games" replace />;
+    }
+    if (needsSetup && pathname !== next && pathname !== '/workspace/games' && pathname !== '/onboard') {
+      return <Navigate to={next} replace />;
+    }
+    if (
+      pathGameId
+      && !(authUser.enabledGames || []).includes(pathGameId)
+      && pathname !== '/workspace'
+      && pathname !== '/workspace/games'
+    ) {
+      return <Navigate to={next} replace />;
+    }
+  }
+
   return (
-    <MainLayout user={authUser} onLogout={onLogout} macroTab={macroTab} setMacroTab={setMacroTab}>
+    <MainLayout user={authUser} onLogout={onLogout} onSessionUser={onSessionUser} activeGameId={effectiveGameId} setActiveGameId={setActiveGameId}>
       <Routes>
         <Route path="/" element={<RequestTab user={authUser} />} />
         <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
         <Route path="/request-history" element={<RequestHistoryTab user={authUser} />} />
         <Route path="/past-auction" element={<PastAuctionTab />} />
-        <Route path="/submit-evidence" element={<SubmitEvidenceTab />} />
-
-        {/* ⚙️ 2. MUST BE INSIDE THIS EXACT GROUP FOR FIRST-PARTY COMPONENT LAYOUTS */}
-        <Route path="/settings-configuration" element={<SettingsTab />} />
-
-        {/* 🛡️ Foundational Raid Governance Routes Mapping */}
+        <Route path="/submit-evidence" element={<Navigate to="/" replace />} />
+        <Route path="/workspace" element={<WorkspaceSettingsPage user={authUser} onSessionUser={onSessionUser} />} />
+        <Route path="/games/adventurer-guild" element={<HighlightsPage user={authUser} />} />
+        <Route path="/games/adventurer-guild/highlights" element={<Navigate to="/games/adventurer-guild" replace />} />
+        <Route path="/games/adventurer-guild/events" element={<GuildEventsPage user={authUser} />} />
+        <Route path="/games/ragnarok-origin/settings" element={<SettingsTab user={authUser} onSessionUser={onSessionUser} />} />
+        <Route path="/settings-configuration" element={<Navigate to="/games/ragnarok-origin/settings" replace />} />
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
         <Route path="/attendance/profile" element={<Profile user={authUser} />} />
         <Route path="/attendance/profile/:uid" element={<Profile user={authUser} />} />
+        <Route path="/attendance/peak-hours" element={<PeakHoursTab user={authUser} />} />
         <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
         <Route path="/attendance/compose" element={<RaidComposeTab user={authUser} />} />
         <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />

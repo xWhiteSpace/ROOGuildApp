@@ -1,21 +1,35 @@
 import { REST, Routes } from 'discord.js';
-import commandsManifest from './commands/manifest.js';
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { listOnboardedTenants } from '../db/tenants.js';
+import { migrate } from '../db/migrate.js';
+import { discordEnv } from '../config/discordEnv.js';
+import { postgresEnv } from '../config/postgresEnv.js';
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const rest = new REST({ version: '10' }).setToken(discordEnv().botToken);
 
 (async () => {
   try {
-    console.log(`⏳ Initializing refresh for ${commandsManifest.length} slash commands...`);
-
-    const data = await rest.put(
-      Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
-      { body: commandsManifest },
-    );
-
-    console.log(`✅ Success! Registered ${data.length} commands to the test server.`);
+    if (!postgresEnv().databaseUrl) {
+      console.log('DATABASE_URL is required to clear slash commands for onboarded guilds.');
+      return;
+    }
+    await migrate();
+    const tenants = await listOnboardedTenants();
+    const ids = tenants.map((t) => t.id);
+    for (const guildId of ids) {
+      const data = await rest.put(
+        Routes.applicationGuildCommands(discordEnv().clientId, guildId),
+        { body: [] },
+      );
+      console.log(`Cleared slash commands on ${guildId} (${data.length} remaining)`);
+    }
+    if (!ids.length) console.log('No onboarded tenants found.');
   } catch (error) {
-    console.error('❌ Failed to register slash commands:', error);
+    console.error('Failed to clear slash commands:', error);
   }
 })();

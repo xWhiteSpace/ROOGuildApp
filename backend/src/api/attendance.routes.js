@@ -1,65 +1,33 @@
 // backend/src/api/attendance.routes.js
 import { Router } from 'express';
-import { getDatabase } from 'firebase-admin/database';
-import { getGateStatusDetails } from '../config/timeWindow.js';
+import { getTenantStore } from '../db/database.js';
+import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
 import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
-import crypto from 'crypto';
-import { ensureWeekInstances, getWeekInstances } from '../services/scheduleService.js';
+import { ensureWeekInstances, getWeekInstances } from '../games/ragnarok-origin/services/scheduleService.js';
 import {
   applyAttendanceDecision,
   AttendanceDecisionError,
   getDefaultLeaveCredits,
-} from '../services/attendanceDecision.js';
+} from '../games/ragnarok-origin/services/attendanceDecision.js';
 import {
   normalizeComposition,
   compositionForPersist,
   findCrossTabDuplicates,
   buildLiveGridsFromComposition,
 } from '@guildname/shared/compositionTabs';
+import { getCurrentTenantId } from '../db/tenantContext.js';
+import { discordChannel } from '../db/channels.js';
+import { checkOfficer } from '../auth/officer.js';
+import { resolveUserIdentity } from '../auth/identity.js';
+import { aggregatePeakHours, normalizePlaySchedule } from '../games/ragnarok-origin/services/peakHours.js';
 
 const router = Router();
 
-function resolveUserIdentity(req) {
-  if (req.session?.user) return req.session.user;
-  const mobileHeaderToken = req.headers['x-user-profile'];
-  if (mobileHeaderToken) {
-    try {
-      const decodedPayload = JSON.parse(decodeURIComponent(mobileHeaderToken));
-      if (decodedPayload && decodedPayload._sig) {
-        const clientSignature = decodedPayload._sig;
-        const profileToVerify = { ...decodedPayload };
-        delete profileToVerify._sig;
-
-        const tokenSigningSecret = process.env.DISCORD_CLIENT_SECRET || 'backup_fallback_secret_key';
-        const expectedSignature = crypto
-          .createHmac('sha256', tokenSigningSecret)
-          .update(JSON.stringify(profileToVerify))
-          .digest('hex');
-
-        if (clientSignature === expectedSignature) {
-          return profileToVerify;
-        } else {
-          console.error("🛑 [API ROUTE INTERCEPT]: Detected forged header signature tamper attempt!");
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse mobile authorization header token:", e.message);
-    }
-  }
-  return null;
+async function verifyDiscordOfficerRole(req, allowedRoles = []) {
+  const { user, ok } = await checkOfficer(req, { adminRoles: allowedRoles });
+  return Boolean(user && ok);
 }
-
-function verifyOfficerPrivileges(user, allowedRoles = []) {
-  if (!user) return false;
-  if (user.roles && Array.isArray(user.roles)) {
-    return user.roles.some(r => allowedRoles.includes(r));
-  }
-  return user.isOfficer === true;
-}
-
-// Alias the name so it safely matches your existing dashboard checks across systems
-const verifyDiscordOfficerRole = verifyOfficerPrivileges;
 
 // 🚪 POST /api/attendance/vanish -> Bot-Driven Server Eviction Gate
 router.post('/vanish', async (req, res) => {
@@ -67,11 +35,11 @@ router.post('/vanish', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -86,7 +54,7 @@ router.post('/vanish', async (req, res) => {
     let kicked = false;
     if (!isDummyTarget && discordClient && discordClient.isReady() && !isDiscordCircuitOpen()) {
       try {
-        const guild = discordClient.guilds.cache.get(process.env.DISCORD_GUILD_ID);
+        const guild = discordClient.guilds.cache.get(getCurrentTenantId());
         const member = guild?.members?.cache.get(targetUid);
         if (member) {
           await enqueueDiscordCall(() =>
@@ -119,11 +87,11 @@ router.post('/update-roster-status', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -143,7 +111,7 @@ router.get('/active-session', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication token missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const sessionSnap = await db.ref('attendance/active_session').once('value');
     return res.json({ success: true, session: sessionSnap.exists() ? snapshot.val() : null });
   } catch (err) {
@@ -157,11 +125,11 @@ router.post('/begin-raid', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Action restricted to authorized Officers.' });
     }
 
@@ -199,14 +167,14 @@ router.post('/begin-raid', async (req, res) => {
         const updatedTallies = currentSession.userTallies || {};
 
         const whitelistedRooms = [
-          process.env.DISCORD_WARROOM_ID_1,
-          process.env.DISCORD_WARROOM_ID_2,
-          process.env.DISCORD_WARROOM_ID_3,
-          process.env.DISCORD_WARROOM_ID_4,
-          process.env.DISCORD_WARROOM_ID_5
+          discordChannel('DISCORD_WARROOM_ID_1'),
+          discordChannel('DISCORD_WARROOM_ID_2'),
+          discordChannel('DISCORD_WARROOM_ID_3'),
+          discordChannel('DISCORD_WARROOM_ID_4'),
+          discordChannel('DISCORD_WARROOM_ID_5')
         ].filter(Boolean);
 
-        const { fetchVoiceChannelPresentUids } = await import('../utils/warRoomResolver.js');
+        const { fetchVoiceChannelPresentUids } = await import('../games/ragnarok-origin/utils/warRoomResolver.js');
         const presentUserIds = await fetchVoiceChannelPresentUids(discordClient, whitelistedRooms);
 
         presentUserIds.forEach(uid => {
@@ -234,11 +202,11 @@ router.post('/end-raid', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Authentication token missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -285,7 +253,7 @@ router.post('/end-raid', async (req, res) => {
     atomicUpdates['attendance/active_session'] = null;
 
     await db.ref().update(atomicUpdates);
-    return res.json({ success: true, message: 'Raid session successfully finalized and archived to Firebase.' });
+    return res.json({ success: true, message: 'Raid session successfully finalized and archived to the database.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -297,11 +265,11 @@ router.post('/update-job-target', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -322,11 +290,11 @@ router.post('/update-expected-rate', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -348,13 +316,13 @@ router.get('/deploy-card', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
-    const { deployPublicAttendanceCardToWarAnnounce } = await import('../services/discordAttendanceCards.js');
+    const { deployPublicAttendanceCardToWarAnnounce } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
     const result = await deployPublicAttendanceCardToWarAnnounce();
     return res.json({ success: true, result });
   } catch (err) {
@@ -372,13 +340,13 @@ router.get('/deploy-party-card', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
-    const { deployPublicPartyCardToWarAnnounce } = await import('../services/partyViewer.js');
+    const { deployPublicPartyCardToWarAnnounce } = await import('../games/ragnarok-origin/services/partyViewer.js');
     const result = await deployPublicPartyCardToWarAnnounce();
     return res.json({ success: true, result });
   } catch (err) {
@@ -397,15 +365,15 @@ router.post('/announce-week', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
-    const channelId = process.env.DISCORD_WARANNOUNCE_CHANNEL_ID;
+    const channelId = discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID');
     if (!channelId) {
       return res.status(400).json({ success: false, error: 'DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.' });
     }
@@ -416,7 +384,7 @@ router.post('/announce-week', async (req, res) => {
     if (!targetChannel) {
       return res.status(404).json({ success: false, error: 'War-announce channel not found.' });
     }
-    const { sendPublicAttendanceCard } = await import('../services/discordAttendanceCards.js');
+    const { sendPublicAttendanceCard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
     const result = await sendPublicAttendanceCard(targetChannel);
     return res.json({ success: true, result });
   } catch (err) {
@@ -471,7 +439,7 @@ router.get('/commitments', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/commitments').once('value');
     return res.json({
       success: true,
@@ -526,7 +494,7 @@ router.get('/special-events', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('scheduler/special_events').once('value');
     return res.json({ success: true, specialEvents: snap.exists() ? snap.val() : {} });
   } catch (err) {
@@ -539,11 +507,11 @@ router.post('/special-events/add', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
     
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { title, description, date, dateEnd, timeStart, timeEnd, type, isAttendanceTracked, daysOfWeek, allDay } = req.body;
@@ -580,11 +548,11 @@ router.delete('/special-events/:id', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
     
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { id } = req.params;
@@ -619,11 +587,11 @@ router.put('/special-events/:id', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
     
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { id } = req.params;
@@ -657,7 +625,7 @@ router.get('/compositions', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const snap = await db.ref('attendance/compositions').once('value');
     const rawMap = snap.exists() ? snap.val() : {};
     const compositions = {};
@@ -688,11 +656,11 @@ router.post('/compositions/create', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -738,11 +706,11 @@ router.post('/compositions/save', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -819,11 +787,11 @@ router.post('/compositions/duplicate', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -888,11 +856,11 @@ router.delete('/compositions/delete/:id', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
@@ -912,11 +880,11 @@ router.post('/roster/save-batch', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -970,11 +938,11 @@ router.post('/dummy/create', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
 
-    if (!verifyDiscordOfficerRole(user, roles)) {
+    if (!await verifyDiscordOfficerRole(req, roles)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -1015,9 +983,10 @@ router.post('/dummy/create', async (req, res) => {
   }
 });
 
-function requireOfficer(user, configSnap) {
-  const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : ["GUILD LEADER", "Vice Guild Leader", "Commander"];
-  return verifyDiscordOfficerRole(user, roles);
+async function requireOfficer(req, configSnap) {
+  const config = configSnap?.exists?.() ? configSnap.val() : {};
+  const { user, ok } = await checkOfficer(req, config);
+  return Boolean(user && ok);
 }
 
 function parseMemberUid(raw) {
@@ -1057,7 +1026,7 @@ router.get('/profile', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const uid = parseMemberUid(req.query.uid || user.id);
     if (!uid) {
@@ -1067,7 +1036,7 @@ router.get('/profile', async (req, res) => {
         received: req.query.uid || user.id || null,
       });
     }
-    const isOfficer = requireOfficer(user, configSnap);
+    const isOfficer = await requireOfficer(req, configSnap);
     if (uid !== String(user.id) && !isOfficer) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
@@ -1084,7 +1053,7 @@ router.get('/me', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const [memberSnap, configSnap] = await Promise.all([
       db.ref(`auction/members/${user.id}`).once('value'),
       db.ref('settings/configuration').once('value'),
@@ -1102,12 +1071,73 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// GET /api/attendance/peak-hours
+router.get('/peak-hours', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const [membersSnap, configSnap] = await Promise.all([
+      db.ref('auction/members').once('value'),
+      db.ref('settings/configuration').once('value'),
+    ]);
+    const members = membersSnap.exists() ? membersSnap.val() : {};
+    const timezone = configSnap.exists() ? (configSnap.val().timezone || 'Asia/Manila') : 'Asia/Manila';
+    const isOfficer = await requireOfficer(req, configSnap);
+    const { heatmap, peak, filled, total, missing } = aggregatePeakHours(members);
+    const mine = normalizePlaySchedule(members[String(user.id)]?.playSchedule);
+    return res.json({
+      success: true,
+      timezone,
+      mine,
+      heatmap,
+      peak,
+      filled,
+      total,
+      missing: isOfficer ? missing : [],
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/attendance/peak-hours/me
+router.put('/peak-hours/me', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  const uid = parseMemberUid(user.id);
+  if (!uid || String(uid).startsWith('dummy_')) {
+    return res.status(400).json({ success: false, error: 'Sign in with Discord to set Peak Hours.' });
+  }
+  const schedule = normalizePlaySchedule({
+    hours: req.body?.hours,
+    days: req.body?.days,
+    start: req.body?.start,
+    end: req.body?.end,
+    updatedAt: Date.now(),
+  });
+  if (!schedule) {
+    return res.status(400).json({ success: false, error: 'Click at least one hour you play.' });
+  }
+  try {
+    const db = getTenantStore();
+    const memberSnap = await db.ref(`auction/members/${uid}`).once('value');
+    if (!memberSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Ask an officer to add you to the roster first.' });
+    }
+    await db.ref(`auction/members/${uid}/playSchedule`).set(schedule);
+    return res.json({ success: true, mine: schedule });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/attendance/members/:uid/profile
 router.get('/members/:uid/profile', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const uid = parseMemberUid(req.params.uid);
     if (!uid) {
@@ -1117,7 +1147,7 @@ router.get('/members/:uid/profile', async (req, res) => {
         received: req.params.uid || null,
       });
     }
-    const isOfficer = requireOfficer(user, configSnap);
+    const isOfficer = await requireOfficer(req, configSnap);
     if (uid !== String(user.id) && !isOfficer) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
@@ -1134,9 +1164,9 @@ router.post('/members/:uid/leave-credits', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const uid = req.params.uid;
@@ -1164,7 +1194,7 @@ router.get('/compose', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const activeSnap = await db.ref('attendance/compose_active').once('value');
     const activeKey = activeSnap.exists() ? activeSnap.val() : null;
     if (!activeKey) return res.json({ success: true, session: null });
@@ -1180,9 +1210,9 @@ router.post('/compose/create', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -1225,9 +1255,9 @@ router.post('/compose/save', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { sessionId, grids } = req.body || {};
@@ -1250,9 +1280,9 @@ router.post('/compose/close', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     await db.ref('attendance/compose_active').remove();
@@ -1290,9 +1320,9 @@ router.post('/compose/send', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
@@ -1308,7 +1338,7 @@ router.post('/compose/send', async (req, res) => {
     }
 
     const eventTitle = events[eventKey].title || eventKey;
-    const { writePublishedSnapshot } = await import('../services/publishedComposition.js');
+    const { writePublishedSnapshot } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const published = await writePublishedSnapshot({
       db,
       session: {
@@ -1336,9 +1366,9 @@ router.post('/compose/deploy-roster', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const { sessionId, grids } = req.body || {};
@@ -1358,7 +1388,7 @@ router.post('/compose/deploy-roster', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No compose session to publish.' });
     }
 
-    const { writePublishedSnapshot } = await import('../services/publishedComposition.js');
+    const { writePublishedSnapshot } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const published = await writePublishedSnapshot({
       db,
       session: composeSession,
@@ -1376,8 +1406,8 @@ router.get('/published', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const { listPublished } = await import('../services/publishedComposition.js');
-    const { published, anchor } = await listPublished(getDatabase());
+    const { listPublished } = await import('../games/ragnarok-origin/services/publishedComposition.js');
+    const { published, anchor } = await listPublished(getTenantStore());
     return res.json({ success: true, published, anchor });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -1389,9 +1419,9 @@ router.post('/published/:id/set-active', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
@@ -1399,7 +1429,7 @@ router.post('/published/:id/set-active', async (req, res) => {
       return res.status(400).json({ success: false, error: 'active must be a boolean.' });
     }
     const active = req.body.active;
-    const { setPublishedAnchor } = await import('../services/publishedComposition.js');
+    const { setPublishedAnchor } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const result = await setPublishedAnchor({ db, id, active });
     if (!result.ok) {
       return res.status(404).json({ success: false, error: result.error });
@@ -1415,13 +1445,13 @@ router.delete('/published/:id', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
-    const { deletePublished } = await import('../services/publishedComposition.js');
+    const { deletePublished } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     await deletePublished({ db, id });
     return res.json({ success: true });
   } catch (err) {
@@ -1430,7 +1460,7 @@ router.delete('/published/:id', async (req, res) => {
 });
 
 async function loadPublishedOr404(db, id) {
-  const { PUBLISHED_PATH } = await import('../services/publishedComposition.js');
+  const { PUBLISHED_PATH } = await import('../games/ragnarok-origin/services/publishedComposition.js');
   const snap = await db.ref(`${PUBLISHED_PATH}/${id}`).once('value');
   if (!snap.exists()) return null;
   return { id, ...snap.val() };
@@ -1441,9 +1471,9 @@ router.post('/published/:id/announce-attendance', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
@@ -1454,7 +1484,7 @@ router.post('/published/:id/announce-attendance', async (req, res) => {
     const {
       sendGenRoomMessage,
       buildAttendanceRaidAnnounce,
-    } = await import('../services/discordGenAnnounce.js');
+    } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
     const content = buildAttendanceRaidAnnounce({
       eventTitle: published.eventTitle || published.eventKey,
       eventDate: published.eventDate,
@@ -1477,9 +1507,9 @@ router.post('/published/:id/announce-party', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
@@ -1490,7 +1520,7 @@ router.post('/published/:id/announce-party', async (req, res) => {
     const {
       sendGenRoomMessage,
       buildPartyReadyAnnounce,
-    } = await import('../services/discordGenAnnounce.js');
+    } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
     const content = buildPartyReadyAnnounce({
       eventTitle: published.eventTitle || published.eventKey,
       eventDate: published.eventDate,
@@ -1512,9 +1542,9 @@ router.post('/published/:id/add-config', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
@@ -1526,7 +1556,7 @@ router.post('/published/:id/add-config', async (req, res) => {
     if (!compSnap.exists()) {
       return res.status(404).json({ success: false, error: 'Raid config not found.' });
     }
-    const { addConfigToPublished } = await import('../services/publishedComposition.js');
+    const { addConfigToPublished } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const result = await addConfigToPublished({
       db,
       id,
@@ -1548,9 +1578,9 @@ router.post('/published/:id/remove-config', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
@@ -1558,7 +1588,7 @@ router.post('/published/:id/remove-config', async (req, res) => {
     if (!configId) {
       return res.status(400).json({ success: false, error: 'configId is required.' });
     }
-    const { removeConfigFromPublished } = await import('../services/publishedComposition.js');
+    const { removeConfigFromPublished } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const result = await removeConfigFromPublished({ db, id, configId });
     if (!result.ok) {
       const status = /not found/i.test(result.error) ? 404 : 400;
@@ -1575,13 +1605,13 @@ router.post('/published/:id/save-grids', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
-    if (!requireOfficer(user, configSnap)) {
+    if (!await requireOfficer(req, configSnap)) {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
     const id = decodeURIComponent(req.params.id || '');
-    const { savePublishedGrids } = await import('../services/publishedComposition.js');
+    const { savePublishedGrids } = await import('../games/ragnarok-origin/services/publishedComposition.js');
     const result = await savePublishedGrids({ db, id, grids: req.body?.grids });
     if (!result.ok) {
       const status = /not found/i.test(result.error) ? 404 : 400;

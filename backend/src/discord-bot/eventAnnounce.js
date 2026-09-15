@@ -16,10 +16,11 @@
  *
  * Mirrors the idempotency pattern used by attendanceAnnounce.js.
  */
-import admin from 'firebase-admin';
+import { getTenantStore } from '../db/database.js';
 import { discordClient } from './client.js';
 import { getGuildNowParts, formatGuildDate, DEFAULT_TZ } from '../utils/guildTime.js';
 import { logDiscordRateLimit, isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
+import { discordChannel } from '../db/channels.js';
 
 const DAY_MINUTES = 1440;
 
@@ -105,7 +106,7 @@ async function claimAnnouncement(db, markerKey) {
  * fire the best-effort snapshot side-effect (never blocks the announcement).
  */
 async function dispatchAnnouncement(phaseTag, eventName) {
-  const auctionChannelId = process.env.DISCORD_AUCTION_CHANNEL_ID;
+  const auctionChannelId = discordChannel('DISCORD_AUCTION_CHANNEL_ID');
   if (!auctionChannelId) throw new Error('DISCORD_AUCTION_CHANNEL_ID is not configured');
 
   const channel = discordClient.channels.cache.get(auctionChannelId)
@@ -114,7 +115,7 @@ async function dispatchAnnouncement(phaseTag, eventName) {
     throw new Error('Configured auction announcement channel is missing or not text-based');
   }
 
-  const { processAndPostDiscordSnapshot } = await import('../services/discordSnapshot.js');
+  const { processAndPostDiscordSnapshot } = await import('../games/ragnarok-origin/services/discordSnapshot.js');
 
   const messages = {
     p1: `📢 **${eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`,
@@ -152,12 +153,12 @@ function collectDuePhases(absMinute, announcementMinutes) {
 export async function maybeAnnounceEvents() {
   if (isDiscordCircuitOpen()) return;
 
-  const db = admin.database();
+  const db = getTenantStore();
 
   const configSnap = await db.ref('settings/configuration').once('value');
   if (configSnap.exists() && configSnap.val().isForceLocked === true) return;
 
-  const { getGateStatusDetails } = await import('../config/timeWindow.js');
+  const { getGateStatusDetails } = await import('../games/ragnarok-origin/timeWindow.js');
   const status = getGateStatusDetails();
   if (!status || !status.announcementMinutes || !status.eventId) return;
 

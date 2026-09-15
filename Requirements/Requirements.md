@@ -1,8 +1,8 @@
 # Guild Name — System Requirements Specification
 
-Single source of truth for functional requirements of the Guild Name full-stack platform (Express + Discord bot backend, Vite/React frontend, Firebase Realtime Database).
+**Historical RTDB-era SRS.** This document describes the Firebase Realtime Database product as it was specified. It is **not** the live install or boot contract. Runtime is VALHALLA (Discord login + bot, Express API, Vite/React SPA, Postgres on Supabase). For current setup, env, and deploy, use the root [README.md](../README.md). Do not treat Firebase Admin, `VITE_FIREBASE_*`, or Discord channel env vars as current requirements.
 
-This document reflects **current code behavior**. Historical chat / Google Sheets / LiveBidding requirements that no longer map to mounted code are listed under [Deleted requirements](#deleted-requirements).
+The numbered REQs below are left as written for history. Chat / Google Sheets / LiveBidding items that no longer map to mounted code are listed under [Deleted requirements](#deleted-requirements).
 
 For install and deploy instructions, see the root [README.md](../README.md).
 
