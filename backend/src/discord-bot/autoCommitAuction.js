@@ -107,9 +107,8 @@ export async function maybeAutoCommitAuction() {
     // Rebuild allocations server-side exactly like the frontend
     // handleCommitSessionAndFlash so the auto path and manual path are identical.
     const requestsSnap = await db.ref('auction/web_requests').once('value');
-    const firebaseRequests = requestsSnap.exists() ? Object.values(requestsSnap.val()) : [];
-
-    const { compileLeaderboard } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
+    const { compileLeaderboard, requestsFromSnapshot } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
+    const firebaseRequests = requestsFromSnapshot(requestsSnap);
     const { rankingsByItem } = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
     const categoryAllocations = session.categoryAllocations || {};

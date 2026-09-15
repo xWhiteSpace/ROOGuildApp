@@ -34,11 +34,8 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false, ex
     const membersData = membersSnap.exists() ? membersSnap.val() : {};
 
     console.log(`📊 [SNAPSHOT ENGINE]: Compiling active scoreboard layouts for target event.`);
-    const firebaseRequests = requestsSnap.exists() ? Object.values(requestsSnap.val()) : [];
-    const userCalculationsMap = {};
-    itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
-
-    const { compileLeaderboard } = await import('../utils/sortingEngine.js');
+    const { compileLeaderboard, requestsFromSnapshot } = await import('../utils/sortingEngine.js');
+    const firebaseRequests = requestsFromSnapshot(requestsSnap);
     const globalStandings = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
     // Establish the text template header layout

@@ -21,6 +21,21 @@ function extractTimeFromId(id, timezone = "Asia/Manila") {
   }
 }
 
+/** Flatten a web_requests snapshot/map and keep the row id (object key). */
+export function requestsFromSnapshot(snapOrMap) {
+  const map = snapOrMap && typeof snapOrMap.val === 'function' ? snapOrMap.val() : snapOrMap;
+  if (!map || typeof map !== 'object') return [];
+  return Object.entries(map).map(([id, req]) => {
+    const row = req && typeof req === 'object' ? { ...req } : {};
+    if (!row.id) row.id = id;
+    return row;
+  });
+}
+
+function ledgerSortKey(req) {
+  return String(req?.id || '');
+}
+
 /**
  * Gold-Standard Deterministic Leaderboard Compiler Engine
  */
@@ -36,7 +51,16 @@ export function compileLeaderboard(firebaseRequests, itemsList, membersData) {
   const userCalculationsMap = {};
   itemsList.forEach(item => { userCalculationsMap[item.id] = {}; });
 
-  firebaseRequests.forEach(req => {
+  // Requested/Canceled is a ledger. Apply rows in push-id order so a cancel
+  // never lands before its matching request (Postgres SELECT order is not stable).
+  const ledger = [...(firebaseRequests || [])].sort((a, b) => {
+    const ka = ledgerSortKey(a);
+    const kb = ledgerSortKey(b);
+    if (ka === kb) return 0;
+    return ka < kb ? -1 : 1;
+  });
+
+  ledger.forEach(req => {
     if ((req.selectionStatus || 'Pending').toLowerCase() !== 'pending') return;
 
     let reqItemId = req.itemId;

@@ -458,7 +458,8 @@ router.get('/init', async (req, res) => {
         .orderByChild('selectionStatus')
         .equalTo('Pending')
         .once('value');
-      const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+      const { compileLeaderboard, requestsFromSnapshot } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
+      const firebaseRequests = requestsFromSnapshot(snapshot);
 
       const liveCounts = {};
       const rankingsByItem = {};
@@ -507,7 +508,6 @@ router.get('/init', async (req, res) => {
     // Phase 4 Clean Up: Query explicit administrative active instances to pipe down to the frontend
     const instancesSnap = await db.ref('scheduler/active_instances').once('value');
     const activeInstancesData = instancesSnap.exists() ? instancesSnap.val() : {};
-    const { compileLeaderboard } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
     const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
     
     Object.assign(rankingsByItem, computedLists.rankingsByItem);
