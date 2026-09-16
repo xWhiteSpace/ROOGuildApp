@@ -92,6 +92,15 @@ export async function getTenantByStripeSubscription(client, subscriptionId) {
   return rows[0] || null;
 }
 
+export async function getTenantByStripeSubscriptionId(subscriptionId) {
+  if (!subscriptionId) return null;
+  const { rows } = await query(
+    'SELECT * FROM tenants WHERE stripe_subscription_id = $1',
+    [String(subscriptionId)]
+  );
+  return rows[0] || null;
+}
+
 async function markPlatformFlag(key) {
   await query(
     `INSERT INTO platform_state (key, data, updated_at)

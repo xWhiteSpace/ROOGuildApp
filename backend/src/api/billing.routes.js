@@ -9,6 +9,7 @@ import {
   billingPublicView,
   countOccupyingGuilds,
   getTenantByStripeSubscription,
+  getTenantByStripeSubscriptionId,
   PERMANENT_BILLING_SOURCES,
   tenantHasAccess,
   withBillingLock,
@@ -47,6 +48,62 @@ function stripeSubscriptionIdFromInvoice(invoice) {
     || stripeId(invoice?.parent?.subscription_details?.subscription);
 }
 
+async function applyLiveSubscription(tenant, sub) {
+  if (!tenant || !sub || PERMANENT_BILLING_SOURCES.has(tenant.billing_source)) return tenant;
+  const stripeStatus = String(sub.status || '');
+  const periodEnd = periodEndFromSubscription(sub) || tenant.current_period_end;
+  const cancelAtPeriodEnd = Boolean(sub.cancel_at_period_end);
+  if (stripeStatus === 'canceled' || stripeStatus === 'incomplete_expired') {
+    await withBillingLock(async (client) => {
+      await activateTenantBilling(client, tenant.id, {
+        subscriptionStatus: 'canceled',
+        billingSource: 'stripe',
+        stripeCustomerId: stripeId(sub.customer) || tenant.stripe_customer_id,
+        stripeSubscriptionId: null,
+        currentPeriodEnd: periodEnd,
+        graceUntil: null,
+        cancelAtPeriodEnd: false,
+      });
+    });
+    return getTenant(tenant.id);
+  }
+  const restored = stripeStatus === 'active' || stripeStatus === 'trialing';
+  await withBillingLock(async (client) => {
+    await activateTenantBilling(client, tenant.id, {
+      subscriptionStatus: restored ? 'active' : (stripeStatus === 'past_due' || stripeStatus === 'unpaid' ? 'past_due' : tenant.subscription_status),
+      billingSource: 'stripe',
+      stripeCustomerId: stripeId(sub.customer) || tenant.stripe_customer_id,
+      stripeSubscriptionId: sub.id || tenant.stripe_subscription_id,
+      currentPeriodEnd: periodEnd,
+      graceUntil: restored ? null : tenant.grace_until,
+      cancelAtPeriodEnd,
+    });
+  });
+  return getTenant(tenant.id);
+}
+
+async function refreshTenantFromStripe(tenant) {
+  if (!tenant || tenant.billing_source !== 'stripe') return tenant;
+  const stripe = stripeClient();
+  if (!stripe) return tenant;
+  let sub = null;
+  if (tenant.stripe_subscription_id) {
+    sub = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id).catch(() => null);
+  }
+  if (!sub && tenant.stripe_customer_id) {
+    const listed = await stripe.subscriptions.list({
+      customer: tenant.stripe_customer_id,
+      status: 'all',
+      limit: 5,
+    }).catch(() => null);
+    sub = (listed?.data || []).find((row) => row.status === 'active' || row.status === 'trialing' || row.status === 'past_due')
+      || listed?.data?.[0]
+      || null;
+  }
+  if (!sub) return tenant;
+  return applyLiveSubscription(tenant, sub);
+}
+
 async function requireLogin(req, res) {
   const identity = resolveUserIdentity(req);
   if (!identity?.id) {
@@ -71,7 +128,10 @@ router.get('/status', async (req, res) => {
   if (!identity) return undefined;
   try {
     const tenantId = req.tenantId || identity.currentTenantId || req.session?.currentTenantId;
-    const tenant = tenantId ? await getTenant(tenantId) : null;
+    let tenant = tenantId ? await getTenant(tenantId) : null;
+    if (tenant?.billing_source === 'stripe') {
+      tenant = await refreshTenantFromStripe(tenant);
+    }
     const activeCount = await countOccupyingGuilds();
     return res.json({
       success: true,
@@ -408,24 +468,13 @@ async function onSubscriptionDeleted(subscription) {
 async function onSubscriptionUpdated(subscription) {
   const subscriptionId = subscription.id;
   if (!subscriptionId) return;
-  const stripeStatus = String(subscription.status || '');
-  if (stripeStatus === 'canceled') return;
-  await withBillingLock(async (client) => {
-    const tenant = await getTenantByStripeSubscription(client, subscriptionId);
-    if (!tenant || PERMANENT_BILLING_SOURCES.has(tenant.billing_source)) return;
-    const periodEnd = periodEndFromSubscription(subscription) || tenant.current_period_end;
-    const cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
-    const restored = stripeStatus === 'active' || stripeStatus === 'trialing';
-    await activateTenantBilling(client, tenant.id, {
-      subscriptionStatus: restored ? 'active' : tenant.subscription_status,
-      billingSource: 'stripe',
-      stripeCustomerId: stripeId(subscription.customer) || tenant.stripe_customer_id,
-      stripeSubscriptionId: subscriptionId,
-      currentPeriodEnd: periodEnd,
-      graceUntil: restored ? null : tenant.grace_until,
-      cancelAtPeriodEnd,
-    });
-  });
+  const stripe = stripeClient();
+  const live = stripe
+    ? await stripe.subscriptions.retrieve(subscriptionId).catch(() => subscription)
+    : subscription;
+  const tenant = await getTenantByStripeSubscriptionId(subscriptionId);
+  if (!tenant) return;
+  await applyLiveSubscription(tenant, live);
 }
 
 export default router;
