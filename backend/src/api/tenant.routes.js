@@ -11,6 +11,8 @@ import { runWithTenant } from '../db/tenantContext.js';
 import { getTenantStore } from '../db/database.js';
 import { deleteGuildLogo, LOGO_MAX_BYTES, resolveGuildLogoUrl, uploadGuildLogo } from '../services/guildLogo.js';
 import { discordGuildsForRequest } from '../db/oauthGuilds.js';
+import { countOccupyingGuilds, tenantHasAccess } from '../db/billing.js';
+import { billingEnv } from '../config/billingEnv.js';
 
 const router = Router();
 
@@ -111,6 +113,9 @@ async function buildSessionUser(req, tenantId, baseUser) {
     enabledGames,
     gameSetup: gameSetupMap(enabledGames, discordChannels),
     activeGameId: enabledGames[0] || null,
+    subscriptionStatus: tenant.subscription_status || 'inactive',
+    billingSource: tenant.billing_source || null,
+    subscriptionAllowed: tenantHasAccess(tenant),
   };
 
   await runWithTenant(tenantId, async () => {
@@ -277,6 +282,14 @@ router.post('/enable-game', async (req, res) => {
   if (!tenantId) {
     return res.status(409).json({ success: false, error: 'Select a Discord server first.', code: 'tenant_required' });
   }
+  const tenant = await getTenant(tenantId);
+  if (!tenantHasAccess(tenant)) {
+    return res.status(402).json({
+      success: false,
+      error: 'This guild needs an active seat. Subscribe or redeem an invite code.',
+      code: 'payment_required',
+    });
+  }
   const gameId = String(req.body?.gameId || '');
   if (!isKnownGame(gameId)) {
     return res.status(400).json({ success: false, error: 'Unknown game.' });
@@ -285,7 +298,6 @@ router.post('/enable-game', async (req, res) => {
   if (!ok) {
     return res.status(403).json({ success: false, error: 'Officer access required to enable a game.' });
   }
-  const tenant = await getTenant(tenantId);
   const enabled = parseEnabledGames(tenant?.enabled_games);
   if (!enabled.includes(gameId)) enabled.push(gameId);
   await setTenantEnabledGames(tenantId, enabled);
@@ -421,6 +433,13 @@ router.post('/game-setup', async (req, res) => {
     return res.status(403).json({ success: false, error: 'Officer access required to finish game setup.' });
   }
   const tenant = await getTenant(tenantId);
+  if (!tenantHasAccess(tenant)) {
+    return res.status(402).json({
+      success: false,
+      error: 'This guild needs an active seat. Subscribe or redeem an invite code.',
+      code: 'payment_required',
+    });
+  }
   const enabled = parseEnabledGames(tenant?.enabled_games);
   if (!enabled.includes(RAGNAROK_ORIGIN_ID)) {
     return res.status(403).json({ success: false, error: 'Enable Ragnarok Origin first.', code: 'game_required', gameId: RAGNAROK_ORIGIN_ID });
@@ -523,6 +542,9 @@ export async function attachTenantLogo(req, user) {
     tenantTimezone: configuration.timezone || DEFAULT_CONFIGURATION.timezone,
     enabledGames,
     gameSetup: gameSetupMap(enabledGames, discordChannels),
+    subscriptionStatus: tenant.subscription_status || 'inactive',
+    billingSource: tenant.billing_source || null,
+    subscriptionAllowed: tenantHasAccess(tenant),
   };
 }
 
@@ -546,10 +568,15 @@ router.get('/mine', async (req, res) => {
   if (!identity?.id) return res.status(401).json({ success: false, error: 'Login required' });
   const discordGuilds = await discordGuildsForRequest(req, identity);
   const tenants = await listVisibleTenants(identity.id, discordGuilds);
-  const onboardable = discordGuilds.filter((g) => {
-    const already = tenants.some((t) => t.id === g.id && t.onboarded);
-    return !already && (g.owner || canManageGuild(g.permissions));
-  });
+  const { maxActiveGuilds } = billingEnv();
+  const activeCount = await countOccupyingGuilds();
+  const atCapacity = activeCount >= maxActiveGuilds;
+  const onboardable = atCapacity
+    ? []
+    : discordGuilds.filter((g) => {
+      const already = tenants.some((t) => t.id === g.id && t.onboarded);
+      return !already && (g.owner || canManageGuild(g.permissions));
+    });
   return res.json({
     success: true,
     tenants: tenants.map((t) => {
@@ -567,6 +594,7 @@ router.get('/mine', async (req, res) => {
       };
     }),
     onboardable,
+    billing: { activeCount, cap: maxActiveGuilds, full: atCapacity },
     currentTenantId: req.session?.currentTenantId || identity.currentTenantId || null,
     inviteUrl: botInviteUrl(),
   });

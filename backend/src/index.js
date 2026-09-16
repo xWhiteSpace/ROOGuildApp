@@ -8,7 +8,7 @@ import { valhallaEnv } from './config/valhallaEnv.js';
 import authRoutes from './auth/discordOAuth.js';
 import { migrate } from './db/migrate.js';
 import { query } from './db/pool.js';
-import { attachTenantContext, requireTenant } from './middleware/tenantContext.js';
+import { attachTenantContext, requireTenant, requireActiveSubscription } from './middleware/tenantContext.js';
 import { requireGame } from './middleware/requireGame.js';
 import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from './games/catalog.js';
 import tenantRoutes from './api/tenant.routes.js';
@@ -27,6 +27,7 @@ import { getDiscordRateLimitStatus, resolveOAuthExchangeUrl } from './utils/disc
 
 import attendanceRoutes from './api/attendance.routes.js';
 import adventurerGuildRoutes from './api/adventurerGuild.routes.js';
+import billingRoutes, { handleStripeWebhook } from './api/billing.routes.js';
 
 initializeEnv();
 await migrate();
@@ -90,6 +91,8 @@ app.use(cors({
   ]
 }));
 
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 app.use(express.json({ limit: '12mb' }));
 
 app.use(
@@ -108,11 +111,12 @@ app.use(
 app.use(attachTenantContext);
 app.use('/auth', authRoutes);
 app.use('/api/tenants', tenantRoutes);
-app.use('/api/requests', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), requestRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/requests', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), requestRoutes);
 
-app.use('/api/attendance', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), attendanceRoutes);
-app.use('/api/live-raid', requireTenant, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
-app.use('/api/adventurer-guild', requireTenant, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
+app.use('/api/attendance', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), attendanceRoutes);
+app.use('/api/live-raid', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
+app.use('/api/adventurer-guild', requireTenant, requireActiveSubscription, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
 
 app.get('/', async (req, res) => {
   try {

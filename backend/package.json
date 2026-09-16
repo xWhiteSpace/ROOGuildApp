@@ -10,10 +10,13 @@
     "clear-commands": "node src/discord-bot/deploy.js",
     "uninstall-commands": "node src/discord-bot/uninstall.js",
     "migrate": "node src/db/migrate.js",
+    "seed-invite-codes": "node src/db/seedInviteCodes.js",
+    "founding-seat": "node src/db/foundingSeat.js",
     "test:isolation": "node src/db/isolationCheck.js"
   },
   "dependencies": {
     "@guildname/shared": "*",
+    "@supabase/supabase-js": "^2.116.0",
     "cors": "^2.8.5",
     "discord.js": "^14.15.0",
     "dotenv": "^16.4.3",
@@ -21,7 +24,7 @@
     "express-session": "^1.19.0",
     "multer": "^2.3.0",
     "pg": "^8.23.0",
-    "@supabase/supabase-js": "^2.116.0"
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

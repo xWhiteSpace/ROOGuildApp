@@ -2,8 +2,10 @@ import { query } from './pool.js';
 import { getCurrentTenantId, runWithTenant, setCachedConfig, setCachedChannels } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { parseEnabledGames } from '../games/catalog.js';
+import { tenantHasAccess } from './billing.js';
 
-const TENANT_COLUMNS = 'id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, created_at, logo_url, enabled_games';
+const TENANT_COLUMNS = `id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, created_at, logo_url, enabled_games,
+  stripe_customer_id, stripe_subscription_id, subscription_status, current_period_end, billing_source, grace_until, cancel_at_period_end`;
 
 export async function listTenants() {
   const { rows } = await query(
@@ -41,7 +43,8 @@ export async function getTenantsByIds(ids) {
 export async function getTenantsForMember(discordUserId) {
   if (!discordUserId) return [];
   const { rows } = await query(
-    `SELECT DISTINCT t.id, t.display_name, t.owner_discord_id, t.plan, t.is_platform_owner, t.onboarded, t.created_at, t.logo_url, t.enabled_games
+    `SELECT DISTINCT t.id, t.display_name, t.owner_discord_id, t.plan, t.is_platform_owner, t.onboarded, t.created_at, t.logo_url, t.enabled_games,
+            t.stripe_customer_id, t.stripe_subscription_id, t.subscription_status, t.current_period_end, t.billing_source, t.grace_until, t.cancel_at_period_end
      FROM tenants t
      INNER JOIN members m ON m.tenant_id = t.id
      WHERE m.discord_id = $1`,
@@ -194,6 +197,7 @@ export async function setTenantDisplayName(tenantId, displayName) {
 export async function forEachOnboardedTenant(fn) {
   const tenants = await listOnboardedTenants();
   for (const tenant of tenants) {
+    if (!tenantHasAccess(tenant)) continue;
     try {
       const { configuration, discordChannels } = await loadTenantSettings(tenant.id);
       setCachedConfig(tenant.id, configuration);

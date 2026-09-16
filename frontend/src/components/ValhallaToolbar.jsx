@@ -165,6 +165,11 @@ export default function ValhallaToolbar({ user, onLogout, onSessionUser, forceCl
                 Workspace
               </button>
             )}
+            {user.isOfficer && (
+              <button type="button" role="menuitem" className={menuItemClass} onClick={() => go('/workspace/billing')}>
+                Billing
+              </button>
+            )}
 
             {otherTenants.map((t) => (
               <button

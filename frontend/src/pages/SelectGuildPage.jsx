@@ -26,6 +26,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
   const navigate = useNavigate();
   const [tenants, setTenants] = useState([]);
   const [onboardable, setOnboardable] = useState([]);
+  const [billing, setBilling] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [intent, setIntent] = useState(readAuthIntent);
@@ -54,6 +55,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
         }
         setTenants(data.tenants || []);
         setOnboardable(data.onboardable || []);
+        setBilling(data.billing || null);
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
@@ -116,7 +118,7 @@ export default function SelectGuildPage({ user, onSessionUser }) {
             {onboardable.length > 0 ? (
               <>
                 <p className="text-[11px] text-slate-500">
-                  Set up this Discord server as a {PRODUCT_NAME} workspace. You need Manage Server. Payments will attach here later.
+                  Set up this Discord server as a {PRODUCT_NAME} workspace. You need Manage Server. After create, you subscribe or redeem an invite code.
                 </p>
                 {onboardable.map((g) => (
                   <button
@@ -142,6 +144,12 @@ export default function SelectGuildPage({ user, onSessionUser }) {
               </>
             ) : (
               <div className="rounded-xl border border-dashed border-indigo-500/40 bg-indigo-950/20 px-4 py-4 space-y-3">
+                {billing?.full ? (
+                  <p className="text-sm text-slate-300">
+                    Capacity reached ({billing.activeCount}/{billing.cap}). New Discord servers cannot be added until a seat frees.
+                  </p>
+                ) : (
+                <>
                 <p className="text-sm text-slate-300">
                   No Discord server is ready to add. {PRODUCT_NAME} only lists servers where you have <span className="font-semibold">Manage Server</span> and that are not a workspace yet.
                 </p>
@@ -155,6 +163,8 @@ export default function SelectGuildPage({ user, onSessionUser }) {
                 >
                   Refresh Discord servers
                 </a>
+                </>
+                )}
               </div>
             )}
           </div>

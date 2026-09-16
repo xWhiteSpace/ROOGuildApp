@@ -13,6 +13,20 @@ CREATE TABLE IF NOT EXISTS tenants (
 
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS enabled_games JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'inactive';
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS billing_source TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS grace_until TIMESTAMPTZ;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS tenants_subscription_status_idx ON tenants (subscription_status);
+
+CREATE TABLE IF NOT EXISTS invite_codes (
+  code TEXT PRIMARY KEY,
+  redeemed_tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  redeemed_at TIMESTAMPTZ
+);
 
 CREATE TABLE IF NOT EXISTS tenant_settings (
   tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,

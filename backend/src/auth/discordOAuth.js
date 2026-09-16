@@ -291,7 +291,11 @@ router.get('/callback', async (req, res) => {
       const signed = signUserProfile(sessionUser);
       return req.session.save(() => {
         const encodedUser = encodeURIComponent(JSON.stringify(signed));
-        const dest = sessionUser.tenantOnboarded ? '/' : '/onboard';
+        const dest = !sessionUser.tenantOnboarded
+          ? '/onboard'
+          : sessionUser.subscriptionAllowed === false
+            ? '/workspace/billing'
+            : '/';
         res.redirect(`${targetFrontend}${dest}?auth_user=${encodedUser}`);
       });
     }

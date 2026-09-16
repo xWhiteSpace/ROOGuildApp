@@ -190,6 +190,24 @@ export default function WorkspaceSettingsPage({ user, onSessionUser }) {
       {success && <div className="bg-emerald-950/30 border border-emerald-500/30 text-emerald-400 text-xs p-3.5 rounded-xl">{success}</div>}
 
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-3">
+        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Billing</div>
+        <p className="text-sm text-slate-200">
+          {user?.subscriptionAllowed
+            ? user?.billingSource === 'invite'
+              ? 'Permanent invite seat — no monthly charge.'
+              : user?.billingSource === 'grandfathered'
+                ? 'Founding guild seat — no monthly charge.'
+                : user?.subscriptionStatus === 'past_due'
+                  ? 'Past due, still in grace. Games keep working until the grace date. Officers can update the card in Billing.'
+                  : '$1/mo Stripe seat. Officers manage the card and cancel in Billing.'
+            : 'This guild does not have an active seat yet.'}
+        </p>
+        <Link to="/workspace/billing" className="inline-flex text-[11px] text-indigo-400 hover:text-indigo-300">
+          Open billing
+        </Link>
+      </div>
+
+      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-3">
         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Connected Discord server</div>
         <p className="text-sm text-slate-200 font-mono">{form.discordGuildId}</p>
         {inviteUrl && (

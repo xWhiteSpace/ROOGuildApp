@@ -101,7 +101,7 @@ export default function OnboardGuildPage({ onSessionUser }) {
       }
       onSessionUser(data.user);
       localStorage.setItem('guild_raid_session', JSON.stringify(data.user));
-      navigate('/workspace/games');
+      navigate('/workspace/billing');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -114,7 +114,7 @@ export default function OnboardGuildPage({ onSessionUser }) {
       <form onSubmit={submit} className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl space-y-4">
         <h1 className="text-2xl font-semibold">Create a workspace for {guild?.name || 'your Discord server'}</h1>
         <p className="text-sm text-slate-400">
-          This creates the {PRODUCT_NAME} workspace for that Discord server. Invite the bot, pick officer roles and a timezone. You will choose a game next.
+          This creates the {PRODUCT_NAME} workspace for that Discord server. Invite the bot, pick officer roles and a timezone. Next you subscribe or redeem an invite code.
         </p>
         {inviteUrl && (
           <a href={inviteUrl} target="_blank" rel="noreferrer" className="inline-flex rounded-full bg-[#5865F2] px-5 py-2 text-sm font-semibold">

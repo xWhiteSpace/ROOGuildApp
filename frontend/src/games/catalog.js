@@ -60,6 +60,7 @@ export function gameIdForPath(pathname) {
 
 export function resolvePostLoginPath(user) {
   if (!user?.currentTenantId) return '/select-guild';
+  if (user.subscriptionAllowed === false) return '/workspace/billing';
   const enabled = user.enabledGames || [];
   if (!enabled.length) return '/workspace/games';
   for (const id of enabled) {

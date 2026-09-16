@@ -23,6 +23,7 @@ import PeakHoursTab from './games/ragnarok-origin/pages/PeakHoursTab';
 import SelectGuildPage from './pages/SelectGuildPage';
 import OnboardGuildPage from './pages/OnboardGuildPage';
 import ChooseGamePage from './pages/ChooseGamePage';
+import BillingPage from './pages/BillingPage';
 import WorkspaceSettingsPage from './pages/WorkspaceSettingsPage';
 import RagnarokSetupPage from './games/ragnarok-origin/pages/RagnarokSetupPage';
 import { apiFetch } from './services/apiClient';
@@ -257,6 +258,7 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
     '/select-guild',
     '/onboard',
     '/workspace/games',
+    '/workspace/billing',
     '/games/ragnarok-origin/setup',
   ]);
 
@@ -285,8 +287,20 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
   if (pathname === '/onboard' && authUser) {
     return <OnboardGuildPage onSessionUser={onSessionUser} />;
   }
+  if (
+    authUser?.currentTenantId
+    && authUser.subscriptionAllowed === false
+    && pathname !== '/workspace/billing'
+    && pathname !== '/onboard'
+    && pathname !== '/select-guild'
+  ) {
+    return <Navigate to="/workspace/billing" replace />;
+  }
   if (pathname === '/workspace/games' && authUser) {
     return <ChooseGamePage user={authUser} onSessionUser={onSessionUser} />;
+  }
+  if (pathname === '/workspace/billing' && authUser) {
+    return <BillingPage user={authUser} onSessionUser={onSessionUser} />;
   }
   if (pathname === '/games/ragnarok-origin/setup' && authUser) {
     return <RagnarokSetupPage onSessionUser={onSessionUser} />;
@@ -309,12 +323,16 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
 
   if (authUser?.currentTenantId) {
     const next = postLoginPath(authUser);
+    const needsBilling = next === '/workspace/billing';
     const needsChoose = next === '/workspace/games';
     const needsSetup = GAMES.some((game) => game.setupPath && next === game.setupPath);
-    if (needsChoose && pathname !== '/workspace/games' && pathname !== '/onboard' && pathname !== '/select-guild') {
+    if (needsBilling && pathname !== '/workspace/billing' && pathname !== '/onboard' && pathname !== '/select-guild') {
+      return <Navigate to="/workspace/billing" replace />;
+    }
+    if (needsChoose && pathname !== '/workspace/games' && pathname !== '/onboard' && pathname !== '/select-guild' && pathname !== '/workspace/billing') {
       return <Navigate to="/workspace/games" replace />;
     }
-    if (needsSetup && pathname !== next && pathname !== '/workspace/games' && pathname !== '/onboard') {
+    if (needsSetup && pathname !== next && pathname !== '/workspace/games' && pathname !== '/onboard' && pathname !== '/workspace/billing') {
       return <Navigate to={next} replace />;
     }
     if (
@@ -322,6 +340,7 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
       && !(authUser.enabledGames || []).includes(pathGameId)
       && pathname !== '/workspace'
       && pathname !== '/workspace/games'
+      && pathname !== '/workspace/billing'
     ) {
       return <Navigate to={next} replace />;
     }

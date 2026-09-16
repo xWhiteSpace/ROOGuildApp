@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DiscordSignInButton from '../components/DiscordSignInButton';
 import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
 import { PRODUCT_NAME } from '../brand';
 import ValhallaLockup from '../components/ValhallaLockup';
+import { apiFetch } from '../services/apiClient';
 
 const CTA_CLASS = 'inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-black/40 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950';
 
@@ -22,6 +23,7 @@ function AuthCard({ kicker, kickerClass, title, body, accent, children }) {
 }
 
 export default function LandingPage() {
+  const [capacity, setCapacity] = useState(null);
   const errorMessage = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error');
@@ -49,6 +51,15 @@ export default function LandingPage() {
       discord_oauth_failed: 'Discord login failed. Do not spam Sign in — wait, then try once.',
     };
     return map[err] || `Login failed (${err}).`;
+  }, []);
+
+  useEffect(() => {
+    apiFetch('/api/billing/capacity', { method: 'GET' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setCapacity({ activeCount: data.activeCount, cap: data.cap, full: data.full });
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -98,13 +109,27 @@ export default function LandingPage() {
             kickerClass="text-indigo-400"
             title="Add my Discord server"
             accent
-            body="Create a workspace for a server you can manage. Invite the bot, then pick a game. This is the account payments will use later."
+            body={
+              capacity?.full
+                ? `Capacity reached (${capacity.activeCount}/${capacity.cap}). Sign in if your guild is already here.`
+                : 'Create a workspace for a server you can manage. Invite the bot, then subscribe or redeem an invite code. This is the account payments will use later.'
+            }
           >
+            {capacity?.full ? (
+              <button
+                type="button"
+                disabled
+                className={`${CTA_CLASS} bg-slate-800 text-slate-500 cursor-not-allowed shadow-none`}
+              >
+                Capacity reached ({capacity.cap}/{capacity.cap})
+              </button>
+            ) : (
             <DiscordSignInButton
               intent="signup"
               label="Get started with Discord"
               className={`${CTA_CLASS} bg-indigo-600 hover:bg-indigo-500`}
             />
+            )}
           </AuthCard>
         </div>
 

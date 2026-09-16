@@ -80,6 +80,13 @@ export async function apiFetch(path, options = {}) {
         throw new Error(peek.error || 'This game is not enabled for this workspace.');
       }
     }
+    if (res.status === 402) {
+      const peek = await res.clone().json().catch(() => null);
+      if (typeof window !== 'undefined' && window.location.pathname !== '/workspace/billing') {
+        window.location.assign('/workspace/billing');
+      }
+      throw new Error(peek?.error || 'This guild needs an active seat.');
+    }
     return res;
   } catch (err) {
     const detail = err?.message || String(err);
