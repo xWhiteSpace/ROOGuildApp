@@ -228,10 +228,15 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
 
   if (selectedEventContext && selectedEventContext.phases) {
     const evAnn = selectedEventContext.announcements || {};
+    const phaseOn = (key) => {
+      const flag = evAnn.enabled?.[key];
+      if (flag === undefined || flag === null) return true;
+      return flag === true;
+    };
     
     // Phase 1 alerts: Evaluated as daily repeating variations constrained inside the Phase 1 window
     const p1 = selectedEventContext.phases[1];
-    if (p1 && evAnn.phase1) {
+    if (p1 && evAnn.phase1 && phaseOn('phase1')) {
       const p1Start = (p1.dayStart * 1440) + parseInt(p1.timeStart.split(':')[0], 10) * 60 + parseInt(p1.timeStart.split(':')[1], 10);
       const p1End = (p1.dayEnd * 1440) + parseInt(p1.timeEnd.split(':')[0], 10) * 60 + parseInt(p1.timeEnd.split(':')[1], 10);
       const p1Duration = (p1End - p1Start + 10080) % 10080;
@@ -249,13 +254,13 @@ const computedAnnouncementMinutes = { phase1: [], phase2: null, phase3: null };
 
     // Phase 2 alerts: Milestone anchored explicitly to P2 Day Start
     const p2 = selectedEventContext.phases[2];
-    if (p2 && evAnn.phase2) {
+    if (p2 && evAnn.phase2 && phaseOn('phase2')) {
       computedAnnouncementMinutes.phase2 = (p2.dayStart * 1440) + parseInt(evAnn.phase2.split(':')[0], 10) * 60 + parseInt(evAnn.phase2.split(':')[1], 10);
     }
 
     // Phase 3 alerts: Milestone anchored explicitly to P3 Day Start
     const p3 = selectedEventContext.phases[3];
-    if (p3 && evAnn.phase3) {
+    if (p3 && evAnn.phase3 && phaseOn('phase3')) {
       computedAnnouncementMinutes.phase3 = (p3.dayStart * 1440) + parseInt(evAnn.phase3.split(':')[0], 10) * 60 + parseInt(evAnn.phase3.split(':')[1], 10);
     }
   }

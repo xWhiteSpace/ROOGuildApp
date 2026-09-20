@@ -724,7 +724,7 @@ export default function RaidPartyTab({ user }) {
       {/* GLOBAL MACRO FRAME CONSOLE HEADER */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 select-none">
         <div className="w-full lg:w-auto">
-          <div className="text-[10px] font-mono font-bold tracking-widest text-slate-500 uppercase">Raid Party Workspace</div>
+          <div className="text-[10px] font-mono font-bold tracking-widest text-slate-500 uppercase">Raid Config Workspace</div>
           {selectedConfigId ? (
             <input 
               type="text"

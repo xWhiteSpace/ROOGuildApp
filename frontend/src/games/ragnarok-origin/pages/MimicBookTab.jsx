@@ -16,6 +16,8 @@ const IconX = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" s
 const IconBook = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>;
 const IconEye = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>;
 const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IconCopy = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>;
+const IconDownload = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
 const IconChevron = ({ direction = "right" }) => {
   const rotations = { left: "rotate-180", right: "", up: "-rotate-90", down: "rotate-90" };
   return <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${rotations[direction] || ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg>;
@@ -49,6 +51,7 @@ export default function MimicBookTab({ user }) {
   const popoverAnchorRef = useRef(null);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   const isUserDraggingRef = useRef(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
   useEffect(() => {
     setIsAdminMode(isOfficer);
@@ -679,6 +682,25 @@ const [rawMembers, setRawMembers] = useState({});
     document.body.removeChild(link);
   };
 
+  const csvEscape = (val) => {
+    const s = String(val ?? '');
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const downloadCsv = (filename, headers, rows) => {
+    const csvContent = [headers.join(','), ...rows.map((row) => row.map(csvEscape).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const toggleAccordionGroup = (groupKey) => {
     setExpandedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
@@ -732,6 +754,105 @@ const [rawMembers, setRawMembers] = useState({});
   };
 
   const currentUserName = user?.displayName || user?.username || '';
+
+  const buildLedgerRows = ({ applySearch = true } = {}) => {
+    let rowsToDisplay = [...generatedSlots];
+    if (viewLens === 'ALL') {
+      items.forEach((item) => {
+        const standbyList = rankingsByItem[item.id] || [];
+        const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter((n) => n !== '').map((uid) => resolveDisplayName(uid));
+
+        standbyList.forEach((uid) => {
+          const resolvedName = resolveDisplayName(uid);
+          if (!winnersInCat.includes(resolvedName)) {
+            rowsToDisplay.push({ name: uid, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
+          }
+        });
+      });
+    }
+
+    if (viewLens === 'MINE') {
+      rowsToDisplay = rowsToDisplay.filter((r) => {
+        const rName = resolveDisplayName(r.name);
+        return r.name === user?.id || rName.toLowerCase() === currentUserName.toLowerCase();
+      });
+      if (rowsToDisplay.length === 0) {
+        items.forEach((item) => {
+          const winnersInCat = (categoryAllocations[item.id]?.selected || []).map((n) => resolveDisplayName(n));
+          if (!winnersInCat.includes(currentUserName) && (rankingsByItem[item.id] || []).includes(currentUserName)) {
+            rowsToDisplay.push({ name: currentUserName, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
+          }
+        });
+      }
+    }
+
+    if (applySearch && searchQuery) {
+      const q = searchQuery.toLowerCase();
+      rowsToDisplay = rowsToDisplay.filter((r) => {
+        const dispName = resolveDisplayName(r.name);
+        return dispName.toLowerCase().includes(q) || (r.itemName || '').toLowerCase().includes(q);
+      });
+    }
+    return rowsToDisplay;
+  };
+
+  const namedLedgerRows = (rows) => rows.filter((r) => r.name && String(r.name).trim() !== '');
+
+  const formatMemberCopyBlocks = (rows) => {
+    const groups = new Map();
+    namedLedgerRows(rows).forEach((row) => {
+      const displayName = resolveDisplayName(row.name);
+      if (!groups.has(displayName)) groups.set(displayName, []);
+      groups.get(displayName).push(row);
+    });
+    return [...groups.entries()].map(([name, memberRows]) => {
+      const lines = memberRows.map((row) => {
+        const loc = typeof row.page === 'number' && typeof row.slot === 'number'
+          ? `Page ${row.page}, Slot ${row.slot}`
+          : 'QUEUE';
+        return `• ${row.itemName} ➔ ${loc}`;
+      });
+      return `${name}\n${lines.join('\n')}`;
+    }).join('\n\n');
+  };
+
+  const handleCopySearchedMembers = async () => {
+    const text = formatMemberCopyBlocks(buildLedgerRows({ applySearch: true }));
+    if (!searchQuery.trim() || !text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 1500);
+    } catch (err) {
+      console.error(err);
+      alert('Could not copy to clipboard.');
+    }
+  };
+
+  const handleExportAllocationCSV = () => {
+    const rows = namedLedgerRows(buildLedgerRows({ applySearch: false }));
+    if (rows.length === 0) return;
+    const csvRows = rows.map((row) => {
+      const isPlaced = typeof row.page === 'number' && typeof row.slot === 'number';
+      return [
+        resolveDisplayName(row.name),
+        row.itemName || '',
+        isPlaced ? row.page : '',
+        isPlaced ? row.slot : '',
+        row.status === 'Selected' ? 'Selected' : 'QUEUE',
+      ];
+    });
+    downloadCsv(
+      `MimicBook_Allocation_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Name', 'Item', 'Page', 'Slot', 'Status'],
+      csvRows,
+    );
+  };
+
+  const ledgerRows = buildLedgerRows({ applySearch: true });
+  const copyableRows = namedLedgerRows(ledgerRows);
+  const canCopy = Boolean(searchQuery.trim()) && copyableRows.length > 0;
+  const canExport = namedLedgerRows(buildLedgerRows({ applySearch: false })).length > 0;
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     return generatedSlots.find(s => s.page === bookCurrentPage && s.slot === (i + 1)) || null;
   });
@@ -1264,14 +1385,34 @@ const [rawMembers, setRawMembers] = useState({});
           </button>
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <input 
-            type="text" 
-            placeholder="Search Member name..." 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-700 font-sans transition shadow-inner" 
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto min-w-0 sm:justify-end">
+          <button
+            type="button"
+            onClick={handleCopySearchedMembers}
+            disabled={!canCopy}
+            title={canCopy ? 'Copy searched members as Discord-ready Page/Slot lines' : 'Search a member name first'}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white hover:border-slate-700 transition cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-800"
+          >
+            <IconCopy /> {copyFeedback ? 'Copied' : 'Copy'}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportAllocationCSV}
+            disabled={!canExport}
+            title="Download assigned + QUEUE ledger as CSV"
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white hover:border-slate-700 transition cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:text-slate-400 disabled:hover:border-slate-800"
+          >
+            <IconDownload /> Export
+          </button>
+          <div className="relative w-full sm:w-64 min-w-0">
+            <input 
+              type="text" 
+              placeholder="Search Member name..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-medium placeholder-slate-600 outline-none focus:border-slate-700 font-sans transition shadow-inner" 
+            />
+          </div>
         </div>
       </div>
 
@@ -1382,47 +1523,10 @@ const [rawMembers, setRawMembers] = useState({});
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900/40 font-mono text-[11px]">
-                  {(() => {
-                    let rowsToDisplay = [...generatedSlots];
-                    if (viewLens === 'ALL') {
-                      items.forEach(item => {
-                        const standbyList = rankingsByItem[item.id] || [];
-                        const winnersInCat = (categoryAllocations[item.id]?.selected || []).filter(n => n !== "").map(uid => resolveDisplayName(uid));
-                        
-                        standbyList.forEach(uid => {
-                          const resolvedName = resolveDisplayName(uid);
-                          if (!winnersInCat.includes(resolvedName)) {
-                            rowsToDisplay.push({ name: uid, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
-                          }
-                        });
-                      });
-                    }
-
-                    if (viewLens === 'MINE') {
-                      rowsToDisplay = rowsToDisplay.filter(r => {
-                        const rName = resolveDisplayName(r.name);
-                        return r.name === user?.id || rName.toLowerCase() === currentUserName.toLowerCase();
-                      });
-                      if (rowsToDisplay.length === 0) {
-                        items.forEach(item => {
-                          const winnersInCat = (categoryAllocations[item.id]?.selected || []).map(n => resolveDisplayName(n));
-                          if (!winnersInCat.includes(currentUserName) && (rankingsByItem[item.id] || []).includes(currentUserName)) {
-                            rowsToDisplay.push({ name: currentUserName, itemType: item.id, itemName: item.name, page: '---', slot: '---', status: 'NotSelected' });
-                          }
-                        });
-                      }
-                    }
-
-                    if (searchQuery) {
-                      const q = searchQuery.toLowerCase();
-                      rowsToDisplay = rowsToDisplay.filter(r => {
-                        const dispName = resolveDisplayName(r.name);
-                        return dispName.toLowerCase().includes(q) || r.itemName.toLowerCase().includes(q);
-                      });
-                    }
-                    if (rowsToDisplay.length === 0) return <tr><td colSpan="3" className="p-8 text-center text-slate-500 font-sans italic text-xs select-none">No entries match your spotlight filters.</td></tr>;
-
-                    return rowsToDisplay.map((row, index) => {
+                  {ledgerRows.length === 0 ? (
+                    <tr><td colSpan="3" className="p-8 text-center text-slate-500 font-sans italic text-xs select-none">No entries match your spotlight filters.</td></tr>
+                  ) : (
+                    ledgerRows.map((row, index) => {
                       const rowDisplayName = resolveDisplayName(row.name);
                       const isSelf = user && (row.name === user?.id || rowDisplayName.toLowerCase() === currentUserName.toLowerCase());
                       const isSelected = row.status === 'Selected';
@@ -1459,8 +1563,8 @@ const [rawMembers, setRawMembers] = useState({});
                           </td>
                         </tr>
                       );
-                    });
-                  })()}
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

@@ -13,7 +13,10 @@ import {
   findCrossTabDuplicates,
   isSlotCoordKey,
 } from '@guildname/shared/compositionTabs';
+import { isArchivedRsvp, normalizeCommitmentStatus } from '@guildname/shared/attendanceStatus';
 import { checkOfficer } from '../auth/officer.js';
+import { buildCompositeKey } from '../utils/guildTime.js';
+import { consumePendingInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
 
 const router = Router();
 
@@ -400,6 +403,101 @@ function parseMonitoringFields(body = {}) {
   };
 }
 
+/**
+ * Create an Active live_session from a published snapshot. Used by officer POST /create
+ * and by War Room automation (no HTTP-to-self).
+ */
+export async function createLiveRaidFromPublished({
+  publishedId,
+  selectedWarRoomIds,
+  monitoringStartsAt,
+  monitoringEndsAt,
+  pollIntervalMinutes,
+  launchedBy = 'War Room',
+}) {
+  const db = getTenantStore();
+  const activeSnap = await db.ref('attendance/live_session').once('value');
+  if (activeSnap.exists()) {
+    return { ok: false, error: 'An active Live Raid session is already running.' };
+  }
+  if (!publishedId || !selectedWarRoomIds?.length) {
+    return { ok: false, error: 'Published composition and at least one war room are required.' };
+  }
+
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const settingsObj = configSnap.exists() ? configSnap.val() : {};
+  const resolvedWarRoomChannelIds = resolveWarRoomChannelIds(
+    selectedWarRoomIds,
+    settingsObj.warRooms || {}
+  );
+  if (resolvedWarRoomChannelIds.length === 0) {
+    return { ok: false, error: 'No valid Discord war room channels resolved. Map voice channel IDs in Settings.' };
+  }
+
+  const publishedSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
+  if (!publishedSnap.exists()) {
+    return { ok: false, error: 'Active composition not found.' };
+  }
+  const published = publishedSnap.val();
+  const gridsPayload = published.grids || {};
+  const selectedGridIds = Array.isArray(published.selectedGridIds) && published.selectedGridIds.length > 0
+    ? published.selectedGridIds
+    : Object.keys(gridsPayload);
+  if (selectedGridIds.length === 0) {
+    return { ok: false, error: 'Selected composition has no Grid Tabs.' };
+  }
+
+  const duplicates = findCrossTabDuplicates(gridsPayload);
+  if (duplicates.length > 0) {
+    return {
+      ok: false,
+      error: `Cannot start Live Raid: composition has ${duplicates.length} member(s) assigned in multiple Grid Tabs.`,
+      duplicates,
+    };
+  }
+
+  const parsedMon = parseMonitoringFields({ monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes });
+  if (!parsedMon.ok) {
+    return { ok: false, error: parsedMon.error };
+  }
+
+  const eventKey = published.eventKey;
+  const eventDate = published.eventDate;
+  const eventTitle = published.eventTitle || published.eventKey || 'Raid Session';
+  const configId = published.configId || selectedGridIds[0];
+
+  const sessionPayload = {
+    status: 'Active',
+    launchedBy,
+    startedAt: Date.now(),
+    publishedId,
+    eventKey,
+    eventDate,
+    eventTitle,
+    selectedConfigId: configId,
+    selectedConfigIds: selectedGridIds,
+    selectedWarRoomIds,
+    selectedWarRooms: resolvedWarRoomChannelIds,
+    grids: gridsPayload,
+    totalPulses: 0,
+    userTallies: {},
+    version: 2,
+    ...(parsedMon.monitoring || {}),
+  };
+
+  await db.ref('attendance/live_session').set(sessionPayload);
+
+  if (parsedMon.monitoring) {
+    armMonitoringSchedule(
+      parsedMon.monitoring.monitoringStartsAt,
+      parsedMon.monitoring.monitoringEndsAt,
+      parsedMon.monitoring.pollIntervalMinutes
+    );
+  }
+
+  return { ok: true, session: sessionPayload };
+}
+
 // Internal end live raid handler
 async function endLiveRaidSessionInternal(s) {
   const db = getTenantStore();
@@ -445,12 +543,12 @@ async function endLiveRaidSessionInternal(s) {
 
   const excusedUids = [];
   const commitmentsSnap = await db.ref('attendance/commitments').once('value');
-  const eventCommitmentsKey = `${s.eventDate}_${s.eventKey}`;
+  const eventCommitmentsKey = buildCompositeKey(s.eventDate, s.eventKey);
   let commitmentsData = {};
   if (commitmentsSnap.exists() && commitmentsSnap.val()[eventCommitmentsKey]) {
     commitmentsData = commitmentsSnap.val()[eventCommitmentsKey];
     Object.entries(commitmentsData).forEach(([uid, commitment]) => {
-      if (commitment.status === 'Leave') {
+      if (normalizeCommitmentStatus(commitment?.status) === 'Leave') {
         excusedUids.push(uid);
       }
     });
@@ -475,14 +573,17 @@ async function endLiveRaidSessionInternal(s) {
   const configSnap = await db.ref('settings/configuration').once('value');
   const systemThreshold = configSnap.exists() ? (parseInt(configSnap.val().attendancePresentThreshold, 10) || 75) : 75;
 
-  // Collect only non-None commitments → flat uid:status map stored inside session_archive
+  // Snapshot live calendar RSVPs (Confirmed / Leave / NoConfirm) into the archive.
   const commitments = {};
   Object.keys(membersData).forEach(uid => {
-    const status = commitmentsData[uid]?.status;
-    if (status === 'Confirmed' || status === 'Leave') {
+    if (membersData[uid]?.isRaidRoster !== true) return;
+    const status = normalizeCommitmentStatus(commitmentsData[uid]?.status);
+    if (isArchivedRsvp(status)) {
       commitments[uid] = status;
     }
   });
+
+  const { inGameStatus: pendingInGame, clearPath: pendingClearPath } = await consumePendingInGameStatus(db, s.eventDate, s.eventKey);
 
   atomicUpdates[`attendance/session_archive/${sessionHistoryId}`] = {
     id: sessionHistoryId,
@@ -502,10 +603,12 @@ async function endLiveRaidSessionInternal(s) {
     pollIntervalMinutes: intervalMins || null,
     effectiveMonitoringEndsAt: effectiveMonitoringEndsAt || null,
     endedEarly,
-    endedAt: now
+    endedAt: now,
+    ...(pendingInGame ? { inGameStatus: pendingInGame } : {}),
   };
 
   atomicUpdates['attendance/live_session'] = null;
+  if (pendingClearPath) atomicUpdates[pendingClearPath] = null;
   await db.ref().update(atomicUpdates);
 }
 
@@ -556,92 +659,24 @@ router.post('/create', async (req, res) => {
       pollIntervalMinutes,
     } = req.body;
 
-    if (!publishedId || !selectedWarRoomIds?.length) {
-      return res.status(400).json({
-        success: false,
-        error: 'Select an Active Composition and at least one war room.',
-      });
-    }
-
-    const settingsObj = configSnap.exists() ? configSnap.val() : {};
-    const resolvedWarRoomChannelIds = resolveWarRoomChannelIds(
-      selectedWarRoomIds,
-      settingsObj.warRooms || {}
-    );
-
-    if (resolvedWarRoomChannelIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No valid Discord war room channels resolved. Map voice channel IDs in Settings.'
-      });
-    }
-
-    const publishedSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
-    if (!publishedSnap.exists()) {
-      return res.status(404).json({ success: false, error: 'Active composition not found.' });
-    }
-    const published = publishedSnap.val();
-    const gridsPayload = published.grids || {};
-    const selectedGridIds = Array.isArray(published.selectedGridIds) && published.selectedGridIds.length > 0
-      ? published.selectedGridIds
-      : Object.keys(gridsPayload);
-    if (selectedGridIds.length === 0) {
-      return res.status(400).json({ success: false, error: 'Selected composition has no Grid Tabs.' });
-    }
-
-    const duplicates = findCrossTabDuplicates(gridsPayload);
-    if (duplicates.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: `Cannot start Live Raid: composition has ${duplicates.length} member(s) assigned in multiple Grid Tabs.`,
-        duplicates,
-      });
-    }
-
-    const parsedMon = parseMonitoringFields({ monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes });
-    if (!parsedMon.ok) {
-      return res.status(400).json({ success: false, error: parsedMon.error });
-    }
-
-    const eventKey = published.eventKey;
-    const eventDate = published.eventDate;
-    const eventTitle = published.eventTitle || published.eventKey || 'Raid Session';
-    const configId = published.configId || selectedGridIds[0];
-
-    // Firebase RTDB drops null keys — only include monitoring fields when set
-    const sessionPayload = {
-      status: 'Active',
-      launchedBy: user.displayName || user.username || 'Officer',
-      startedAt: Date.now(),
+    const created = await createLiveRaidFromPublished({
       publishedId,
-      eventKey,
-      eventDate,
-      eventTitle,
-      selectedConfigId: configId,
-      selectedConfigIds: selectedGridIds,
       selectedWarRoomIds,
-      selectedWarRooms: resolvedWarRoomChannelIds,
-      grids: gridsPayload,
-      totalPulses: 0,
-      userTallies: {},
-      version: 2,
-      ...(parsedMon.monitoring || {}),
-    };
-
-    await db.ref('attendance/live_session').set(sessionPayload);
-
-    if (parsedMon.monitoring) {
-      const armResult = armMonitoringSchedule(
-        parsedMon.monitoring.monitoringStartsAt,
-        parsedMon.monitoring.monitoringEndsAt,
-        parsedMon.monitoring.pollIntervalMinutes
-      );
-      console.log('[live-raid] create wrote monitoring to attendance/live_session:', parsedMon.monitoring, armResult);
-    } else {
-      console.log('[live-raid] create wrote attendance/live_session WITHOUT monitoring fields (none provided in request body)');
+      monitoringStartsAt,
+      monitoringEndsAt,
+      pollIntervalMinutes,
+      launchedBy: user.displayName || user.username || 'Officer',
+    });
+    if (!created.ok) {
+      const status = /not found/i.test(created.error || '') ? 404 : 400;
+      return res.status(status).json({
+        success: false,
+        error: created.error,
+        duplicates: created.duplicates,
+      });
     }
 
-    return res.json({ success: true, session: sessionPayload, path: 'attendance/live_session' });
+    return res.json({ success: true, session: created.session, path: 'attendance/live_session' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -856,9 +891,8 @@ router.patch('/history/:sessionId/in-game', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Session archive not found' });
     }
 
-    const flagValue = confirmed === true ? true : null;
-    await db.ref(`attendance/session_archive/${sessionId}/inGameStatus/${userId}`).set(flagValue);
-    return res.json({ success: true, confirmed: flagValue === true });
+    const confirmedFlag = await setInGameStatusFlag(db, sessionId, userId, confirmed === true);
+    return res.json({ success: true, confirmed: confirmedFlag });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

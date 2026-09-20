@@ -2,6 +2,7 @@
  * Schedule SSOT: materialize weekly instances + shared commitment writes.
  */
 import { getTenantStore } from '../../../db/database.js';
+import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import {
   getWeekMonday,
   enumerateWeekDates,
@@ -29,7 +30,8 @@ export function buildWeekInstanceMap({ weekMonday, events, specialEvents, existi
   for (const { dateStr, dayOfWeek } of weekDates) {
     if (events && typeof events === 'object') {
       for (const [eventId, ev] of Object.entries(events)) {
-        const p3 = ev?.phases?.[3];
+        const raidP3 = isRaidEnabled(ev) ? ev.raid.phases[3] : null;
+        const p3 = raidP3 || ev?.phases?.[3];
         if (!p3 || parseInt(p3.dayStart, 10) !== dayOfWeek) continue;
         const key = buildCompositeKey(dateStr, eventId);
         const prior = existingInstances[key] || {};

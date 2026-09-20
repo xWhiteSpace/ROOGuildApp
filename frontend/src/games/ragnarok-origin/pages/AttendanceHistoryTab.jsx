@@ -1,7 +1,6 @@
 // frontend/src/pages/AttendanceHistoryTab.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { 
-  Calendar, 
   Search, 
   ChevronRight, 
   ArrowLeft,
@@ -18,8 +17,28 @@ import {
   Swords
 } from 'lucide-react';
 import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
+import {
+  COMMITMENT_CONFIRMED,
+  COMMITMENT_LEAVE,
+  COMMITMENT_NO_CONFIRM,
+  normalizeCommitmentStatus,
+} from '@guildname/shared/attendanceStatus';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+
+function CalendarRsvpIcon({ status, size = 15 }) {
+  const normalized = normalizeCommitmentStatus(status);
+  if (normalized === COMMITMENT_CONFIRMED) {
+    return <CheckCircle size={size} className="text-emerald-400" title="Available" />;
+  }
+  if (normalized === COMMITMENT_LEAVE) {
+    return <CheckCircle size={size} className="text-amber-500" title="Leave" />;
+  }
+  if (normalized === COMMITMENT_NO_CONFIRM) {
+    return <MinusCircle size={size} className="text-rose-400" title="No Confirm" />;
+  }
+  return <XCircle size={size} className="text-slate-600 opacity-40" title="Unanswered" />;
+}
 
 export default function AttendanceHistoryTab({ user }) {
   const isOfficer = user?.isOfficer === true;
@@ -189,7 +208,7 @@ export default function AttendanceHistoryTab({ user }) {
       const userTicks = targetSession.userTallies?.[uid] || 0;
       const totalPulses = targetSession.totalPulses || 0;
 
-      const commitment = targetSession.commitments?.[uid] || 'None';
+      const commitment = normalizeCommitmentStatus(targetSession.commitments?.[uid]);
       const inGameConfirmed = targetSession.inGameStatus?.[uid] === true;
 
       const pts = calculatePoints(commitment, userTicks, totalPulses, inGameConfirmed);
@@ -238,7 +257,7 @@ export default function AttendanceHistoryTab({ user }) {
       const userTicks = s.userTallies?.[selectedMemberUid] || 0;
       const totalPulses = s.totalPulses || 0;
 
-      const commitment = s.commitments?.[selectedMemberUid] || 'None';
+      const commitment = normalizeCommitmentStatus(s.commitments?.[selectedMemberUid]);
       const inGameConfirmed = s.inGameStatus?.[selectedMemberUid] === true;
 
       const pts = calculatePoints(commitment, userTicks, totalPulses, inGameConfirmed);
@@ -247,6 +266,7 @@ export default function AttendanceHistoryTab({ user }) {
         sessionId: s.id,
         eventTitle: s.eventTitle || 'Raid run',
         eventDate: s.eventDate,
+        commitment,
         points: pts
       });
     });
@@ -280,7 +300,7 @@ export default function AttendanceHistoryTab({ user }) {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
         <div>
           <span className="text-[10px] font-mono font-bold tracking-widest text-slate-500 uppercase block">Raid Governance</span>
-          <h1 className="text-md font-black tracking-wider text-slate-100 uppercase mt-0.5">Attendance Performance Deck</h1>
+          <h1 className="text-md font-black tracking-wider text-slate-100 uppercase mt-0.5">GVG History</h1>
         </div>
 
         <div className="flex bg-slate-950 border border-slate-850 p-0.5 rounded-xl shrink-0">
@@ -371,6 +391,7 @@ export default function AttendanceHistoryTab({ user }) {
                           {sessions[selectedSessionId]?.eventTitle} ({sessions[selectedSessionId]?.eventDate})
                         </h3>
                         <span className="text-[9px] font-mono text-indigo-400">Committed By: {sessions[selectedSessionId]?.committedBy || 'System'}</span>
+                        <p className="text-[9px] font-mono text-slate-600 mt-0.5">Calendar RSVP is copied when Live Raid ends.</p>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -387,9 +408,9 @@ export default function AttendanceHistoryTab({ user }) {
                       <thead className="bg-slate-900/45 text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 select-none">
                         <tr>
                           <th className="px-4 py-2.5 text-left">Character Name</th>
-                          <th className="px-4 py-2.5 text-center w-24">Calendar Status</th>
-                          <th className="px-4 py-2.5 text-center w-24">Discord Presence</th>
-                          <th className="px-4 py-2.5 text-center w-24">In-game Status</th>
+                          <th className="px-4 py-2.5 text-center w-24">Calendar RSVP</th>
+                          <th className="px-4 py-2.5 text-center w-24">Discord Voice</th>
+                          <th className="px-4 py-2.5 text-center w-24" title="Officer flag on this archive — not Discord Available">In-game</th>
                           <th className="px-4 py-2.5 text-center w-28">Duration pulse</th>
                           <th className="px-4 py-2.5 text-right w-28">Raid Score</th>
                         </tr>
@@ -409,11 +430,7 @@ export default function AttendanceHistoryTab({ user }) {
                               </td>
                               <td className="px-4 py-2 text-center">
                                 <div className="flex justify-center">
-                                  {row.points.calPt === 1.0 ? (
-                                    <CheckCircle size={15} className={row.commitment === 'Leave' ? 'text-amber-500' : 'text-emerald-400'} title={row.commitment} />
-                                  ) : (
-                                    <XCircle size={15} className="text-slate-600 opacity-40" title="Uncommitted / No Signup" />
-                                  )}
+                                  <CalendarRsvpIcon status={row.commitment} />
                                 </div>
                               </td>
                               <td className="px-4 py-2 text-center">
@@ -427,7 +444,7 @@ export default function AttendanceHistoryTab({ user }) {
                                     type="button"
                                     disabled={!isOfficer}
                                     onClick={() => handleToggleInGameStatus(selectedSessionId, row.uid)}
-                                    title={row.inGameConfirmed ? 'In-game confirmed (+1). Click to unset.' : 'Not confirmed in-game. Click to confirm (+1).'}
+                                    title={row.inGameConfirmed ? 'In-game (officer flag, +1). Not Discord Available. Click to unset.' : 'In-game (officer flag, +1). Not Discord Available. Click to confirm.'}
                                     className={`p-1 rounded-lg transition ${
                                       isOfficer ? 'cursor-pointer hover:bg-slate-900' : 'cursor-default'
                                     } ${row.inGameConfirmed ? 'text-cyan-400' : 'text-slate-600 opacity-40'}`}
@@ -555,13 +572,13 @@ export default function AttendanceHistoryTab({ user }) {
                         </div>
                         <div className="flex items-center gap-4 shrink-0 font-sans text-right">
                           <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                            <span title={`Calendar: ${log.points.calPt} pt`} className={log.points.calPt === 1.0 ? 'text-emerald-400' : 'text-slate-600'}>
-                              {log.points.calPt === 1.0 ? <Calendar size={12} /> : <XCircle size={12} />}
+                            <span title={`Calendar RSVP: ${log.points.calPt} pt`}>
+                              <CalendarRsvpIcon status={log.commitment} size={12} />
                             </span>
-                            <span title={`Discord Voice Presence: ${log.points.discPt} pt`} className={log.points.discPt === 1.0 ? 'text-indigo-400' : 'text-slate-600'}>
+                            <span title={`Discord Voice: ${log.points.discPt} pt`} className={log.points.discPt === 1.0 ? 'text-indigo-400' : 'text-slate-600'}>
                               {log.points.discPt === 1.0 ? <Mic size={12} /> : <MicOff size={12} />}
                             </span>
-                            <span title={`In-game Status: ${log.points.inGamePt} pt`} className={log.points.inGamePt === 1.0 ? 'text-cyan-400' : 'text-slate-600 opacity-40'}>
+                            <span title={`In-game (officer flag): ${log.points.inGamePt} pt`} className={log.points.inGamePt === 1.0 ? 'text-cyan-400' : 'text-slate-600 opacity-40'}>
                               <Swords size={12} />
                             </span>
                             <span title={`Duration pulse: ${log.points.durationPt.toFixed(2)} pt`} className="text-[9px] font-mono text-slate-600">({Math.round(log.points.durationPt * 100)}%)</span>

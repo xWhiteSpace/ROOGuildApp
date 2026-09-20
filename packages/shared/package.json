@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    "./compositionTabs": "./compositionTabs.js"
+    "./compositionTabs": "./compositionTabs.js",
+    "./raidCycle": "./raidCycle.js",
+    "./attendanceStatus": "./attendanceStatus.js",
+    "./inGameAlias": "./inGameAlias.js"
   },
   "private": true
 }

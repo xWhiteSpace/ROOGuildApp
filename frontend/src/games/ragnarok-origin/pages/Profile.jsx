@@ -1,7 +1,7 @@
 // frontend/src/pages/Profile.jsx
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Minus, Plus, User } from 'lucide-react';
+import { Minus, Plus, Search, User } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
 import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 
@@ -44,6 +44,8 @@ export default function Profile({ user }) {
   const [error, setError] = useState('');
   const [adjusting, setAdjusting] = useState(false);
   const [auctionStats, setAuctionStats] = useState(EMPTY_AUCTION_STATS);
+  const [rosterMembers, setRosterMembers] = useState({});
+  const [memberSearch, setMemberSearch] = useState('');
 
   const canView = !!targetUid && (String(targetUid) === String(user?.id) || isOfficer);
 
@@ -103,10 +105,52 @@ export default function Profile({ user }) {
     loadProfile();
   }, [targetUid, user?.id]);
 
+  useEffect(() => {
+    if (!isOfficer) {
+      setRosterMembers({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const initRes = await apiFetch('/api/requests/init', { method: 'GET' });
+        const initData = await initRes.json();
+        if (!cancelled && initData.success) {
+          setRosterMembers(initData.members || {});
+        }
+      } catch (err) {
+        console.error('Officer profile roster load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOfficer]);
+
+  const memberSearchResults = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return [];
+    return Object.entries(rosterMembers)
+      .map(([uid, p]) => ({
+        uid,
+        displayName: p.displayName || p.username || uid,
+      }))
+      .filter((m) => m.displayName.toLowerCase().includes(q))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+      .slice(0, 8);
+  }, [rosterMembers, memberSearch]);
+
   const timeline = useMemo(
     () => buildMemberTrendTimeline(sessions, targetUid, 8),
     [sessions, targetUid]
   );
+
+  const handleSelectMember = (uid) => {
+    setMemberSearch('');
+    if (String(uid) === String(user?.id)) {
+      navigate('/attendance/profile');
+      return;
+    }
+    navigate(`/attendance/profile/${uid}`);
+  };
 
   const handleAdjustCredits = async (delta) => {
     if (!isOfficer || !targetUid || adjusting) return;
@@ -129,25 +173,64 @@ export default function Profile({ user }) {
     }
   };
 
+  const job = member ? jobsCatalog[member.jobCode] : null;
+  const role = member ? rolesCatalog[member.roleCode] : null;
+  const credits = member && Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : 0;
+  const noConfirms = member ? (parseInt(member.noConfirmCount, 10) || 0) : 0;
+  const viewingOther = Boolean(routeUid && String(routeUid) !== String(user?.id));
+
+  const officerSearchBar = isOfficer ? (
+    <div className="relative">
+      <input
+        type="text"
+        placeholder="Search a member…"
+        value={memberSearch}
+        onChange={(e) => setMemberSearch(e.target.value)}
+        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-700 font-sans transition-all"
+      />
+      <div className="absolute left-3 top-2.5 text-slate-500 pointer-events-none">
+        <Search size={14} />
+      </div>
+      {memberSearchResults.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl shadow-xl scrollbar-thin">
+          {memberSearchResults.map((m) => (
+            <button
+              key={m.uid}
+              type="button"
+              onClick={() => handleSelectMember(m.uid)}
+              className="w-full text-left px-3 py-2 text-xs font-sans font-semibold text-slate-300 hover:bg-slate-900 hover:text-white transition truncate cursor-pointer"
+            >
+              {m.displayName}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   if (!canView) {
-    return <div className="p-6 text-xs text-rose-400 font-mono">You can only view your own profile.</div>;
+    return (
+      <div className="max-w-3xl mx-auto space-y-5 font-sans p-1">
+        {officerSearchBar}
+        <div className="p-6 text-xs text-rose-400 font-mono">You can only view your own profile.</div>
+      </div>
+    );
   }
-
-  if (loading) {
-    return <div className="p-6 text-xs font-mono uppercase text-slate-500 animate-pulse">Loading profile…</div>;
-  }
-
-  if (error || !member) {
-    return <div className="p-6 text-xs text-rose-400 font-mono">{error || 'Member not found.'}</div>;
-  }
-
-  const job = jobsCatalog[member.jobCode];
-  const role = rolesCatalog[member.roleCode];
-  const credits = Number.isInteger(member.leaveCreditsRemaining) ? member.leaveCreditsRemaining : 0;
-  const noConfirms = parseInt(member.noConfirmCount, 10) || 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 font-sans animate-fadeIn p-1">
+      {officerSearchBar}
+
+      {loading && (
+        <div className="p-6 text-xs font-mono uppercase text-slate-500 animate-pulse">Loading profile…</div>
+      )}
+
+      {!loading && (error || !member) && (
+        <div className="p-6 text-xs text-rose-400 font-mono">{error || 'Member not found.'}</div>
+      )}
+
+      {!loading && member && (
+        <>
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 shadow-md flex items-start gap-4">
         <div className="w-12 h-12 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center text-indigo-400 shrink-0">
           {job?.iconFile ? (
@@ -222,7 +305,7 @@ export default function Profile({ user }) {
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4">
         <div>
           <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-500">Auction Rewards</div>
-          <p className="text-[10px] text-slate-500 mt-1">Guild loot nights plus this member’s Selected bids.</p>
+          <p className="text-[10px] text-slate-500 mt-1">Guild loot nights plus this member’s committed auction awards.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -234,7 +317,7 @@ export default function Profile({ user }) {
           <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 space-y-2">
             <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-500">Items acquired</div>
             <span className="text-3xl font-black tabular-nums text-slate-100">{auctionStats.totalItemsAcquired}</span>
-            <p className="text-[10px] text-slate-500">Pieces won with Bid Status Selected.</p>
+            <p className="text-[10px] text-slate-500">Pieces won on the Mimic Book ledger.</p>
           </div>
         </div>
 
@@ -258,8 +341,10 @@ export default function Profile({ user }) {
           </div>
         )}
       </div>
+        </>
+      )}
 
-      {routeUid && String(routeUid) !== String(user?.id) && (
+      {viewingOther && (
         <button
           type="button"
           onClick={() => navigate('/attendance/profile')}

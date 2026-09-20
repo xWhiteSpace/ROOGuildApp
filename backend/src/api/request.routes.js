@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { getTenantStore } from '../db/database.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
+import { findOverlappingRaidCyclePair } from '@guildname/shared/raidCycle';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { getCurrentTenantId } from '../db/tenantContext.js';
 import { checkOfficer, configNeedsSetup, publicSettingsView, helpSettingsView } from '../auth/officer.js';
@@ -12,6 +13,7 @@ import { discordEnv } from '../config/discordEnv.js';
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
 import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
+import { asItemsList, buildMemberAuctionStats } from '../utils/memberAuctionStats.js';
 
 function pickKeys(source, keys) {
   const out = {};
@@ -294,6 +296,17 @@ router.post('/settings/save', async (req, res) => {
         ...omitKeys(config, WORKSPACE_CONFIG_KEYS),
         guildLogoUrl: storedConfig.guildLogoUrl || '',
       };
+    }
+    if (scope === 'game') {
+      const overlap = findOverlappingRaidCyclePair(nextConfig.events || {});
+      if (overlap) {
+        const titleA = nextConfig.events?.[overlap.a]?.title || overlap.a;
+        const titleB = nextConfig.events?.[overlap.b]?.title || overlap.b;
+        return res.status(400).json({
+          success: false,
+          error: `Raid cycles overlap between ${titleA} (${overlap.a}) and ${titleB} (${overlap.b}). Adjust Start/End so raid-enabled events do not overlap.`,
+        });
+      }
     }
     await db.ref('settings/configuration').set(nextConfig);
     if (scope === 'game' && req.body.discordChannels) {
@@ -1301,17 +1314,17 @@ router.get('/request-history', async (req, res) => {
 
 /**
  * GET /api/requests/member-auction-stats?uid=
- * Self or officer. Guild-wide loot_history battle count + this member's Selected qty.
+ * Self or officer. Guild-wide loot_history battle count + this member's past_auctions qty.
  */
 router.get('/member-auction-stats', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getDatabase();
+    const db = getTenantStore();
     const configSnap = await db.ref('settings/configuration').once('value');
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
-    const allowedRoles = dynamicConfig.adminRoles || ['GUILD LEADER', 'Vice Guild Leader', 'Commander'];
+    const allowedRoles = dynamicConfig.adminRoles || [];
 
     const uid = parseMemberUid(req.query.uid || user.id);
     if (!uid) {
@@ -1322,18 +1335,19 @@ router.get('/member-auction-stats', async (req, res) => {
       });
     }
 
-    if (uid !== String(user.id) && !verifyDiscordOfficerRole(user, allowedRoles)) {
+    if (uid !== String(user.id) && !await verifyDiscordOfficerRole(req, allowedRoles)) {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
-    const [lootSnap, requestsSnap] = await Promise.all([
+    const [lootSnap, awardsSnap] = await Promise.all([
       db.ref('auction/loot_history').once('value'),
-      db.ref('auction/web_requests').orderByChild('userId').equalTo(uid).once('value'),
+      db.ref('auction/past_auctions').once('value'),
     ]);
 
     const stats = buildMemberAuctionStats({
       lootHistory: lootSnap.exists() ? lootSnap.val() : {},
-      memberRequests: requestsSnap.exists() ? requestsSnap.val() : {},
+      pastAuctions: awardsSnap.exists() ? awardsSnap.val() : {},
+      memberUid: uid,
       itemsList: asItemsList(dynamicConfig.items),
     });
 

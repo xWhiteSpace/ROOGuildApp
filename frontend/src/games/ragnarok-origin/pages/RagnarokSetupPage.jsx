@@ -20,6 +20,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
     genroomId: '',
     attendanceId: '',
     warAnnounceChannelId: '',
+    raidScreenshotChannelId: '',
     warRooms: { ...emptyRooms },
   });
 
@@ -35,6 +36,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
           genroomId: channels.genroomId || '',
           attendanceId: channels.attendanceId || '',
           warAnnounceChannelId: channels.warAnnounceChannelId || '',
+          raidScreenshotChannelId: channels.raidScreenshotChannelId || '',
           warRooms: { ...emptyRooms, ...(channels.warRooms || {}) },
         });
       })
@@ -92,6 +94,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
         {field('General room channel ID', 'genroomId', '')}
         {field('Weekly attendance thread parent (one text channel)', 'attendanceId', '')}
         {field('War-announce (one text channel for cards)', 'warAnnounceChannelId', '')}
+        {field('Raid Screenshot (gallery after OCR Commit)', 'raidScreenshotChannelId', '')}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Object.keys(emptyRooms).map((key, idx) => (
             <label key={key} className="block text-xs text-slate-400">

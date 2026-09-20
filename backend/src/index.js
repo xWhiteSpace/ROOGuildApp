@@ -19,6 +19,8 @@ import { checkOfficer } from './auth/officer.js';
 import { initializeDiscordBot, discordClient, getDiscordBotHealth } from './discord-bot/client.js'; 
 import requestRoutes from './api/request.routes.js';
 import liveRaidRoutes, { resumeLiveRaidMonitoringIfNeeded } from './api/liveRaid.routes.js';
+import warRoomRoutes from './api/warRoom.routes.js';
+import ocrReviewRoutes from './api/ocrReview.routes.js';
 
 import { processAndPostDiscordSnapshot } from './games/ragnarok-origin/services/discordSnapshot.js';
 import { getGateStatusDetails } from './games/ragnarok-origin/timeWindow.js';
@@ -116,6 +118,8 @@ app.use('/api/requests', requireTenant, requireActiveSubscription, requireGame(R
 
 app.use('/api/attendance', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), attendanceRoutes);
 app.use('/api/live-raid', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
+app.use('/api/war-room', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), warRoomRoutes);
+app.use('/api/ocr-reviews', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), ocrReviewRoutes);
 app.use('/api/adventurer-guild', requireTenant, requireActiveSubscription, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
 
 app.get('/', async (req, res) => {
@@ -182,7 +186,7 @@ app.get('/api/deploy-attendance-card', requireOfficerTenant, async (req, res) =>
   try {
     const { deployPublicAttendanceCardToWarAnnounce } = await import('./games/ragnarok-origin/services/discordAttendanceCards.js');
     await deployPublicAttendanceCardToWarAnnounce();
-    res.send('📟 SUCCESS: Attendance card posted to the war-announce channel.');
+    res.send('📟 SUCCESS: GVG Readiness dashboard posted to the war-announce channel.');
   } catch (err) {
     console.error('Attendance card deploy failed:', err.message);
     const msg = err.message || 'Unknown error';
@@ -202,6 +206,22 @@ app.get('/api/deploy-party-card', requireOfficerTenant, async (req, res) => {
     res.send('📟 SUCCESS: Party card posted to the war-announce channel.');
   } catch (err) {
     console.error('Party card deploy failed:', err.message);
+    const msg = err.message || 'Unknown error';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    res.status(status).send(`❌ Server Exception: ${msg}`);
+  }
+});
+
+app.get('/api/deploy-ocr-card', requireOfficerTenant, async (req, res) => {
+  try {
+    const { deployPublicOcrCardToWarAnnounce } = await import('./games/ragnarok-origin/services/discordPartyOcr.js');
+    await deployPublicOcrCardToWarAnnounce();
+    res.send('📟 SUCCESS: Party OCR card posted to the war-announce channel.');
+  } catch (err) {
+    console.error('OCR card deploy failed:', err.message);
     const msg = err.message || 'Unknown error';
     const status = /not configured/i.test(msg) ? 400
       : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503

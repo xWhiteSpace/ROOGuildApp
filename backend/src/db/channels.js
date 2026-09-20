@@ -8,6 +8,7 @@ const ENV_TO_FIELD = {
   DISCORD_GENROOM_ID_1: 'genroomId',
   DISCORD_ATTENDANCE_ID: 'attendanceId',
   DISCORD_WARANNOUNCE_CHANNEL_ID: 'warAnnounceChannelId',
+  DISCORD_RAID_SCREENSHOT_CHANNEL_ID: 'raidScreenshotChannelId',
 };
 
 /**

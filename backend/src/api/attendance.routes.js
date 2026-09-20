@@ -29,6 +29,15 @@ async function verifyDiscordOfficerRole(req, allowedRoles = []) {
   return Boolean(user && ok);
 }
 
+const VANISH_BATCH_CAP = 500;
+
+function collectVanishTargetUids(body) {
+  const rawList = Array.isArray(body?.targetUids) && body.targetUids.length
+    ? body.targetUids
+    : (body?.targetUid != null ? [body.targetUid] : []);
+  return [...new Set(rawList.map((raw) => parseMemberUid(raw)).filter(Boolean))];
+}
+
 // 🚪 POST /api/attendance/vanish -> Bot-Driven Server Eviction Gate
 router.post('/vanish', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -43,39 +52,81 @@ router.post('/vanish', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
     }
 
-    const { targetUid } = req.body;
-    if (!targetUid) return res.status(400).json({ success: false, error: 'Missing user ID parameter.' });
-
-    // 1. Best-effort kick off the active Discord Server Guild. This is NON-FATAL:
-    // the bot often lacks Kick permission (or the target outranks it), and that
-    // must never block the database purge below. Dummies are placeholder-only
-    // (no Discord identity) so we skip the kick entirely.
-    const isDummyTarget = targetUid.startsWith('dummy_');
-    let kicked = false;
-    if (!isDummyTarget && discordClient && discordClient.isReady() && !isDiscordCircuitOpen()) {
-      try {
-        const guild = discordClient.guilds.cache.get(getCurrentTenantId());
-        const member = guild?.members?.cache.get(targetUid);
-        if (member) {
-          await enqueueDiscordCall(() =>
-            member.kick('Vanished from guild via administrative dashboard web request')
-          );
-          kicked = true;
-        }
-      } catch (kickErr) {
-        console.warn(`⚠️ [VANISH]: Discord kick skipped for ${targetUid} (proceeding with DB purge):`, kickErr.message);
-      }
+    const targetUids = collectVanishTargetUids(req.body);
+    if (targetUids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Missing user ID parameter.' });
+    }
+    if (targetUids.length > VANISH_BATCH_CAP) {
+      return res.status(400).json({
+        success: false,
+        error: `Vanish is limited to ${VANISH_BATCH_CAP} members per request.`,
+      });
     }
 
-    // 2. ALWAYS clear the identity record from the cloud nodes, regardless of kick outcome.
-    await db.ref(`auction/members/${targetUid}`).remove();
+    const vanished = [];
+    const failed = [];
+    const purgeUpdates = {};
+    const kickUids = [];
 
-    const kickNote = isDummyTarget
-      ? 'Dummy placeholder record purged from the database.'
-      : kicked
-        ? 'Discord server kick completed and database profile record purged.'
-        : 'Database profile record purged. Discord kick was skipped or not permitted (bot lacks permission or member already gone).';
-    return res.json({ success: true, kicked, message: kickNote });
+    for (const targetUid of targetUids) {
+      const isDummyTarget = targetUid.startsWith('dummy_');
+      purgeUpdates[`auction/members/${targetUid}`] = null;
+      vanished.push({ uid: targetUid, dummy: isDummyTarget });
+      if (!isDummyTarget) kickUids.push(targetUid);
+    }
+
+    try {
+      await db.ref().update(purgeUpdates);
+    } catch (purgeErr) {
+      return res.status(500).json({
+        success: false,
+        error: purgeErr.message,
+        vanished: [],
+        failed: targetUids.map((uid) => ({ uid, error: purgeErr.message })),
+      });
+    }
+
+    // Discord kicks are best-effort and must not delay the dashboard purge.
+    // Dummies have no Discord identity. Fire-and-forget so large feeder
+    // cleanups (dozens of members) return immediately.
+    const guild = discordClient?.isReady() && !isDiscordCircuitOpen()
+      ? discordClient.guilds.cache.get(getCurrentTenantId())
+      : null;
+    if (guild && kickUids.length > 0) {
+      setImmediate(() => {
+        (async () => {
+          for (const targetUid of kickUids) {
+            try {
+              const member = guild.members?.cache.get(targetUid);
+              if (!member) continue;
+              await enqueueDiscordCall(() =>
+                member.kick('Vanished from guild via administrative dashboard web request')
+              );
+            } catch (kickErr) {
+              console.warn(`⚠️ [VANISH]: Discord kick skipped for ${targetUid}:`, kickErr.message);
+            }
+          }
+        })().catch((kickLoopErr) => {
+          console.warn('⚠️ [VANISH]: Background Discord kick loop failed:', kickLoopErr.message);
+        });
+      });
+    }
+
+    const dummyCount = vanished.filter((entry) => entry.dummy).length;
+    const single = vanished[0];
+    const message = vanished.length === 1
+      ? (single.dummy
+          ? 'Dummy placeholder record purged from the database.'
+          : 'Database profile record purged. Discord kick was queued if the bot has permission.')
+      : `Purged ${vanished.length} member record(s). Discord kicks queued: ${kickUids.length}. Dummy placeholders: ${dummyCount}.`;
+
+    return res.json({
+      success: true,
+      kicked: kickUids.length > 0,
+      vanished: vanished.map((entry) => entry.uid),
+      failed,
+      message,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -351,6 +402,30 @@ router.get('/deploy-party-card', async (req, res) => {
     return res.json({ success: true, result });
   } catch (err) {
     const msg = err.message || 'Failed to deploy party card.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /locate the war-announce/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// GET /api/attendance/deploy-ocr-card
+router.get('/deploy-ocr-card', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { deployPublicOcrCardToWarAnnounce } = await import('../games/ragnarok-origin/services/discordPartyOcr.js');
+    const result = await deployPublicOcrCardToWarAnnounce();
+    return res.json({ success: true, result });
+  } catch (err) {
+    const msg = err.message || 'Failed to deploy OCR card.';
     const status = /not configured/i.test(msg) ? 400
       : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
       : /locate the war-announce/i.test(msg) ? 404
@@ -902,6 +977,7 @@ router.post('/roster/save-batch', async (req, res) => {
       batchAtomicUpdates[`auction/members/${uid}/roleCode`] = m.roleCode || "";
       batchAtomicUpdates[`auction/members/${uid}/groupTag`] = m.groupTag || "";
       batchAtomicUpdates[`auction/members/${uid}/joinedAt`] = m.joinedAt || "";
+      batchAtomicUpdates[`auction/members/${uid}/inGameName`] = String(m.inGameName || "").trim().slice(0, 100);
       
       if (m.status) {
         batchAtomicUpdates[`auction/members/${uid}/status`] = m.status;
@@ -970,6 +1046,7 @@ router.post('/dummy/create', async (req, res) => {
       jobCode: jobCode || "",
       roleCode: roleCode || "",
       groupTag: groupTag || "",
+      inGameName: String(req.body?.inGameName || "").trim().slice(0, 100),
       joinedAt: joinedAt || "",
       status: "Active",
       leaveCreditsRemaining: getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {}),
