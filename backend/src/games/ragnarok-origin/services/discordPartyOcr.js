@@ -154,6 +154,16 @@ export async function saveReview(review) {
   await db.ref(`attendance/ocr_reviews/${review.id}`).set(review);
 }
 
+export async function deleteReview(review, members = {}) {
+  if (!review?.id) return false;
+  clearWebsiteShots(review.id);
+  await purgeReviewStaging(review).catch(() => {});
+  const db = getTenantStore();
+  await db.ref(`attendance/ocr_reviews/${review.id}`).remove();
+  await refreshReviewMessage({ ...review, status: 'cancelled' }, members, null).catch(() => {});
+  return true;
+}
+
 export function stashWebsiteShots(reviewId, buffers) {
   if (!reviewId || !buffers?.length) return;
   const copies = buffers.map((buf) => Buffer.from(buf));

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, ChevronLeft, ChevronRight, Filter, Search, Upload } from 'lucide-react';
+import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
 import {
   cacheReviewShots,
@@ -177,6 +177,7 @@ export default function OcrReviewTab({ user }) {
   const [markFilter, setMarkFilter] = useState(() => (savedSession.reviewId === reviewId && savedSession.markFilter) || 'all');
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState(pendingUpload.files || []);
   const [localPreviews, setLocalPreviews] = useState(
     () => location.state?.screenshotPreviews || getCachedReviewShots(reviewId)
@@ -454,6 +455,27 @@ export default function OcrReviewTab({ user }) {
     }
   };
 
+  const removeReview = async (id, { fromList = false } = {}) => {
+    if (!id || deletingId || busy) return;
+    setDeletingId(id);
+    setError('');
+    try {
+      const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Delete failed.');
+      clearCachedReviewShots(id);
+      setReviews((prev) => prev.filter((row) => row.id !== id));
+      if (!fromList || id === reviewId) {
+        writeOcrUiSession({ stayOnList: true, reviewId: null });
+        navigate('/attendance/ocr-review');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId('');
+    }
+  };
+
   const goToList = () => {
     writeOcrUiSession({ stayOnList: true });
   };
@@ -593,23 +615,38 @@ export default function OcrReviewTab({ user }) {
           {reviews.length === 0 ? (
             <div className="px-4 py-10 text-center text-xs text-slate-500">No OCR reviews yet. Upload a screenshot or scan from Discord.</div>
           ) : reviews.map((row) => (
-            <button
+            <div
               key={row.id}
-              type="button"
-              onClick={() => {
-                writeOcrUiSession({ reviewId: row.id, stayOnList: false });
-                navigate(`/attendance/ocr-review/${row.id}`);
-              }}
-              className="w-full text-left px-4 py-3 border-b border-slate-800 last:border-b-0 hover:bg-slate-900/50 flex items-center justify-between gap-3"
+              className="w-full px-4 py-3 border-b border-slate-800 last:border-b-0 hover:bg-slate-900/50 flex items-center justify-between gap-3"
             >
-              <div>
+              <button
+                type="button"
+                onClick={() => {
+                  writeOcrUiSession({ reviewId: row.id, stayOnList: false });
+                  navigate(`/attendance/ocr-review/${row.id}`);
+                }}
+                className="min-w-0 flex-1 text-left"
+              >
                 <div className="text-sm font-semibold text-slate-100">{row.eventTitle || row.eventKey}</div>
                 <div className="text-[11px] text-slate-500">{row.eventDate} · match {row.matchCount ?? '—'} · unmatch {row.unmatchedCount} · O {row.presentCount}</div>
-              </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wider ${row.status === 'draft' ? 'text-cyan-400' : row.status === 'committed' ? 'text-emerald-400' : 'text-slate-500'}`}>
+              </button>
+              <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 ${row.status === 'draft' ? 'text-cyan-400' : row.status === 'committed' ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {row.status}
               </span>
-            </button>
+              <button
+                type="button"
+                title="Delete review"
+                disabled={Boolean(deletingId)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  removeReview(row.id, { fromList: true });
+                }}
+                className="w-9 h-9 rounded-lg border border-slate-800 text-slate-500 hover:text-rose-300 hover:border-rose-800 inline-flex items-center justify-center disabled:opacity-40"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -665,6 +702,17 @@ export default function OcrReviewTab({ user }) {
               Cancel
             </button>
           </div>
+        )}
+        {!draft && (
+          <button
+            type="button"
+            onClick={() => removeReview(reviewId)}
+            disabled={Boolean(deletingId)}
+            className="h-[42px] px-4 rounded-xl border border-slate-700 text-slate-300 text-[11px] font-bold uppercase tracking-wider disabled:opacity-40 inline-flex items-center gap-2"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
         )}
       </div>
       {error && <div className="text-xs text-rose-400">{error}</div>}

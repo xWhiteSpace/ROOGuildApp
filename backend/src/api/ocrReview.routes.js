@@ -9,6 +9,7 @@ import { checkOfficer } from '../auth/officer.js';
 import {
   loadReview,
   saveReview,
+  deleteReview,
   applyPresentUids,
   assignUnmatched,
   finalizeOcrCommit,
@@ -19,9 +20,8 @@ import {
   listOcrEvents,
   resolveOcrEvent,
   createReviewFromBuffers,
-  clearWebsiteShots,
 } from '../games/ragnarok-origin/services/discordPartyOcr.js';
-import { purgeReviewStaging, resolveReviewShotUrls } from '../games/ragnarok-origin/services/ocrShotStaging.js';
+import { resolveReviewShotUrls } from '../games/ragnarok-origin/services/ocrShotStaging.js';
 
 const router = Router();
 const MAX_SHOT_BYTES = 8 * 1024 * 1024;
@@ -178,7 +178,7 @@ router.get('/', async (req, res) => {
     const snap = await ctx.db.ref('attendance/ocr_reviews').once('value');
     const all = snap.exists() ? snap.val() : {};
     const reviews = Object.values(all || {})
-      .filter((row) => row && row.id)
+      .filter((row) => row && row.id && row.status !== 'cancelled')
       .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
       .slice(0, 40)
       .map((row) => summarizeReview(row, members));
@@ -273,13 +273,24 @@ router.post('/:id/cancel', async (req, res) => {
     if (!review || review.status !== 'draft') {
       return res.status(409).json({ success: false, error: 'This review is no longer editable.' });
     }
-    review.status = 'cancelled';
-    clearWebsiteShots(review.id);
-    await purgeReviewStaging(review).catch(() => {});
-    await saveReview(review);
     const membersSnap = await ctx.db.ref('auction/members').once('value');
     const members = membersSnap.exists() ? membersSnap.val() : {};
-    await refreshReviewMessage(review, members, null).catch(() => {});
+    await deleteReview(review, members);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const ctx = await requireOfficerUser(req, res);
+    if (!ctx) return;
+    const review = await loadReview(req.params.id);
+    if (!review) return res.status(404).json({ success: false, error: 'Review not found.' });
+    const membersSnap = await ctx.db.ref('auction/members').once('value');
+    const members = membersSnap.exists() ? membersSnap.val() : {};
+    await deleteReview(review, members);
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
