@@ -428,9 +428,12 @@ export default function OcrReviewTab({ user }) {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Commit failed.');
-      writeOcrUiSession({ reviewId, stayOnList: false });
-      setNotice(`Committed ${data.presentCount} in-game present. ${data.message || ''}`);
-      await loadOne(reviewId);
+      clearCachedReviewShots(reviewId);
+      writeOcrUiSession({ stayOnList: true, reviewId: null });
+      navigate('/attendance/ocr-review', {
+        replace: true,
+        state: { commitNotice: `Committed ${data.presentCount} in-game present. ${data.message || ''}` },
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -561,6 +564,9 @@ export default function OcrReviewTab({ user }) {
           <p className="text-xs text-slate-400 mt-1">Upload every Team Party screenshot for the raid, mark O/X, then Commit swords.</p>
         </div>
         {error && <div className="text-xs text-rose-400">{error}</div>}
+        {location.state?.commitNotice && (
+          <div className="text-xs text-emerald-400">{location.state.commitNotice}</div>
+        )}
         <form onSubmit={uploadScan} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Upload screenshots</div>
           <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-2">

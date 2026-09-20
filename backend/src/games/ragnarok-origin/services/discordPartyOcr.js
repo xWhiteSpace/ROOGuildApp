@@ -420,7 +420,7 @@ export async function finalizeOcrCommit(review, members, committedBy) {
   const gallery = await postGallery(review, committedBy).catch((err) => ({ posted: false, reason: err.message }));
   await purgeReviewStaging(review).catch(() => {});
   clearWebsiteShots(review.id);
-  await saveReview(review);
+  await db.ref(`attendance/ocr_reviews/${review.id}`).remove();
   const swordNote = result.mode === 'archive'
     ? 'In-game swords updated on the archived raid.'
     : 'End Raid has not happened yet — swords are pending and will light when this event is archived.';
