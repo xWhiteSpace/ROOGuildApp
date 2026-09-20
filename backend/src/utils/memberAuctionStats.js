@@ -1,14 +1,21 @@
 /**
  * Pure aggregator for Profile Auction Rewards.
+ * Item list SSOT = Settings catalog ids matching item_xxx.
+ * Counts = this member's past_auction_awards rows (snowflake + itemId).
  * Recorded battles = unique loot_history date+event groups (guild-wide).
- * Item qty = sum of this member's web_requests where selectionStatus is Selected.
- * Resolves catalog by itemId, then case-insensitive item name (legacy rows omit itemId).
+ * Legacy award rows without itemId fall back to case-insensitive item name.
  */
+
+const ITEM_XXX = /^item_\d+$/i;
 
 export function asItemsList(rawItems) {
   if (!rawItems) return [];
   if (Array.isArray(rawItems)) return rawItems.filter(Boolean);
   return Object.values(rawItems).filter(Boolean);
+}
+
+export function catalogItemXxxList(rawItems) {
+  return asItemsList(rawItems).filter((item) => ITEM_XXX.test(String(item?.id || '').trim()));
 }
 
 export function resolveCatalogItem(row, itemsList) {
@@ -26,8 +33,13 @@ export function resolveCatalogItem(row, itemsList) {
   return null;
 }
 
-export function buildMemberAuctionStats({ lootHistory, memberRequests, itemsList = [] }) {
-  const catalog = asItemsList(itemsList);
+function rowBelongsToMember(row, memberUid) {
+  if (!row || !memberUid) return false;
+  return String(row.userId || '').trim() === String(memberUid).trim();
+}
+
+export function buildMemberAuctionStats({ lootHistory, pastAuctions, memberUid, itemsList = [] }) {
+  const catalog = catalogItemXxxList(itemsList);
   const battleKeys = new Set();
 
   Object.values(lootHistory || {}).forEach((row) => {
@@ -37,19 +49,18 @@ export function buildMemberAuctionStats({ lootHistory, memberRequests, itemsList
 
   const qtyByKey = new Map();
   catalog.forEach((item) => {
-    if (!item?.id) return;
-    qtyByKey.set(item.id, 0);
+    qtyByKey.set(String(item.id).trim(), 0);
   });
 
   const extraMeta = new Map();
 
-  Object.values(memberRequests || {}).forEach((row) => {
-    if (!row) return;
-    if (String(row.selectionStatus || '').toLowerCase() !== 'selected') return;
+  Object.values(pastAuctions || {}).forEach((row) => {
+    if (!rowBelongsToMember(row, memberUid)) return;
     const qty = parseInt(row.quantity, 10) || 0;
+    if (qty === 0) return;
 
     const catalogItem = resolveCatalogItem(row, catalog);
-    const key = catalogItem?.id || row.itemId || row.item || 'unknown';
+    const key = catalogItem?.id || String(row.itemId || row.item || 'unknown').trim();
     qtyByKey.set(key, (qtyByKey.get(key) || 0) + qty);
 
     if (!catalogItem && !extraMeta.has(key)) {
@@ -63,12 +74,12 @@ export function buildMemberAuctionStats({ lootHistory, memberRequests, itemsList
 
   const items = [];
   catalog.forEach((item) => {
-    if (!item?.id) return;
+    const id = String(item.id).trim();
     items.push({
-      itemId: item.id,
-      name: item.name || item.id,
+      itemId: id,
+      name: item.name || id,
       colorTheme: item.colorTheme || '',
-      quantity: qtyByKey.get(item.id) || 0,
+      quantity: qtyByKey.get(id) || 0,
     });
   });
   extraMeta.forEach((meta, key) => {

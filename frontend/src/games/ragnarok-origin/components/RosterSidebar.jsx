@@ -59,14 +59,16 @@ export default function RosterSidebar({
       <div className="space-y-1.5 select-none shrink-0 border-b border-slate-900 pb-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest block">Roster Registries</span>
-          <button
-            type="button"
-            onClick={() => setRightPanelCollapsed(true)}
-            className="p-0.5 rounded text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
-            title="Collapse Panel"
-          >
-            <ChevronRight size={14} />
-          </button>
+          {typeof setRightPanelCollapsed === 'function' && (
+            <button
+              type="button"
+              onClick={() => setRightPanelCollapsed(true)}
+              className="p-0.5 rounded text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              title="Collapse Panel"
+            >
+              <ChevronRight size={14} />
+            </button>
+          )}
         </div>
         <div className="relative w-full mt-0.5">
           <input 

@@ -12,10 +12,10 @@ import { logoutUser } from './services/authService';
 import MasterListTab from './games/ragnarok-origin/pages/MasterListTab';
 
 import RaidPartyTab from './games/ragnarok-origin/pages/RaidPartyTab';
-import RaidComposeTab from './games/ragnarok-origin/pages/RaidComposeTab';
+import WarRoomTab from './games/ragnarok-origin/pages/WarRoomTab';
+import OcrReviewTab from './games/ragnarok-origin/pages/OcrReviewTab';
 import Profile from './games/ragnarok-origin/pages/Profile';
 import StatisticsTab from './games/ragnarok-origin/pages/StatisticsTab';
-import LiveRaidTab from './games/ragnarok-origin/pages/LiveRaidTab';
 import AttendanceHistoryTab from './games/ragnarok-origin/pages/AttendanceHistoryTab';
 
 import Scheduler from './games/ragnarok-origin/pages/Scheduler';
@@ -365,8 +365,11 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/attendance/profile/:uid" element={<Profile user={authUser} />} />
         <Route path="/attendance/peak-hours" element={<PeakHoursTab user={authUser} />} />
         <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
-        <Route path="/attendance/compose" element={<RaidComposeTab user={authUser} />} />
-        <Route path="/attendance/liveraid" element={<LiveRaidTab user={authUser} />} />
+        <Route path="/attendance/war-room" element={<WarRoomTab user={authUser} />} />
+        <Route path="/attendance/ocr-review" element={<OcrReviewTab user={authUser} />} />
+        <Route path="/attendance/ocr-review/:reviewId" element={<OcrReviewTab user={authUser} />} />
+        <Route path="/attendance/compose" element={<Navigate to="/attendance/war-room" replace />} />
+        <Route path="/attendance/liveraid" element={<Navigate to="/attendance/war-room" replace />} />
         <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
         <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
         <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />

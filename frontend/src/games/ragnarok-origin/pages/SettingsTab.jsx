@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../../services/apiClient';
 import { productTitle } from '../../../brand';
+import { defaultRaidSubtree, findOverlappingRaidCyclePair, phaseAnnouncementEnabled } from '@guildname/shared/raidCycle';
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -37,7 +38,10 @@ const IconLock = () => <svg className="w-4 h-4" fill="none" stroke="currentColor
 const IconGlobe = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20M2 12h20"/></svg>;
 const IconCalendar = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>;
 const IconHelp = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" strokeLinecap="round"/></svg>;
-const IconBell = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>;
+const IconBell = ({ filled = false }) => filled
+  ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 002.45-2h-4.9A2.5 2.5 0 0012 22zM18 16V9a6 6 0 10-12 0v7L4 18v1h16v-1l-2-2z"/></svg>
+  : <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>;
+const IconClock = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" strokeLinecap="round"/></svg>;
 const IconSliders = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" strokeLinecap="round"/></svg>;
 const IconShield = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
 const IconPackage = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>;
@@ -54,6 +58,7 @@ const EMPTY_DISCORD_CHANNELS = {
   genroomId: '',
   attendanceId: '',
   warAnnounceChannelId: '',
+  raidScreenshotChannelId: '',
   warRooms: {
     DISCORD_WARROOM_ID_1: '',
     DISCORD_WARROOM_ID_2: '',
@@ -81,6 +86,8 @@ export default function SettingsTab({ user, onSessionUser }) {
   const [deployAttendanceMsg, setDeployAttendanceMsg] = useState(null);
   const [deployingPartyCard, setDeployingPartyCard] = useState(false);
   const [deployPartyMsg, setDeployPartyMsg] = useState(null);
+  const [deployingOcrCard, setDeployingOcrCard] = useState(false);
+  const [deployOcrMsg, setDeployOcrMsg] = useState(null);
   const [discordChannels, setDiscordChannels] = useState(EMPTY_DISCORD_CHANNELS);
   
   const [config, setConfig] = useState({
@@ -121,6 +128,7 @@ export default function SettingsTab({ user, onSessionUser }) {
   const [activeAlarmPopoverId, setActiveAlarmPopoverId] = useState(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const logoInputRef = useRef(null);
+  const [raidCompositions, setRaidCompositions] = useState({});
 
   const applySessionUser = (next) => {
     if (!next) return;
@@ -210,6 +218,17 @@ export default function SettingsTab({ user, onSessionUser }) {
       .then((r) => r.json())
       .then((data) => {
         if (data.success) setDiscordRoles(data.roles || []);
+      })
+      .catch(() => {});
+    return undefined;
+  }, [isLocked]);
+
+  useEffect(() => {
+    if (isLocked) return undefined;
+    apiFetch('/api/attendance/compositions')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setRaidCompositions(data.compositions || {});
       })
       .catch(() => {});
     return undefined;
@@ -307,6 +326,21 @@ export default function SettingsTab({ user, onSessionUser }) {
     }
   };
 
+  const handleDeployOcrCard = async () => {
+    if (deployingOcrCard) return;
+    setDeployingOcrCard(true);
+    setDeployOcrMsg(null);
+    try {
+      const text = await postDeployRoute('/api/deploy-ocr-card');
+      setDeployOcrMsg({ ok: true, text: text || 'Party OCR card deployed to Discord.' });
+    } catch (err) {
+      setDeployOcrMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setDeployingOcrCard(false);
+      setTimeout(() => setDeployOcrMsg(null), 12000);
+    }
+  };
+
   const handleUpdateEventLootLimit = (evKey, itemId, direction) => {
     const updatedEvents = { ...config.events };
     if (!updatedEvents[evKey].loots) updatedEvents[evKey].loots = {};
@@ -385,7 +419,8 @@ export default function SettingsTab({ user, onSessionUser }) {
       announcements: {
         phase1: ["07:00", "12:00", "19:00"],
         phase2: "22:15",
-        phase3: "20:55"
+        phase3: "20:55",
+        enabled: { phase1: false, phase2: false, phase3: false },
       }
     };
 
@@ -406,6 +441,36 @@ export default function SettingsTab({ user, onSessionUser }) {
     }
   };
 
+  const toggleEventPhaseAnnouncement = (evKey, phaseKey) => {
+    const updatedEvents = { ...config.events };
+    const ev = updatedEvents[evKey];
+    if (!ev) return;
+    const current = ev.announcements || { phase1: ["07:00", "12:00", "19:00"], phase2: "22:15", phase3: "20:55" };
+    const nextEnabled = !phaseAnnouncementEnabled(current, phaseKey);
+    updatedEvents[evKey] = {
+      ...ev,
+      announcements: {
+        ...current,
+        enabled: { ...(current.enabled || {}), [phaseKey]: nextEnabled },
+      },
+    };
+    setConfig((prev) => ({ ...prev, events: updatedEvents }));
+  };
+
+  const toggleRaidPhaseAnnouncement = (evKey, phaseKey) => {
+    patchRaid(evKey, (current) => {
+      const announcements = { ...(current.announcements || {}) };
+      const nextEnabled = !phaseAnnouncementEnabled(announcements, phaseKey);
+      return {
+        ...current,
+        announcements: {
+          ...announcements,
+          enabled: { ...(announcements.enabled || {}), [phaseKey]: nextEnabled },
+        },
+      };
+    });
+  };
+
   const handlePhaseChange = (evKey, phaseNum, field, value) => {
     const updatedEvents = { ...config.events };
     if (updatedEvents[evKey] && updatedEvents[evKey].phases?.[phaseNum]) {
@@ -414,10 +479,57 @@ export default function SettingsTab({ user, onSessionUser }) {
     }
   };
 
+  const patchRaid = (evKey, mapper) => {
+    const updatedEvents = { ...config.events };
+    const ev = updatedEvents[evKey];
+    if (!ev) return;
+    const current = ev.raid && ev.raid.configId
+      ? { ...ev.raid }
+      : defaultRaidSubtree({ configId: '', fromAuctionPhases: ev.phases });
+    updatedEvents[evKey] = { ...ev, raid: mapper(current) };
+    setConfig((prev) => ({ ...prev, events: updatedEvents }));
+  };
+
+  const handleRaidConfigChange = (evKey, configId) => {
+    const updatedEvents = { ...config.events };
+    const ev = updatedEvents[evKey];
+    if (!ev) return;
+    if (!configId) {
+      const next = { ...ev };
+      delete next.raid;
+      updatedEvents[evKey] = next;
+      setConfig((prev) => ({ ...prev, events: updatedEvents }));
+      return;
+    }
+    const raid = ev.raid?.configId
+      ? { ...ev.raid, configId }
+      : defaultRaidSubtree({ configId, fromAuctionPhases: ev.phases });
+    raid.configId = configId;
+    updatedEvents[evKey] = { ...ev, raid };
+    setConfig((prev) => ({ ...prev, events: updatedEvents }));
+  };
+
+  const handleRaidPhaseChange = (evKey, phaseNum, field, value) => {
+    patchRaid(evKey, (raid) => {
+      const phases = { ...(raid.phases || {}) };
+      const phase = { ...(phases[phaseNum] || { dayStart: 0, timeStart: '00:00', dayEnd: 0, timeEnd: '00:00' }) };
+      phase[field] = field.includes('dayStart') || field.includes('dayEnd') ? Number(value) : value;
+      phases[phaseNum] = phase;
+      return { ...raid, phases };
+    });
+  };
+
   const handleSaveWorkspaceChanges = async () => {
     try {
       setSuccessMsg('');
       setErrorMsg('');
+      const overlap = findOverlappingRaidCyclePair(config.events || {});
+      if (overlap) {
+        const titleA = config.events?.[overlap.a]?.title || overlap.a;
+        const titleB = config.events?.[overlap.b]?.title || overlap.b;
+        setErrorMsg(`Raid cycles overlap between ${titleA} (${overlap.a}) and ${titleB} (${overlap.b}). Adjust Start/End so raid-enabled events do not overlap.`);
+        return;
+      }
       const res = await apiFetch('/api/requests/settings/save', {
         method: 'POST',
         body: JSON.stringify({ config, discordChannels, scope: 'game' })
@@ -648,7 +760,7 @@ export default function SettingsTab({ user, onSessionUser }) {
             <div className="space-y-2 border-t border-slate-800/80 pt-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  Attendance card → war-announce channel
+                  GVG Readiness dashboard → war-announce channel
                 </span>
                 <button
                   type="button"
@@ -656,14 +768,14 @@ export default function SettingsTab({ user, onSessionUser }) {
                   disabled={deployingAttendanceCard}
                   className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {deployingAttendanceCard ? 'Sending…' : 'Send attendance'}
+                  {deployingAttendanceCard ? 'Sending…' : 'Send dashboard'}
                 </button>
               </div>
               {deployAttendanceMsg && (
                 <p className={`text-[10px] font-mono font-semibold ${deployAttendanceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployAttendanceMsg.text}</p>
               )}
               <p className="text-[10px] text-slate-500">
-                Members click Open Attendance for Confirm/Leave and job/role.
+                Posts a persistent GVG Readiness board (deadline bar, MasterList, Available / Unavailable). My status, Change class, and Change Alias stay private.
               </p>
             </div>
 
@@ -685,6 +797,28 @@ export default function SettingsTab({ user, onSessionUser }) {
                 <p className={`text-[10px] font-mono font-semibold ${deployPartyMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployPartyMsg.text}</p>
               )}
             </div>
+
+            <div className="space-y-2 border-t border-slate-800/80 pt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
+                  Party OCR card → war-announce channel
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDeployOcrCard}
+                  disabled={deployingOcrCard}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deployingOcrCard ? 'Sending…' : 'Send OCR'}
+                </button>
+              </div>
+              {deployOcrMsg && (
+                <p className={`text-[10px] font-mono font-semibold ${deployOcrMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployOcrMsg.text}</p>
+              )}
+              <p className="text-[10px] text-slate-500">
+                Officers scan Team Party screenshots on a public Party OCR card in this channel, or upload on VALHALLA (Raid → GVG Attendance). Review, O/X, and Commit swords happen on the website. After Commit, images may post to the Raid Screenshot channel.
+              </p>
+            </div>
           </div>
 
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
@@ -696,6 +830,7 @@ export default function SettingsTab({ user, onSessionUser }) {
               ['genroomId', 'General room'],
               ['attendanceId', 'Weekly attendance thread parent (one text channel)'],
               ['warAnnounceChannelId', 'War announce (one text channel for cards)'],
+              ['raidScreenshotChannelId', 'Raid Screenshot (gallery after OCR Commit)'],
             ].map(([key, label]) => (
               <label key={key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
                 {label}
@@ -789,6 +924,9 @@ export default function SettingsTab({ user, onSessionUser }) {
                             {activeDropsCount} Items
                           </span>
                         </div>
+                        {ev.raid?.configId ? (
+                          <span className="text-[9px] font-mono uppercase tracking-wider text-emerald-400">Raid: {raidCompositions[ev.raid.configId]?.title || ev.raid.configId}</span>
+                        ) : null}
                       </div>
                     );
                   })
@@ -836,6 +974,7 @@ export default function SettingsTab({ user, onSessionUser }) {
                     {/* ⏱️ UNIFIED LIFECYCLE TIMELINE: EXTRA COMPACT AND STACKED FOR 1-GLANCE VISIBILITY */}
                     <div className="space-y-3">
                       <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide"><IconSliders /> Event Cycle Setting</div>
+                      <p className="text-[10px] text-slate-500">Yellow bell turns Discord notifications ON. Clock sets the time. A time does not send while the bell is off.</p>
                       <div className="bg-slate-950/40 border border-slate-800/60 rounded-3xl p-5 relative space-y-4 select-none z-10">
                         <div className="absolute left-11 top-10 bottom-10 w-0.5 bg-indigo-500/80 shadow-[0_0_12px_rgba(99,102,241,0.8)] z-0" />
                         
@@ -843,6 +982,8 @@ export default function SettingsTab({ user, onSessionUser }) {
                           const phase = ev.phases?.[phaseNum] || { dayStart: 0, timeStart: "00:00", dayEnd: 0, timeEnd: "00:00" };
                           const phaseLabels = { 1: 'Bid Request Open', 2: 'Bid Request Closed', 3: 'Event + Live Auction' };
                           const isPopoverOpen = activeAlarmPopoverId === phaseNum;
+                          const phaseKey = `phase${phaseNum}`;
+                          const announceOn = phaseAnnouncementEnabled(ev.announcements, phaseKey);
 
                           return (
                             <div key={phaseNum} className={`relative font-mono text-[11px] ${isPopoverOpen ? 'z-30' : 'z-10'}`}>
@@ -873,9 +1014,24 @@ export default function SettingsTab({ user, onSessionUser }) {
                                     </div>
                                   </div>
 
-                                  <button type="button" onClick={() => setActiveAlarmPopoverId(isPopoverOpen ? null : phaseNum)} className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer shrink-0 ${isPopoverOpen ? 'bg-indigo-600 border-transparent text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500/40'}`} title="Configure Announcements">
-                                    <IconBell />
-                                  </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleEventPhaseAnnouncement(editingEventKey, phaseKey)}
+                                      className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer ${announceOn ? 'bg-amber-500/15 border-amber-400 text-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)]' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-amber-300 hover:border-amber-500/40'}`}
+                                      title={announceOn ? 'Notifications ON — click to turn off' : 'Turn notifications ON'}
+                                    >
+                                      <IconBell filled={announceOn} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveAlarmPopoverId(isPopoverOpen ? null : phaseNum)}
+                                      className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer ${isPopoverOpen ? 'bg-indigo-600 border-transparent text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500/40'}`}
+                                      title="Set notification time"
+                                    >
+                                      <IconClock />
+                                    </button>
+                                  </div>
 
                                   {isPopoverOpen && (
                                     <>
@@ -950,6 +1106,203 @@ export default function SettingsTab({ user, onSessionUser }) {
                         })}
                       </div>
                     </div>
+
+                    {/* RAID CYCLE — independent of auction phases */}
+                    {(() => {
+                      const raid = ev.raid;
+                      const raidEnabled = Boolean(raid?.configId);
+                      const raidPhases = raid?.phases || {};
+                      const raidAnn = raid?.announcements || { phase1: ['19:00'], phase2: '20:00', phase3: '20:55' };
+                      const compositionEntries = Object.entries(raidCompositions || {});
+                      const warRoomEntries = Object.entries(config.warRooms || {});
+                      const maxRooms = config.liveRaidMaxWarRooms || 2;
+                      const selectedRooms = Array.isArray(raid?.warRoomIds) ? raid.warRoomIds : [];
+                      const raidPhaseLabels = { 1: 'GvG Preparation', 2: 'Party Adjustments', 3: 'War' };
+                      return (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide"><IconSliders /> Raid Cycle</div>
+                          <p className="text-[10px] text-slate-500">Optional. Selecting a Raid Party config enables War Room automation for this event without changing auction times. Yellow bell turns raid Discord notifications ON.</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <label className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 space-y-1">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Raid config</span>
+                              <select
+                                value={raid?.configId || ''}
+                                onChange={(e) => handleRaidConfigChange(editingEventKey, e.target.value)}
+                                className="w-full bg-transparent text-slate-200 text-xs outline-none cursor-pointer"
+                              >
+                                <option value="" className="bg-slate-950">None (auction only)</option>
+                                {compositionEntries.map(([id, comp]) => (
+                                  <option key={id} value={id} className="bg-slate-950">{comp?.title || id}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 space-y-1">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Poll (minutes)</span>
+                              <input
+                                type="number"
+                                min="15"
+                                max="120"
+                                disabled={!raidEnabled}
+                                value={raid?.pollIntervalMinutes ?? 20}
+                                onChange={(e) => patchRaid(editingEventKey, (current) => ({ ...current, pollIntervalMinutes: Math.max(15, parseInt(e.target.value, 10) || 20) }))}
+                                className="w-full bg-transparent text-amber-500 font-mono text-xs font-bold outline-none disabled:opacity-40"
+                              />
+                            </label>
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 space-y-1">
+                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">War rooms (max {maxRooms})</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {warRoomEntries.length === 0 ? (
+                                  <span className="text-[10px] text-slate-600 italic">None in Settings → Roles</span>
+                                ) : warRoomEntries.map(([roomId, room]) => {
+                                  const checked = selectedRooms.includes(roomId);
+                                  return (
+                                    <label key={roomId} className={`text-[10px] px-2 py-1 rounded-lg border cursor-pointer ${checked ? 'border-indigo-500 text-indigo-300' : 'border-slate-800 text-slate-500'} ${!raidEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                                      <input
+                                        type="checkbox"
+                                        className="sr-only"
+                                        checked={checked}
+                                        disabled={!raidEnabled}
+                                        onChange={() => {
+                                          patchRaid(editingEventKey, (current) => {
+                                            const ids = Array.isArray(current.warRoomIds) ? [...current.warRoomIds] : [];
+                                            const has = ids.includes(roomId);
+                                            if (has) return { ...current, warRoomIds: ids.filter((id) => id !== roomId) };
+                                            if (ids.length >= maxRooms) return current;
+                                            return { ...current, warRoomIds: [...ids, roomId] };
+                                          });
+                                        }}
+                                      />
+                                      {room?.name || roomId}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          {raidEnabled && (
+                            <div className="bg-slate-950/40 border border-slate-800/60 rounded-3xl p-5 relative space-y-4 select-none z-10">
+                              <div className="absolute left-11 top-10 bottom-10 w-0.5 bg-emerald-500/70 shadow-[0_0_12px_rgba(16,185,129,0.5)] z-0" />
+                              {['1', '2', '3'].map((phaseNum) => {
+                                const phase = raidPhases[phaseNum] || { dayStart: 0, timeStart: '00:00', dayEnd: 0, timeEnd: '00:00' };
+                                const popoverId = `raid-${phaseNum}`;
+                                const isPopoverOpen = activeAlarmPopoverId === popoverId;
+                                const phaseKey = `phase${phaseNum}`;
+                                const announceOn = phaseAnnouncementEnabled(raidAnn, phaseKey);
+                                return (
+                                  <div key={popoverId} className={`relative font-mono text-[11px] ${isPopoverOpen ? 'z-30' : 'z-10'}`}>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/30 p-3 rounded-2xl border border-slate-800/40 hover:border-slate-800/80 transition-colors">
+                                      <div className="flex items-center gap-4">
+                                        <div className="w-6 h-6 rounded-full bg-emerald-950 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center font-sans font-bold shrink-0">
+                                          {phaseNum}
+                                        </div>
+                                        <span className="font-sans font-medium text-slate-200">{raidPhaseLabels[phaseNum]}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 relative">
+                                        <div className="flex flex-col gap-2">
+                                          <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
+                                            <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">Start:</span>
+                                            <select value={phase.dayStart} onChange={(e) => handleRaidPhaseChange(editingEventKey, phaseNum, 'dayStart', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0">
+                                              {DAYS_OF_WEEK_MAP.map((d) => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
+                                            </select>
+                                            <input type="text" maxLength="5" value={phase.timeStart} onChange={(e) => handleRaidPhaseChange(editingEventKey, phaseNum, 'timeStart', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-500 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-emerald-500/40 shrink-0" />
+                                          </div>
+                                          <div className="flex items-center gap-2 bg-slate-950 border border-slate-800/60 rounded-xl px-3 py-1.5">
+                                            <span className="font-sans text-[10px] text-slate-500 uppercase font-bold w-12 shrink-0">End:</span>
+                                            <select value={phase.dayEnd} onChange={(e) => handleRaidPhaseChange(editingEventKey, phaseNum, 'dayEnd', e.target.value)} className="bg-transparent text-slate-300 outline-none cursor-pointer font-sans text-xs w-28 shrink-0">
+                                              {DAYS_OF_WEEK_MAP.map((d) => <option key={d.value} value={d.value} className="bg-slate-950 text-slate-300">{d.label}</option>)}
+                                            </select>
+                                            <input type="text" maxLength="5" value={phase.timeEnd} onChange={(e) => handleRaidPhaseChange(editingEventKey, phaseNum, 'timeEnd', e.target.value)} className="bg-slate-900 border border-slate-800 text-amber-400 rounded-lg px-2 py-0.5 text-center w-16 font-mono text-xs font-bold outline-none focus:border-emerald-500/40 shrink-0" />
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleRaidPhaseAnnouncement(editingEventKey, phaseKey)}
+                                            className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer ${announceOn ? 'bg-amber-500/15 border-amber-400 text-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.45)]' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-amber-300 hover:border-amber-500/40'}`}
+                                            title={announceOn ? 'Notifications ON — click to turn off' : 'Turn notifications ON'}
+                                          >
+                                            <IconBell filled={announceOn} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveAlarmPopoverId(isPopoverOpen ? null : popoverId)}
+                                            className={`flex items-center justify-center w-10 h-10 rounded-xl border transition shadow-sm cursor-pointer ${isPopoverOpen ? 'bg-emerald-600 border-transparent text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/40'}`}
+                                            title="Set notification time"
+                                          >
+                                            <IconClock />
+                                          </button>
+                                        </div>
+                                        {isPopoverOpen && (
+                                          <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setActiveAlarmPopoverId(null)} />
+                                            <div className="absolute right-0 top-full mt-2 bg-slate-900 border border-slate-800 p-3.5 rounded-2xl shadow-2xl z-50 w-72 space-y-2.5 font-sans animate-fadeIn">
+                                              {phaseNum === '1' ? (
+                                                <div className="space-y-2">
+                                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">GvG Preparation (GEN Room)</span>
+                                                  <div className="flex flex-wrap gap-1.5 items-center">
+                                                    {(raidAnn.phase1 || ['19:00']).map((time, idx) => (
+                                                      <div key={idx} className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
+                                                        <input type="time" value={time} onChange={(e) => {
+                                                          patchRaid(editingEventKey, (current) => {
+                                                            const announcements = { ...(current.announcements || raidAnn) };
+                                                            const next = [...(announcements.phase1 || [])];
+                                                            next[idx] = e.target.value;
+                                                            return { ...current, announcements: { ...announcements, phase1: next } };
+                                                          });
+                                                        }} className="bg-transparent text-slate-200 outline-none cursor-pointer" />
+                                                        <button type="button" onClick={() => {
+                                                          patchRaid(editingEventKey, (current) => {
+                                                            const announcements = { ...(current.announcements || raidAnn) };
+                                                            const next = (announcements.phase1 || []).filter((_, i) => i !== idx);
+                                                            return { ...current, announcements: { ...announcements, phase1: next.length ? next : ['19:00'] } };
+                                                          });
+                                                        }} className="text-slate-500 hover:text-rose-400 transition cursor-pointer"><IconX /></button>
+                                                      </div>
+                                                    ))}
+                                                    {(raidAnn.phase1 || []).length < 3 && (
+                                                      <button type="button" onClick={() => {
+                                                        patchRaid(editingEventKey, (current) => {
+                                                          const announcements = { ...(current.announcements || raidAnn) };
+                                                          const next = [...(announcements.phase1 || []), '12:00'];
+                                                          return { ...current, announcements: { ...announcements, phase1: next } };
+                                                        });
+                                                      }} className="px-2.5 py-1 rounded-xl border border-dashed border-slate-700 bg-slate-950 text-slate-500 text-[10px] font-semibold cursor-pointer">+ Add</button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="space-y-1.5">
+                                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{phaseNum === '2' ? 'Party Adjustments (war-announce)' : 'War (war-announce)'}</span>
+                                                  <div className="w-max bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 shadow-inner font-mono text-xs">
+                                                    <input
+                                                      type="time"
+                                                      value={phaseNum === '2' ? (raidAnn.phase2 || '20:00') : (raidAnn.phase3 || '20:55')}
+                                                      onChange={(e) => {
+                                                        patchRaid(editingEventKey, (current) => {
+                                                          const announcements = { ...(current.announcements || raidAnn) };
+                                                          const key = phaseNum === '2' ? 'phase2' : 'phase3';
+                                                          return { ...current, announcements: { ...announcements, [key]: e.target.value } };
+                                                        });
+                                                      }}
+                                                      className="bg-transparent text-slate-200 outline-none cursor-pointer"
+                                                    />
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* TAC-TILE LOOT CEILINGS LIST COMPONENT */}
                     <div className="bg-slate-950/40 border border-slate-800/80 p-4 rounded-xl space-y-3 shadow-inner flex flex-col justify-between">

@@ -115,7 +115,8 @@ export async function resolveViewerParty(snowflakeId) {
 
   let timeStart = instanceSnap.exists() ? instanceSnap.val().timeStart : '';
   if (!timeStart) {
-    timeStart = config.events?.[session.eventKey]?.phases?.[3]?.timeStart || '';
+    const ev = config.events?.[session.eventKey];
+    timeStart = ev?.raid?.phases?.[3]?.timeStart || ev?.phases?.[3]?.timeStart || '';
   }
 
   const partyName = found.alloc[`party_name_${found.col}`] || `P${found.col}`;

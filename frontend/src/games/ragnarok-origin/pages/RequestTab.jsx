@@ -102,10 +102,12 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
   const adjustCounter = (itemId, direction, limitQty, currentActive) => {
     if (!isGateOpen) return; 
     const currentInput = localSelections[itemId] || 0;
-    // ✅ FIXED: Check boundaries against the combined total state to allow downsizing selections down to a minimum floor of 1
-    if (direction === 'up' && currentActive + currentInput < limitQty) {
+    const combinedTotal = currentActive + currentInput;
+    // Unsaved items can return to 0. A saved request stays at a floor of 1 (use Cancel to drop it).
+    const minQty = currentActive > 0 ? 1 : 0;
+    if (direction === 'up' && combinedTotal < limitQty) {
       setLocalSelections(prev => ({ ...prev, [itemId]: currentInput + 1 }));
-    } else if (direction === 'down' && currentActive + currentInput > 1) {
+    } else if (direction === 'down' && combinedTotal > minQty) {
       setLocalSelections(prev => ({ ...prev, [itemId]: currentInput - 1 }));
     }
   };
@@ -376,6 +378,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                 const currentActive = liveCounts[item.id] || 0;
                 const localInput = localSelections[item.id] || 0;
                 const combinedTotal = currentActive + localInput;
+                const minQty = currentActive > 0 ? 1 : 0;
                 const limitQty = item.limitQty;
                 
                 // Construct architectural ambient shadow/border dynamically if a custom theme profile passes down
@@ -419,7 +422,7 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
                         <button
                           type="button"
                           onClick={() => adjustCounter(item.id, 'down', limitQty, currentActive)}
-                          disabled={combinedTotal <= 1 || processing || !isGateOpen}
+                          disabled={combinedTotal <= minQty || processing || !isGateOpen}
                           className="w-7 h-7 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold hover:bg-slate-800 hover:text-white disabled:opacity-10 select-none cursor-pointer flex items-center justify-center transition shadow-sm"
                         >
                           -

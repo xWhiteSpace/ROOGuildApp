@@ -4,9 +4,10 @@ import { handleAuctionInteraction } from '../games/ragnarok-origin/services/disc
 import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
 import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
 import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
-import { handleAttendanceCardInteraction } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
+import { handleAttendanceCardInteraction, attendanceCardWantsEphemeralAck, attendanceCardSkipsGatewayAck } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
 import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
 import { handlePartyCardInteraction } from '../games/ragnarok-origin/services/partyViewer.js';
+import { handlePartyOcrInteraction } from '../games/ragnarok-origin/services/discordPartyOcr.js';
 import { clearGuildCommands } from './deployGuild.js';
 
 import { discordEnv } from '../config/discordEnv.js';
@@ -173,14 +174,27 @@ async function withGuildTenant(guildId, fn) {
       try {
         // Attendance card lives in the war-announce channel — route by customId
         // prefix so it bypasses the general-room gate.
-        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('attcard:')) {
+        if (
+          (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit())
+          && interaction.customId?.startsWith('attcard:')
+        ) {
           // ACK within Discord's 3s window before any Firebase / panel work.
-          if (interaction.customId === 'attcard:open') {
+          // Change Alias opens a modal — showModal must be the first response.
+          if (interaction.isModalSubmit()) {
             await interaction.deferReply({ ephemeral: true });
-          } else {
-            await interaction.deferUpdate();
+          } else if (!attendanceCardSkipsGatewayAck(interaction)) {
+            if (attendanceCardWantsEphemeralAck(interaction)) {
+              await interaction.deferReply({ ephemeral: true });
+            } else {
+              await interaction.deferUpdate();
+            }
           }
           return await handleAttendanceCardInteraction(interaction);
+        }
+
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('ocr:')) {
+          await interaction.deferUpdate();
+          return await handlePartyOcrInteraction(interaction);
         }
 
         if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('partycard:')) {
@@ -244,12 +258,18 @@ async function withGuildTenant(guildId, fn) {
         if (!circuitOpen) {
           const { maybeAnnounceEvents } = await import('./eventAnnounce.js');
           await maybeAnnounceEvents();
+          const { maybeAnnounceRaidEvents } = await import('./raidEventAnnounce.js');
+          await maybeAnnounceRaidEvents();
         }
         const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
         await attendanceDecision.closeExpiredDeadlines();
         await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
         const liveRaid = await import('../api/liveRaid.routes.js');
         await liveRaid.maybeAutoEndLiveRaid();
+        const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
+        await maybeRunWarRoomAutomation();
+        const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
+        await refreshGvgReadinessBoard();
         const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
         await maybeAutoCommitAuction();
       }).catch((err) => console.error('⚠️ Tenant scheduler warning:', err.message));

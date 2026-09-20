@@ -620,7 +620,7 @@ export default function Scheduler({ user }) {
       <div className="col-span-12 lg:col-span-3 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="bg-slate-900/40 border border-slate-800 h-[52px] px-5 rounded-2xl flex items-center gap-2 select-none">
           <Zap size={14} className="text-amber-400 shrink-0" />
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Guild Scheduler</h3>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Calendar</h3>
         </div>
 
         {activeDayFocus ? (
