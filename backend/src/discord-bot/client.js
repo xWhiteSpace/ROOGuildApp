@@ -1,6 +1,7 @@
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../games/ragnarok-origin/services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
+import { handleRequestDeckInteraction } from '../games/ragnarok-origin/services/discordRequestDeck.js';
 import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
 import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
 import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
@@ -204,6 +205,16 @@ async function withGuildTenant(guildId, fn) {
           return await handlePartyCardInteraction(interaction);
         }
 
+        // Request Card cart (Bid Open submit / Drop) — private ephemeral panel.
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('reqcard:')) {
+          if (interaction.customId === 'reqcard:open') {
+            await interaction.deferReply({ ephemeral: true });
+          } else {
+            await interaction.deferUpdate();
+          }
+          return await handleRequestDeckInteraction(interaction);
+        }
+
         // ⚔️ Live Auction panel lives in its own auction-request channel — route by
         // customId so it bypasses the general-room gate (self-service loot claiming).
         if (
@@ -220,7 +231,7 @@ async function withGuildTenant(guildId, fn) {
 
         if (interaction.isChatInputCommand()) {
           return await interaction.reply({
-            content: 'Slash commands were removed. Use the auction, attendance, or party cards in your mapped Discord channels.',
+            content: 'Slash commands were removed. Use the Request, attendance, or party cards in your mapped Discord channels.',
             ephemeral: true,
           }).catch(() => {});
         }

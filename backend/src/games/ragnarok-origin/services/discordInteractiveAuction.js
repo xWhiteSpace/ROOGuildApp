@@ -83,15 +83,23 @@ function compileUserClaimsSummary(virtualMatrix, userId, finalRosterName) {
  */
 export async function sendPublicAuctionCard(channel) {
   const embed = new EmbedBuilder()
-    .setTitle('⚔️ LIVE AUCTION INTERACTION PANEL')
-    .setDescription('During Live Auction, Please Review and claim remaining vacant item slots right here.\n\nClick the button below to open your personal Request panel.')
+    .setTitle('Request Card')
+    .setDescription(
+      'Request loot items during **Bid Open**, or claim vacant slots during **Live Auction**.\n\n' +
+      '**Open Request** — stage quantities, submit, or drop a saved request (private).\n' +
+      '**Open Live Claim** — claim remaining vacant item slots during the live auction (private).'
+    )
     .setColor('#4f46e5');
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
+      .setCustomId('reqcard:open')
+      .setLabel('Open Request')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId('open_auction_panel')
-      .setLabel('🔍 Open My Personal Request Panel')
-      .setStyle(ButtonStyle.Primary)
+      .setLabel('Open Live Claim')
+      .setStyle(ButtonStyle.Secondary)
   );
 
   await channel.send({ embeds: [embed], components: [buttonRow] });

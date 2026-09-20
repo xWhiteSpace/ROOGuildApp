@@ -152,7 +152,7 @@ function requireOfficerTenant(req, res, next) {
 
 app.get('/api/deploy-auction-card', requireOfficerTenant, async (req, res) => {
   try {
-    // 🛡️ Secure Channel Separation: Directs the initialization card straight into your clean Auction Request lobby space
+    // 🛡️ Secure Channel Separation: Request Card (item cart + live claim) into the auction-request channel
     const channelId = discordChannel('DISCORD_AUCREQ_CHANNEL_ID');
     if (!channelId) {
       return res.status(400).send("❌ Failure: Auction request channel is not mapped for this guild.");
@@ -174,7 +174,7 @@ app.get('/api/deploy-auction-card', requireOfficerTenant, async (req, res) => {
     const { sendPublicAuctionCard } = await import('./games/ragnarok-origin/services/discordInteractiveAuction.js');
     await sendPublicAuctionCard(targetChannel);
 
-    res.send("📟 SUCCESS: The Interactive Public Auction Card layout has dropped into your channel!");
+    res.send("📟 SUCCESS: Request Card posted to the auction request channel (Open Request + Open Live Claim).");
   } catch (err) {
     console.error("Deployer Route Failure Exception Caught:", err.message);
     res.status(500).send(`❌ Server Exception: ${err.message}`);

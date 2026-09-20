@@ -280,14 +280,14 @@ export default function SettingsTab({ user, onSessionUser }) {
     return text;
   };
 
-  // Posts the interactive public auction card into DISCORD_AUCREQ_CHANNEL_ID via the backend deploy route.
+  // Posts the Request Card (item cart + live claim) into DISCORD_AUCREQ_CHANNEL_ID.
   const handleDeployAuctionCard = async () => {
     if (deployingCard) return;
     setDeployingCard(true);
     setDeployCardMsg(null);
     try {
       const text = await postDeployRoute('/api/deploy-auction-card');
-      setDeployCardMsg({ ok: true, text: text || 'Auction card deployed to Discord.' });
+      setDeployCardMsg({ ok: true, text: text || 'Request Card deployed to Discord.' });
     } catch (err) {
       setDeployCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
@@ -741,7 +741,7 @@ export default function SettingsTab({ user, onSessionUser }) {
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  Auction claim card → auction request channel
+                  Request Card → auction request channel
                 </span>
                 <button
                   type="button"
@@ -749,12 +749,15 @@ export default function SettingsTab({ user, onSessionUser }) {
                   disabled={deployingCard}
                   className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {deployingCard ? 'Sending…' : 'Send auction'}
+                  {deployingCard ? 'Sending…' : 'Send Request Card'}
                 </button>
               </div>
               {deployCardMsg && (
                 <p className={`text-[10px] font-mono font-semibold ${deployCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployCardMsg.text}</p>
               )}
+              <p className="text-[10px] text-slate-500">
+                One public Request Card: Open Request (item cart, submit, drop) and Open Live Claim (vacant slots). Both open a private panel.
+              </p>
             </div>
 
             <div className="space-y-2 border-t border-slate-800/80 pt-3">
