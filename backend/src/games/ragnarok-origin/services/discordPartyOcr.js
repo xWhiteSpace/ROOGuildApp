@@ -406,7 +406,7 @@ export function assignUnmatched(review, unmatchedId, uid) {
 export async function finalizeOcrCommit(review, members, committedBy) {
   const db = getTenantStore();
   const roster = raidRosterUids(members);
-  const statusMap = inGameStatusMapFromPresent(presentSet(review), roster);
+  const statusMap = inGameStatusMapFromPresent([...presentSet(review)], roster);
   const result = await commitInGameForEvent(db, {
     eventDate: review.eventDate,
     eventKey: review.eventKey,

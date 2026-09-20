@@ -12,7 +12,11 @@ export function raidRosterUids(members) {
 }
 
 export function inGameStatusMapFromPresent(presentUids, rosterUids) {
-  const present = new Set((presentUids || []).map(String));
+  let list = [];
+  if (presentUids instanceof Set) list = [...presentUids];
+  else if (Array.isArray(presentUids)) list = presentUids;
+  else if (presentUids && typeof presentUids === 'object') list = Object.keys(presentUids);
+  const present = new Set(list.map(String));
   const next = {};
   for (const uid of rosterUids || []) {
     if (present.has(String(uid))) next[uid] = true;
