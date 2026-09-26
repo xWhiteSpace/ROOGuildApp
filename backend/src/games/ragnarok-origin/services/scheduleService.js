@@ -1,7 +1,9 @@
 /**
  * Schedule SSOT: materialize weekly instances + shared commitment writes.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getTenantStore } from '../../../db/database.js';
+import { getCachedConfig } from '../../../db/tenantContext.js';
 import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import {
   getWeekMonday,
@@ -11,10 +13,92 @@ import {
   DEFAULT_TZ,
 } from '../../../utils/guildTime.js';
 
+const scheduleBatchAls = new AsyncLocalStorage();
+
+/**
+ * Share schedule/config reads across jobs in one Discord tick.
+ * HTTP callers are not wrapped, so they always hit a fresh path.
+ */
+export function runScheduleBatch(fn) {
+  return scheduleBatchAls.run({
+    weekResults: new Map(),
+    allInstancesPromise: null,
+    specialEventsPromise: null,
+    membersPromise: null,
+  }, fn);
+}
+
+/**
+ * One members collection read per Discord tick. Outside a batch, always a fresh read
+ * so button RSVPs are not served a snapshot from the scheduler.
+ */
+export async function loadRosterMembers(db = getTenantStore()) {
+  const read = async () => {
+    const snap = await db.ref('auction/members').once('value');
+    return snap.exists() ? (snap.val() || {}) : {};
+  };
+  const batch = scheduleBatchAls.getStore();
+  if (!batch) return read();
+  if (!batch.membersPromise) batch.membersPromise = read();
+  return batch.membersPromise;
+}
+
+function instancePayloadEqual(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.weekMonday === b.weekMonday
+    && a.eventId === b.eventId
+    && a.date === b.date
+    && a.title === b.title
+    && a.timeStart === b.timeStart
+    && a.timeEnd === b.timeEnd
+    && Boolean(a.isSpecial) === Boolean(b.isSpecial)
+    && Boolean(a.isCancelled) === Boolean(b.isCancelled)
+    && (a.notes || '') === (b.notes || '')
+    && (a.source || '') === (b.source || '')
+  );
+}
+
+async function loadAllInstances(db, batch) {
+  if (!batch) {
+    const snap = await db.ref('scheduler/instances').once('value');
+    return snap.exists() ? snap.val() : {};
+  }
+  if (!batch.allInstancesPromise) {
+    batch.allInstancesPromise = db.ref('scheduler/instances').once('value').then((snap) => (
+      snap.exists() ? snap.val() : {}
+    ));
+  }
+  return batch.allInstancesPromise;
+}
+
+async function loadSpecialEvents(db, batch) {
+  if (!batch) {
+    const snap = await db.ref('scheduler/special_events').once('value');
+    return snap.exists() ? snap.val() : {};
+  }
+  if (!batch.specialEventsPromise) {
+    batch.specialEventsPromise = db.ref('scheduler/special_events').once('value').then((snap) => (
+      snap.exists() ? snap.val() : {}
+    ));
+  }
+  return batch.specialEventsPromise;
+}
+
+async function loadEvents(db) {
+  const cached = getCachedConfig();
+  if (cached && cached.events && typeof cached.events === 'object') return cached.events;
+  const eventsSnap = await db.ref('settings/configuration/events').once('value');
+  return eventsSnap.exists() ? eventsSnap.val() : {};
+}
+
 /**
  * Resolve guild timezone from settings (or default).
+ * Uses this tick's already-loaded tenant config when present.
  */
 export async function resolveGuildTimezone(db = getTenantStore()) {
+  const cached = getCachedConfig();
+  if (cached) return cached.timezone || DEFAULT_TZ;
   const snap = await db.ref('settings/configuration/timezone').once('value');
   return snap.exists() ? (snap.val() || DEFAULT_TZ) : DEFAULT_TZ;
 }
@@ -92,25 +176,13 @@ export function buildWeekInstanceMap({ weekMonday, events, specialEvents, existi
   return map;
 }
 
-/**
- * Idempotent materialize of scheduler/instances for a week.
- * Preserves isCancelled / notes / custom title on existing keys.
- * @returns {{ weekMonday: string, instances: object }}
- */
-export async function ensureWeekInstances({ weekMonday: requestedMonday, force = false } = {}) {
-  const db = getTenantStore();
-  const timezone = await resolveGuildTimezone(db);
-  const weekMonday = requestedMonday || getWeekMonday(timezone);
-
-  const [eventsSnap, specialSnap, existingSnap] = await Promise.all([
-    db.ref('settings/configuration/events').once('value'),
-    db.ref('scheduler/special_events').once('value'),
-    db.ref('scheduler/instances').once('value'),
+async function materializeWeek({ db, weekMonday, timezone, force, batch }) {
+  const [events, specialEvents, loadedInstances] = await Promise.all([
+    loadEvents(db),
+    loadSpecialEvents(db, batch),
+    loadAllInstances(db, batch),
   ]);
-
-  const events = eventsSnap.exists() ? eventsSnap.val() : {};
-  const specialEvents = specialSnap.exists() ? specialSnap.val() : {};
-  const allExisting = existingSnap.exists() ? existingSnap.val() : {};
+  const allExisting = loadedInstances && typeof loadedInstances === 'object' ? loadedInstances : {};
 
   // Only pass existing instances for this week (or any key we'll overwrite)
   const weekExisting = {};
@@ -145,6 +217,7 @@ export async function ensureWeekInstances({ weekMonday: requestedMonday, force =
 
   const updates = {};
   for (const [key, instance] of Object.entries(map)) {
+    if (instancePayloadEqual(weekExisting[key], instance)) continue;
     updates[`scheduler/instances/${key}`] = instance;
   }
   if (Object.keys(updates).length > 0) {
@@ -152,6 +225,28 @@ export async function ensureWeekInstances({ weekMonday: requestedMonday, force =
   }
 
   return { weekMonday, instances: map, timezone };
+}
+
+/**
+ * Idempotent materialize of scheduler/instances for a week.
+ * Preserves isCancelled / notes / custom title on existing keys.
+ * Within a schedule batch, the same week is materialized once and only diffs are written.
+ * @returns {{ weekMonday: string, instances: object }}
+ */
+export async function ensureWeekInstances({ weekMonday: requestedMonday, force = false } = {}) {
+  const db = getTenantStore();
+  const timezone = await resolveGuildTimezone(db);
+  const weekMonday = requestedMonday || getWeekMonday(timezone);
+  const batch = scheduleBatchAls.getStore();
+  const memoKey = `${weekMonday}:${force ? '1' : '0'}`;
+
+  if (batch?.weekResults.has(memoKey)) {
+    return batch.weekResults.get(memoKey);
+  }
+
+  const pending = materializeWeek({ db, weekMonday, timezone, force, batch });
+  if (batch) batch.weekResults.set(memoKey, pending);
+  return pending;
 }
 
 /**

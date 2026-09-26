@@ -3,6 +3,7 @@
  */
 import { Router } from 'express';
 import { getTenantStore } from '../db/database.js';
+import { getCachedConfig } from '../db/tenantContext.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import { getRaidCycleStatus } from '../games/ragnarok-origin/raidTimeWindow.js';
 import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
@@ -19,17 +20,19 @@ router.get('/init', async (req, res) => {
     await refreshTenantConfigCache().catch(() => {});
     const db = getTenantStore();
     const cycle = getRaidCycleStatus();
+    let config = getCachedConfig();
+    if (!config) {
+      const configSnap = await db.ref('settings/configuration').once('value');
+      config = configSnap.exists() ? configSnap.val() : {};
+    }
 
-    const [configSnap, membersSnap, commitmentsSnap, liveSnap, statusSnap, compositionsSnap] = await Promise.all([
-      db.ref('settings/configuration').once('value'),
+    const [membersSnap, commitmentsSnap, liveSnap, statusSnap, compositionsSnap] = await Promise.all([
       db.ref('auction/members').once('value'),
       db.ref('attendance/commitments').once('value'),
       db.ref('attendance/live_session').once('value'),
       db.ref('attendance/war_room_status').once('value'),
       db.ref('attendance/compositions').once('value'),
     ]);
-
-    const config = configSnap.exists() ? configSnap.val() : {};
     const compositions = compositionsSnap.exists() ? compositionsSnap.val() : {};
     const { published, anchor } = await listPublished(db);
     const publishedRecord = cycle.publishedId && published?.[cycle.publishedId]

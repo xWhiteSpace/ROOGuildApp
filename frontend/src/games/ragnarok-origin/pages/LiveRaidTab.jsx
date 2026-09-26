@@ -41,6 +41,7 @@ import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
+import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -448,19 +449,19 @@ export default function LiveRaidTab({ user }) {
   useEffect(() => {
     if (!session) return undefined;
 
-    const liveSessionPoller = setInterval(() => {
+    const stopLive = pollWhileVisible(() => {
       fetchActiveLiveSession(false);
     }, 4000);
 
-    const voicePoller = setInterval(() => {
+    const stopVoice = pollWhileVisible(() => {
       fetchVoicePresenceList(session);
     }, 10000);
 
     fetchVoicePresenceList(session);
 
     return () => {
-      clearInterval(liveSessionPoller);
-      clearInterval(voicePoller);
+      stopLive();
+      stopVoice();
     };
   }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
@@ -468,11 +469,10 @@ export default function LiveRaidTab({ user }) {
     if (session !== null) return undefined;
     loadPublishedCompositions();
     loadCommitments();
-    const id = setInterval(() => {
+    return pollWhileVisible(() => {
       loadPublishedCompositions();
       loadCommitments();
     }, 5000);
-    return () => clearInterval(id);
   }, [session]);
 
   const publishedList = useMemo(() => {

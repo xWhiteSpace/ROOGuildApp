@@ -1,6 +1,7 @@
 // backend/src/api/liveRaid.routes.js
 import { Router } from 'express';
 import { getTenantStore } from '../db/database.js';
+import { getCurrentTenantId, runWithTenant } from '../db/tenantContext.js';
 import { discordClient } from '../discord-bot/client.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import {
@@ -225,8 +226,9 @@ async function captureFinalMonitoringPulse(db, s) {
 /**
  * Start the voice-presence polling ticker.
  * Fires one pulse immediately, then every pollIntervalMs.
+ * tenantId is captured at arm time so interval ticks keep ALS after the HTTP/bot context ends.
  */
-function startTicker(pollIntervalMs, monitoringEndsAt) {
+function startTicker(pollIntervalMs, monitoringEndsAt, tenantId) {
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
     global.liveRaidIntervalTicker = undefined;
@@ -237,13 +239,17 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
     if (pulseInFlight) return;
     pulseInFlight = true;
     try {
-      const result = await runPulseOnce(pollIntervalMs, monitoringEndsAt);
-      if (result.stop) {
-        if (global.liveRaidIntervalTicker) {
-          clearInterval(global.liveRaidIntervalTicker);
-          global.liveRaidIntervalTicker = undefined;
+      const run = async () => {
+        const result = await runPulseOnce(pollIntervalMs, monitoringEndsAt);
+        if (result.stop) {
+          if (global.liveRaidIntervalTicker) {
+            clearInterval(global.liveRaidIntervalTicker);
+            global.liveRaidIntervalTicker = undefined;
+          }
         }
-      }
+      };
+      if (tenantId) await runWithTenant(tenantId, run);
+      else await run();
     } catch (err) {
       console.error("⚠️ Ticker error:", err.message);
     } finally {
@@ -261,6 +267,7 @@ function startTicker(pollIntervalMs, monitoringEndsAt) {
  */
 function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   const db = getTenantStore();
+  const tenantId = getCurrentTenantId();
 
   if (global.liveRaidIntervalTicker) {
     clearInterval(global.liveRaidIntervalTicker);
@@ -290,7 +297,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
       monitoringTickerStatus: 'running',
       monitoringTickerNote: `Ticker started at ${new Date().toISOString()}`,
     }).catch(() => {});
-    startTicker(pollIntervalMs, endsAt);
+    startTicker(pollIntervalMs, endsAt, tenantId);
     return { armed: true, reason: 'running' };
   }
 
@@ -301,7 +308,8 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   }).catch(() => {});
 
   global.monitoringSchedulerTicker = setInterval(() => {
-    if (Date.now() >= startsAt) {
+    const fire = () => {
+      if (Date.now() < startsAt) return;
       console.log(`▶️  Monitoring start time reached — starting ticker.`);
       clearInterval(global.monitoringSchedulerTicker);
       global.monitoringSchedulerTicker = undefined;
@@ -310,14 +318,16 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
           monitoringTickerStatus: 'running',
           monitoringTickerNote: `Ticker started at ${new Date().toISOString()}`,
         }).catch(() => {});
-        startTicker(pollIntervalMs, endsAt);
+        startTicker(pollIntervalMs, endsAt, tenantId);
       } else {
         db.ref('attendance/live_session').update({
           monitoringTickerStatus: 'ended',
           monitoringTickerNote: 'Start reached but end already passed.',
         }).catch(() => {});
       }
-    }
+    };
+    if (tenantId) runWithTenant(tenantId, fire);
+    else fire();
   }, 15 * 1000);
 
   return { armed: true, reason: 'scheduled' };

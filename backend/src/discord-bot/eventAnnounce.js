@@ -21,6 +21,7 @@ import { discordClient } from './client.js';
 import { getGuildNowParts, formatGuildDate, DEFAULT_TZ } from '../utils/guildTime.js';
 import { logDiscordRateLimit, isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
 import { discordChannel } from '../db/channels.js';
+import { readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 
 const DAY_MINUTES = 1440;
 
@@ -154,9 +155,8 @@ export async function maybeAnnounceEvents() {
   if (isDiscordCircuitOpen()) return;
 
   const db = getTenantStore();
-
-  const configSnap = await db.ref('settings/configuration').once('value');
-  if (configSnap.exists() && configSnap.val().isForceLocked === true) return;
+  const config = await readTenantConfiguration(db);
+  if (config.isForceLocked === true) return;
 
   const { getGateStatusDetails } = await import('../games/ragnarok-origin/timeWindow.js');
   const status = getGateStatusDetails();

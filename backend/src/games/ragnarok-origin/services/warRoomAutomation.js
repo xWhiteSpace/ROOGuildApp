@@ -3,28 +3,56 @@
  * Isolated from auction auto-commit / eventAnnounce.
  */
 import { getTenantStore } from '../../../db/database.js';
+import { getCurrentTenantId } from '../../../db/tenantContext.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
 import {
   addConfigToPublished,
+  configIdFromGridKey,
+  removeConfigFromPublished,
   setPublishedAnchor,
   writePublishedSnapshot,
 } from './publishedComposition.js';
 import { createLiveRaidFromPublished } from '../../../api/liveRaid.routes.js';
 
 const STATUS_PATH = 'attendance/war_room_status';
+const lastWrittenStatus = new Map();
+
+function statusSignature(patch) {
+  return JSON.stringify({
+    lastError: patch.lastError ?? null,
+    publishedId: patch.publishedId ?? null,
+    eventId: patch.eventId ?? null,
+  });
+}
 
 async function writeStatus(db, patch) {
+  const tenantId = getCurrentTenantId() || '_';
+  const signature = statusSignature(patch);
+  const isLiveStart = patch.liveStartedAt != null;
+  if (!isLiveStart && lastWrittenStatus.get(tenantId) === signature) return;
+  lastWrittenStatus.set(tenantId, signature);
   await db.ref(STATUS_PATH).update({
     ...patch,
     updatedAt: Date.now(),
   }).catch(() => {});
 }
 
+function collectPublishedConfigIds(published) {
+  const ids = new Set();
+  Object.entries(published?.grids || {}).forEach(([gridKey, grid]) => {
+    const id = configIdFromGridKey(gridKey) || String(grid?.parentConfigId || '').trim();
+    if (id) ids.add(id);
+  });
+  return [...ids];
+}
+
 async function ensurePublishedForCycle(db, cycle) {
   const publishedId = cycle.publishedId;
+  const targetConfigId = String(cycle.configId || '').trim();
   if (!publishedId || !cycle.activeEventId) return { ok: false, error: 'No published id for cycle.' };
+  if (!targetConfigId) return { ok: false, error: 'No Raid Party config is assigned in Game Settings.' };
 
-  const existingSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
+  let existingSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
   if (!existingSnap.exists()) {
     const written = await writePublishedSnapshot({
       db,
@@ -33,7 +61,7 @@ async function ensurePublishedForCycle(db, cycle) {
         eventDate: cycle.warDate,
         eventTitle: cycle.activeEventTitle,
         timeStart: cycle.warStartTime,
-        configId: cycle.configId,
+        configId: targetConfigId,
         grids: {},
         selectedGridIds: [],
       },
@@ -41,21 +69,43 @@ async function ensurePublishedForCycle(db, cycle) {
       sentBy: 'War Room',
     });
     if (!written.ok) return written;
+    existingSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
   }
 
-  const compositionSnap = await db.ref(`attendance/compositions/${cycle.configId}`).once('value');
+  const published = existingSnap.exists() ? existingSnap.val() : {};
+  const presentIds = collectPublishedConfigIds(published);
+  const alreadySynced = presentIds.length === 1 && presentIds[0] === targetConfigId;
+  if (alreadySynced) {
+    return { ok: true, id: publishedId };
+  }
+
+  const compositionSnap = await db.ref(`attendance/compositions/${targetConfigId}`).once('value');
   if (!compositionSnap.exists()) {
-    return { ok: false, error: `Raid Party config ${cycle.configId} was not found.` };
+    return { ok: false, error: `Raid Party config ${targetConfigId} was not found.` };
   }
 
-  const added = await addConfigToPublished({
-    db,
-    id: publishedId,
-    configId: cycle.configId,
-    composition: compositionSnap.val(),
-  });
-  if (!added.ok && !/already on this composition/i.test(added.error || '')) {
-    return added;
+  if (!presentIds.includes(targetConfigId)) {
+    const added = await addConfigToPublished({
+      db,
+      id: publishedId,
+      configId: targetConfigId,
+      composition: compositionSnap.val(),
+    });
+    if (!added.ok && !/already on this composition/i.test(added.error || '')) {
+      return added;
+    }
+  }
+
+  for (const extraId of presentIds) {
+    if (extraId === targetConfigId) continue;
+    const removed = await removeConfigFromPublished({
+      db,
+      id: publishedId,
+      configId: extraId,
+    });
+    if (!removed.ok && !/not on this composition/i.test(removed.error || '')) {
+      return removed;
+    }
   }
 
   await setPublishedAnchor({ db, id: publishedId, active: true });
@@ -67,13 +117,22 @@ export async function maybeRunWarRoomAutomation() {
   const cycle = getRaidCycleStatus();
   if (!cycle || cycle.needsSetup || cycle.isForceLocked || !cycle.activeEventId) return;
 
+  let liveExists = false;
+  if (cycle.currentPhase === 3) {
+    const liveSnap = await db.ref('attendance/live_session').once('value');
+    liveExists = liveSnap.exists();
+  }
+
   if (cycle.currentPhase >= 1 && cycle.currentPhase <= 3) {
-    const ensured = await ensurePublishedForCycle(db, cycle);
-    if (!ensured.ok) {
-      await writeStatus(db, { lastError: ensured.error, lastErrorAt: Date.now(), publishedId: cycle.publishedId });
-      console.error('[war-room] publish/set-active failed:', ensured.error);
-    } else {
-      await writeStatus(db, { lastError: null, publishedId: cycle.publishedId, eventId: cycle.activeEventId });
+    const shouldSyncPublished = cycle.currentPhase <= 2 || !liveExists;
+    if (shouldSyncPublished) {
+      const ensured = await ensurePublishedForCycle(db, cycle);
+      if (!ensured.ok) {
+        await writeStatus(db, { lastError: ensured.error, lastErrorAt: Date.now(), publishedId: cycle.publishedId });
+        console.error('[war-room] publish/set-active failed:', ensured.error);
+      } else {
+        await writeStatus(db, { lastError: null, publishedId: cycle.publishedId, eventId: cycle.activeEventId });
+      }
     }
     try {
       const { ensureGvgReadinessBoardIfMissing } = await import('./discordAttendanceCards.js');
@@ -84,9 +143,7 @@ export async function maybeRunWarRoomAutomation() {
   }
 
   if (cycle.currentPhase !== 3) return;
-
-  const liveSnap = await db.ref('attendance/live_session').once('value');
-  if (liveSnap.exists()) return;
+  if (liveExists) return;
 
   const warRoomIds = cycle.warRoomIds || [];
   if (warRoomIds.length === 0) {

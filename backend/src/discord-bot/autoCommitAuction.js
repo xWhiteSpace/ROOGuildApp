@@ -16,6 +16,7 @@
  */
 import { getTenantStore } from '../db/database.js';
 import { getGuildWeekMinute, DEFAULT_TZ } from '../utils/guildTime.js';
+import { readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 
 const WEEK_MINUTES = 10080;
 
@@ -61,9 +62,7 @@ function toArray(node) {
 export async function maybeAutoCommitAuction() {
   try {
     const db = getTenantStore();
-
-    const configSnap = await db.ref('settings/configuration').once('value');
-    const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+    const dynamicConfig = await readTenantConfiguration(db);
     if (dynamicConfig.isForceLocked === true) return;
 
     const { getGateStatusDetails } = await import('../games/ragnarok-origin/timeWindow.js');

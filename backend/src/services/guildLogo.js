@@ -3,6 +3,7 @@ import { postgresEnv } from '../config/postgresEnv.js';
 
 export const LOGO_BUCKET = 'guild-assets';
 export const LOGO_MAX_BYTES = 512 * 1024;
+export const ASSET_CACHE_CONTROL = '31536000';
 
 let cachedClient = null;
 
@@ -64,6 +65,7 @@ export async function uploadGuildLogo(tenantId, buffer) {
   const objectPath = `${tenantId}/logo.${kind.ext}`;
   const { error } = await supabase.storage.from(LOGO_BUCKET).upload(objectPath, buffer, {
     contentType: kind.mime,
+    cacheControl: ASSET_CACHE_CONTROL,
     upsert: true,
   });
   if (error) {

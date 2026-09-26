@@ -4,11 +4,11 @@ import { handleAuctionInteraction } from '../games/ragnarok-origin/services/disc
 import { handleRequestDeckInteraction } from '../games/ragnarok-origin/services/discordRequestDeck.js';
 import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
 import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
-import { refreshTenantConfigCache } from '../games/ragnarok-origin/timeWindow.js';
 import { handleAttendanceCardInteraction, attendanceCardWantsEphemeralAck, attendanceCardSkipsGatewayAck } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
 import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
 import { handlePartyCardInteraction } from '../games/ragnarok-origin/services/partyViewer.js';
 import { handlePartyOcrInteraction } from '../games/ragnarok-origin/services/discordPartyOcr.js';
+import { runScheduleBatch } from '../games/ragnarok-origin/services/scheduleService.js';
 import { clearGuildCommands } from './deployGuild.js';
 
 import { discordEnv } from '../config/discordEnv.js';
@@ -262,27 +262,28 @@ async function withGuildTenant(guildId, fn) {
     setInterval(() => {
       const circuitOpen = isDiscordCircuitOpen();
       forEachOnboardedTenant(async () => {
-        await refreshTenantConfigCache().catch(() => {});
-        if (skipFirstDiscordTick) {
-          return;
-        }
-        if (!circuitOpen) {
-          const { maybeAnnounceEvents } = await import('./eventAnnounce.js');
-          await maybeAnnounceEvents();
-          const { maybeAnnounceRaidEvents } = await import('./raidEventAnnounce.js');
-          await maybeAnnounceRaidEvents();
-        }
-        const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
-        await attendanceDecision.closeExpiredDeadlines();
-        await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
-        const liveRaid = await import('../api/liveRaid.routes.js');
-        await liveRaid.maybeAutoEndLiveRaid();
-        const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
-        await maybeRunWarRoomAutomation();
-        const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
-        await refreshGvgReadinessBoard();
-        const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
-        await maybeAutoCommitAuction();
+        await runScheduleBatch(async () => {
+          if (skipFirstDiscordTick) {
+            return;
+          }
+          if (!circuitOpen) {
+            const { maybeAnnounceEvents } = await import('./eventAnnounce.js');
+            await maybeAnnounceEvents();
+            const { maybeAnnounceRaidEvents } = await import('./raidEventAnnounce.js');
+            await maybeAnnounceRaidEvents();
+          }
+          const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
+          await attendanceDecision.closeExpiredDeadlines();
+          await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
+          const liveRaid = await import('../api/liveRaid.routes.js');
+          await liveRaid.maybeAutoEndLiveRaid();
+          const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
+          await maybeRunWarRoomAutomation();
+          const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
+          await refreshGvgReadinessBoard();
+          const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
+          await maybeAutoCommitAuction();
+        });
       }).catch((err) => console.error('⚠️ Tenant scheduler warning:', err.message));
 
       if (skipFirstDiscordTick) {

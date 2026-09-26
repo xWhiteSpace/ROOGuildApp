@@ -42,6 +42,16 @@ export async function refreshTenantConfigCache() {
 }
 
 /**
+ * Prefer the config already loaded for this tenant tick; hit Postgres only on cache miss.
+ */
+export async function readTenantConfiguration(db) {
+  const cached = getCachedConfig();
+  if (cached) return cached;
+  const configSnap = await db.ref('settings/configuration').once('value');
+  return configSnap.exists() ? configSnap.val() : { ...DEFAULT_CONFIGURATION };
+}
+
+/**
  * Synchronous Gate State Evaluation Engine
  * Instantly parses current calendar structures against cached cloud parameters without promises.
  */

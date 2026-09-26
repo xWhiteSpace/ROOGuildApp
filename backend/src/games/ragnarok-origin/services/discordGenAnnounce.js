@@ -5,16 +5,41 @@
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { discordChannel } from '../../../db/channels.js';
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 function warAnnounceMention() {
   const warId = (discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID') || '').trim();
   return warId ? `<#${warId}>` : 'war-announce';
 }
 
-export function buildAttendanceRaidAnnounce({ eventTitle, eventDate, timeStart }) {
-  const title = eventTitle || 'Raid';
-  const date = eventDate || '—';
-  const time = timeStart || '—';
-  return `**${title}** raid created for **${date} ${time}**. Confirm attendance in ${warAnnounceMention()}.`;
+function warAnnounceCta() {
+  const warId = (discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID') || '').trim();
+  return warId ? ` Confirm yours at <#${warId}>.` : '';
+}
+
+/** Readiness-board date style: Sep 23, 2026 */
+export function formatAnnounceDate(dateStr) {
+  if (!dateStr) return '—';
+  const [year, month, day] = String(dateStr).split('-').map(Number);
+  const mon = MONTHS_SHORT[(month || 1) - 1] || '—';
+  const dd = Number.isFinite(day) ? String(day).padStart(2, '0') : '—';
+  return Number.isFinite(year) ? `${mon} ${dd}, ${year}` : String(dateStr);
+}
+
+export function buildAttendanceRaidAnnounce({ eventDate }) {
+  const date = formatAnnounceDate(eventDate);
+  return `Get ready for the next GVG on **${date}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you.`;
+}
+
+export function buildRsvpAnnounceLine({ displayName, available, eventTitle, eventDate }) {
+  const name = displayName || 'A raider';
+  const event = eventTitle || 'the raid';
+  const when = formatAnnounceDate(eventDate);
+  const cta = warAnnounceCta();
+  if (!available) {
+    return `🕊️ **${name}** is **Unavailable** for **${event}** this coming **${when}.** Rest well — the guild has you covered.${cta}`;
+  }
+  return `⚔️ **${name}** will be **Available** for **${event}** this coming **${when}.** Locked in — see you there.${cta}`;
 }
 
 export function buildPartyReadyAnnounce({ eventTitle, eventDate }) {

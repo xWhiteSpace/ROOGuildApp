@@ -3,6 +3,7 @@ import { Radio, Timer, Users, Volume2 } from 'lucide-react';
 import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { apiFetch } from '../../../services/apiClient';
 import { RAID_PHASE_LABELS } from '@guildname/shared/raidCycle';
+import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 
 const PHASE_LABELS = {
   1: RAID_PHASE_LABELS[1],
@@ -65,8 +66,7 @@ export default function WarRoomTab({ user }) {
   }, [loadInit, user]);
 
   useEffect(() => {
-    const id = setInterval(() => loadInit({ quiet: true }), 5000);
-    return () => clearInterval(id);
+    return pollWhileVisible(() => loadInit({ quiet: true }), 5000);
   }, [loadInit]);
 
   useEffect(() => {
@@ -85,8 +85,7 @@ export default function WarRoomTab({ user }) {
       }
     };
     pollVoice();
-    const id = setInterval(pollVoice, 10000);
-    return () => clearInterval(id);
+    return pollWhileVisible(pollVoice, 10000);
   }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
   const persistLiveGrids = async (grids) => {

@@ -1,6 +1,7 @@
 // frontend/src/pages/MimicBookTab.jsx
 import { useState, useEffect, useRef, useContext } from 'react';
 import { MimicBookContext } from '../../../App';
+import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -320,8 +321,7 @@ const [rawMembers, setRawMembers] = useState({});
   useEffect(() => {
     loadTrueRequestPool();
     fetchActiveSessionFromBackend(true);
-    const pollerInterval = setInterval(() => { fetchActiveSessionFromBackend(false); }, 3500);
-    return () => clearInterval(pollerInterval);
+    return pollWhileVisible(() => { fetchActiveSessionFromBackend(false); }, 3500);
   }, [user]);
 
   const handleAddLootRow = () => {

@@ -21,6 +21,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiFetch, getBackendUrl } from '../../../services/apiClient';
+import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 import {
   formatGuildDate,
   getWeekMonday,
@@ -145,12 +146,7 @@ export default function Scheduler({ user }) {
     loadSchedulerEcosystem();
     fetchCommitmentsFromApi();
 
-    // Admin-SDK poll — reliable when client RTDB rules block browser listeners
-    const pollId = setInterval(fetchCommitmentsFromApi, 4000);
-
-    return () => {
-      clearInterval(pollId);
-    };
+    return pollWhileVisible(fetchCommitmentsFromApi, 4000);
   }, [user]);
 
   // Re-ensure when timezone changes after first load

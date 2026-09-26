@@ -1,4 +1,4 @@
-import { getSupabaseAdmin, LOGO_BUCKET } from '../../../services/guildLogo.js';
+import { getSupabaseAdmin, LOGO_BUCKET, ASSET_CACHE_CONTROL } from '../../../services/guildLogo.js';
 
 export const HIGHLIGHT_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -44,6 +44,7 @@ export async function uploadHighlightMedia(tenantId, highlightId, buffer) {
   const objectPath = `${tenantId}/highlights/${highlightId}.${kind.ext}`;
   const { error } = await supabase.storage.from(LOGO_BUCKET).upload(objectPath, buffer, {
     contentType: kind.mime,
+    cacheControl: ASSET_CACHE_CONTROL,
     upsert: true,
   });
   if (error) {

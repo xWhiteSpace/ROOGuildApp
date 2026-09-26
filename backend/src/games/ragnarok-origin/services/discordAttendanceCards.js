@@ -15,6 +15,7 @@ import {
 } from 'discord.js';
 import { sanitizeInGameName } from '@guildname/shared/inGameAlias';
 import { getTenantStore } from '../../../db/database.js';
+import { loadRosterMembers } from './scheduleService.js';
 import {
   applyAttendanceDecision,
   AttendanceDecisionError,
@@ -25,6 +26,10 @@ import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discord
 import { jobIconEmoji, withJobIcon } from './discordJobEmojis.js';
 import { discordChannel } from '../../../db/channels.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
+import {
+  buildRsvpAnnounceLine,
+  sendGenRoomMessage,
+} from './discordGenAnnounce.js';
 
 const EMBED_COLOR = '#9333ea';
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -35,8 +40,18 @@ const PANEL_TITLE = 'GVG Readiness Check';
 const CARD_PATH = 'attendance/gvg_readiness_card';
 const BAR_WIDTH = 10;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const ANNOUNCE_COOLDOWN_MS = 60 * 1000;
 
 const userEventLocks = new Map();
+const lastAnnounceAt = new Map();
+
+function consumeAnnounceCooldown(key) {
+  const now = Date.now();
+  const last = lastAnnounceAt.get(key) || 0;
+  if (now - last < ANNOUNCE_COOLDOWN_MS) return false;
+  lastAnnounceAt.set(key, now);
+  return true;
+}
 
 function withUserEventLock(key, fn) {
   const prev = userEventLocks.get(key) || Promise.resolve();
@@ -298,11 +313,10 @@ async function buildPublicReadinessBoard() {
     return { content: null, embeds: [embed], components: [] };
   }
 
-  const [membersSnap, commitSnap] = await Promise.all([
-    db.ref('auction/members').once('value'),
+  const [members, commitSnap] = await Promise.all([
+    loadRosterMembers(db),
     db.ref(`attendance/commitments/${event.key}`).once('value'),
   ]);
-  const members = membersSnap.exists() ? membersSnap.val() : {};
   const commitments = commitSnap.exists() ? commitSnap.val() : {};
   const cycle = getRaidCycleStatus();
   const nowMs = Date.now();
@@ -726,6 +740,18 @@ export async function handleAttendanceCardInteraction(interaction) {
       } catch (err) {
         const msg = err instanceof AttendanceDecisionError ? err.message : err.message;
         return await interaction.followUp({ content: `❌ ${msg}`, ephemeral: true }).catch(() => {});
+      }
+
+      if (consumeAnnounceCooldown(lockKey)) {
+        const cycle = getRaidCycleStatus();
+        sendGenRoomMessage(buildRsvpAnnounceLine({
+          displayName,
+          available: nextStatus === 'Confirmed',
+          eventTitle: cycle?.activeEventTitle,
+          eventDate: cycle?.warDate,
+        })).catch((err) => {
+          console.error('⚠️ Attendance gen-room announce skipped:', err.message);
+        });
       }
 
       if (fromEphemeral) {

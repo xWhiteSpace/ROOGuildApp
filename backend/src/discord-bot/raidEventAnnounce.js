@@ -12,6 +12,7 @@ import {
   sendWarAnnounceMessage,
 } from '../games/ragnarok-origin/services/discordGenAnnounce.js';
 import { getRaidCycleStatus } from '../games/ragnarok-origin/raidTimeWindow.js';
+import { readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 
 const CATCHUP_WINDOW_MINUTES = 3;
 const SENDING_TTL_MS = 10 * 60 * 1000;
@@ -46,6 +47,13 @@ function collectDuePhases(absMinute, announcementMinutes) {
   return due;
 }
 
+function hasScheduledRaidAnnouncements(announcementMinutes) {
+  const { phase1 = [], phase2 = null, phase3 = null } = announcementMinutes || {};
+  return (Array.isArray(phase1) && phase1.length > 0)
+    || typeof phase2 === 'number'
+    || typeof phase3 === 'number';
+}
+
 async function dispatchRaidAnnouncement(phaseTag, cycle) {
   const payload = {
     eventTitle: cycle.activeEventTitle,
@@ -63,11 +71,12 @@ export async function maybeAnnounceRaidEvents() {
   if (isDiscordCircuitOpen()) return;
 
   const db = getTenantStore();
-  const configSnap = await db.ref('settings/configuration').once('value');
-  if (configSnap.exists() && configSnap.val().isForceLocked === true) return;
+  const config = await readTenantConfiguration(db);
+  if (config.isForceLocked === true) return;
 
   const status = getRaidCycleStatus();
   if (!status || status.needsSetup || status.isForceLocked || !status.eventId) return;
+  if (!hasScheduledRaidAnnouncements(status.announcementMinutes)) return;
 
   const timezone = status.timezone || DEFAULT_TZ;
   const eventId = status.eventId;

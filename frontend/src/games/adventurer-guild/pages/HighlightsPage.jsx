@@ -128,7 +128,7 @@ export default function HighlightsPage({ user }) {
         {highlights.map((item) => (
           <article key={item.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden">
             {isVideo(item) ? (
-              <video src={item.url} controls className="w-full aspect-video bg-black" />
+              <video src={item.url} controls preload="metadata" className="w-full aspect-video bg-black" />
             ) : (
               <img src={item.url} alt={item.caption || 'Highlight'} className="w-full aspect-video object-cover bg-slate-950" />
             )}

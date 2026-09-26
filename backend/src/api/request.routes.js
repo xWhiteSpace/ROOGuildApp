@@ -1,7 +1,7 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
 import { getTenantStore } from '../db/database.js';
-import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
+import { getGateStatusDetails, readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 import { findOverlappingRaidCyclePair } from '@guildname/shared/raidCycle';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { getCurrentTenantId } from '../db/tenantContext.js';
@@ -237,15 +237,14 @@ router.get('/active-session', async (req, res) => {
 
   try {
     const db = getTenantStore();
-    const configSnap = await db.ref('settings/configuration').once('value');
-    const dynamicConfig = configSnap.exists() ? configSnap.val() : { items: [] };
-    const itemsList = dynamicConfig.items || [];
-    
     const sessionSnap = await db.ref('auction/active_session').once('value');
 
     if (!sessionSnap.exists()) {
       return res.json({ success: true, session: null });
     }
+
+    const dynamicConfig = await readTenantConfiguration(db);
+    const itemsList = dynamicConfig.items || [];
 
     const currentSessionData = sessionSnap.val();
     const timeDeltaMilliseconds = Date.now() - (currentSessionData.lastUpdated || 0);

@@ -3,7 +3,8 @@
  * deadline closer, and monthly leave-credit refresh.
  */
 import { getTenantStore } from '../../../db/database.js';
-import { writeCommitment, ensureWeekInstances, resolveGuildTimezone } from './scheduleService.js';
+import { getCachedConfig } from '../../../db/tenantContext.js';
+import { writeCommitment, ensureWeekInstances, resolveGuildTimezone, loadRosterMembers } from './scheduleService.js';
 import {
   getWeekMonday,
   parseCompositeKey,
@@ -240,23 +241,28 @@ export async function closeExpiredDeadlines({ nowMs = Date.now() } = {}) {
   const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
   const upcoming = await listUpcomingInstances({ timezone, includePreviousWeek: true });
-  const membersSnap = await db.ref('auction/members').once('value');
-  const members = membersSnap.exists() ? membersSnap.val() : {};
-  const rosterUids = Object.entries(members)
-    .filter(([, m]) => isRaidRosterMember(m))
-    .map(([uid]) => uid);
 
-  let closed = 0;
+  const due = [];
   for (const ev of upcoming) {
     const startMs = getEventStartMs(ev, timezone);
     const deadlineMs = getEventDeadlineMs(ev, timezone);
     if (!Number.isFinite(deadlineMs) || deadlineMs > nowMs) continue;
     if (Number.isFinite(startMs) && startMs + 7 * 24 * 60 * 60 * 1000 < nowMs) continue;
-
-    const commitSnap = await db.ref(`attendance/commitments/${ev.key}`).once('value');
-    const commits = commitSnap.exists() ? commitSnap.val() : {};
     const markerSnap = await db.ref(`attendance/deadline_closed/${ev.key}`).once('value');
     if (markerSnap.exists()) continue;
+    due.push(ev);
+  }
+  if (due.length === 0) return { closed: 0 };
+
+  const members = await loadRosterMembers(db);
+  const rosterUids = Object.entries(members)
+    .filter(([, m]) => isRaidRosterMember(m))
+    .map(([uid]) => uid);
+
+  let closed = 0;
+  for (const ev of due) {
+    const commitSnap = await db.ref(`attendance/commitments/${ev.key}`).once('value');
+    const commits = commitSnap.exists() ? commitSnap.val() : {};
 
     const updates = {};
     let eventClosed = 0;
@@ -293,11 +299,10 @@ export async function maybeRefreshMonthlyLeaveCredits({ now = new Date() } = {})
   const markerSnap = await markerRef.once('value');
   if (markerSnap.exists()) return { skipped: true, reason: 'already-ran', ym };
 
-  const [configSnap, membersSnap] = await Promise.all([
-    db.ref('settings/configuration').once('value'),
-    db.ref('auction/members').once('value'),
-  ]);
-  const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+  const cached = getCachedConfig();
+  const membersSnap = await db.ref('auction/members').once('value');
+  const config = cached || ((await db.ref('settings/configuration').once('value')).val() || {});
+  const defaultCredits = getDefaultLeaveCredits(config);
   const members = membersSnap.exists() ? membersSnap.val() : {};
   const updates = {};
   let count = 0;
