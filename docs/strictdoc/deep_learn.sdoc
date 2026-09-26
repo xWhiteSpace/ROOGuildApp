@@ -17,12 +17,11 @@ V-model shape used:
                      ↘ TST (plans) → EVD (proof; Last Boss only)
 
 Learnings:
-1. Poison SRS: Requirements/Requirements.md (Firebase RTDB) must never enter USR/REQ. Policy quarantine id poison-srs-firebase-requirements-md.
-2. Develop live behavior is SoT; Staging tip may be newer chronologically but is not SoT unless promoted.
-3. published ≠ proven. Registry acceptance of TST plans is not left–right proof.
-4. Edge authorship matters: Test Master authors verifies (plan lineage); depends_on is design-only; evidences is Last Boss only; requires_tol is node field only.
-5. Open musts stay open — deferred ≠ waived (Auth 008/015/017; Tenant live Discord 026/029/030).
-6. Tooling must be pinned before execution claims (Vitest/MSW/Playwright/coverage still greenfield).
+1. Develop live behavior is SoT; Staging tip may be newer chronologically but is not SoT unless promoted.
+2. published ≠ proven. Registry acceptance of TST plans is not left–right proof.
+3. Edge authorship matters: Test Master authors verifies (plan lineage); depends_on is design-only; evidences is Last Boss only; requires_tol is node field only.
+4. Open musts stay open — deferred ≠ waived (Auth 008/015/017; Tenant live Discord 026/029/030).
+5. Tooling must be pinned before execution claims (Vitest/MSW/Playwright/coverage still greenfield).
 <<<
 
 [SECTION]

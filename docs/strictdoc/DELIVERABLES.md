@@ -27,12 +27,6 @@ strictdoc export . --config strictdoc.toml --output-dir output
 
 ---
 
-## Poison warning (do not forget)
-
-**`Requirements/Requirements.md` is NOT SoT.**  
-It is a historical Firebase RTDB SRS. Policy quarantine (`poison-srs-firebase-requirements-md`) refuses it as requirements registry content. Live Develop behavior + published SSOT nodes are the only requirements truth for this gym.
-
----
 
 ## Deliverable index
 

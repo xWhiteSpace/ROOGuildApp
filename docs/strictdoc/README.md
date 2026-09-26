@@ -1,6 +1,6 @@
 # ROO StrictDoc export — HOW TO OPEN
 
-**Open [`DELIVERABLES.md`](DELIVERABLES.md) first.** That file is the single human entry: deliverables table, poison warning, phase status, honesty board, and links into every `.sdoc`.
+**Open [`DELIVERABLES.md`](DELIVERABLES.md) first.** That file is the single human entry: deliverables table, phase status, honesty board, and links into every `.sdoc`.
 
 ## Quick paths
 
@@ -28,11 +28,10 @@ docs/strictdoc/
 strictdoc export . --config strictdoc.toml --output-dir output
 ```
 
-## Non-negotiables
+## Source of truth
 
 - SoT: `Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07`
-- **`Requirements/Requirements.md` is NOT SoT** (Firebase poison SRS)
+- Requirements in this pack come from published SSOT only (live Develop behavior)
 - published ≠ proven; **zero EVD** at export
-- Do not invent requirements; SSOT JSON only
 
 Generated: 2026-09-26T23:12:34+09:00 (JST)

@@ -44,7 +44,6 @@
     "evidence_status": "none",
     "evd_count": 0
   },
-  "poison": "Requirements/Requirements.md is NOT SoT",
   "skipped_nodes": {
     "design_full_bodies": "FNC/API/CMP/INT/UNT full nodes summarized by domain ranges only (not every node inlined)",
     "invented_requirements": "none \u2014 SSOT JSON only"
