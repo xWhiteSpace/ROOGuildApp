@@ -1,0 +1,158 @@
+[DOCUMENT]
+TITLE: ROO Design Summary (left-side tips)
+UID: DOC-ROO-DESIGN
+VERSION: 0.1
+
+[SECTION]
+TITLE: Phase 2 left-side status
+
+[TEXT]
+STATEMENT: >>>
+Phase 2 left-side DONE (tips = next free IDs from last publish).
+Published counts vs tips:
+- FNC published=173; tip=FNC-ROO-174
+- API published=114; tip=API-ROO-115
+- CMP published=28; tip=CMP-ROO-029
+- INT published=114; tip=INT-ROO-115
+- UNT published=183; tip=UNT-ROO-184
+
+This document summarizes by domain with ID ranges only (not every design node).
+Full node JSON remains in SSOT registries under interfaces/, structure/, units/.
+SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+Poison: Requirements/Requirements.md is NOT SoT.
+<<<
+
+[SECTION]
+TITLE: FNC — Functional specs
+
+[TEXT]
+STATEMENT: >>>
+Published count: 173
+ID span: FNC-ROO-001 .. FNC-ROO-173
+Next tip: FNC-ROO-174
+
+Domain map:
+- Platform/Auth: count=6; range=FNC-ROO-001 .. FNC-ROO-006
+- Tenant/Workspace: count=9; range=FNC-ROO-007 .. FNC-ROO-015
+- Games catalog: count=8; range=FNC-ROO-016 .. FNC-ROO-023
+- Billing/Capacity: count=13; range=FNC-ROO-024 .. FNC-ROO-036
+- Discord bot/Channels: count=16; range=FNC-ROO-037 .. FNC-ROO-052
+- Auction/Requests: count=23; range=FNC-ROO-053 .. FNC-ROO-075
+- Attendance/Roster: count=14; range=FNC-ROO-076 .. FNC-ROO-089
+- Scheduler/RSVP: count=12; range=FNC-ROO-090 .. FNC-ROO-101
+- Raid compose/Party: count=24; range=FNC-ROO-102 .. FNC-ROO-125
+- Live Raid/Voice: count=16; range=FNC-ROO-126 .. FNC-ROO-141
+- OCR/GVG Attendance: count=9; range=FNC-ROO-142 .. FNC-ROO-150
+- Adventurer Guild: count=8; range=FNC-ROO-151 .. FNC-ROO-158
+- Data isolation/Storage: count=9; range=FNC-ROO-159 .. FNC-ROO-167
+- Frontend shell/UX: count=6; range=FNC-ROO-168 .. FNC-ROO-173
+<<<
+
+[SECTION]
+TITLE: API — Interfaces
+
+[TEXT]
+STATEMENT: >>>
+Published count: 114
+ID span: API-ROO-001 .. API-ROO-114
+Next tip: API-ROO-115
+
+Domain map:
+- Platform/Auth: count=5; range=API-ROO-001 .. API-ROO-005
+- Tenant/Workspace: count=9; range=API-ROO-006 .. API-ROO-014
+- Games catalog: count=3; range=API-ROO-015 .. API-ROO-017
+- Billing/Capacity: count=6; range=API-ROO-018 .. API-ROO-023
+- Discord bot/Channels: count=7; range=API-ROO-024 .. API-ROO-030
+- Auction/Requests: count=17; range=API-ROO-031 .. API-ROO-047
+- Attendance/Roster: count=12; range=API-ROO-048 .. API-ROO-059
+- Scheduler/RSVP: count=9; range=API-ROO-060 .. API-ROO-068
+- Raid compose/Party: count=20; range=API-ROO-069 .. API-ROO-088
+- Live Raid/Voice: count=11; range=API-ROO-089 .. API-ROO-099
+- OCR/GVG Attendance: count=8; range=API-ROO-100 .. API-ROO-107
+- Adventurer Guild: count=7; range=API-ROO-108 .. API-ROO-114
+<<<
+
+[SECTION]
+TITLE: CMP — Components
+
+[TEXT]
+STATEMENT: >>>
+Published count: 28
+ID span: CMP-ROO-001 .. CMP-ROO-028
+Next tip: CMP-ROO-029
+
+Domain map:
+- Platform/Auth: count=4; range=CMP-ROO-001 .. CMP-ROO-004
+- Tenant/Workspace: count=2; range=CMP-ROO-005 .. CMP-ROO-006
+- Games catalog: count=2; range=CMP-ROO-007 .. CMP-ROO-008
+- Billing/Capacity: count=1; range=CMP-ROO-009 .. CMP-ROO-009
+- Discord bot/Channels: count=2; range=CMP-ROO-010 .. CMP-ROO-011
+- Auction/Requests: count=2; range=CMP-ROO-012 .. CMP-ROO-013
+- Attendance/Roster: count=3; range=CMP-ROO-014 .. CMP-ROO-016
+- Scheduler/RSVP: count=2; range=CMP-ROO-017 .. CMP-ROO-018
+- Raid compose/Party: count=3; range=CMP-ROO-019 .. CMP-ROO-021
+- Live Raid/Voice: count=2; range=CMP-ROO-022 .. CMP-ROO-023
+- OCR/GVG Attendance: count=1; range=CMP-ROO-024 .. CMP-ROO-024
+- Adventurer Guild: count=2; range=CMP-ROO-025 .. CMP-ROO-026
+- Data isolation/Storage: count=2; range=CMP-ROO-027 .. CMP-ROO-028
+<<<
+
+[SECTION]
+TITLE: INT — Integration seams
+
+[TEXT]
+STATEMENT: >>>
+Published count: 114
+ID span: INT-ROO-001 .. INT-ROO-114
+Next tip: INT-ROO-115
+
+Domain map:
+- Platform/Auth: count=5; range=INT-ROO-001 .. INT-ROO-005
+- Tenant/Workspace: count=9; range=INT-ROO-006 .. INT-ROO-014
+- Games catalog: count=3; range=INT-ROO-015 .. INT-ROO-017
+- Billing/Capacity: count=6; range=INT-ROO-018 .. INT-ROO-023
+- Discord bot/Channels: count=7; range=INT-ROO-024 .. INT-ROO-030
+- Auction/Requests: count=17; range=INT-ROO-031 .. INT-ROO-047
+- Attendance/Roster: count=12; range=INT-ROO-048 .. INT-ROO-059
+- Scheduler/RSVP: count=9; range=INT-ROO-060 .. INT-ROO-068
+- Raid compose/Party: count=20; range=INT-ROO-069 .. INT-ROO-088
+- Live Raid/Voice: count=11; range=INT-ROO-089 .. INT-ROO-099
+- OCR/GVG Attendance: count=8; range=INT-ROO-100 .. INT-ROO-107
+- Adventurer Guild: count=7; range=INT-ROO-108 .. INT-ROO-114
+<<<
+
+[SECTION]
+TITLE: UNT — Units
+
+[TEXT]
+STATEMENT: >>>
+Published count: 183
+ID span: UNT-ROO-001 .. UNT-ROO-183
+Next tip: UNT-ROO-184
+
+Domain map:
+- Platform/Auth: count=17; range=UNT-ROO-001 .. UNT-ROO-017
+- Tenant/Workspace: count=9; range=UNT-ROO-018 .. UNT-ROO-026
+- Games catalog: count=9; range=UNT-ROO-027 .. UNT-ROO-035
+- Billing/Capacity: count=12; range=UNT-ROO-036 .. UNT-ROO-047
+- Discord bot/Channels: count=16; range=UNT-ROO-048 .. UNT-ROO-063
+- Auction/Requests: count=22; range=UNT-ROO-064 .. UNT-ROO-085
+- Attendance/Roster: count=14; range=UNT-ROO-086 .. UNT-ROO-099
+- Scheduler/RSVP: count=12; range=UNT-ROO-100 .. UNT-ROO-111
+- Raid compose/Party: count=24; range=UNT-ROO-112 .. UNT-ROO-135
+- Live Raid/Voice: count=16; range=UNT-ROO-136 .. UNT-ROO-151
+- OCR/GVG Attendance: count=9; range=UNT-ROO-152 .. UNT-ROO-160
+- Adventurer Guild: count=8; range=UNT-ROO-161 .. UNT-ROO-168
+- Data isolation/Storage: count=9; range=UNT-ROO-169 .. UNT-ROO-177
+- Frontend shell/UX: count=6; range=UNT-ROO-178 .. UNT-ROO-183
+<<<
+
+[SECTION]
+TITLE: Cross-kind tip snapshot
+
+[TEXT]
+STATEMENT: >>>
+Tips (next free): FNC=FNC-ROO-174, API=API-ROO-115, CMP=CMP-ROO-029, INT=INT-ROO-115, UNT=UNT-ROO-184, TOL=TOL-ROO-012, TST=TST-ROO-066
+Note: Frontend shell UNT batch closed Phase 2 left-side (UNT tip 184).
+<<<
+

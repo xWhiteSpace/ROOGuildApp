@@ -1,0 +1,93 @@
+[DOCUMENT]
+TITLE: ROO Deep Learn — V-model gym overview
+UID: DOC-ROO-DEEP
+VERSION: 0.1
+
+[SECTION]
+TITLE: What this gym taught
+
+[TEXT]
+STATEMENT: >>>
+ROO deep rebuild gym for WhiteSpace / ROOGuildApp (VALHALLA).
+SoT branch/commit: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+SSOT Gate is the only publisher; sibling bots propose only.
+
+V-model shape used:
+  USR → REQ → FNC/API → CMP/INT → UNT
+                     ↘ TST (plans) → EVD (proof; Last Boss only)
+
+Learnings:
+1. Poison SRS: Requirements/Requirements.md (Firebase RTDB) must never enter USR/REQ. Policy quarantine id poison-srs-firebase-requirements-md.
+2. Develop live behavior is SoT; Staging tip may be newer chronologically but is not SoT unless promoted.
+3. published ≠ proven. Registry acceptance of TST plans is not left–right proof.
+4. Edge authorship matters: Test Master authors verifies (plan lineage); depends_on is design-only; evidences is Last Boss only; requires_tol is node field only.
+5. Open musts stay open — deferred ≠ waived (Auth 008/015/017; Tenant live Discord 026/029/030).
+6. Tooling must be pinned before execution claims (Vitest/MSW/Playwright/coverage still greenfield).
+<<<
+
+[SECTION]
+TITLE: Phase status
+
+[TEXT]
+STATEMENT: >>>
+P1 Requirements — DONE
+  USR 42 (USR-ROO-001..042)
+  REQ 172 (REQ-ROO-001..172)
+
+P2 Left-side design — DONE
+  FNC 173 tip FNC-ROO-174
+  API 114 tip API-ROO-115
+  CMP 28 tip CMP-ROO-029
+  INT 114 tip INT-ROO-115
+  UNT 183 tip UNT-ROO-184
+
+P3 Right-side verification — PAUSED after Games
+  TST 65 published (TST-ROO-001..065); tip TST-ROO-066
+  Domains planned: Platform/Auth (22), Tenant/Workspace (23), Games catalog (20)
+  Remaining domains (Billing, Discord, Auction, Attendance, Scheduler, Raid, Live Raid, OCR, Guild, Isolation, Frontend) have no TST yet
+  EVD: 0
+
+P4 This StrictDoc export — THIS PACKAGE
+  Human entry: DELIVERABLES.md
+  Copy target on Staging: docs/strictdoc/ inside xWhiteSpace/ROOGuildApp
+<<<
+
+[SECTION]
+TITLE: Gaps & honesty board
+
+[TEXT]
+STATEMENT: >>>
+Zero EVD. All TST execution_status=blocked_on_tooling.
+
+Open must (Auth):
+- REQ-ROO-008 production Vercel OAuth bridge (must not soft-pass via config-only)
+- REQ-ROO-015 localhost Vite proxy
+- REQ-ROO-017 CORS host matrix
+
+Open must live Discord (Tenant):
+- REQ-ROO-026 / 029 / 030 — MSW lineage may exist; live bot invite / guild onboard E2E still open
+
+Challenge sequence accepted:
+- platform-auth-tst CHALLENGE + AMEND
+- tenant-workspace-tst CHALLENGE + AMEND (+ LIVE)
+- games-catalog-tst LIVE + AMEND RECHALLENGE
+
+Do not claim Auth/Tenant/Games 'tested done' because plans are published.
+<<<
+
+[SECTION]
+TITLE: How to navigate StrictDoc package
+
+[TEXT]
+STATEMENT: >>>
+Open DELIVERABLES.md first (human index).
+Then:
+- requirements/usr.sdoc — user desires
+- requirements/req.sdoc — system REQs with Parent → USR
+- design/summary.sdoc — tip counts + domain ID ranges
+- verification/tests.sdoc — TST plans + honesty + open musts
+- tools/tol.sdoc — present vs greenfield tools
+- deep_learn.sdoc — this overview
+Use strictdoc.toml to render HTML if StrictDoc CLI is available.
+<<<
+

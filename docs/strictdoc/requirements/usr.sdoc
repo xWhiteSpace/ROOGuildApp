@@ -1,0 +1,858 @@
+[DOCUMENT]
+TITLE: ROO User Requirements (USR)
+UID: DOC-ROO-USR
+VERSION: 0.1
+
+[SECTION]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+Project: ROO (gym = ROOGuildApp / live product VALHALLA).
+SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+Source: SSOT requirements/usr (published only).
+Poison: Requirements/Requirements.md is NOT SoT — Firebase historical SRS; refused by policy quarantine.
+Phase 1 complete: USR-ROO-001 .. USR-ROO-042 (42 nodes).
+STATUS Active means published in SSOT registry, not proven by evidence.
+<<<
+
+[SECTION]
+TITLE: Platform/Auth (USR-ROO-001 .. USR-ROO-005)
+
+[REQUIREMENT]
+UID: USR-ROO-001
+STATUS: Active
+TITLE: Platform health and safe boot
+STATEMENT: >>>
+Operators and deploy pipelines need the API process to refuse to start without required secrets, migrate schema, start the Discord bot, and expose a health check that reflects DB reachability.
+<<<
+RATIONALE: >>>
+Avoid silent half-starts and false-online production.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+who: Platform operators / deploy
+why: Avoid silent half-starts and false-online production.
+spoken_constraints: Develop live behavior only; No Firebase SRS import
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-002
+STATUS: Active
+TITLE: Discord OAuth sign-in and callback routing
+STATEMENT: >>>
+Users must sign in (or sign up) via Discord OAuth and land in the correct post-auth path based on onboarded guild count and intent, including production token-exchange via the Vercel bridge and rate-limit friendly redirects.
+<<<
+RATIONALE: >>>
+Single identity provider; guild membership drives tenant access.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+who: End users (members/officers)
+why: Single identity provider; guild membership drives tenant access.
+spoken_constraints: Scopes identify guilds guilds.members.read; state intent signin|signup
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-003
+STATUS: Active
+TITLE: Session identity and logout
+STATEMENT: >>>
+Authenticated callers need a stable identity from session or signed profile header, a me endpoint that re-signs profile, and a logout that clears the session cookie.
+<<<
+RATIONALE: >>>
+Cross-origin and cookie fallbacks require dual identity resolution.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+who: Authenticated SPA / API clients
+why: Cross-origin and cookie fallbacks require dual identity resolution.
+spoken_constraints: HMAC verify with DISCORD_CLIENT_SECRET for x-user-profile
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-004
+STATUS: Active
+TITLE: SPA session restore and credentialed API client
+STATEMENT: >>>
+The browser app must restore session from auth_user query then localStorage (migrating legacy keys), verify via /auth/me, always send credentials, and attach profile/tenant headers; local dev uses Vite proxy.
+<<<
+RATIONALE: >>>
+Survive OAuth redirects and local vs deployed backends.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+who: SPA users
+why: Survive OAuth redirects and local vs deployed backends.
+spoken_constraints: Legacy dynasty_raid_session migrates to guild_raid_session
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-005
+STATUS: Active
+TITLE: Cookie, CORS, and unauthenticated routing
+STATEMENT: >>>
+Session cookies and CORS must match local HTTP vs deployed HTTPS realities; unauthenticated users hitting protected shells go to landing; /login permanently redirects to /landing; document title reflects product vs guild.
+<<<
+RATIONALE: >>>
+Cross-site cookie and CORS must work with Vercel ↔ Render.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+who: SPA + browser security model
+why: Cross-site cookie and CORS must work with Vercel ↔ Render.
+spoken_constraints: secure/sameSite differ by environment
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Tenant/Workspace (USR-ROO-006 .. USR-ROO-010)
+
+[REQUIREMENT]
+UID: USR-ROO-006
+STATUS: Active
+TITLE: Tenant identity is Discord guild
+STATEMENT: >>>
+Platform / onboard need: Tenant identity is Discord guild. One guild = one tenant PK.
+<<<
+RATIONALE: >>>
+One guild = one tenant PK.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+who: Platform / onboard
+why: One guild = one tenant PK.
+spoken_constraints: tenants.id = Discord guild id
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-007
+STATUS: Active
+TITLE: Discover and select workspace
+STATEMENT: >>>
+Members need: Discover and select workspace. List onboarded + onboardable guilds; select builds session.
+<<<
+RATIONALE: >>>
+List onboarded + onboardable guilds; select builds session.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+who: Members
+why: List onboarded + onboardable guilds; select builds session.
+spoken_constraints: capacity can empty onboardable
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-008
+STATUS: Active
+TITLE: Onboard new Discord guild workspace
+STATEMENT: >>>
+Guild owner / Manage Server need: Onboard new Discord guild workspace. Create tenant when bot present and officer roles set.
+<<<
+RATIONALE: >>>
+Create tenant when bot present and officer roles set.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+who: Guild owner / Manage Server
+why: Create tenant when bot present and officer roles set.
+spoken_constraints: 409 if already onboarded; bot invite when missing
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-009
+STATUS: Active
+TITLE: Officer model and workspace settings
+STATEMENT: >>>
+Officers need: Officer model and workspace settings. Define officers; edit display/timezone/roles; logo.
+<<<
+RATIONALE: >>>
+Define officers; edit display/timezone/roles; logo.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+who: Officers
+why: Define officers; edit display/timezone/roles; logo.
+spoken_constraints: Manage Server only for create; logo ≤512KB
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-010
+STATUS: Active
+TITLE: Post-login tenant routing
+STATEMENT: >>>
+Authenticated users need: Post-login tenant routing. Force select-guild and ordered post-login path.
+<<<
+RATIONALE: >>>
+Force select-guild and ordered post-login path.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+who: Authenticated users
+why: Force select-guild and ordered post-login path.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Games catalog (USR-ROO-011 .. USR-ROO-012)
+
+[REQUIREMENT]
+UID: USR-ROO-011
+STATUS: Active
+TITLE: Known games and enable/disable
+STATEMENT: >>>
+Officers need: Known games and enable/disable. Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+<<<
+RATIONALE: >>>
+Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+<<<
+COMMENT: >>>
+domain: Games catalog
+who: Officers
+why: Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+spoken_constraints: active subscription to enable
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-012
+STATUS: Active
+TITLE: Game setup and API gating
+STATEMENT: >>>
+Officers / API need: Game setup and API gating. RO channel setup; requireGame gates; SPA path block; active game storage.
+<<<
+RATIONALE: >>>
+RO channel setup; requireGame gates; SPA path block; active game storage.
+<<<
+COMMENT: >>>
+domain: Games catalog
+who: Officers / API
+why: RO channel setup; requireGame gates; SPA path block; active game storage.
+spoken_constraints: AG has no channel setup
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Billing/Capacity (USR-ROO-013 .. USR-ROO-016)
+
+[REQUIREMENT]
+UID: USR-ROO-013
+STATUS: Active
+TITLE: Seat access and SPA billing gate
+STATEMENT: >>>
+Members / SPA need: Seat access and SPA billing gate. Access when active or past_due-in-grace; 402 and SPA redirect when inactive.
+<<<
+RATIONALE: >>>
+Access when active or past_due-in-grace; 402 and SPA redirect when inactive.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+who: Members / SPA
+why: Access when active or past_due-in-grace; 402 and SPA redirect when inactive.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-014
+STATUS: Active
+TITLE: Capacity and billing status APIs
+STATEMENT: >>>
+Public / officers need: Capacity and billing status APIs. Capacity cap visibility and tenant billing status.
+<<<
+RATIONALE: >>>
+Capacity cap visibility and tenant billing status.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+who: Public / officers
+why: Capacity cap visibility and tenant billing status.
+spoken_constraints: BILLING_MAX_ACTIVE_GUILDS
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-015
+STATUS: Active
+TITLE: Stripe checkout, portal, invite redeem
+STATEMENT: >>>
+Officers need: Stripe checkout, portal, invite redeem. Checkout, portal, one-time invite redeem under lock.
+<<<
+RATIONALE: >>>
+Checkout, portal, one-time invite redeem under lock.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+who: Officers
+why: Checkout, portal, one-time invite redeem under lock.
+spoken_constraints: reject if access or capacity full
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-016
+STATUS: Active
+TITLE: Stripe webhooks and billing permanence
+STATEMENT: >>>
+Billing system need: Stripe webhooks and billing permanence. Webhook lifecycle, overflow refund, grace, permanent invite/grandfathered.
+<<<
+RATIONALE: >>>
+Webhook lifecycle, overflow refund, grace, permanent invite/grandfathered.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+who: Billing system
+why: Webhook lifecycle, overflow refund, grace, permanent invite/grandfathered.
+spoken_constraints: Stripe env optional at boot
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Discord bot/Channels (USR-ROO-017 .. USR-ROO-020)
+
+[REQUIREMENT]
+UID: USR-ROO-017
+STATUS: Active
+TITLE: Bot boot intents and slash cleanup
+STATEMENT: >>>
+Platform need: Bot boot intents and slash cleanup. Required intents; fatal without token; clear slash on ready.
+<<<
+RATIONALE: >>>
+Required intents; fatal without token; clear slash on ready.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+who: Platform
+why: Required intents; fatal without token; clear slash on ready.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-018
+STATUS: Active
+TITLE: Interactions, ticker, rate-limit circuit
+STATEMENT: >>>
+Discord bot need: Interactions, ticker, rate-limit circuit. Card customId routing; 60s ticker; 429 circuit; proxy/IPv4.
+<<<
+RATIONALE: >>>
+Card customId routing; 60s ticker; 429 circuit; proxy/IPv4.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+who: Discord bot
+why: Card customId routing; 60s ticker; 429 circuit; proxy/IPv4.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-019
+STATUS: Active
+TITLE: Officer deploy Discord cards
+STATEMENT: >>>
+Officers need: Officer deploy Discord cards. Deploy request/attendance/party/OCR cards to mapped channels.
+<<<
+RATIONALE: >>>
+Deploy request/attendance/party/OCR cards to mapped channels.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+who: Officers
+why: Deploy request/attendance/party/OCR cards to mapped channels.
+spoken_constraints: channels in tenant_settings JSON
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-020
+STATUS: Active
+TITLE: Discord debug and member nickname cache
+STATEMENT: >>>
+Ops / SPA need: Discord debug and member nickname cache. Ratelimit debug without secrets; cached nicknames with roster fallback.
+<<<
+RATIONALE: >>>
+Ratelimit debug without secrets; cached nicknames with roster fallback.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+who: Ops / SPA
+why: Ratelimit debug without secrets; cached nicknames with roster fallback.
+spoken_constraints: 2 min TTL
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Auction/Requests (USR-ROO-021 .. USR-ROO-024)
+
+[REQUIREMENT]
+UID: USR-ROO-021
+STATUS: Active
+TITLE: Request lobby submit/cancel and Discord card
+STATEMENT: >>>
+Members need: Request lobby submit/cancel and Discord card. Init/submit/cancel requests; Discord reqcard without website.
+<<<
+RATIONALE: >>>
+Init/submit/cancel requests; Discord reqcard without website.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+who: Members
+why: Init/submit/cancel requests; Discord reqcard without website.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-022
+STATUS: Active
+TITLE: Mimic Book session and commit
+STATEMENT: >>>
+Officers / scheduler need: Mimic Book session and commit. Active session, optimistic update, atomic commit, auto-commit.
+<<<
+RATIONALE: >>>
+Active session, optimistic update, atomic commit, auto-commit.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+who: Officers / scheduler
+why: Active session, optimistic update, atomic commit, auto-commit.
+spoken_constraints: 24h auto-reset
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-023
+STATUS: Active
+TITLE: Roster sync, priority reset, history APIs
+STATEMENT: >>>
+Officers / members need: Roster sync, priority reset, history APIs. Sync roster Ghost rules; reset priority; clear/history/loot/past/stats.
+<<<
+RATIONALE: >>>
+Sync roster Ghost rules; reset priority; clear/history/loot/past/stats.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+who: Officers / members
+why: Sync roster Ghost rules; reset priority; clear/history/loot/past/stats.
+spoken_constraints: never Ghost dummy_*
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-024
+STATUS: Active
+TITLE: Auction settings and SPA routes
+STATEMENT: >>>
+Officers / members need: Auction settings and SPA routes. Help/settings get/save/unlock; auction routes; submit-evidence redirect.
+<<<
+RATIONALE: >>>
+Help/settings get/save/unlock; auction routes; submit-evidence redirect.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+who: Officers / members
+why: Help/settings get/save/unlock; auction routes; submit-evidence redirect.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Attendance/Roster (USR-ROO-025 .. USR-ROO-027)
+
+[REQUIREMENT]
+UID: USR-ROO-025
+STATUS: Active
+TITLE: Roster vanish, updates, dummies
+STATEMENT: >>>
+Officers need: Roster vanish, updates, dummies. Batch vanish/kick; leaf updates; dummy create.
+<<<
+RATIONALE: >>>
+Batch vanish/kick; leaf updates; dummy create.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+who: Officers
+why: Batch vanish/kick; leaf updates; dummy create.
+spoken_constraints: vanish batch ≤500
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-026
+STATUS: Active
+TITLE: Profiles and leave credits
+STATEMENT: >>>
+Members / officers need: Profiles and leave credits. Profiles, me summary, leave credit adjust, seed and monthly refresh.
+<<<
+RATIONALE: >>>
+Profiles, me summary, leave credit adjust, seed and monthly refresh.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+who: Members / officers
+why: Profiles, me summary, leave credit adjust, seed and monthly refresh.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-027
+STATUS: Active
+TITLE: Peak hours, job targets, expected rate, UI
+STATEMENT: >>>
+Members / officers need: Peak hours, job targets, expected rate, UI. Peak hours heatmap; job targets; expected rate; attendance pages.
+<<<
+RATIONALE: >>>
+Peak hours heatmap; job targets; expected rate; attendance pages.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+who: Members / officers
+why: Peak hours heatmap; job targets; expected rate; attendance pages.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Scheduler/RSVP (USR-ROO-028 .. USR-ROO-029)
+
+[REQUIREMENT]
+UID: USR-ROO-028
+STATUS: Active
+TITLE: Week instances and RSVP commitments
+STATEMENT: >>>
+Members need: Week instances and RSVP commitments. Ensure week; commitments; Confirmed/Leave/NoConfirm/None; deadline close.
+<<<
+RATIONALE: >>>
+Ensure week; commitments; Confirmed/Leave/NoConfirm/None; deadline close.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+who: Members
+why: Ensure week; commitments; Confirmed/Leave/NoConfirm/None; deadline close.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-029
+STATUS: Active
+TITLE: Special events and announce week
+STATEMENT: >>>
+Officers need: Special events and announce week. Special events CRUD; announce-week Discord flow; scheduler UI.
+<<<
+RATIONALE: >>>
+Special events CRUD; announce-week Discord flow; scheduler UI.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+who: Officers
+why: Special events CRUD; announce-week Discord flow; scheduler UI.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Raid compose/Party (USR-ROO-030 .. USR-ROO-031)
+
+[REQUIREMENT]
+UID: USR-ROO-030
+STATUS: Active
+TITLE: Compositions and compose sessions
+STATEMENT: >>>
+Officers need: Compositions and compose sessions. Composition CRUD; cross-tab unique members; compose session APIs.
+<<<
+RATIONALE: >>>
+Composition CRUD; cross-tab unique members; compose session APIs.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+who: Officers
+why: Composition CRUD; cross-tab unique members; compose session APIs.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-031
+STATUS: Active
+TITLE: Published compositions and War Room hub
+STATEMENT: >>>
+Officers / members need: Published compositions and War Room hub. Published lifecycle, Discord announces, war-room init/automation, UI routes.
+<<<
+RATIONALE: >>>
+Published lifecycle, Discord announces, war-room init/automation, UI routes.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+who: Officers / members
+why: Published lifecycle, Discord announces, war-room init/automation, UI routes.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Live Raid/Voice (USR-ROO-032 .. USR-ROO-034)
+
+[REQUIREMENT]
+UID: USR-ROO-032
+STATUS: Active
+TITLE: Create and update live raid session
+STATEMENT: >>>
+Officers need: Create and update live raid session. Create/update/cell-update from published grids; reject dupes.
+<<<
+RATIONALE: >>>
+Create/update/cell-update from published grids; reject dupes.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+who: Officers
+why: Create/update/cell-update from published grids; reject dupes.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-033
+STATUS: Active
+TITLE: Voice presence monitoring pulses
+STATEMENT: >>>
+Officers / bot ticker need: Voice presence monitoring pulses. Voice presence; monitoring schedule ≥15m; pulses with circuit skip.
+<<<
+RATIONALE: >>>
+Voice presence; monitoring schedule ≥15m; pulses with circuit skip.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+who: Officers / bot ticker
+why: Voice presence; monitoring schedule ≥15m; pulses with circuit skip.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-034
+STATUS: Active
+TITLE: End, cancel, resume, history
+STATEMENT: >>>
+Officers / system need: End, cancel, resume, history. Archive end, early pulse, cancel, boot resume/auto-end, history APIs/UI.
+<<<
+RATIONALE: >>>
+Archive end, early pulse, cancel, boot resume/auto-end, history APIs/UI.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+who: Officers / system
+why: Archive end, early pulse, cancel, boot resume/auto-end, history APIs/UI.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: OCR/GVG Attendance (USR-ROO-035 .. USR-ROO-035)
+
+[REQUIREMENT]
+UID: USR-ROO-035
+STATUS: Active
+TITLE: OCR review lifecycle
+STATEMENT: >>>
+Officers need: OCR review lifecycle. List events; scan ≤8 images; draft patch/commit/cancel; Discord refresh; non-draft 409.
+<<<
+RATIONALE: >>>
+List events; scan ≤8 images; draft patch/commit/cancel; Discord refresh; non-draft 409.
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+who: Officers
+why: List events; scan ≤8 images; draft patch/commit/cancel; Discord refresh; non-draft 409.
+spoken_constraints: ≤8MB/image
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Adventurer Guild (USR-ROO-036 .. USR-ROO-037)
+
+[REQUIREMENT]
+UID: USR-ROO-036
+STATUS: Active
+TITLE: Highlights gallery
+STATEMENT: >>>
+Members / officers need: Highlights gallery. List/upload/delete highlights with storage and caption limits.
+<<<
+RATIONALE: >>>
+List/upload/delete highlights with storage and caption limits.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+who: Members / officers
+why: List/upload/delete highlights with storage and caption limits.
+spoken_constraints: ≤25MB; caption ≤280
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-037
+STATUS: Active
+TITLE: AG events calendar
+STATEMENT: >>>
+Members / officers need: AG events calendar. List contributed+native events; officer CRUD; SPA routes.
+<<<
+RATIONALE: >>>
+List contributed+native events; officer CRUD; SPA routes.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+who: Members / officers
+why: List contributed+native events; officer CRUD; SPA routes.
+spoken_constraints: title≤120; desc≤500
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Data isolation/Storage (USR-ROO-038 .. USR-ROO-040)
+
+[REQUIREMENT]
+UID: USR-ROO-038
+STATUS: Active
+TITLE: Tenant isolation middleware
+STATEMENT: >>>
+Platform security need: Tenant isolation middleware. tenant_id stamp; runWithTenant; reject silent x-tenant-id switch.
+<<<
+RATIONALE: >>>
+tenant_id stamp; runWithTenant; reject silent x-tenant-id switch.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+who: Platform security
+why: tenant_id stamp; runWithTenant; reject silent x-tenant-id switch.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-039
+STATUS: Active
+TITLE: Postgres schema and json_docs store
+STATEMENT: >>>
+Platform need: Postgres schema and json_docs store. Core tables; Firebase-compatible json_docs; platform_state for circuit.
+<<<
+RATIONALE: >>>
+Core tables; Firebase-compatible json_docs; platform_state for circuit.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+who: Platform
+why: Core tables; Firebase-compatible json_docs; platform_state for circuit.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-040
+STATUS: Active
+TITLE: Shared packages, isolation test, defaults
+STATEMENT: >>>
+Platform / RO config need: Shared packages, isolation test, defaults. Shared FE/BE helpers; isolation test script; timezone and RO seed defaults.
+<<<
+RATIONALE: >>>
+Shared FE/BE helpers; isolation test script; timezone and RO seed defaults.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+who: Platform / RO config
+why: Shared FE/BE helpers; isolation test script; timezone and RO seed defaults.
+spoken_constraints: default TZ Asia/Manila
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[SECTION]
+TITLE: Frontend shell/UX (USR-ROO-041 .. USR-ROO-042)
+
+[REQUIREMENT]
+UID: USR-ROO-041
+STATUS: Active
+TITLE: Landing, layout, help, workspace routes
+STATEMENT: >>>
+SPA users need: Landing, layout, help, workspace routes. Landing redirect; MainLayout/nav; help modal; workspace/game/billing/setup routes.
+<<<
+RATIONALE: >>>
+Landing redirect; MainLayout/nav; help modal; workspace/game/billing/setup routes.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+who: SPA users
+why: Landing redirect; MainLayout/nav; help modal; workspace/game/billing/setup routes.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-042
+STATUS: Active
+TITLE: Billing redirect and onboard/landing components
+STATEMENT: >>>
+SPA users need: Billing redirect and onboard/landing components. apiFetch 402→billing; Officer Role Picker / Discord Sign-In / brand lockup.
+<<<
+RATIONALE: >>>
+apiFetch 402→billing; Officer Role Picker / Discord Sign-In / brand lockup.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+who: SPA users
+why: apiFetch 402→billing; Officer Role Picker / Discord Sign-In / brand lockup.
+spoken_constraints: (none)
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+

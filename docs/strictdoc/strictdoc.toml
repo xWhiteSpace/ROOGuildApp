@@ -1,0 +1,23 @@
+[project]
+title = "ROO / ROOGuildApp StrictDoc Export"
+# Minimal config: all .sdoc under this tree
+
+include_doc_paths = [
+  "*.sdoc",
+  "requirements/**.sdoc",
+  "design/**.sdoc",
+  "verification/**.sdoc",
+  "tools/**.sdoc",
+]
+
+exclude_doc_paths = [
+  "output/**",
+  "**/_cache/**",
+]
+
+features = [
+  "TABLE_SCREEN",
+  "TRACEABILITY_SCREEN",
+  "DEEP_TRACEABILITY_SCREEN",
+  "SEARCH",
+]
