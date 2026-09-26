@@ -1,0 +1,1822 @@
+[DOCUMENT]
+TITLE: ROO Verification Plans (TST)
+UID: DOC-ROO-TST
+VERSION: 0.1
+
+[SECTION]
+TITLE: Honesty — published ≠ proven
+
+[TEXT]
+STATEMENT: >>>
+CRITICAL HONESTY (Last Boss challenges accepted):
+- TST-ROO-001 .. TST-ROO-065 are published PLANS only.
+- execution_status for published nodes: blocked_on_tooling (runners catalogued, not pinned in app repo).
+- evidence_status: none. EVD node count: 0.
+- Zero evidences edges. Zero done claims.
+- verifies fields / graph edges are plan lineage — not execution proof.
+- Soft greens / coverage alone are NOT pass criteria.
+- Tip next: TST-ROO-066 (P3 paused after Games catalog TST-065).
+
+Open must gaps (Auth): REQ-ROO-008, REQ-ROO-015, REQ-ROO-017
+Open must live-Discord (Tenant): REQ-ROO-026, REQ-ROO-029, REQ-ROO-030
+
+Poison: Requirements/Requirements.md is NOT SoT.
+SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+<<<
+
+[SECTION]
+TITLE: Open must & deferred gaps
+
+[TEXT]
+STATEMENT: >>>
+### Platform/Auth open must
+- GAP-AUTH-TST-001: REQ-ROO-015 [must/open] — REQ-ROO-015 localhost Vite proxy (empty backend base)
+- GAP-AUTH-TST-002: REQ-ROO-017 [must/open] — REQ-ROO-017 exhaustive CORS host matrix
+- GAP-AUTH-TST-004: REQ-ROO-008 [must/open] — Production Discord token exchange live Vercel FRONTEND_URL oauth bridge (REQ-ROO-008)
+
+### Tenant/Workspace live Discord / open
+- GAP-TENANT-TST-001: priority=None coverage=watch_deferred topic=GAP-TENANT-TST-001
+- GAP-TENANT-TST-002: priority=must coverage=open topic=GAP-TENANT-TST-002
+- GAP-TENANT-TST-003: priority=None coverage=None topic=GAP-TENANT-TST-003
+- GAP-TENANT-TST-004: priority=None coverage=None topic=GAP-TENANT-TST-004
+- GAP-TENANT-TST-005: priority=None coverage=None topic=GAP-TENANT-TST-005
+
+### Games catalog gaps
+- GAP-GAMES-TST-001: priority=None coverage=watch_deferred topic=
+- GAP-GAMES-TST-002: priority=None coverage=deferred topic=
+- GAP-GAMES-TST-003: priority=None coverage=open topic=
+<<<
+
+[SECTION]
+TITLE: Platform/Auth — TST-ROO-001 .. TST-ROO-022 (22 plans)
+
+[REQUIREMENT]
+UID: TST-ROO-001
+STATUS: Active
+TITLE: ProcessBootstrap refuses start when required secrets missing
+STATEMENT: >>>
+Plan: ProcessBootstrap refuses start when required secrets missing
+level: unit
+verifies: REQ-ROO-002, FNC-ROO-001, UNT-ROO-001, CMP-ROO-001
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: env_gate_refusal, missing_secret_matrix
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Missing DISCORD_CLIENT_SECRET refuses normal start: expected=Process does not reach Discord bot init; env gate fails
+  - Missing SESSION_SECRET refuses normal start: expected=Refuse start before migrate/bot
+  - Missing DATABASE_URL refuses normal start: expected=Refuse start; no half-boot
+  - All required secrets present allows gate pass: expected=Env gate succeeds so migrate can run
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-002
+
+[REQUIREMENT]
+UID: TST-ROO-002
+STATUS: Active
+TITLE: ProcessBootstrap runs migrate before Discord bot start
+STATEMENT: >>>
+Plan: ProcessBootstrap runs migrate before Discord bot start
+level: unit
+verifies: REQ-ROO-003, FNC-ROO-001, UNT-ROO-001, CMP-ROO-001
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: boot_order, migrate_before_bot
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Successful migrate then bot init order: expected=migrate() completes before Discord bot initialization
+  - Migrate failure blocks bot start: expected=Bot never starts when migrate throws/fails
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-003
+
+[REQUIREMENT]
+UID: TST-ROO-003
+STATUS: Active
+TITLE: HealthProbe maps DB ping success/failure to HTTP outcomes
+STATEMENT: >>>
+Plan: HealthProbe maps DB ping success/failure to HTTP outcomes
+level: unit
+verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001, UNT-ROO-005, CMP-ROO-001
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: health_probe_unit, db_ping_stub
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - DB ping success → online body: expected=Handler returns online success payload
+  - DB ping failure → 503 failure body: expected=Handler returns HTTP 503 semantics with failure body
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-001
+
+[REQUIREMENT]
+UID: TST-ROO-004
+STATUS: Active
+TITLE: IdentityResolver prefers session then HMAC x-user-profile
+STATEMENT: >>>
+Plan: IdentityResolver prefers session then HMAC x-user-profile
+level: unit
+verifies: REQ-ROO-012, FNC-ROO-004, UNT-ROO-010, CMP-ROO-003
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: identity_resolution, hmac_verify
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Session user wins over header: expected=Resolved identity is session user when both present
+  - Valid HMAC x-user-profile accepted without session: expected=Identity resolved from signed profile using DISCORD_CLIENT_SECRET
+  - Invalid/unsigned profile rejected: expected=No authenticated identity
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-012
+
+[REQUIREMENT]
+UID: TST-ROO-005
+STATUS: Active
+TITLE: ProfileSigner re-signs profile for authenticated /auth/me payload
+STATEMENT: >>>
+Plan: ProfileSigner re-signs profile for authenticated /auth/me payload
+level: unit
+verifies: REQ-ROO-010, FNC-ROO-004, UNT-ROO-011, API-ROO-004, CMP-ROO-003
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: profile_resign, hmac_sign
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Authenticated me includes re-signed profile: expected=Returned user carries verifiable re-signed profile
+  - Unauthenticated me returns authenticated:false: expected=No user / authenticated false
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-010
+
+[REQUIREMENT]
+UID: TST-ROO-006
+STATUS: Active
+TITLE: SessionCookiePolicy local HTTP vs deployed HTTPS flags
+STATEMENT: >>>
+Plan: SessionCookiePolicy local HTTP vs deployed HTTPS flags
+level: unit
+verifies: REQ-ROO-016, FNC-ROO-006, UNT-ROO-003, CMP-ROO-001
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: cookie_policy_matrix
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Local HTTP cookie policy: expected=secure:false and sameSite:lax
+  - Deployed HTTPS cookie policy: expected=secure:true and sameSite appropriate for cross-site SPA
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-016
+
+[REQUIREMENT]
+UID: TST-ROO-007
+STATUS: Active
+TITLE: OAuthLoginStart builds Discord authorize URL with scopes and intent
+STATEMENT: >>>
+Plan: OAuthLoginStart builds Discord authorize URL with scopes and intent
+level: unit
+verifies: REQ-ROO-004, FNC-ROO-003, API-ROO-002, UNT-ROO-006, CMP-ROO-002
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: oauth_authorize_url, scope_intent_state
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Scopes include identify guilds guilds.members.read: expected=Authorize URL carries required scopes
+  - State carries signin|signup intent: expected=State encodes intent used by callback routing
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-004
+
+[REQUIREMENT]
+UID: TST-ROO-008
+STATUS: Active
+TITLE: SessionRestore prefers auth_user query then migrates legacy localStorage key
+STATEMENT: >>>
+Plan: SessionRestore prefers auth_user query then migrates legacy localStorage key
+level: unit
+verifies: REQ-ROO-013, FNC-ROO-005, UNT-ROO-013, CMP-ROO-004
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: spa_session_restore, legacy_key_migrate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - auth_user query preferred: expected=Restore uses auth_user before localStorage
+  - Legacy dynasty_raid_session migrates to guild_raid_session: expected=Legacy key rewritten; session usable
+  - Restored session verified via /auth/me path (stubbed): expected=Client treats me verification as auth gate
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-ROO-004 absent from unit/integ verifies (Gate already stripped live).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-013
+
+[REQUIREMENT]
+UID: TST-ROO-009
+STATUS: Active
+TITLE: Platform health seam end-to-end through CMP host + INT-001
+STATEMENT: >>>
+Plan: Platform health seam end-to-end through CMP host + INT-001
+level: integration
+verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001, CMP-ROO-001, INT-ROO-001, UNT-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: health_seam, db_reachability_integration
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Reachable DB → GET / online via host seam: expected=INT-ROO-001/API-ROO-001 returns online body
+  - Unreachable DB → GET / 503 via host seam: expected=503 failure body through same seam
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-001
+
+[REQUIREMENT]
+UID: TST-ROO-010
+STATUS: Active
+TITLE: Discord OAuth login+callback seam with mocked Discord token exchange
+STATEMENT: >>>
+Plan: Discord OAuth login+callback seam with mocked Discord token exchange
+level: integration
+verifies: REQ-ROO-004, REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-002, API-ROO-003, CMP-ROO-002, INT-ROO-002, INT-ROO-003, UNT-ROO-006, UNT-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: oauth_seam_msw, callback_routing_integration
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Login start redirects to Discord authorize: expected=INT-002 yields Discord redirect with scopes/intent
+  - Callback single onboarded guild non-signup → tenant path: expected=Redirect into that tenant path
+  - Callback zero/multiple/signup → /select-guild with auth_user: expected=Landing on select-guild with auth context
+  - Callback persists compact guild list to session/DB: expected=Guild membership persisted as specified by REQ-005
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-004
+
+[REQUIREMENT]
+UID: TST-ROO-011
+STATUS: Active
+TITLE: Identity me/logout seam across CMP-003 and INT-004/005
+STATEMENT: >>>
+Plan: Identity me/logout seam across CMP-003 and INT-004/005
+level: integration
+verifies: REQ-ROO-010, REQ-ROO-011, FNC-ROO-004, API-ROO-004, API-ROO-005, CMP-ROO-003, INT-ROO-004, INT-ROO-005, UNT-ROO-010, UNT-ROO-011, UNT-ROO-012
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: session_me_logout_seam
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Session-backed GET /auth/me authenticated: expected=authenticated:true with re-signed profile
+  - POST /auth/logout clears connect.sid: expected=Session destroyed; subsequent me unauthenticated
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-010
+
+[REQUIREMENT]
+UID: TST-ROO-012
+STATUS: Active
+TITLE: Discord circuit-open guard redirects login/callback to landing
+STATEMENT: >>>
+Plan: Discord circuit-open guard redirects login/callback to landing
+level: integration
+verifies: REQ-ROO-009, FNC-ROO-003, CMP-ROO-002, UNT-ROO-009, INT-ROO-002, INT-ROO-003
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: circuit_breaker_oauth, rate_limit_redirect
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Open circuit on login → landing with discord_rate_limited: expected=No Discord authorize; landing hint including until
+  - Open circuit on callback → landing with discord_rate_limited: expected=OAuth not completed; rate-limit hint
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-009
+
+[REQUIREMENT]
+UID: TST-ROO-013
+STATUS: Active
+TITLE: SPA CredentialedApiClient attaches credentials and auth headers (MSW)
+STATEMENT: >>>
+Plan: SPA CredentialedApiClient attaches credentials and auth headers (MSW)
+level: integration
+verifies: REQ-ROO-014, FNC-ROO-005, CMP-ROO-004, UNT-ROO-014
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: credentialed_fetch_msw, header_attachment
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - apiFetch uses credentials:include: expected=Outgoing request includes credentials
+  - Attaches x-user-profile and x-tenant-id when available: expected=Headers present on authenticated client calls
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-ROO-004 absent from unit/integ verifies (Gate already stripped live).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-014
+
+[REQUIREMENT]
+UID: TST-ROO-014
+STATUS: Active
+TITLE: GET / health probe HTTP contract (online vs 503)
+STATEMENT: >>>
+Plan: GET / health probe HTTP contract (online vs 503)
+level: system
+verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001
+requires_tol: TOL-ROO-006, TOL-ROO-005
+patterns: http_health_contract
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GET / 200 online when DB ping succeeds: expected=Online success body per API-ROO-001
+  - GET / 503 when DB ping fails: expected=Failure body; not false-online
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-001
+
+[REQUIREMENT]
+UID: TST-ROO-015
+STATUS: Active
+TITLE: GET /auth/login Discord OAuth start HTTP contract
+STATEMENT: >>>
+Plan: GET /auth/login Discord OAuth start HTTP contract
+level: system
+verifies: REQ-ROO-004, REQ-ROO-009, FNC-ROO-003, API-ROO-002
+requires_tol: TOL-ROO-006, TOL-ROO-005
+patterns: http_oauth_login
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GET /auth/login redirects to Discord with scopes+intent: expected=3xx to Discord authorize URL
+  - Open circuit path yields landing rate-limit redirect: expected=Landing with discord_rate_limited when circuit open
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-004
+
+[REQUIREMENT]
+UID: TST-ROO-016
+STATUS: Active
+TITLE: GET /auth/callback exchange, persist, and post-auth routing HTTP
+STATEMENT: >>>
+Plan: GET /auth/callback exchange, persist, and post-auth routing HTTP
+level: system
+verifies: REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-003
+requires_tol: TOL-ROO-006, TOL-ROO-005, TOL-ROO-007
+patterns: http_oauth_callback, post_auth_routing
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Successful exchange persists guild list and session identity: expected=Session established; compact guild list stored
+  - Single-guild non-signup → tenant redirect: expected=Redirect into tenant path
+  - Zero/multi/signup → /select-guild?auth_user: expected=Select-guild with auth_user context
+  - Production exchange config-path probe (FRONTEND_URL oauth bridge wiring) — NOT REQ-008 closure: expected=Config selects FRONTEND_URL bridge path when production flags set; does NOT prove live Vercel bridge E2E. REQ-ROO-008 remains open (GAP-AUTH-TST-004).
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD. | AMEND CHALLENGE C5: REQ-ROO-008 removed from verifies. Config-path case alone does NOT satisfy must REQ-008 (live Vercel FRONTEND_URL oauth exchange bridge). Coverage = open via GAP-AUTH-TST-004. Do not count REQ-008 covered.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-005
+
+[REQUIREMENT]
+UID: TST-ROO-017
+STATUS: Active
+TITLE: GET /auth/me and POST /auth/logout HTTP contracts
+STATEMENT: >>>
+Plan: GET /auth/me and POST /auth/logout HTTP contracts
+level: system
+verifies: REQ-ROO-010, REQ-ROO-011, REQ-ROO-012, FNC-ROO-004, API-ROO-004, API-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-005
+patterns: http_me_logout
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Authenticated GET /auth/me: expected={authenticated:true,user} with re-signed profile
+  - Unauthenticated GET /auth/me: expected=authenticated:false
+  - POST /auth/logout clears session cookie: expected=connect.sid cleared; follow-up me unauthenticated
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-010
+
+[REQUIREMENT]
+UID: TST-ROO-018
+STATUS: Active
+TITLE: Acceptance: platform health and safe boot visible to operators
+STATEMENT: >>>
+Plan: Acceptance: platform health and safe boot visible to operators
+level: acceptance
+verifies: USR-ROO-001, REQ-ROO-001, REQ-ROO-002, REQ-ROO-003, FNC-ROO-001, FNC-ROO-002, API-ROO-001
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-008
+patterns: acceptance_boot_health, operator_probe, acceptance_boot_health_playwright, operator_observable_ui
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Deployed/process with secrets up → health online: expected=GET / reflects online when DB reachable
+  - Missing required secret refuses start (operator-observable): expected=Process does not serve false-online
+  - Playwright: operator opens health/status surface and observes online when process healthy: expected=Browser-visible health indicator or documented operator URL shows online; no false-online
+  - Playwright: operator-observable refusal when required secrets missing (no false-online UI/API): expected=Operator cannot observe healthy/online serving when boot gate refused; failure visible
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: Acceptance for USR-ROO-001. HTTP probe cases use TOL-ROO-005/006; operator-observable UI/browser cases require TOL-ROO-008 Playwright (catalog-only, not pinned → blocked_on_tooling). AMEND CHALLENGE C4: added Playwright path for operator-visible acceptance while retaining USR-001 claim. evidence_status=none — Last Boss owns EVD. Never self-certify done. published≠proven.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-001
+
+[REQUIREMENT]
+UID: TST-ROO-019
+STATUS: Active
+TITLE: Acceptance: Discord OAuth sign-in routes to tenant or select-guild
+STATEMENT: >>>
+Plan: Acceptance: Discord OAuth sign-in routes to tenant or select-guild
+level: acceptance
+verifies: USR-ROO-002, REQ-ROO-004, REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-002, API-ROO-003
+requires_tol: TOL-ROO-008
+patterns: acceptance_oauth_browser, post_login_path
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - User starts login from SPA and completes Discord OAuth (staged/mock IdP as available): expected=Session established; lands on tenant or /select-guild per guild count/intent
+  - Signup intent forces select-guild even with one guild: expected=/select-guild with auth_user
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: UI/browser acceptance needs TOL-ROO-008 Playwright when introduced; API-only acceptance may use HTTP client without browser. Playwright not installed → blocked_on_tooling for browser cases. evidence_status=none — Last Boss owns EVD. Never self-certify done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-004
+
+[REQUIREMENT]
+UID: TST-ROO-020
+STATUS: Active
+TITLE: Acceptance: session identity via /auth/me and logout clears cookie
+STATEMENT: >>>
+Plan: Acceptance: session identity via /auth/me and logout clears cookie
+level: acceptance
+verifies: USR-ROO-003, REQ-ROO-010, REQ-ROO-011, FNC-ROO-004, API-ROO-004, API-ROO-005
+requires_tol: TOL-ROO-008
+patterns: acceptance_session_logout_browser
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Authenticated SPA sees me identity: expected=UI/API client observes authenticated user
+  - Logout returns to unauthenticated state: expected=Cookie cleared; protected shell no longer authenticated
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: UI/browser acceptance needs TOL-ROO-008 Playwright when introduced; API-only acceptance may use HTTP client without browser. Playwright not installed → blocked_on_tooling for browser cases. evidence_status=none — Last Boss owns EVD. Never self-certify done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-010
+
+[REQUIREMENT]
+UID: TST-ROO-021
+STATUS: Active
+TITLE: Acceptance: SPA session restore and credentialed API after OAuth redirect
+STATEMENT: >>>
+Plan: Acceptance: SPA session restore and credentialed API after OAuth redirect
+level: acceptance
+verifies: USR-ROO-004, REQ-ROO-013, REQ-ROO-014, FNC-ROO-005
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: acceptance_spa_restore
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - auth_user query restore after OAuth redirect: expected=SPA restores session and verifies via /auth/me
+  - Subsequent API calls send credentials + profile/tenant headers: expected=Credentialed client behavior observed in browser network
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: UI/browser acceptance needs TOL-ROO-008 Playwright when introduced; API-only acceptance may use HTTP client without browser. Playwright not installed → blocked_on_tooling for browser cases. evidence_status=none — Last Boss owns EVD. Never self-certify done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-013
+
+[REQUIREMENT]
+UID: TST-ROO-022
+STATUS: Active
+TITLE: Acceptance: unauthenticated shell gate and /login→/landing
+STATEMENT: >>>
+Plan: Acceptance: unauthenticated shell gate and /login→/landing
+level: acceptance
+verifies: USR-ROO-005, REQ-ROO-019, REQ-ROO-020, FNC-ROO-006, UNT-ROO-015, CMP-ROO-004
+requires_tol: TOL-ROO-008
+patterns: acceptance_unauth_routing
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - /login permanently redirects to /landing: expected=Browser ends on /landing
+  - Unauthenticated navigation to protected shell → /landing: expected=Redirect to landing; no protected content
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+notes: UI/browser acceptance needs TOL-ROO-008 Playwright when introduced; API-only acceptance may use HTTP client without browser. Playwright not installed → blocked_on_tooling for browser cases. evidence_status=none — Last Boss owns EVD. Never self-certify done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-019
+
+[SECTION]
+TITLE: Tenant/Workspace — TST-ROO-023 .. TST-ROO-045 (23 plans)
+
+[REQUIREMENT]
+UID: TST-ROO-023
+STATUS: Active
+TITLE: TenantIdentityKey treats Discord guild id as tenants.id PK
+STATEMENT: >>>
+Plan: TenantIdentityKey treats Discord guild id as tenants.id PK
+level: unit
+verifies: REQ-ROO-021, FNC-ROO-007, UNT-ROO-018, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: tenant_pk_guild_id, identity_key_equality
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Guild id string becomes tenants.id: expected=Created/looked-up tenant PK equals Discord guild id
+  - Non-guild synthetic id refused as tenant PK: expected=Identity helper rejects or does not mint non-guild PK
+  - Round-trip: load by guild id returns same tenant: expected=Lookup by guild id hits the same row as create
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-021
+
+[REQUIREMENT]
+UID: TST-ROO-024
+STATUS: Active
+TITLE: MineAndOnboardableDiscovery lists onboarded and capacity-gated onboardable
+STATEMENT: >>>
+Plan: MineAndOnboardableDiscovery lists onboarded and capacity-gated onboardable
+level: unit
+verifies: REQ-ROO-022, REQ-ROO-023, FNC-ROO-008, UNT-ROO-019, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: mine_list, capacity_empty_onboardable
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Visible onboarded tenants returned for member: expected=mine includes onboarded guilds user can see
+  - Manage-Server guilds appear as onboardable when capacity allows: expected=onboardable includes Manage-Server guilds under capacity
+  - Capacity full → onboardable empty + billing capacity flags: expected=onboardable=[], capacity flags present per REQ-023
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. Deep billing entitlement math deferred to Billing/Capacity domain. | AMEND C-T3: REQ-023 planned surface lineage only (empty onboardable + capacity flags). Deep billing entitlement math deferred to Billing/Capacity (GAP-TENANT-TST-001). Never imply REQ-023 fully proven via Tenant alone. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-022
+
+[REQUIREMENT]
+UID: TST-ROO-025
+STATUS: Active
+TITLE: TenantSelectAndRosterSync builds session and upserts auction member
+STATEMENT: >>>
+Plan: TenantSelectAndRosterSync builds session and upserts auction member
+level: unit
+verifies: REQ-ROO-024, REQ-ROO-025, FNC-ROO-009, UNT-ROO-020, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: tenant_select, roster_member_upsert
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Select requires membership visibility: expected=Non-visible tenant select refused
+  - Select builds session user with officer flag and enabled games: expected=Session carries officer/enabledGames/subscription slice
+  - Select upserts auction/members/{discordId} displayName/roles/syncedAt: expected=Member doc upserted with displayName, roles, syncedAt
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-024
+
+[REQUIREMENT]
+UID: TST-ROO-026
+STATUS: Active
+TITLE: WorkspaceOnboard gates Manage Server, bot presence, officer roles; 409/bot_not_in_guild
+STATEMENT: >>>
+Plan: WorkspaceOnboard gates Manage Server, bot presence, officer roles; 409/bot_not_in_guild
+level: unit
+verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, UNT-ROO-021, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: onboard_gates, onboard_409, bot_not_in_guild
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Happy path: Manage Server + bot in guild + ≥1 officer role → create tenant: expected=Tenant+settings created; empty Discord channel map; onboarded=true
+  - Already onboarded → 409: expected=Reject with already-onboarded conflict
+  - Bot not in guild → bot_not_in_guild + invite URL: expected=Reject payload includes invite URL
+  - Missing officer role names refused: expected=Onboard does not create without ≥1 officer role name
+  - Manage Server required for create (not day-to-day officer tools): expected=Create gate checks Manage Server/owner; officer tools not substituted
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-026
+
+[REQUIREMENT]
+UID: TST-ROO-027
+STATUS: Active
+TITLE: BotInviteUrlProvider returns Discord bot invite URL
+STATEMENT: >>>
+Plan: BotInviteUrlProvider returns Discord bot invite URL
+level: unit
+verifies: REQ-ROO-030, FNC-ROO-011, UNT-ROO-022, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: bot_invite_url
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Invite URL generated without guildId: expected=Valid Discord bot invite URL returned
+  - Optional guildId query included when provided: expected=Invite URL embeds guildId when supplied
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-030
+
+[REQUIREMENT]
+UID: TST-ROO-028
+STATUS: Active
+TITLE: DiscordRoleCatalog requires bot in guild and sorts non-@everyone roles
+STATEMENT: >>>
+Plan: DiscordRoleCatalog requires bot in guild and sorts non-@everyone roles
+level: unit
+verifies: REQ-ROO-031, FNC-ROO-011, UNT-ROO-023, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: discord_role_catalog, bot_presence_gate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Bot in guild → non-@everyone roles sorted by position: expected=Catalog excludes @everyone; ordered by position
+  - Bot not in guild → refuse catalog: expected=Error/empty refusal when bot missing
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-031
+
+[REQUIREMENT]
+UID: TST-ROO-029
+STATUS: Active
+TITLE: OfficerPredicate owner OR adminRoles; empty adminRoles → owner only
+STATEMENT: >>>
+Plan: OfficerPredicate owner OR adminRoles; empty adminRoles → owner only
+level: unit
+verifies: REQ-ROO-032, REQ-ROO-033, FNC-ROO-012, UNT-ROO-026, CMP-ROO-006
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: officer_predicate, admin_roles_casefold
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Tenant owner always officer: expected=owner_discord_id matches → officer true
+  - adminRoles name/id match case-insensitive → officer: expected=Role name/id in adminRoles grants officer
+  - Empty adminRoles → owner only: expected=Non-owner with empty adminRoles is not officer
+  - Manage Server alone does not grant day-to-day officer tools: expected=Predicate does not treat Manage Server as officer for tools
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-032
+
+[REQUIREMENT]
+UID: TST-ROO-030
+STATUS: Active
+TITLE: WorkspaceSettingsService officer-only read/update display/timezone/adminRoles
+STATEMENT: >>>
+Plan: WorkspaceSettingsService officer-only read/update display/timezone/adminRoles
+level: unit
+verifies: REQ-ROO-034, FNC-ROO-013, UNT-ROO-024, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: workspace_settings, officer_only_settings
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer can read display name, timezone, adminRoles + Discord roles: expected=Read returns settings slice and role catalog
+  - Officer can update display/timezone/adminRoles: expected=Update persists fields
+  - Non-officer refused: expected=Read/update denied for non-officer
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-034
+
+[REQUIREMENT]
+UID: TST-ROO-031
+STATUS: Active
+TITLE: GuildLogoManager upload ≤512KB, clear, Discord icon fallback
+STATEMENT: >>>
+Plan: GuildLogoManager upload ≤512KB, clear, Discord icon fallback
+level: unit
+verifies: REQ-ROO-035, REQ-ROO-036, FNC-ROO-014, UNT-ROO-025, CMP-ROO-005
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: guild_logo_upload, logo_size_gate, discord_icon_fallback
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Upload ≤512KB succeeds: expected=Custom logo stored
+  - Upload >512KB refused: expected=Reject oversized payload
+  - Clear removes custom logo: expected=DELETE clears stored custom logo
+  - No custom logo → effective logo falls back to Discord guild icon: expected=Effective logo URL/path uses Discord icon
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only (published ≠ proven). No depends_on authored. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-035
+
+[REQUIREMENT]
+UID: TST-ROO-032
+STATUS: Active
+TITLE: Tenants mine discovery seam through CMP-005 + INT-006
+STATEMENT: >>>
+Plan: Tenants mine discovery seam through CMP-005 + INT-006
+level: integration
+verifies: REQ-ROO-022, REQ-ROO-023, FNC-ROO-008, API-ROO-006, CMP-ROO-005, INT-ROO-006, UNT-ROO-019
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_tenants_mine, msw_discord_guilds
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Authenticated mine lists onboarded + onboardable: expected=INT-006 returns combined list for session user
+  - Capacity-full path empties onboardable with flags: expected=Seam surfaces empty onboardable + capacity flags
+  - Unauthenticated mine refused: expected=Session guard fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). Seam plans use MSW for Discord/HTTP mocks. execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only. No depends_on. | AMEND C-T3: REQ-023 planned surface lineage only (empty onboardable + capacity flags). Deep billing entitlement math deferred to Billing/Capacity (GAP-TENANT-TST-001). Never imply REQ-023 fully proven via Tenant alone. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-022
+
+[REQUIREMENT]
+UID: TST-ROO-033
+STATUS: Active
+TITLE: Tenant select seam builds session and syncs roster member
+STATEMENT: >>>
+Plan: Tenant select seam builds session and syncs roster member
+level: integration
+verifies: REQ-ROO-024, REQ-ROO-025, FNC-ROO-009, API-ROO-007, CMP-ROO-005, INT-ROO-007, UNT-ROO-020
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_tenant_select, roster_sync_seam
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Select visible tenant → session currentTenantId set: expected=Session reflects selected tenant + officer/games slice
+  - Select upserts auction member doc: expected=Member upsert observed via seam/mock store
+  - Select invisible tenant refused: expected=Visibility gate fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). Seam plans use MSW for Discord/HTTP mocks. execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only. No depends_on. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-024
+
+[REQUIREMENT]
+UID: TST-ROO-034
+STATUS: Active
+TITLE: Tenant onboard seam happy path, 409, and bot_not_in_guild
+STATEMENT: >>>
+Plan: Tenant onboard seam happy path, 409, and bot_not_in_guild
+level: integration
+verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, API-ROO-008, CMP-ROO-005, INT-ROO-008, UNT-ROO-021
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_tenant_onboard, onboard_conflict, bot_invite_on_miss
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Manage Server + bot present + officer roles → onboard creates tenant: expected=INT-008 creates tenant/settings; onboarded=true
+  - Already onboarded → 409 through seam: expected=Conflict status propagated
+  - Bot missing → bot_not_in_guild with invite URL: expected=Error payload includes invite URL
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). Seam plans use MSW for Discord/HTTP mocks. execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only. No depends_on. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-026
+
+[REQUIREMENT]
+UID: TST-ROO-035
+STATUS: Active
+TITLE: Invite URL and Discord roles catalog seams
+STATEMENT: >>>
+Plan: Invite URL and Discord roles catalog seams
+level: integration
+verifies: REQ-ROO-030, REQ-ROO-031, FNC-ROO-011, API-ROO-009, API-ROO-010, CMP-ROO-005, INT-ROO-009, INT-ROO-010, UNT-ROO-022, UNT-ROO-023
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_invite_url, seam_discord_roles
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Invite-url seam returns bot invite (optional guildId): expected=INT-009 yields invite URL
+  - Discord-roles seam requires bot; returns sorted non-@everyone: expected=INT-010 catalog correct when bot present
+  - Discord-roles seam refuses when bot absent: expected=Fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). Seam plans use MSW for Discord/HTTP mocks. execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only. No depends_on. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-030
+
+[REQUIREMENT]
+UID: TST-ROO-036
+STATUS: Active
+TITLE: Workspace settings and logo seams officer-gated via CMP-006
+STATEMENT: >>>
+Plan: Workspace settings and logo seams officer-gated via CMP-006
+level: integration
+verifies: REQ-ROO-032, REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-012, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014, CMP-ROO-005, CMP-ROO-006, INT-ROO-011, INT-ROO-012, INT-ROO-013, INT-ROO-014, UNT-ROO-024, UNT-ROO-025, UNT-ROO-026
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_workspace_settings, seam_guild_logo, officer_gate_integ
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer GET/POST workspace settings succeed: expected=INT-011/012 persist/read display/timezone/adminRoles
+  - Non-officer workspace settings refused: expected=CMP-006 officer gate fails closed
+  - Officer logo upload ≤512KB and clear: expected=INT-013/014 store and clear custom logo
+  - Effective logo falls back to Discord icon when cleared: expected=Fallback path observed after clear
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). Seam plans use MSW for Discord/HTTP mocks. execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only. No depends_on. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-032
+
+[REQUIREMENT]
+UID: TST-ROO-037
+STATUS: Active
+TITLE: GET /api/tenants/mine and POST /api/tenants/select HTTP contracts
+STATEMENT: >>>
+Plan: GET /api/tenants/mine and POST /api/tenants/select HTTP contracts
+level: system
+verifies: REQ-ROO-022, REQ-ROO-023, REQ-ROO-024, REQ-ROO-025, FNC-ROO-008, FNC-ROO-009, API-ROO-006, API-ROO-007
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_tenants_mine, http_tenants_select
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GET /api/tenants/mine session → 200 with onboarded/onboardable: expected=Contract shape matches inventory
+  - GET /api/tenants/mine capacity-full → empty onboardable + flags: expected=REQ-023 flags present
+  - POST /api/tenants/select visible tenant → session built: expected=200 and session currentTenantId set
+  - POST /api/tenants/select without session → refuse: expected=Auth guard fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: HTTP contract plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where Discord is mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = plan lineage only. No depends_on. | AMEND C-T3: REQ-023 planned surface lineage only (empty onboardable + capacity flags). Deep billing entitlement math deferred to Billing/Capacity (GAP-TENANT-TST-001). Never imply REQ-023 fully proven via Tenant alone. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-022
+
+[REQUIREMENT]
+UID: TST-ROO-038
+STATUS: Active
+TITLE: POST /api/tenants/onboard HTTP contract (create, 409, bot_not_in_guild)
+STATEMENT: >>>
+Plan: POST /api/tenants/onboard HTTP contract (create, 409, bot_not_in_guild)
+level: system
+verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, API-ROO-008
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_tenants_onboard
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - POST onboard happy path → 2xx + tenant created: expected=Tenant+settings; onboarded=true
+  - POST onboard already exists → 409: expected=Conflict status
+  - POST onboard bot missing → bot_not_in_guild + invite URL: expected=Error body includes invite URL
+  - POST onboard without Manage Server → refuse: expected=session_manage_server guard fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: HTTP contract plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where Discord is mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = plan lineage only. No depends_on. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-026
+
+[REQUIREMENT]
+UID: TST-ROO-039
+STATUS: Active
+TITLE: GET /api/tenants/invite-url and GET /api/tenants/discord-roles HTTP contracts
+STATEMENT: >>>
+Plan: GET /api/tenants/invite-url and GET /api/tenants/discord-roles HTTP contracts
+level: system
+verifies: REQ-ROO-030, REQ-ROO-031, FNC-ROO-011, API-ROO-009, API-ROO-010
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_invite_url, http_discord_roles
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GET invite-url (no auth) returns bot invite URL: expected=200 with invite URL; optional guildId honored
+  - GET discord-roles with session + bot present: expected=Sorted non-@everyone roles
+  - GET discord-roles bot absent → refuse: expected=Fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: HTTP contract plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where Discord is mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = plan lineage only. No depends_on. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-030
+
+[REQUIREMENT]
+UID: TST-ROO-040
+STATUS: Active
+TITLE: Workspace GET/POST and logo POST/DELETE HTTP contracts (officer-only)
+STATEMENT: >>>
+Plan: Workspace GET/POST and logo POST/DELETE HTTP contracts (officer-only)
+level: system
+verifies: REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_workspace_settings, http_guild_logo
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GET/POST /api/tenants/workspace as officer: expected=Read/update display/timezone/adminRoles
+  - GET/POST workspace as non-officer → refuse: expected=session_officer guard fails closed
+  - POST /api/tenants/logo ≤512KB; DELETE clears: expected=Upload/clear succeed for officer
+  - POST logo >512KB → refuse: expected=Size gate fails closed
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: HTTP contract plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where Discord is mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = plan lineage only. No depends_on. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-034
+
+[REQUIREMENT]
+UID: TST-ROO-041
+STATUS: Active
+TITLE: Acceptance: tenant identity is Discord guild (one guild = one tenant PK)
+STATEMENT: >>>
+Plan: Acceptance: tenant identity is Discord guild (one guild = one tenant PK)
+level: acceptance
+verifies: USR-ROO-006, REQ-ROO-021, FNC-ROO-007, CMP-ROO-005, UNT-ROO-018
+requires_tol: TOL-ROO-008, TOL-ROO-006
+patterns: acceptance_tenant_identity, guild_equals_tenant
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Operator/onboard sees tenant keyed by Discord guild id: expected=UI/API tenant id matches guild id
+  - No alternate tenant PK invented for guild: expected=One guild maps to one tenants.id
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-021
+
+[REQUIREMENT]
+UID: TST-ROO-042
+STATUS: Active
+TITLE: Acceptance: members discover and select workspace
+STATEMENT: >>>
+Plan: Acceptance: members discover and select workspace
+level: acceptance
+verifies: USR-ROO-007, REQ-ROO-022, REQ-ROO-023, REQ-ROO-024, REQ-ROO-025, FNC-ROO-008, FNC-ROO-009, API-ROO-006, API-ROO-007, CMP-ROO-005
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: acceptance_discover_select, select_guild_flow
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Member opens select-guild and sees onboarded + onboardable: expected=List visible in UI
+  - Capacity full shows empty onboardable / capacity messaging: expected=User-visible empty onboardable path
+  - Selecting a workspace builds session and lands in tenant context: expected=Post-select session has currentTenantId
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. | AMEND C-T3: REQ-023 planned surface lineage only (empty onboardable + capacity flags). Deep billing entitlement math deferred to Billing/Capacity (GAP-TENANT-TST-001). Never imply REQ-023 fully proven via Tenant alone. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-022
+
+[REQUIREMENT]
+UID: TST-ROO-043
+STATUS: Active
+TITLE: Acceptance: guild owner onboards new Discord guild workspace
+STATEMENT: >>>
+Plan: Acceptance: guild owner onboards new Discord guild workspace
+level: acceptance
+verifies: USR-ROO-008, REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-030, REQ-ROO-031, REQ-ROO-033, FNC-ROO-010, FNC-ROO-011, API-ROO-008, API-ROO-009, API-ROO-010, CMP-ROO-005
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: acceptance_onboard, bot_invite_ux
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Owner with Manage Server onboards when bot present and officer roles set: expected=Workspace created; onboarded=true
+  - Already onboarded guild shows conflict (409 UX): expected=User sees already-onboarded messaging
+  - Bot missing offers invite URL path: expected=User can obtain invite URL and retry
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. Live Discord guild E2E with real bot invite may remain env-blocked; MSW path is plan-primary until Adepts pin runners + Discord test fixtures. | AMEND C-T2: MSW/system/acceptance plans keep verifies lineage only. Live Discord guild onboard E2E (bot invite/token) for REQ-026/029/030 (+ USR-008 / TST-043) remains open / never_soft_pass (GAP-TENANT-TST-002). MSW ≠ live Discord proof; never soft-pass. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-026
+
+[REQUIREMENT]
+UID: TST-ROO-044
+STATUS: Active
+TITLE: Acceptance: officers manage officer model and workspace settings including logo
+STATEMENT: >>>
+Plan: Acceptance: officers manage officer model and workspace settings including logo
+level: acceptance
+verifies: USR-ROO-009, REQ-ROO-032, REQ-ROO-033, REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-012, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014, CMP-ROO-005, CMP-ROO-006
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: acceptance_officer_settings, acceptance_guild_logo
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer edits display name, timezone, adminRoles: expected=Settings persist and reload
+  - Non-officer cannot open day-to-day officer tools: expected=UI/API refuse; Manage Server alone insufficient
+  - Officer uploads ≤512KB logo and can clear; Discord icon fallback visible: expected=Logo UX matches REQ-035/036
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-032
+
+[REQUIREMENT]
+UID: TST-ROO-045
+STATUS: Active
+TITLE: Acceptance: authenticated user forced to select-guild and ordered post-login path
+STATEMENT: >>>
+Plan: Acceptance: authenticated user forced to select-guild and ordered post-login path
+level: acceptance
+verifies: USR-ROO-010, REQ-ROO-037, REQ-ROO-038, FNC-ROO-015, CMP-ROO-004, UNT-ROO-017
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: acceptance_post_login_routing, force_select_guild
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Authenticated user without currentTenantId forced to /select-guild: expected=SPA routes to select-guild
+  - Post-login path order: select-guild → billing → choose games → game setup → game home: expected=Resolver follows ordered steps per REQ-038
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. FNC-015 allocated to SPA Shell CMP-004; unit coverage lives on Auth UNT-ROO-017 (no second Tenant PostLoginPathResolver). Cross-domain verifies to CMP-004/UNT-017 intentional. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-037
+
+[SECTION]
+TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065 (20 plans)
+
+[REQUIREMENT]
+UID: TST-ROO-046
+STATUS: Active
+TITLE: GamesWhitelist accepts only adventurer-guild and ragnarok-origin
+STATEMENT: >>>
+Plan: GamesWhitelist accepts only adventurer-guild and ragnarok-origin
+level: unit
+verifies: REQ-ROO-039, FNC-ROO-016, UNT-ROO-027, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: known_game_ids, parse_enabled_games_filter
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - KNOWN_GAME_IDS is exactly adventurer-guild and ragnarok-origin: expected=Whitelist equals the two catalog ids only
+  - isKnownGame rejects unknown id: expected=Unknown gameId → false / validation refuse
+  - parseEnabledGames drops unknown stored ids: expected=Stored junk filtered; only known ids remain
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-039
+
+[REQUIREMENT]
+UID: TST-ROO-047
+STATUS: Active
+TITLE: EnableKnownGame appends known id with active seat and setupPath
+STATEMENT: >>>
+Plan: EnableKnownGame appends known id with active seat and setupPath
+level: unit
+verifies: REQ-ROO-040, FNC-ROO-017, UNT-ROO-028, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: enable_known_game, setup_path_for_game, active_seat_gate_surface
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer + active seat appends known gameId idempotently: expected=enabled_games gains id once; re-enable no duplicate
+  - RO enable returns setupPath /games/ragnarok-origin/setup: expected=setupPathForGame(RO) → RO setup route
+  - AG enable returns AG home path (no setup route): expected=setupPathForGame(AG) → /games/adventurer-guild
+  - Inactive seat → payment_required surface: expected=Gate refuses with 402-shaped payment_required (seat predicate mocked; deep Billing deferred)
+  - Unknown gameId refused: expected=Validation error; list unchanged
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling. | Active-seat predicate is planned_surface via mocked tenantHasAccess only (GAP-GAMES-TST-001). Deep Billing entitlement deferred — never imply REQ-050 proven via Games.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-040
+
+[REQUIREMENT]
+UID: TST-ROO-048
+STATUS: Active
+TITLE: DisableGamePreserveData removes enabled id without wiping stores
+STATEMENT: >>>
+Plan: DisableGamePreserveData removes enabled id without wiping stores
+level: unit
+verifies: REQ-ROO-041, FNC-ROO-018, UNT-ROO-029, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: disable_game_preserve_data, enabled_games_remove
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer removes known gameId from enabled_games: expected=Id absent from enabled list after disable
+  - Stored game documents / channel map retained: expected=json_docs and discord channel map not deleted
+  - Unknown gameId → 400-shaped validation: expected=Refuse unknown; no side effects
+  - Active seat not required for disable: expected=Disable succeeds for officer without active seat
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-041
+
+[REQUIREMENT]
+UID: TST-ROO-049
+STATUS: Active
+TITLE: RoSetupCompleteness requires aucreq OR auction OR warAnnounce
+STATEMENT: >>>
+Plan: RoSetupCompleteness requires aucreq OR auction OR warAnnounce
+level: unit
+verifies: REQ-ROO-042, FNC-ROO-019, UNT-ROO-030, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: ro_setup_completeness, channel_or_gate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - All three channel ids empty → RO incomplete: expected=isRagnarokSetupComplete false
+  - Any one of aucreq/auction/warAnnounce set → complete: expected=Completeness true for each single-id case
+  - gameSetupMap marks RO complete only when enabled AND complete: expected=Enabled+incomplete stays incomplete in map
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-042
+
+[REQUIREMENT]
+UID: TST-ROO-050
+STATUS: Active
+TITLE: AgNoSetupReadiness marks AG ready on enable alone
+STATEMENT: >>>
+Plan: AgNoSetupReadiness marks AG ready on enable alone
+level: unit
+verifies: REQ-ROO-043, FNC-ROO-020, UNT-ROO-031, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: ag_no_setup, game_setup_paths_absent
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - GAME_SETUP_PATHS has no adventurer-guild entry: expected=No dedicated AG setup route
+  - Enabled AG alone → gameSetupMap ready: expected=AG true in map solely from enabledGames
+  - No channel ids required for AG: expected=AG readiness ignores Discord channel map
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-043
+
+[REQUIREMENT]
+UID: TST-ROO-051
+STATUS: Active
+TITLE: RoChannelMapPersistence writes war rooms 1–5 and channel fields
+STATEMENT: >>>
+Plan: RoChannelMapPersistence writes war rooms 1–5 and channel fields
+level: unit
+verifies: REQ-ROO-044, FNC-ROO-021, UNT-ROO-032, CMP-ROO-007
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: ro_channel_map, war_rooms_1_5, active_seat_gate_surface
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Persists auction/aucreq/genroom/attendance/warAnnounce/raidScreenshot: expected=discordChannels fields written as provided
+  - Persists warRooms DISCORD_WARROOM_ID_1..5: expected=War rooms 1–5 stored
+  - RO not enabled → game_required refuse: expected=403-shaped game_required when RO absent from enabled_games
+  - Inactive seat → payment_required surface: expected=402-shaped refuse with mocked seat false (Billing deep deferred)
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling. | Active-seat predicate planned_surface only (GAP-GAMES-TST-001). Channel ids are stored snowflakes — no live Discord bot E2E required for this unit plan.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-044
+
+[REQUIREMENT]
+UID: TST-ROO-052
+STATUS: Active
+TITLE: RequireGameGate returns 403 game_required for RO and AG mounts
+STATEMENT: >>>
+Plan: RequireGameGate returns 403 game_required for RO and AG mounts
+level: unit
+verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, UNT-ROO-033, CMP-ROO-008
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: require_game_gate, game_required_403, tenant_required_409
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - RO mount without ragnarok-origin → 403 game_required: expected=Body includes code game_required and gameId ragnarok-origin
+  - AG mount without adventurer-guild → 403 game_required: expected=Body includes code game_required and gameId adventurer-guild
+  - Enabled game passes requireGame: expected=Gate allows when id in parseEnabledGames
+  - No current tenant → 409 tenant_required: expected=Missing tenant context fails closed
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-045
+
+[REQUIREMENT]
+UID: TST-ROO-053
+STATUS: Active
+TITLE: SpaGamePathGate redirects disabled paths and persists valhalla_active_game
+STATEMENT: >>>
+Plan: SpaGamePathGate redirects disabled paths and persists valhalla_active_game
+level: unit
+verifies: REQ-ROO-047, REQ-ROO-048, FNC-ROO-023, UNT-ROO-035, CMP-ROO-004
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: spa_game_path_gate, valhalla_active_game, post_login_redirect
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Navigate into disabled game path → redirect postLoginPath: expected=Blocked path does not render; Navigate to resolver result
+  - workspace/games/billing paths exempt from game gate: expected=Exempt paths not redirected by pathGameId check
+  - Active game id written to localStorage valhalla_active_game: expected=Key valhalla_active_game holds active id
+  - Stored activeGameId not in enabledGames → reconcile to first enabled: expected=Stale id replaced when an enabled game exists
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-047
+
+[REQUIREMENT]
+UID: TST-ROO-054
+STATUS: Active
+TITLE: Enable-game seam INT-015 through CMP-007
+STATEMENT: >>>
+Plan: Enable-game seam INT-015 through CMP-007
+level: integration
+verifies: REQ-ROO-040, FNC-ROO-017, API-ROO-015, CMP-ROO-007, INT-ROO-015, UNT-ROO-028
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_enable_game, msw_session_officer_seat
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer + active seat enable known game via INT-015: expected=Seam returns enabledGames + setupPath; CMP-007 provider
+  - Non-officer enable refused: expected=403 fail-closed at seam
+  - Inactive seat → payment_required at seam: expected=402-shaped surface (mocked seat; Billing deep deferred)
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on. No EVD/evidences. C-T1: planned verifies lineage only — never say covered while blocked. | GAP-GAMES-TST-001: seat surface only.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-040
+
+[REQUIREMENT]
+UID: TST-ROO-055
+STATUS: Active
+TITLE: Disable-game seam INT-016 preserves stored game data
+STATEMENT: >>>
+Plan: Disable-game seam INT-016 preserves stored game data
+level: integration
+verifies: REQ-ROO-041, FNC-ROO-018, API-ROO-016, CMP-ROO-007, INT-ROO-016, UNT-ROO-029
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_disable_game, preserve_game_stores
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer disable removes enabled id via INT-016: expected=enabledGames updated; success body
+  - After disable, channel map / game docs still readable: expected=Stores retained across seam
+  - Unknown gameId refused at seam: expected=400-shaped validation
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on. No EVD/evidences. C-T1: planned verifies lineage only — never say covered while blocked.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-041
+
+[REQUIREMENT]
+UID: TST-ROO-056
+STATUS: Active
+TITLE: RO game-setup seam INT-017 persists channel map including war rooms
+STATEMENT: >>>
+Plan: RO game-setup seam INT-017 persists channel map including war rooms
+level: integration
+verifies: REQ-ROO-044, FNC-ROO-021, API-ROO-017, CMP-ROO-007, INT-ROO-017, UNT-ROO-032
+requires_tol: TOL-ROO-006, TOL-ROO-007
+patterns: seam_game_setup, war_rooms_persist, msw_session_ro_enabled
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer + RO enabled + seat persists full channel map via INT-017: expected=discordChannels + warRooms 1–5 stored
+  - RO not enabled → game_required at seam: expected=403 game_required
+  - Inactive seat → payment_required surface: expected=402-shaped (Billing deep deferred)
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest + TOL-ROO-007 MSW are catalog-published but not installed/pinned (greenfield). execution_status=blocked_on_tooling. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on. No EVD/evidences. C-T1: planned verifies lineage only — never say covered while blocked. | Channel ids are snowflake strings under test — no live Discord bot invite required for planned MSW lineage. GAP-GAMES-TST-001 seat surface.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-044
+
+[REQUIREMENT]
+UID: TST-ROO-057
+STATUS: Active
+TITLE: RequireGame mount/API-tree wiring under CMP-008 for RO and AG
+STATEMENT: >>>
+Plan: RequireGame mount/API-tree wiring under CMP-008 for RO and AG
+level: unit
+verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, CMP-ROO-008, UNT-ROO-033
+requires_tol: TOL-ROO-006, TOL-ROO-011
+patterns: unit_require_game_mount_tree, ro_ag_mount_gate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - RO API tree without RO enabled → 403 game_required: expected=Mount middleware under CMP-008 enforces FNC-022 (unit mount-tree)
+  - AG API tree without AG enabled → 403 game_required: expected=AG mount enforces requireGame(adventurer-guild) under CMP-008
+  - Enabled game allows mount through gate: expected=Request proceeds past requireGame on mount tree
+  - Missing tenant → 409 tenant_required: expected=Fail closed at mount wiring
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling. | AMEND C-G1: demoted level=unit — was false integration (no INT-* for requireGame in SSOT; INT-015/016/017 are enable/disable/setup only). Do not invent private INT. Cases retained as unit mount/API-tree under UNT-033/CMP-008. Differentiated from TST-ROO-052 (gate predicate/body unit) — 057 focuses on mount-tree wiring cases under CMP-008. Same verifies set retained; merge/supersede not required — keep ID. No System Designer INT route needed.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-045
+
+[REQUIREMENT]
+UID: TST-ROO-058
+STATUS: Active
+TITLE: POST /api/tenants/enable-game HTTP contract
+STATEMENT: >>>
+Plan: POST /api/tenants/enable-game HTTP contract
+level: system
+verifies: REQ-ROO-040, FNC-ROO-017, API-ROO-015
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_enable_game, api_015_contract
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - POST enable-game officer+seat+known id → 200 enabledGames+setupPath+user: expected=Contract matches API-ROO-015 success shape
+  - Unauthenticated → 401: expected=Auth guard fails closed
+  - No tenant → 409 tenant_required: expected=Error code tenant_required
+  - Inactive seat → 402 payment_required: expected=Surface payment_required (seat mocked)
+  - Unknown game → 400: expected=Validation refuse
+  - Non-officer → 403: expected=Officer guard fails closed
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: HTTP/system plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where session/tenant mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling. | GAP-GAMES-TST-001: 402 seat path is planned_surface only.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-040
+
+[REQUIREMENT]
+UID: TST-ROO-059
+STATUS: Active
+TITLE: POST /api/tenants/disable-game HTTP contract
+STATEMENT: >>>
+Plan: POST /api/tenants/disable-game HTTP contract
+level: system
+verifies: REQ-ROO-041, FNC-ROO-018, API-ROO-016
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_disable_game, api_016_contract
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - POST disable-game officer+known id → 200 enabledGames without id: expected=Contract matches API-ROO-016; data retained
+  - Unauthenticated → 401: expected=Auth fail closed
+  - No tenant → 409 tenant_required: expected=Error code tenant_required
+  - Unknown game → 400: expected=Validation refuse
+  - Non-officer → 403: expected=Officer guard fails closed
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: HTTP/system plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where session/tenant mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-041
+
+[REQUIREMENT]
+UID: TST-ROO-060
+STATUS: Active
+TITLE: POST /api/tenants/game-setup HTTP contract
+STATEMENT: >>>
+Plan: POST /api/tenants/game-setup HTTP contract
+level: system
+verifies: REQ-ROO-044, FNC-ROO-021, API-ROO-017
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_game_setup, api_017_contract
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - POST game-setup officer+RO+seat+channels → 200 user: expected=Contract matches API-ROO-017; war rooms 1–5 accepted
+  - RO not enabled → 403 game_required: expected=Error code game_required
+  - Inactive seat → 402 payment_required: expected=Surface payment_required (seat mocked)
+  - Non-officer → 403: expected=Officer guard fails closed
+  - No tenant → 409 tenant_required: expected=Error code tenant_required
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: HTTP/system plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where session/tenant mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling. | GAP-GAMES-TST-001 seat surface. No live Discord bot required for HTTP contract plan (snowflake body).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-044
+
+[REQUIREMENT]
+UID: TST-ROO-061
+STATUS: Active
+TITLE: Mounted RO/AG APIs enforce requireGame HTTP 403 game_required
+STATEMENT: >>>
+Plan: Mounted RO/AG APIs enforce requireGame HTTP 403 game_required
+level: system
+verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, API-ROO-031, API-ROO-108
+requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
+patterns: http_require_game_mounts, game_required_system, api_031_108_sample
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Sample RO mount GET /api/requests/init (API-ROO-031) without RO → 403 game_required: expected=code game_required, gameId ragnarok-origin
+  - Sample AG mount GET /api/adventurer-guild/highlights (API-ROO-108) without AG → 403 game_required: expected=code game_required, gameId adventurer-guild
+  - Enabled game allows mount past gate: expected=Not 403 game_required when enabled
+  - No tenant on mount → 409 tenant_required: expected=Error code tenant_required
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: HTTP/system plans cite TOL-ROO-005 Express host + TOL-ROO-006 Vitest (+ TOL-ROO-007 MSW where session/tenant mocked). Runners not pinned → blocked_on_tooling. evidence_status=none. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling. | AMEND C-G2: added representative API verifies API-ROO-031 (/api/requests/init) + API-ROO-108 (/api/adventurer-guild/highlights) matching sister 058–060 pattern (each system plan cites concrete API). planned_surface: samples only — full RO /api/requests tree API-031..047 and AG API-108..114 not each cited; incomplete mount set.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-045
+
+[REQUIREMENT]
+UID: TST-ROO-062
+STATUS: Active
+TITLE: Acceptance: officers enable/disable known games without data loss
+STATEMENT: >>>
+Plan: Acceptance: officers enable/disable known games without data loss
+level: acceptance
+verifies: USR-ROO-011, REQ-ROO-039, REQ-ROO-040, REQ-ROO-041, FNC-ROO-016, FNC-ROO-017, FNC-ROO-018, CMP-ROO-007, UNT-ROO-027, UNT-ROO-028, UNT-ROO-029
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: accept_enable_disable, known_games_only
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer with seat enables ragnarok-origin and sees setup path: expected=UI/API reflects enabled RO + setup entry
+  - Officer enables adventurer-guild without setup step: expected=AG ready on enable; no channel setup required
+  - Officer disables a game; prior game data still present: expected=Enabled list drops id; stored data retained
+  - Unknown game cannot be enabled: expected=Catalog whitelist refuses
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where HTTP/session mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling. | GAP-GAMES-TST-001: seat precondition mocked/plan-surface; deep Billing watch/deferred.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-039
+
+[REQUIREMENT]
+UID: TST-ROO-063
+STATUS: Active
+TITLE: Acceptance: RO channel setup completeness and game-setup persistence
+STATEMENT: >>>
+Plan: Acceptance: RO channel setup completeness and game-setup persistence
+level: acceptance
+verifies: USR-ROO-012, REQ-ROO-042, REQ-ROO-043, REQ-ROO-044, FNC-ROO-019, FNC-ROO-020, FNC-ROO-021, CMP-ROO-007, UNT-ROO-030, UNT-ROO-031, UNT-ROO-032
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: accept_ro_setup, ag_no_setup, war_rooms
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - RO remains incomplete until aucreq/auction/warAnnounce mapped: expected=Setup incomplete UX until one channel set
+  - Officer persists RO channel map including war rooms 1–5: expected=game-setup saves map; completeness can flip
+  - AG has no setup path after enable: expected=No AG channel-setup route required
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where HTTP/session mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling. | Channel map persistence plans use mocked session/HTTP; live Discord bot invite not required for Games catalog acceptance of stored snowflakes. GAP-GAMES-TST-001 seat surface on game-setup.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-042
+
+[REQUIREMENT]
+UID: TST-ROO-064
+STATUS: Active
+TITLE: Acceptance: mounted game APIs gate on requireGame
+STATEMENT: >>>
+Plan: Acceptance: mounted game APIs gate on requireGame
+level: acceptance
+verifies: USR-ROO-012, REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, CMP-ROO-008, UNT-ROO-033
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: accept_require_game, api_gating
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - With RO disabled, RO API calls surface game_required: expected=403 game_required observable to client
+  - With AG disabled, AG API calls surface game_required: expected=403 game_required for adventurer-guild
+  - After enable, corresponding mount succeeds past gate: expected=No game_required when enabled
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where HTTP/session mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-045
+
+[REQUIREMENT]
+UID: TST-ROO-065
+STATUS: Active
+TITLE: Acceptance: SPA blocks disabled game paths and persists active game
+STATEMENT: >>>
+Plan: Acceptance: SPA blocks disabled game paths and persists active game
+level: acceptance
+verifies: USR-ROO-012, REQ-ROO-047, REQ-ROO-048, FNC-ROO-023, CMP-ROO-004, UNT-ROO-035
+requires_tol: TOL-ROO-008, TOL-ROO-007
+patterns: accept_spa_path_gate, valhalla_active_game
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Navigate to disabled game route → redirected off game path: expected=Landing matches post-login resolver; disabled game not shown
+  - Selecting/using a game writes valhalla_active_game: expected=localStorage key holds active game id
+  - Stale active game not in enabledGames is reconciled: expected=SPA recovers to an enabled game when available
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where HTTP/session mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only; published ≠ proven. No depends_on. No EVD/evidences. C-T1: never claim covered/done while blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-047
+

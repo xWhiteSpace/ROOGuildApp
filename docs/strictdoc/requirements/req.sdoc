@@ -1,0 +1,3673 @@
+[DOCUMENT]
+TITLE: ROO System Requirements (REQ)
+UID: DOC-ROO-REQ
+VERSION: 0.1
+
+[SECTION]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+Project: ROO / ROOGuildApp.
+SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+Source: SSOT requirements/req (published only).
+Each REQ Parent-links to its USR via linked_from.
+Poison: Requirements/Requirements.md is NOT SoT.
+Phase 1 complete: REQ-ROO-001 .. REQ-ROO-172 (172 nodes).
+published ≠ proven; zero EVD at export time.
+<<<
+
+[SECTION]
+TITLE: Platform/Auth (REQ-ROO-001 .. REQ-ROO-020)
+
+[REQUIREMENT]
+UID: REQ-ROO-001
+STATUS: Active
+TITLE: REQ-ROO-001: GET / returns an online body when the database ping succeeds, and returns HTTP 5
+STATEMENT: >>>
+GET / returns an online body when the database ping succeeds, and returns HTTP 503 with a failure body when the database ping fails.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: GET / returns an online body when the database ping succeeds, and returns HTTP 503 with a failure body when the database ping fails.
+source_draft: D-REQ-001
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-001
+
+[REQUIREMENT]
+UID: REQ-ROO-002
+STATUS: Active
+TITLE: REQ-ROO-002: Backend process exits/refuses normal start unless Discord OAuth client credentia
+STATEMENT: >>>
+Backend process exits/refuses normal start unless Discord OAuth client credentials, bot token, OAUTH_REDIRECT_URI, SESSION_SECRET, and DATABASE_URL are present (env.js gate).
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Backend process exits/refuses normal start unless Discord OAuth client credentials, bot token, OAUTH_REDIRECT_URI, SESSION_SECRET, and DATABASE_URL are present (env.js gate).
+source_draft: D-REQ-002
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-001
+
+[REQUIREMENT]
+UID: REQ-ROO-003
+STATUS: Active
+TITLE: REQ-ROO-003: On successful start, backend runs migrate() before initializing the Discord bot.
+STATEMENT: >>>
+On successful start, backend runs migrate() before initializing the Discord bot.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: On successful start, backend runs migrate() before initializing the Discord bot.
+source_draft: D-REQ-003
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-001
+
+[REQUIREMENT]
+UID: REQ-ROO-004
+STATUS: Active
+TITLE: REQ-ROO-004: GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, 
+STATEMENT: >>>
+GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, and guilds.members.read, carrying state intent signin or signup.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, and guilds.members.read, carrying state intent signin or signup.
+source_draft: D-REQ-004
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-005
+STATUS: Active
+TITLE: REQ-ROO-005: GET /auth/callback exchanges the OAuth code, persists a compact Discord guild li
+STATEMENT: >>>
+GET /auth/callback exchanges the OAuth code, persists a compact Discord guild list into session and DB, and builds the base user identity.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: GET /auth/callback exchanges the OAuth code, persists a compact Discord guild list into session and DB, and builds the base user identity.
+source_draft: D-REQ-005
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-006
+STATUS: Active
+TITLE: REQ-ROO-006: When OAuth callback finds exactly one onboarded guild and intent is not signup, 
+STATEMENT: >>>
+When OAuth callback finds exactly one onboarded guild and intent is not signup, the user is redirected into that tenant path (home, billing, or onboard as applicable).
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: When OAuth callback finds exactly one onboarded guild and intent is not signup, the user is redirected into that tenant path (home, billing, or onboard as applicable).
+source_draft: D-REQ-006
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-007
+STATUS: Active
+TITLE: REQ-ROO-007: When OAuth callback finds zero or multiple onboarded guilds, or intent is signup
+STATEMENT: >>>
+When OAuth callback finds zero or multiple onboarded guilds, or intent is signup, the user is redirected to /select-guild with auth_user context.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: When OAuth callback finds zero or multiple onboarded guilds, or intent is signup, the user is redirected to /select-guild with auth_user context.
+source_draft: D-REQ-007
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-008
+STATUS: Active
+TITLE: REQ-ROO-008: In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth
+STATEMENT: >>>
+In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth exchange bridge so Discord never sees the Render IP; local development may exchange directly.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth exchange bridge so Discord never sees the Render IP; local development may exchange directly.
+source_draft: D-REQ-008
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-009
+STATUS: Active
+TITLE: REQ-ROO-009: When the Discord circuit is open, login and callback redirect to landing with di
+STATEMENT: >>>
+When the Discord circuit is open, login and callback redirect to landing with discord_rate_limited (including until hint) instead of completing OAuth.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: When the Discord circuit is open, login and callback redirect to landing with discord_rate_limited (including until hint) instead of completing OAuth.
+source_draft: D-REQ-009
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-002
+
+[REQUIREMENT]
+UID: REQ-ROO-010
+STATUS: Active
+TITLE: REQ-ROO-010: GET /auth/me returns {authenticated,user} with a re-signed profile when authenti
+STATEMENT: >>>
+GET /auth/me returns {authenticated,user} with a re-signed profile when authenticated; returns authenticated:false when not.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: GET /auth/me returns {authenticated,user} with a re-signed profile when authenticated; returns authenticated:false when not.
+source_draft: D-REQ-010
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-003
+
+[REQUIREMENT]
+UID: REQ-ROO-011
+STATUS: Active
+TITLE: REQ-ROO-011: POST /auth/logout destroys the server session and clears the connect.sid cookie.
+STATEMENT: >>>
+POST /auth/logout destroys the server session and clears the connect.sid cookie.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: POST /auth/logout destroys the server session and clears the connect.sid cookie.
+source_draft: D-REQ-011
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-003
+
+[REQUIREMENT]
+UID: REQ-ROO-012
+STATUS: Active
+TITLE: REQ-ROO-012: Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-p
+STATEMENT: >>>
+Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-profile verified with DISCORD_CLIENT_SECRET.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-profile verified with DISCORD_CLIENT_SECRET.
+source_draft: D-REQ-012
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-003
+
+[REQUIREMENT]
+UID: REQ-ROO-013
+STATUS: Active
+TITLE: REQ-ROO-013: SPA restores session from auth_user query first, then guild_raid_session localSt
+STATEMENT: >>>
+SPA restores session from auth_user query first, then guild_raid_session localStorage (migrating legacy dynasty_raid_session if present), then verifies with GET /auth/me.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA restores session from auth_user query first, then guild_raid_session localStorage (migrating legacy dynasty_raid_session if present), then verifies with GET /auth/me.
+source_draft: D-REQ-013
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-004
+
+[REQUIREMENT]
+UID: REQ-ROO-014
+STATUS: Active
+TITLE: REQ-ROO-014: SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x
+STATEMENT: >>>
+SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x-tenant-id headers when a session exists.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x-tenant-id headers when a session exists.
+source_draft: D-REQ-014
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-004
+
+[REQUIREMENT]
+UID: REQ-ROO-015
+STATUS: Active
+TITLE: REQ-ROO-015: On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
+STATEMENT: >>>
+On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
+source_draft: D-REQ-015
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-004
+
+[REQUIREMENT]
+UID: REQ-ROO-016
+STATUS: Active
+TITLE: REQ-ROO-016: Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS 
+STATEMENT: >>>
+Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS uses secure:true and sameSite:none.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS uses secure:true and sameSite:none.
+source_draft: D-REQ-016
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-005
+
+[REQUIREMENT]
+UID: REQ-ROO-017
+STATUS: Active
+TITLE: REQ-ROO-017: CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.ap
+STATEMENT: >>>
+CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.app, LAN, and ngrok; credentials enabled; allows headers x-user-profile and x-tenant-id.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.app, LAN, and ngrok; credentials enabled; allows headers x-user-profile and x-tenant-id.
+source_draft: D-REQ-017
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-005
+
+[REQUIREMENT]
+UID: REQ-ROO-018
+STATUS: Active
+TITLE: REQ-ROO-018: Document title is the product name when logged out and '{Guild} · VALHALLA' when
+STATEMENT: >>>
+Document title is the product name when logged out and '{Guild} · VALHALLA' when authenticated with a guild context.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: should
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Document title is the product name when logged out and '{Guild} · VALHALLA' when authenticated with a guild context.
+source_draft: D-REQ-018
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-005
+
+[REQUIREMENT]
+UID: REQ-ROO-019
+STATUS: Active
+TITLE: REQ-ROO-019: /login permanently redirects to /landing.
+STATEMENT: >>>
+/login permanently redirects to /landing.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: /login permanently redirects to /landing.
+source_draft: D-REQ-019
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-005
+
+[REQUIREMENT]
+UID: REQ-ROO-020
+STATUS: Active
+TITLE: REQ-ROO-020: Unauthenticated users navigating protected shells are redirected to /landing.
+STATEMENT: >>>
+Unauthenticated users navigating protected shells are redirected to /landing.
+<<<
+COMMENT: >>>
+domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Unauthenticated users navigating protected shells are redirected to /landing.
+source_draft: D-REQ-020
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-005
+
+[SECTION]
+TITLE: Tenant/Workspace (REQ-ROO-021 .. REQ-ROO-038)
+
+[REQUIREMENT]
+UID: REQ-ROO-021
+STATUS: Active
+TITLE: REQ-ROO-021: One Discord guild id is the tenant primary key (`tenants.id`).
+STATEMENT: >>>
+One Discord guild id is the tenant primary key (`tenants.id`).
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: One Discord guild id is the tenant primary key (`tenants.id`).
+source_draft: D-REQ-021
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-006
+
+[REQUIREMENT]
+UID: REQ-ROO-022
+STATUS: Active
+TITLE: REQ-ROO-022: `GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboar
+STATEMENT: >>>
+`GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboardable Manage-Server guilds.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboardable Manage-Server guilds.
+source_draft: D-REQ-022
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-007
+
+[REQUIREMENT]
+UID: REQ-ROO-023
+STATUS: Active
+TITLE: REQ-ROO-023: When platform capacity is full, `onboardable` list is empty and billing capacity
+STATEMENT: >>>
+When platform capacity is full, `onboardable` list is empty and billing capacity flags are returned.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: When platform capacity is full, `onboardable` list is empty and billing capacity flags are returned.
+source_draft: D-REQ-023
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-007
+
+[REQUIREMENT]
+UID: REQ-ROO-024
+STATUS: Active
+TITLE: REQ-ROO-024: `POST /api/tenants/select` requires membership visibility; builds session user w
+STATEMENT: >>>
+`POST /api/tenants/select` requires membership visibility; builds session user with officer flag, enabled games, subscriptionAllowed.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/tenants/select` requires membership visibility; builds session user with officer flag, enabled games, subscriptionAllowed.
+source_draft: D-REQ-024
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-007
+
+[REQUIREMENT]
+UID: REQ-ROO-025
+STATUS: Active
+TITLE: REQ-ROO-025: Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/synce
+STATEMENT: >>>
+Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/syncedAt.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/syncedAt.
+source_draft: D-REQ-025
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-007
+
+[REQUIREMENT]
+UID: REQ-ROO-026
+STATUS: Active
+TITLE: REQ-ROO-026: `POST /api/tenants/onboard` requires Manage Server (or owner), bot already in gu
+STATEMENT: >>>
+`POST /api/tenants/onboard` requires Manage Server (or owner), bot already in guild, ≥1 officer role name.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/tenants/onboard` requires Manage Server (or owner), bot already in guild, ≥1 officer role name.
+source_draft: D-REQ-026
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-027
+STATUS: Active
+TITLE: REQ-ROO-027: Onboard creates tenant + settings with empty Discord channel map and marks `onbo
+STATEMENT: >>>
+Onboard creates tenant + settings with empty Discord channel map and marks `onboarded=true`.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Onboard creates tenant + settings with empty Discord channel map and marks `onboarded=true`.
+source_draft: D-REQ-027
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-028
+STATUS: Active
+TITLE: REQ-ROO-028: Onboard rejects if guild already onboarded (409).
+STATEMENT: >>>
+Onboard rejects if guild already onboarded (409).
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Onboard rejects if guild already onboarded (409).
+source_draft: D-REQ-028
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-029
+STATUS: Active
+TITLE: REQ-ROO-029: Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
+STATEMENT: >>>
+Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
+source_draft: D-REQ-029
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-030
+STATUS: Active
+TITLE: REQ-ROO-030: `GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
+STATEMENT: >>>
+`GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
+source_draft: D-REQ-030
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-031
+STATUS: Active
+TITLE: REQ-ROO-031: `GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone ro
+STATEMENT: >>>
+`GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone roles sorted by position.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone roles sorted by position.
+source_draft: D-REQ-031
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-008
+
+[REQUIREMENT]
+UID: REQ-ROO-032
+STATUS: Active
+TITLE: REQ-ROO-032: Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRole
+STATEMENT: >>>
+Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRoles` (case-insensitive); empty adminRoles → owner only.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRoles` (case-insensitive); empty adminRoles → owner only.
+source_draft: D-REQ-032
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-009
+
+[REQUIREMENT]
+UID: REQ-ROO-033
+STATUS: Active
+TITLE: REQ-ROO-033: Manage Server is required to create workspace, not for day-to-day officer tools.
+STATEMENT: >>>
+Manage Server is required to create workspace, not for day-to-day officer tools.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Manage Server is required to create workspace, not for day-to-day officer tools.
+source_draft: D-REQ-033
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-009
+
+[REQUIREMENT]
+UID: REQ-ROO-034
+STATUS: Active
+TITLE: REQ-ROO-034: `GET/POST /api/tenants/workspace` officer-only; read/update display name, timezo
+STATEMENT: >>>
+`GET/POST /api/tenants/workspace` officer-only; read/update display name, timezone, adminRoles; returns Discord roles + invite URL.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET/POST /api/tenants/workspace` officer-only; read/update display name, timezone, adminRoles; returns Discord roles + invite URL.
+source_draft: D-REQ-034
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-009
+
+[REQUIREMENT]
+UID: REQ-ROO-035
+STATUS: Active
+TITLE: REQ-ROO-035: Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear v
+STATEMENT: >>>
+Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear via `DELETE /api/tenants/logo`.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear via `DELETE /api/tenants/logo`.
+source_draft: D-REQ-035
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-009
+
+[REQUIREMENT]
+UID: REQ-ROO-036
+STATUS: Active
+TITLE: REQ-ROO-036: Effective logo falls back to Discord guild icon when no custom logo.
+STATEMENT: >>>
+Effective logo falls back to Discord guild icon when no custom logo.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Effective logo falls back to Discord guild icon when no custom logo.
+source_draft: D-REQ-036
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-009
+
+[REQUIREMENT]
+UID: REQ-ROO-037
+STATUS: Active
+TITLE: REQ-ROO-037: Authenticated user without `currentTenantId` is forced to `/select-guild`.
+STATEMENT: >>>
+Authenticated user without `currentTenantId` is forced to `/select-guild`.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Authenticated user without `currentTenantId` is forced to `/select-guild`.
+source_draft: D-REQ-037
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-010
+
+[REQUIREMENT]
+UID: REQ-ROO-038
+STATUS: Active
+TITLE: REQ-ROO-038: Post-login path resolver: select-guild → billing (if not allowed) → choose games
+STATEMENT: >>>
+Post-login path resolver: select-guild → billing (if not allowed) → choose games → game setup → game home.
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Post-login path resolver: select-guild → billing (if not allowed) → choose games → game setup → game home.
+source_draft: D-REQ-038
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-010
+
+[SECTION]
+TITLE: Games catalog (REQ-ROO-039 .. REQ-ROO-048)
+
+[REQUIREMENT]
+UID: REQ-ROO-039
+STATUS: Active
+TITLE: REQ-ROO-039: Known games: `adventurer-guild`, `ragnarok-origin` only.
+STATEMENT: >>>
+Known games: `adventurer-guild`, `ragnarok-origin` only.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Known games: `adventurer-guild`, `ragnarok-origin` only.
+source_draft: D-REQ-039
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-ROO-040
+STATUS: Active
+TITLE: REQ-ROO-040: `POST /api/tenants/enable-game` officer + active subscription; appends known gam
+STATEMENT: >>>
+`POST /api/tenants/enable-game` officer + active subscription; appends known game id.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/tenants/enable-game` officer + active subscription; appends known game id.
+source_draft: D-REQ-040
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-ROO-041
+STATUS: Active
+TITLE: REQ-ROO-041: `POST /api/tenants/disable-game` officer; removes game from enabled list without
+STATEMENT: >>>
+`POST /api/tenants/disable-game` officer; removes game from enabled list without deleting stored game data.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/tenants/disable-game` officer; removes game from enabled list without deleting stored game data.
+source_draft: D-REQ-041
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-ROO-042
+STATUS: Active
+TITLE: REQ-ROO-042: Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnn
+STATEMENT: >>>
+Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnnounce channel ids is mapped.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnnounce channel ids is mapped.
+source_draft: D-REQ-042
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-043
+STATUS: Active
+TITLE: REQ-ROO-043: Adventurer Guild has no setup path / no channel requirements.
+STATEMENT: >>>
+Adventurer Guild has no setup path / no channel requirements.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Adventurer Guild has no setup path / no channel requirements.
+source_draft: D-REQ-043
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-044
+STATUS: Active
+TITLE: REQ-ROO-044: `POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Disc
+STATEMENT: >>>
+`POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Discord channel map including war rooms 1–5.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Discord channel map including war rooms 1–5.
+source_draft: D-REQ-044
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-045
+STATUS: Active
+TITLE: REQ-ROO-045: Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
+STATEMENT: >>>
+Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
+source_draft: D-REQ-045
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-046
+STATUS: Active
+TITLE: REQ-ROO-046: Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `
+STATEMENT: >>>
+Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `game_required`.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `game_required`.
+source_draft: D-REQ-046
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-047
+STATUS: Active
+TITLE: REQ-ROO-047: SPA blocks navigation into a game path that is not in `enabledGames` (redirect t
+STATEMENT: >>>
+SPA blocks navigation into a game path that is not in `enabledGames` (redirect to post-login path).
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA blocks navigation into a game path that is not in `enabledGames` (redirect to post-login path).
+source_draft: D-REQ-047
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-ROO-048
+STATUS: Active
+TITLE: REQ-ROO-048: Active game id persists in `localStorage` key `valhalla_active_game`.
+STATEMENT: >>>
+Active game id persists in `localStorage` key `valhalla_active_game`.
+<<<
+COMMENT: >>>
+domain: Games catalog
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Active game id persists in `localStorage` key `valhalla_active_game`.
+source_draft: D-REQ-048
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[SECTION]
+TITLE: Billing/Capacity (REQ-ROO-049 .. REQ-ROO-061)
+
+[REQUIREMENT]
+UID: REQ-ROO-049
+STATUS: Active
+TITLE: REQ-ROO-049: Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_du
+STATEMENT: >>>
+Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_due` with future `grace_until`).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_due` with future `grace_until`).
+source_draft: D-REQ-049
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-013
+
+[REQUIREMENT]
+UID: REQ-ROO-050
+STATUS: Active
+TITLE: REQ-ROO-050: Game feature mounts also require `requireActiveSubscription` → 402 `payment_requ
+STATEMENT: >>>
+Game feature mounts also require `requireActiveSubscription` → 402 `payment_required` when seat inactive.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Game feature mounts also require `requireActiveSubscription` → 402 `payment_required` when seat inactive.
+source_draft: D-REQ-050
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-013
+
+[REQUIREMENT]
+UID: REQ-ROO-051
+STATUS: Active
+TITLE: REQ-ROO-051: SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except
+STATEMENT: >>>
+SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except onboard/select/billing).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except onboard/select/billing).
+source_draft: D-REQ-051
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-013
+
+[REQUIREMENT]
+UID: REQ-ROO-052
+STATUS: Active
+TITLE: REQ-ROO-052: `GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS
+STATEMENT: >>>
+`GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS`), full flag (public).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS`), full flag (public).
+source_draft: D-REQ-052
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-014
+
+[REQUIREMENT]
+UID: REQ-ROO-053
+STATUS: Active
+TITLE: REQ-ROO-053: `GET /api/billing/status` returns public billing view for current tenant (refres
+STATEMENT: >>>
+`GET /api/billing/status` returns public billing view for current tenant (refreshes Stripe when source=stripe).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/billing/status` returns public billing view for current tenant (refreshes Stripe when source=stripe).
+source_draft: D-REQ-053
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-014
+
+[REQUIREMENT]
+UID: REQ-ROO-054
+STATUS: Active
+TITLE: REQ-ROO-054: Officer `POST /api/billing/create-checkout-session` creates Stripe subscription 
+STATEMENT: >>>
+Officer `POST /api/billing/create-checkout-session` creates Stripe subscription Checkout; rejects if already has access or capacity full.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/billing/create-checkout-session` creates Stripe subscription Checkout; rejects if already has access or capacity full.
+source_draft: D-REQ-054
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-015
+
+[REQUIREMENT]
+UID: REQ-ROO-055
+STATUS: Active
+TITLE: REQ-ROO-055: Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal w
+STATEMENT: >>>
+Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal when stripe customer exists.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal when stripe customer exists.
+source_draft: D-REQ-055
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-015
+
+[REQUIREMENT]
+UID: REQ-ROO-056
+STATUS: Active
+TITLE: REQ-ROO-056: Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=in
+STATEMENT: >>>
+Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=invite` under advisory lock; marks invite code redeemed once.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=invite` under advisory lock; marks invite code redeemed once.
+source_draft: D-REQ-056
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-015
+
+[REQUIREMENT]
+UID: REQ-ROO-057
+STATUS: Active
+TITLE: REQ-ROO-057: Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout comple
+STATEMENT: >>>
+Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout completed, invoice paid/failed, subscription updated/deleted.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout completed, invoice paid/failed, subscription updated/deleted.
+source_draft: D-REQ-057
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-016
+
+[REQUIREMENT]
+UID: REQ-ROO-058
+STATUS: Active
+TITLE: REQ-ROO-058: Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckou
+STATEMENT: >>>
+Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckout).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckout).
+source_draft: D-REQ-058
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-016
+
+[REQUIREMENT]
+UID: REQ-ROO-059
+STATUS: Active
+TITLE: REQ-ROO-059: Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE
+STATEMENT: >>>
+Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE_DAYS`, default 3).
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE_DAYS`, default 3).
+source_draft: D-REQ-059
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-016
+
+[REQUIREMENT]
+UID: REQ-ROO-060
+STATUS: Active
+TITLE: REQ-ROO-060: Permanent billing sources `invite` and `grandfathered` are not overwritten by St
+STATEMENT: >>>
+Permanent billing sources `invite` and `grandfathered` are not overwritten by Stripe subscription lifecycle.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Permanent billing sources `invite` and `grandfathered` are not overwritten by Stripe subscription lifecycle.
+source_draft: D-REQ-060
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-016
+
+[REQUIREMENT]
+UID: REQ-ROO-061
+STATUS: Active
+TITLE: REQ-ROO-061: Stripe env optional at boot; invite redemption works without Stripe keys.
+STATEMENT: >>>
+Stripe env optional at boot; invite redemption works without Stripe keys.
+<<<
+COMMENT: >>>
+domain: Billing/Capacity
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Stripe env optional at boot; invite redemption works without Stripe keys.
+source_draft: D-REQ-061
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-016
+
+[SECTION]
+TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077)
+
+[REQUIREMENT]
+UID: REQ-ROO-062
+STATUS: Active
+TITLE: REQ-ROO-062: Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVo
+STATEMENT: >>>
+Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVoiceStates.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVoiceStates.
+source_draft: D-REQ-062
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-017
+
+[REQUIREMENT]
+UID: REQ-ROO-063
+STATUS: Active
+TITLE: REQ-ROO-063: Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
+STATEMENT: >>>
+Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
+source_draft: D-REQ-063
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-017
+
+[REQUIREMENT]
+UID: REQ-ROO-064
+STATUS: Active
+TITLE: REQ-ROO-064: On ready, clear leftover guild slash commands for each onboarded tenant; slash i
+STATEMENT: >>>
+On ready, clear leftover guild slash commands for each onboarded tenant; slash invocations reply that commands were removed (use cards).
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: On ready, clear leftover guild slash commands for each onboarded tenant; slash invocations reply that commands were removed (use cards).
+source_draft: D-REQ-064
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-017
+
+[REQUIREMENT]
+UID: REQ-ROO-065
+STATUS: Active
+TITLE: REQ-ROO-065: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `req
+STATEMENT: >>>
+Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, auction claim panel ids — bypass general-room gate.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, auction claim panel ids — bypass general-room gate.
+source_draft: D-REQ-065
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-066
+STATUS: Active
+TITLE: REQ-ROO-066: ~60s tenant ticker runs phase announces, raid event announces, leave-credit refr
+STATEMENT: >>>
+~60s tenant ticker runs phase announces, raid event announces, leave-credit refresh, deadline close, live-raid auto-end, war-room automation, GVG readiness refresh, auto-commit auction (skips Discord-facing work when circuit open; skips first Discord tick after ready).
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: ~60s tenant ticker runs phase announces, raid event announces, leave-credit refresh, deadline close, live-raid auto-end, war-room automation, GVG readiness refresh, auto-commit auction (skips Discord-facing work when circuit open; skips first Discord tick after ready).
+source_draft: D-REQ-066
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-067
+STATUS: Active
+TITLE: REQ-ROO-067: Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable 
+STATEMENT: >>>
+Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable until times.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable until times.
+source_draft: D-REQ-067
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-068
+STATUS: Active
+TITLE: REQ-ROO-068: Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAge
+STATEMENT: >>>
+Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAgent.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAgent.
+source_draft: D-REQ-068
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-069
+STATUS: Active
+TITLE: REQ-ROO-069: Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
+STATEMENT: >>>
+Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
+source_draft: D-REQ-069
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-070
+STATUS: Active
+TITLE: REQ-ROO-070: Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-requ
+STATEMENT: >>>
+Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-request channel.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-request channel.
+source_draft: D-REQ-070
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-071
+STATUS: Active
+TITLE: REQ-ROO-071: Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-a
+STATEMENT: >>>
+Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-announce channel.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-announce channel.
+source_draft: D-REQ-071
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-072
+STATUS: Active
+TITLE: REQ-ROO-072: Officer `GET /api/deploy-party-card` posts party viewer card to war-announce cha
+STATEMENT: >>>
+Officer `GET /api/deploy-party-card` posts party viewer card to war-announce channel.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/deploy-party-card` posts party viewer card to war-announce channel.
+source_draft: D-REQ-072
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-073
+STATUS: Active
+TITLE: REQ-ROO-073: Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
+STATEMENT: >>>
+Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
+source_draft: D-REQ-073
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-074
+STATUS: Active
+TITLE: REQ-ROO-074: Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings S
+STATEMENT: >>>
+Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings Send UX.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings Send UX.
+source_draft: D-REQ-074
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-075
+STATUS: Active
+TITLE: REQ-ROO-075: Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per
+STATEMENT: >>>
+Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per tenant).
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per tenant).
+source_draft: D-REQ-075
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
+
+[REQUIREMENT]
+UID: REQ-ROO-076
+STATUS: Active
+TITLE: REQ-ROO-076: `GET /api/debug/discord-ratelimit` returns bot health + rate-limit status withou
+STATEMENT: >>>
+`GET /api/debug/discord-ratelimit` returns bot health + rate-limit status without secrets.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/debug/discord-ratelimit` returns bot health + rate-limit status without secrets.
+source_draft: D-REQ-076
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-020
+
+[REQUIREMENT]
+UID: REQ-ROO-077
+STATUS: Active
+TITLE: REQ-ROO-077: `GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) 
+STATEMENT: >>>
+`GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) or Postgres roster fallback without REST-fetching 1000 members from Render IP.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) or Postgres roster fallback without REST-fetching 1000 members from Render IP.
+source_draft: D-REQ-077
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-020
+
+[SECTION]
+TITLE: Auction/Requests (REQ-ROO-078 .. REQ-ROO-100)
+
+[REQUIREMENT]
+UID: REQ-ROO-078
+STATUS: Active
+TITLE: REQ-ROO-078: `GET /api/requests/init` builds request lobby for signed-in member (gate/items/s
+STATEMENT: >>>
+`GET /api/requests/init` builds request lobby for signed-in member (gate/items/selections).
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/init` builds request lobby for signed-in member (gate/items/selections).
+source_draft: D-REQ-078
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-021
+
+[REQUIREMENT]
+UID: REQ-ROO-079
+STATUS: Active
+TITLE: REQ-ROO-079: `POST /api/requests/submit` accepts selections while registration gate open; ret
+STATEMENT: >>>
+`POST /api/requests/submit` accepts selections while registration gate open; returns RequestDeckError statuses.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/requests/submit` accepts selections while registration gate open; returns RequestDeckError statuses.
+source_draft: D-REQ-079
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-021
+
+[REQUIREMENT]
+UID: REQ-ROO-080
+STATUS: Active
+TITLE: REQ-ROO-080: `POST /api/requests/cancel` cancels pending request for item when allowed by dec
+STATEMENT: >>>
+`POST /api/requests/cancel` cancels pending request for item when allowed by deck rules.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/requests/cancel` cancels pending request for item when allowed by deck rules.
+source_draft: D-REQ-080
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-021
+
+[REQUIREMENT]
+UID: REQ-ROO-081
+STATUS: Active
+TITLE: REQ-ROO-081: Discord Request Card (`reqcard:*`) supports open/submit/drop without website (De
+STATEMENT: >>>
+Discord Request Card (`reqcard:*`) supports open/submit/drop without website (Develop tip).
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Discord Request Card (`reqcard:*`) supports open/submit/drop without website (Develop tip).
+source_draft: D-REQ-081
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-021
+
+[REQUIREMENT]
+UID: REQ-ROO-082
+STATUS: Active
+TITLE: REQ-ROO-082: Interactive auction claim panel updates `auction/active_session` when Discord ga
+STATEMENT: >>>
+Interactive auction claim panel updates `auction/active_session` when Discord gate open and member on roster.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Interactive auction claim panel updates `auction/active_session` when Discord gate open and member on roster.
+source_draft: D-REQ-082
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-083
+STATUS: Active
+TITLE: REQ-ROO-083: `GET /api/requests/active-session` returns Mimic Book session; auto-resets if ol
+STATEMENT: >>>
+`GET /api/requests/active-session` returns Mimic Book session; auto-resets if older than 24h.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/active-session` returns Mimic Book session; auto-resets if older than 24h.
+source_draft: D-REQ-083
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-084
+STATUS: Active
+TITLE: REQ-ROO-084: Officer `POST /api/requests/update-session` writes active session with optimisti
+STATEMENT: >>>
+Officer `POST /api/requests/update-session` writes active session with optimistic version check (stale version aborted).
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/update-session` writes active session with optimistic version check (stale version aborted).
+source_draft: D-REQ-084
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-085
+STATUS: Active
+TITLE: REQ-ROO-085: Officer `POST /api/requests/commit-session` atomically writes loot_history + pas
+STATEMENT: >>>
+Officer `POST /api/requests/commit-session` atomically writes loot_history + past_auctions + web_request status flips and clears active_session.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/commit-session` atomically writes loot_history + past_auctions + web_request status flips and clears active_session.
+source_draft: D-REQ-085
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-086
+STATUS: Active
+TITLE: REQ-ROO-086: Commit marks winners Selected, absent Absent, notSelected NotSelected; supersede
+STATEMENT: >>>
+Commit marks winners Selected, absent Absent, notSelected NotSelected; supersedes redundant pending rows.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Commit marks winners Selected, absent Absent, notSelected NotSelected; supersedes redundant pending rows.
+source_draft: D-REQ-086
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-087
+STATUS: Active
+TITLE: REQ-ROO-087: Auto-commit scheduler can call the same `performCommitSession` path as manual co
+STATEMENT: >>>
+Auto-commit scheduler can call the same `performCommitSession` path as manual commit.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Auto-commit scheduler can call the same `performCommitSession` path as manual commit.
+source_draft: D-REQ-087
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-088
+STATUS: Active
+TITLE: REQ-ROO-088: Officer `POST /api/requests/sync-roster` syncs Discord members into `auction/mem
+STATEMENT: >>>
+Officer `POST /api/requests/sync-roster` syncs Discord members into `auction/members`, marks missing as Ghost, never Ghosts `dummy_*`.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/sync-roster` syncs Discord members into `auction/members`, marks missing as Ghost, never Ghosts `dummy_*`.
+source_draft: D-REQ-088
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-089
+STATUS: Active
+TITLE: REQ-ROO-089: Officer `POST /api/requests/reset-priority` inserts AdminReset/Reset ledger row 
+STATEMENT: >>>
+Officer `POST /api/requests/reset-priority` inserts AdminReset/Reset ledger row for member+item.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/reset-priority` inserts AdminReset/Reset ledger row for member+item.
+source_draft: D-REQ-089
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-090
+STATUS: Active
+TITLE: REQ-ROO-090: Officer `POST /api/requests/clear-history` deletes web_requests whose date falls
+STATEMENT: >>>
+Officer `POST /api/requests/clear-history` deletes web_requests whose date falls in inclusive range.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/clear-history` deletes web_requests whose date falls in inclusive range.
+source_draft: D-REQ-090
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-091
+STATUS: Active
+TITLE: REQ-ROO-091: `GET /api/requests/request-history` returns web_requests ledger newest-first.
+STATEMENT: >>>
+`GET /api/requests/request-history` returns web_requests ledger newest-first.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/request-history` returns web_requests ledger newest-first.
+source_draft: D-REQ-091
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-092
+STATUS: Active
+TITLE: REQ-ROO-092: `GET /api/requests/loot-history` returns loot_history newest-first.
+STATEMENT: >>>
+`GET /api/requests/loot-history` returns loot_history newest-first.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/loot-history` returns loot_history newest-first.
+source_draft: D-REQ-092
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-093
+STATUS: Active
+TITLE: REQ-ROO-093: `GET /api/requests/past-auctions` returns past awards + members map.
+STATEMENT: >>>
+`GET /api/requests/past-auctions` returns past awards + members map.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/past-auctions` returns past awards + members map.
+source_draft: D-REQ-093
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-094
+STATUS: Active
+TITLE: REQ-ROO-094: `GET /api/requests/member-auction-stats` self-or-officer; returns battle count +
+STATEMENT: >>>
+`GET /api/requests/member-auction-stats` self-or-officer; returns battle count + award qty by item.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/member-auction-stats` self-or-officer; returns battle count + award qty by item.
+source_draft: D-REQ-094
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-095
+STATUS: Active
+TITLE: REQ-ROO-095: Settings help URLs exposed to all members via `GET /api/requests/settings/help` 
+STATEMENT: >>>
+Settings help URLs exposed to all members via `GET /api/requests/settings/help` (no adminRoles/channels).
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Settings help URLs exposed to all members via `GET /api/requests/settings/help` (no adminRoles/channels).
+source_draft: D-REQ-095
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[REQUIREMENT]
+UID: REQ-ROO-096
+STATUS: Active
+TITLE: REQ-ROO-096: `GET /api/requests/settings/get` returns public view for non-officers; full conf
+STATEMENT: >>>
+`GET /api/requests/settings/get` returns public view for non-officers; full config + discordChannels for officers.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/requests/settings/get` returns public view for non-officers; full config + discordChannels for officers.
+source_draft: D-REQ-096
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[REQUIREMENT]
+UID: REQ-ROO-097
+STATUS: Active
+TITLE: REQ-ROO-097: Officer `POST /api/requests/settings/save` with `scope=workspace|game`; game sco
+STATEMENT: >>>
+Officer `POST /api/requests/settings/save` with `scope=workspace|game`; game scope rejects overlapping raid cycles.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/settings/save` with `scope=workspace|game`; game scope rejects overlapping raid cycles.
+source_draft: D-REQ-097
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[REQUIREMENT]
+UID: REQ-ROO-098
+STATUS: Active
+TITLE: REQ-ROO-098: Officer `POST /api/requests/settings/unlock` marks session settings unlocked and
+STATEMENT: >>>
+Officer `POST /api/requests/settings/unlock` marks session settings unlocked and returns signed officer user.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/requests/settings/unlock` marks session settings unlocked and returns signed officer user.
+source_draft: D-REQ-098
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[REQUIREMENT]
+UID: REQ-ROO-099
+STATUS: Active
+TITLE: REQ-ROO-099: Auction SPA routes: `/` Request, `/mimic-book`, `/request-history`, `/past-aucti
+STATEMENT: >>>
+Auction SPA routes: `/` Request, `/mimic-book`, `/request-history`, `/past-auction`.
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Auction SPA routes: `/` Request, `/mimic-book`, `/request-history`, `/past-auction`.
+source_draft: D-REQ-099
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[REQUIREMENT]
+UID: REQ-ROO-100
+STATUS: Active
+TITLE: REQ-ROO-100: `/submit-evidence` redirects to `/` (placeholder removed).
+STATEMENT: >>>
+`/submit-evidence` redirects to `/` (placeholder removed).
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `/submit-evidence` redirects to `/` (placeholder removed).
+source_draft: D-REQ-100
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
+[SECTION]
+TITLE: Attendance/Roster (REQ-ROO-101 .. REQ-ROO-113)
+
+[REQUIREMENT]
+UID: REQ-ROO-101
+STATUS: Active
+TITLE: REQ-ROO-101: Officer `POST /api/attendance/vanish` removes members from DB (batch ≤500) and k
+STATEMENT: >>>
+Officer `POST /api/attendance/vanish` removes members from DB (batch ≤500) and kicks non-dummy Discord members when possible.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/vanish` removes members from DB (batch ≤500) and kicks non-dummy Discord members when possible.
+source_draft: D-REQ-101
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-025
+
+[REQUIREMENT]
+UID: REQ-ROO-102
+STATUS: Active
+TITLE: REQ-ROO-102: Officer `POST /api/attendance/update-roster-status` atomically patches roster le
+STATEMENT: >>>
+Officer `POST /api/attendance/update-roster-status` atomically patches roster leaf fields.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/update-roster-status` atomically patches roster leaf fields.
+source_draft: D-REQ-102
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-025
+
+[REQUIREMENT]
+UID: REQ-ROO-103
+STATUS: Active
+TITLE: REQ-ROO-103: Officer `POST /api/attendance/roster/save-batch` bulk-persists roster leaf updat
+STATEMENT: >>>
+Officer `POST /api/attendance/roster/save-batch` bulk-persists roster leaf updates.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/roster/save-batch` bulk-persists roster leaf updates.
+source_draft: D-REQ-103
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-025
+
+[REQUIREMENT]
+UID: REQ-ROO-104
+STATUS: Active
+TITLE: REQ-ROO-104: Officer `POST /api/attendance/dummy/create` creates placeholder `dummy_*` roster
+STATEMENT: >>>
+Officer `POST /api/attendance/dummy/create` creates placeholder `dummy_*` roster members.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/dummy/create` creates placeholder `dummy_*` roster members.
+source_draft: D-REQ-104
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-025
+
+[REQUIREMENT]
+UID: REQ-ROO-105
+STATUS: Active
+TITLE: REQ-ROO-105: `GET /api/attendance/profile` / `GET /api/attendance/members/:uid/profile` retur
+STATEMENT: >>>
+`GET /api/attendance/profile` / `GET /api/attendance/members/:uid/profile` return member profile (self or targeted).
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/attendance/profile` / `GET /api/attendance/members/:uid/profile` return member profile (self or targeted).
+source_draft: D-REQ-105
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-026
+
+[REQUIREMENT]
+UID: REQ-ROO-106
+STATUS: Active
+TITLE: REQ-ROO-106: `GET /api/attendance/me` returns current user leave credits / no-confirm summary
+STATEMENT: >>>
+`GET /api/attendance/me` returns current user leave credits / no-confirm summary.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/attendance/me` returns current user leave credits / no-confirm summary.
+source_draft: D-REQ-106
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-026
+
+[REQUIREMENT]
+UID: REQ-ROO-107
+STATUS: Active
+TITLE: REQ-ROO-107: Officer `POST /api/attendance/members/:uid/leave-credits` adjusts leave credits 
+STATEMENT: >>>
+Officer `POST /api/attendance/members/:uid/leave-credits` adjusts leave credits by delta.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/members/:uid/leave-credits` adjusts leave credits by delta.
+source_draft: D-REQ-107
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-026
+
+[REQUIREMENT]
+UID: REQ-ROO-108
+STATUS: Active
+TITLE: REQ-ROO-108: Boot seeds missing leave credits per onboarded tenant (`seedMissingLeaveCredits`
+STATEMENT: >>>
+Boot seeds missing leave credits per onboarded tenant (`seedMissingLeaveCredits`).
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Boot seeds missing leave credits per onboarded tenant (`seedMissingLeaveCredits`).
+source_draft: D-REQ-108
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-026
+
+[REQUIREMENT]
+UID: REQ-ROO-109
+STATUS: Active
+TITLE: REQ-ROO-109: Monthly leave-credit refresh runs from bot ticker (`maybeRefreshMonthlyLeaveCred
+STATEMENT: >>>
+Monthly leave-credit refresh runs from bot ticker (`maybeRefreshMonthlyLeaveCredits`).
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Monthly leave-credit refresh runs from bot ticker (`maybeRefreshMonthlyLeaveCredits`).
+source_draft: D-REQ-109
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-026
+
+[REQUIREMENT]
+UID: REQ-ROO-110
+STATUS: Active
+TITLE: REQ-ROO-110: `GET /api/attendance/peak-hours` aggregates guild peak-hour heatmap; `PUT /api/a
+STATEMENT: >>>
+`GET /api/attendance/peak-hours` aggregates guild peak-hour heatmap; `PUT /api/attendance/peak-hours/me` saves own play schedule.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/attendance/peak-hours` aggregates guild peak-hour heatmap; `PUT /api/attendance/peak-hours/me` saves own play schedule.
+source_draft: D-REQ-110
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-027
+
+[REQUIREMENT]
+UID: REQ-ROO-111
+STATUS: Active
+TITLE: REQ-ROO-111: Officer `POST /api/attendance/update-job-target` saves recruitment goals by job.
+STATEMENT: >>>
+Officer `POST /api/attendance/update-job-target` saves recruitment goals by job.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/update-job-target` saves recruitment goals by job.
+source_draft: D-REQ-111
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-027
+
+[REQUIREMENT]
+UID: REQ-ROO-112
+STATUS: Active
+TITLE: REQ-ROO-112: Officer `POST /api/attendance/update-expected-rate` saves guild expected attenda
+STATEMENT: >>>
+Officer `POST /api/attendance/update-expected-rate` saves guild expected attendance rate.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/update-expected-rate` saves guild expected attendance rate.
+source_draft: D-REQ-112
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-027
+
+[REQUIREMENT]
+UID: REQ-ROO-113
+STATUS: Active
+TITLE: REQ-ROO-113: Frontend MasterList / Profile / Peak Hours / Statistics pages are mounted under 
+STATEMENT: >>>
+Frontend MasterList / Profile / Peak Hours / Statistics pages are mounted under `/attendance/*`.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Frontend MasterList / Profile / Peak Hours / Statistics pages are mounted under `/attendance/*`.
+source_draft: D-REQ-113
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-027
+
+[SECTION]
+TITLE: Scheduler/RSVP (REQ-ROO-114 .. REQ-ROO-122)
+
+[REQUIREMENT]
+UID: REQ-ROO-114
+STATUS: Active
+TITLE: REQ-ROO-114: `POST /api/attendance/ensure-week` materializes scheduler week instances for a w
+STATEMENT: >>>
+`POST /api/attendance/ensure-week` materializes scheduler week instances for a week.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/attendance/ensure-week` materializes scheduler week instances for a week.
+source_draft: D-REQ-114
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-115
+STATUS: Active
+TITLE: REQ-ROO-115: `GET /api/attendance/week-instances` returns week instances (auto-ensure if need
+STATEMENT: >>>
+`GET /api/attendance/week-instances` returns week instances (auto-ensure if needed).
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/attendance/week-instances` returns week instances (auto-ensure if needed).
+source_draft: D-REQ-115
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-116
+STATUS: Active
+TITLE: REQ-ROO-116: `GET /api/attendance/commitments` returns live RSVP tree.
+STATEMENT: >>>
+`GET /api/attendance/commitments` returns live RSVP tree.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/attendance/commitments` returns live RSVP tree.
+source_draft: D-REQ-116
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-117
+STATUS: Active
+TITLE: REQ-ROO-117: `POST /api/attendance/commit-availability` logs Confirmed / Leave / related RSVP
+STATEMENT: >>>
+`POST /api/attendance/commit-availability` logs Confirmed / Leave / related RSVP decisions (via attendanceDecision rules + leave credits).
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `POST /api/attendance/commit-availability` logs Confirmed / Leave / related RSVP decisions (via attendanceDecision rules + leave credits).
+source_draft: D-REQ-117
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-118
+STATUS: Active
+TITLE: REQ-ROO-118: Canonical RSVP statuses: Confirmed, Leave, NoConfirm, None (`@guildname/shared/a
+STATEMENT: >>>
+Canonical RSVP statuses: Confirmed, Leave, NoConfirm, None (`@guildname/shared/attendanceStatus`).
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Canonical RSVP statuses: Confirmed, Leave, NoConfirm, None (`@guildname/shared/attendanceStatus`).
+source_draft: D-REQ-118
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-119
+STATUS: Active
+TITLE: REQ-ROO-119: Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+STATEMENT: >>>
+Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+source_draft: D-REQ-119
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-120
+STATUS: Active
+TITLE: REQ-ROO-120: Special events CRUD under `/api/attendance/special-events` (list/add/update/dele
+STATEMENT: >>>
+Special events CRUD under `/api/attendance/special-events` (list/add/update/delete) with officer writes.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Special events CRUD under `/api/attendance/special-events` (list/add/update/delete) with officer writes.
+source_draft: D-REQ-120
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-029
+
+[REQUIREMENT]
+UID: REQ-ROO-121
+STATUS: Active
+TITLE: REQ-ROO-121: Officer `POST /api/attendance/announce-week` triggers weekly attendance Discord 
+STATEMENT: >>>
+Officer `POST /api/attendance/announce-week` triggers weekly attendance Discord card/thread flow.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/attendance/announce-week` triggers weekly attendance Discord card/thread flow.
+source_draft: D-REQ-121
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-029
+
+[REQUIREMENT]
+UID: REQ-ROO-122
+STATUS: Active
+TITLE: REQ-ROO-122: Scheduler UI at `/attendance/scheduler`.
+STATEMENT: >>>
+Scheduler UI at `/attendance/scheduler`.
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Scheduler UI at `/attendance/scheduler`.
+source_draft: D-REQ-122
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-029
+
+[SECTION]
+TITLE: Raid compose/Party (REQ-ROO-123 .. REQ-ROO-132)
+
+[REQUIREMENT]
+UID: REQ-ROO-123
+STATUS: Active
+TITLE: REQ-ROO-123: Compositions CRUD: list/create/save/duplicate/delete under `/api/attendance/comp
+STATEMENT: >>>
+Compositions CRUD: list/create/save/duplicate/delete under `/api/attendance/compositions*`.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Compositions CRUD: list/create/save/duplicate/delete under `/api/attendance/compositions*`.
+source_draft: D-REQ-123
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-030
+
+[REQUIREMENT]
+UID: REQ-ROO-124
+STATUS: Active
+TITLE: REQ-ROO-124: Composition tabs enforce cross-tab unique members (`findCrossTabDuplicates`).
+STATEMENT: >>>
+Composition tabs enforce cross-tab unique members (`findCrossTabDuplicates`).
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Composition tabs enforce cross-tab unique members (`findCrossTabDuplicates`).
+source_draft: D-REQ-124
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-030
+
+[REQUIREMENT]
+UID: REQ-ROO-125
+STATUS: Active
+TITLE: REQ-ROO-125: Compose session APIs: get/create/save/close/send/deploy-roster under `/api/atten
+STATEMENT: >>>
+Compose session APIs: get/create/save/close/send/deploy-roster under `/api/attendance/compose*`.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Compose session APIs: get/create/save/close/send/deploy-roster under `/api/attendance/compose*`.
+source_draft: D-REQ-125
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-030
+
+[REQUIREMENT]
+UID: REQ-ROO-126
+STATUS: Active
+TITLE: REQ-ROO-126: Published compositions list/set-active/delete under `/api/attendance/published*`
+STATEMENT: >>>
+Published compositions list/set-active/delete under `/api/attendance/published*`.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Published compositions list/set-active/delete under `/api/attendance/published*`.
+source_draft: D-REQ-126
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-127
+STATUS: Active
+TITLE: REQ-ROO-127: Published announce attendance / announce party endpoints post Discord cards for 
+STATEMENT: >>>
+Published announce attendance / announce party endpoints post Discord cards for a published id.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Published announce attendance / announce party endpoints post Discord cards for a published id.
+source_draft: D-REQ-127
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-128
+STATUS: Active
+TITLE: REQ-ROO-128: Published add/remove config and save-grids endpoints mutate published snapshot.
+STATEMENT: >>>
+Published add/remove config and save-grids endpoints mutate published snapshot.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Published add/remove config and save-grids endpoints mutate published snapshot.
+source_draft: D-REQ-128
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-129
+STATUS: Active
+TITLE: REQ-ROO-129: `GET /api/war-room/init` returns raid cycle status, published record, live sessi
+STATEMENT: >>>
+`GET /api/war-room/init` returns raid cycle status, published record, live session, members, jobs, commitments, war rooms, automation status.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/war-room/init` returns raid cycle status, published record, live session, members, jobs, commitments, war rooms, automation status.
+source_draft: D-REQ-129
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-130
+STATUS: Active
+TITLE: REQ-ROO-130: War Room automation may create live raid from published composition without HTTP
+STATEMENT: >>>
+War Room automation may create live raid from published composition without HTTP-to-self (`createLiveRaidFromPublished`).
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: War Room automation may create live raid from published composition without HTTP-to-self (`createLiveRaidFromPublished`).
+source_draft: D-REQ-130
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-131
+STATUS: Active
+TITLE: REQ-ROO-131: Frontend War Room at `/attendance/war-room`; legacy `/attendance/compose` and `/
+STATEMENT: >>>
+Frontend War Room at `/attendance/war-room`; legacy `/attendance/compose` and `/attendance/liveraid` redirect there.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Frontend War Room at `/attendance/war-room`; legacy `/attendance/compose` and `/attendance/liveraid` redirect there.
+source_draft: D-REQ-131
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-132
+STATUS: Active
+TITLE: REQ-ROO-132: Raid Config UI at `/attendance/raidparty`.
+STATEMENT: >>>
+Raid Config UI at `/attendance/raidparty`.
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Raid Config UI at `/attendance/raidparty`.
+source_draft: D-REQ-132
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[SECTION]
+TITLE: Live Raid/Voice (REQ-ROO-133 .. REQ-ROO-146)
+
+[REQUIREMENT]
+UID: REQ-ROO-133
+STATUS: Active
+TITLE: REQ-ROO-133: Officer `POST /api/live-raid/create` starts Active session from published compos
+STATEMENT: >>>
+Officer `POST /api/live-raid/create` starts Active session from published composition + ≥1 war room; rejects duplicates / missing grids / cross-tab dupes.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/live-raid/create` starts Active session from published composition + ≥1 war room; rejects duplicates / missing grids / cross-tab dupes.
+source_draft: D-REQ-133
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-032
+
+[REQUIREMENT]
+UID: REQ-ROO-134
+STATUS: Active
+TITLE: REQ-ROO-134: `GET /api/live-raid/session` returns current live_session (war rooms normalized 
+STATEMENT: >>>
+`GET /api/live-raid/session` returns current live_session (war rooms normalized to Discord channel snowflakes).
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/live-raid/session` returns current live_session (war rooms normalized to Discord channel snowflakes).
+source_draft: D-REQ-134
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-032
+
+[REQUIREMENT]
+UID: REQ-ROO-135
+STATUS: Active
+TITLE: REQ-ROO-135: Officer `POST /api/live-raid/update` patches session; rejects cross-tab duplicat
+STATEMENT: >>>
+Officer `POST /api/live-raid/update` patches session; rejects cross-tab duplicate grids.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/live-raid/update` patches session; rejects cross-tab duplicate grids.
+source_draft: D-REQ-135
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-032
+
+[REQUIREMENT]
+UID: REQ-ROO-136
+STATUS: Active
+TITLE: REQ-ROO-136: Officer `POST /api/live-raid/cell-update` moves/clears a member slot across grid
+STATEMENT: >>>
+Officer `POST /api/live-raid/cell-update` moves/clears a member slot across grids atomically.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/live-raid/cell-update` moves/clears a member slot across grids atomically.
+source_draft: D-REQ-136
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-032
+
+[REQUIREMENT]
+UID: REQ-ROO-137
+STATUS: Active
+TITLE: REQ-ROO-137: `GET /api/live-raid/voice-presence` returns present UIDs for resolved war-room c
+STATEMENT: >>>
+`GET /api/live-raid/voice-presence` returns present UIDs for resolved war-room channels (503 if circuit open).
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/live-raid/voice-presence` returns present UIDs for resolved war-room channels (503 if circuit open).
+source_draft: D-REQ-137
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-033
+
+[REQUIREMENT]
+UID: REQ-ROO-138
+STATUS: Active
+TITLE: REQ-ROO-138: Monitoring schedule requires startsAt, endsAt, pollIntervalMinutes ≥ 15; arms ti
+STATEMENT: >>>
+Monitoring schedule requires startsAt, endsAt, pollIntervalMinutes ≥ 15; arms ticker scheduled/running/ended.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Monitoring schedule requires startsAt, endsAt, pollIntervalMinutes ≥ 15; arms ticker scheduled/running/ended.
+source_draft: D-REQ-138
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-033
+
+[REQUIREMENT]
+UID: REQ-ROO-139
+STATUS: Active
+TITLE: REQ-ROO-139: Voice pulses increment `totalPulses` and per-uid tallies; dedupe within half-int
+STATEMENT: >>>
+Voice pulses increment `totalPulses` and per-uid tallies; dedupe within half-interval; skip when Discord circuit open.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Voice pulses increment `totalPulses` and per-uid tallies; dedupe within half-interval; skip when Discord circuit open.
+source_draft: D-REQ-139
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-033
+
+[REQUIREMENT]
+UID: REQ-ROO-140
+STATUS: Active
+TITLE: REQ-ROO-140: Officer `POST /api/live-raid/end` archives session to `attendance/session_archiv
+STATEMENT: >>>
+Officer `POST /api/live-raid/end` archives session to `attendance/session_archive` with tallies, commitments snapshot, expectedPulses, endedEarly flag; clears live_session.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/live-raid/end` archives session to `attendance/session_archive` with tallies, commitments snapshot, expectedPulses, endedEarly flag; clears live_session.
+source_draft: D-REQ-140
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-141
+STATUS: Active
+TITLE: REQ-ROO-141: Early end captures a final pulse when monitoring had started and end is before s
+STATEMENT: >>>
+Early end captures a final pulse when monitoring had started and end is before scheduled end.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Early end captures a final pulse when monitoring had started and end is before scheduled end.
+source_draft: D-REQ-141
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-142
+STATUS: Active
+TITLE: REQ-ROO-142: Officer `POST /api/live-raid/cancel` clears live_session without archive.
+STATEMENT: >>>
+Officer `POST /api/live-raid/cancel` clears live_session without archive.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/live-raid/cancel` clears live_session without archive.
+source_draft: D-REQ-142
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-143
+STATUS: Active
+TITLE: REQ-ROO-143: Boot resumes monitoring ticker if Active session still within window; auto-ends 
+STATEMENT: >>>
+Boot resumes monitoring ticker if Active session still within window; auto-ends if window already passed.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Boot resumes monitoring ticker if Active session still within window; auto-ends if window already passed.
+source_draft: D-REQ-143
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-144
+STATUS: Active
+TITLE: REQ-ROO-144: Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+STATEMENT: >>>
+Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+source_draft: D-REQ-144
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-145
+STATUS: Active
+TITLE: REQ-ROO-145: `GET /api/live-raid/history/all` returns session archives; officer can delete on
+STATEMENT: >>>
+`GET /api/live-raid/history/all` returns session archives; officer can delete one and PATCH in-game present flags.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/live-raid/history/all` returns session archives; officer can delete one and PATCH in-game present flags.
+source_draft: D-REQ-145
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-146
+STATUS: Active
+TITLE: REQ-ROO-146: Frontend GVG History at `/attendance/history`; GVG Attendance OCR UI at `/attend
+STATEMENT: >>>
+Frontend GVG History at `/attendance/history`; GVG Attendance OCR UI at `/attendance/ocr-review`.
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Frontend GVG History at `/attendance/history`; GVG Attendance OCR UI at `/attendance/ocr-review`.
+source_draft: D-REQ-146
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[SECTION]
+TITLE: OCR/GVG Attendance (REQ-ROO-147 .. REQ-ROO-151)
+
+[REQUIREMENT]
+UID: REQ-ROO-147
+STATUS: Active
+TITLE: REQ-ROO-147: Officer `GET /api/ocr-reviews/events` lists eligible OCR calendar events.
+STATEMENT: >>>
+Officer `GET /api/ocr-reviews/events` lists eligible OCR calendar events.
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/ocr-reviews/events` lists eligible OCR calendar events.
+source_draft: D-REQ-147
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-035
+
+[REQUIREMENT]
+UID: REQ-ROO-148
+STATUS: Active
+TITLE: REQ-ROO-148: Officer `POST /api/ocr-reviews/scan` accepts ≤8 images ≤8MB each, creates draft 
+STATEMENT: >>>
+Officer `POST /api/ocr-reviews/scan` accepts ≤8 images ≤8MB each, creates draft review tied to event.
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `POST /api/ocr-reviews/scan` accepts ≤8 images ≤8MB each, creates draft review tied to event.
+source_draft: D-REQ-148
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-035
+
+[REQUIREMENT]
+UID: REQ-ROO-149
+STATUS: Active
+TITLE: REQ-ROO-149: Officer list/get draft reviews; patch present UIDs / assign unmatched; commit fi
+STATEMENT: >>>
+Officer list/get draft reviews; patch present UIDs / assign unmatched; commit finalizes; cancel/delete removes draft.
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer list/get draft reviews; patch present UIDs / assign unmatched; commit finalizes; cancel/delete removes draft.
+source_draft: D-REQ-149
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-035
+
+[REQUIREMENT]
+UID: REQ-ROO-150
+STATUS: Active
+TITLE: REQ-ROO-150: Commit writes in-game/attendance outcomes and refreshes Discord review message w
+STATEMENT: >>>
+Commit writes in-game/attendance outcomes and refreshes Discord review message when present.
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Commit writes in-game/attendance outcomes and refreshes Discord review message when present.
+source_draft: D-REQ-150
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-035
+
+[REQUIREMENT]
+UID: REQ-ROO-151
+STATUS: Active
+TITLE: REQ-ROO-151: Non-draft reviews are not editable (409).
+STATEMENT: >>>
+Non-draft reviews are not editable (409).
+<<<
+COMMENT: >>>
+domain: OCR/GVG Attendance
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Non-draft reviews are not editable (409).
+source_draft: D-REQ-151
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-035
+
+[SECTION]
+TITLE: Adventurer Guild (REQ-ROO-152 .. REQ-ROO-157)
+
+[REQUIREMENT]
+UID: REQ-ROO-152
+STATUS: Active
+TITLE: REQ-ROO-152: `GET /api/adventurer-guild/highlights` lists highlights newest-first for members
+STATEMENT: >>>
+`GET /api/adventurer-guild/highlights` lists highlights newest-first for members.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/adventurer-guild/highlights` lists highlights newest-first for members.
+source_draft: D-REQ-152
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-036
+
+[REQUIREMENT]
+UID: REQ-ROO-153
+STATUS: Active
+TITLE: REQ-ROO-153: Authenticated `POST /api/adventurer-guild/highlights` uploads image/video ≤25MB 
+STATEMENT: >>>
+Authenticated `POST /api/adventurer-guild/highlights` uploads image/video ≤25MB to Supabase Storage and stores caption ≤280 chars.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Authenticated `POST /api/adventurer-guild/highlights` uploads image/video ≤25MB to Supabase Storage and stores caption ≤280 chars.
+source_draft: D-REQ-153
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-036
+
+[REQUIREMENT]
+UID: REQ-ROO-154
+STATUS: Active
+TITLE: REQ-ROO-154: Highlight delete allowed for creator or officer; deletes storage object + row.
+STATEMENT: >>>
+Highlight delete allowed for creator or officer; deletes storage object + row.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Highlight delete allowed for creator or officer; deletes storage object + row.
+source_draft: D-REQ-154
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-036
+
+[REQUIREMENT]
+UID: REQ-ROO-155
+STATUS: Active
+TITLE: REQ-ROO-155: `GET /api/adventurer-guild/events` returns native AG events + contributed schedu
+STATEMENT: >>>
+`GET /api/adventurer-guild/events` returns native AG events + contributed schedules from other enabled games in date range.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `GET /api/adventurer-guild/events` returns native AG events + contributed schedules from other enabled games in date range.
+source_draft: D-REQ-155
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-037
+
+[REQUIREMENT]
+UID: REQ-ROO-156
+STATUS: Active
+TITLE: REQ-ROO-156: Officer CRUD for native AG events (title≤120, description≤500, date/time/allDay)
+STATEMENT: >>>
+Officer CRUD for native AG events (title≤120, description≤500, date/time/allDay).
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer CRUD for native AG events (title≤120, description≤500, date/time/allDay).
+source_draft: D-REQ-156
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-037
+
+[REQUIREMENT]
+UID: REQ-ROO-157
+STATUS: Active
+TITLE: REQ-ROO-157: SPA routes `/games/adventurer-guild` (Highlights) and `/games/adventurer-guild/e
+STATEMENT: >>>
+SPA routes `/games/adventurer-guild` (Highlights) and `/games/adventurer-guild/events`; highlights alias redirects to home.
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA routes `/games/adventurer-guild` (Highlights) and `/games/adventurer-guild/events`; highlights alias redirects to home.
+source_draft: D-REQ-157
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-037
+
+[SECTION]
+TITLE: Data isolation/Storage (REQ-ROO-158 .. REQ-ROO-166)
+
+[REQUIREMENT]
+UID: REQ-ROO-158
+STATUS: Active
+TITLE: REQ-ROO-158: Every operational row is stamped with `tenant_id`; tenant middleware runs handle
+STATEMENT: >>>
+Every operational row is stamped with `tenant_id`; tenant middleware runs handlers inside `runWithTenant`.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Every operational row is stamped with `tenant_id`; tenant middleware runs handlers inside `runWithTenant`.
+source_draft: D-REQ-158
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-038
+
+[REQUIREMENT]
+UID: REQ-ROO-159
+STATUS: Active
+TITLE: REQ-ROO-159: `x-tenant-id` header cannot silently switch away from session/current tenant whe
+STATEMENT: >>>
+`x-tenant-id` header cannot silently switch away from session/current tenant when mismatched.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: `x-tenant-id` header cannot silently switch away from session/current tenant when mismatched.
+source_draft: D-REQ-159
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-038
+
+[REQUIREMENT]
+UID: REQ-ROO-160
+STATUS: Active
+TITLE: REQ-ROO-160: Postgres tables: tenants, invite_codes, tenant_settings, members, auction_reques
+STATEMENT: >>>
+Postgres tables: tenants, invite_codes, tenant_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Postgres tables: tenants, invite_codes, tenant_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+source_draft: D-REQ-160
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-039
+
+[REQUIREMENT]
+UID: REQ-ROO-161
+STATUS: Active
+TITLE: REQ-ROO-161: Flexible trees (compositions, live_session, auction session, highlights, etc.) p
+STATEMENT: >>>
+Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id,path)` Firebase-compatible store API.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id,path)` Firebase-compatible store API.
+source_draft: D-REQ-161
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-039
+
+[REQUIREMENT]
+UID: REQ-ROO-162
+STATUS: Active
+TITLE: REQ-ROO-162: Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
+STATEMENT: >>>
+Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
+source_draft: D-REQ-162
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-039
+
+[REQUIREMENT]
+UID: REQ-ROO-163
+STATUS: Active
+TITLE: REQ-ROO-163: Shared package exports attendance statuses, composition tab helpers, raid cycle 
+STATEMENT: >>>
+Shared package exports attendance statuses, composition tab helpers, raid cycle helpers, in-game alias helpers for FE/BE parity.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Shared package exports attendance statuses, composition tab helpers, raid cycle helpers, in-game alias helpers for FE/BE parity.
+source_draft: D-REQ-163
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-040
+
+[REQUIREMENT]
+UID: REQ-ROO-164
+STATUS: Active
+TITLE: REQ-ROO-164: Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
+STATEMENT: >>>
+Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
+source_draft: D-REQ-164
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-040
+
+[REQUIREMENT]
+UID: REQ-ROO-165
+STATUS: Active
+TITLE: REQ-ROO-165: Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use t
+STATEMENT: >>>
+Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use tenant timezone.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use tenant timezone.
+source_draft: D-REQ-165
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-040
+
+[REQUIREMENT]
+UID: REQ-ROO-166
+STATUS: Active
+TITLE: REQ-ROO-166: Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxC
+STATEMENT: >>>
+Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxConfigs=5, liveRaidMaxWarRooms=2, specialEventCategories, warRooms/jobs/roles placeholders, help embed URLs empty.
+<<<
+COMMENT: >>>
+domain: Data isolation/Storage
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxConfigs=5, liveRaidMaxWarRooms=2, specialEventCategories, warRooms/jobs/roles placeholders, help embed URLs empty.
+source_draft: D-REQ-166
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-040
+
+[SECTION]
+TITLE: Frontend shell/UX (REQ-ROO-167 .. REQ-ROO-172)
+
+[REQUIREMENT]
+UID: REQ-ROO-167
+STATUS: Active
+TITLE: REQ-ROO-167: Landing is public full-bleed; authenticated users on `/landing` redirect to post
+STATEMENT: >>>
+Landing is public full-bleed; authenticated users on `/landing` redirect to post-login path.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Landing is public full-bleed; authenticated users on `/landing` redirect to post-login path.
+source_draft: D-REQ-167
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-041
+
+[REQUIREMENT]
+UID: REQ-ROO-168
+STATUS: Active
+TITLE: REQ-ROO-168: MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auctio
+STATEMENT: >>>
+MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auction + Raid for RO; Hall for AG).
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auction + Raid for RO; Hall for AG).
+source_draft: D-REQ-168
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-041
+
+[REQUIREMENT]
+UID: REQ-ROO-169
+STATUS: Active
+TITLE: REQ-ROO-169: Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens 
+STATEMENT: >>>
+Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens external tab.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens external tab.
+source_draft: D-REQ-169
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-041
+
+[REQUIREMENT]
+UID: REQ-ROO-170
+STATUS: Active
+TITLE: REQ-ROO-170: Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Bill
+STATEMENT: >>>
+Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Billing at `/workspace/billing`; RO setup at `/games/ragnarok-origin/setup`.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Billing at `/workspace/billing`; RO setup at `/games/ragnarok-origin/setup`.
+source_draft: D-REQ-170
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-041
+
+[REQUIREMENT]
+UID: REQ-ROO-171
+STATUS: Active
+TITLE: REQ-ROO-171: apiFetch on 402 redirects browser to `/workspace/billing`.
+STATEMENT: >>>
+apiFetch on 402 redirects browser to `/workspace/billing`.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: apiFetch on 402 redirects browser to `/workspace/billing`.
+source_draft: D-REQ-171
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-042
+
+[REQUIREMENT]
+UID: REQ-ROO-172
+STATUS: Active
+TITLE: REQ-ROO-172: Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components 
+STATEMENT: >>>
+Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components support onboard and landing flows.
+<<<
+COMMENT: >>>
+domain: Frontend shell/UX
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components support onboard and landing flows.
+source_draft: D-REQ-172
+ssot_status: published
+sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-042
+

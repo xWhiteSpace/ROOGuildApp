@@ -1,0 +1,199 @@
+[DOCUMENT]
+TITLE: ROO Tool Catalog (TOL)
+UID: DOC-ROO-TOL
+VERSION: 0.1
+
+[SECTION]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+TOL-ROO-001 .. TOL-ROO-011 published in SSOT tools registry.
+Tip next: TOL-ROO-012.
+present_intent = expected/live stack for ROOGuildApp.
+greenfield = catalogued for verification but not yet installed/pinned for execution (blocks TST execution_status).
+Catalog presence ≠ installed in repo ≠ proven.
+<<<
+
+[SECTION]
+TITLE: Present intent (7)
+
+[REQUIREMENT]
+UID: TOL-ROO-001
+STATUS: Active
+TITLE: Node.js
+STATEMENT: >>>
+name: Node.js
+role: runtime
+version: 22 LTS (or current Active LTS)
+install: use project .nvmrc / engines field; nvm or official Node install
+notes: required for Vite, Express, Vitest, Playwright
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=runtime; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-002
+STATUS: Active
+TITLE: npm
+STATEMENT: >>>
+name: npm
+role: package_manager
+version: bundled with Node 22
+install: comes with Node
+notes: default lockfile package-lock.json; do not introduce pnpm/yarn unless a later TOL supersedes
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=package_manager; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-003
+STATUS: Active
+TITLE: Vite
+STATEMENT: >>>
+name: Vite
+role: frontend_bundler
+version: ^5 (pin in package.json)
+install: npm i -D vite
+notes: React frontend build/dev server
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=frontend_bundler; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-004
+STATUS: Active
+TITLE: React
+STATEMENT: >>>
+name: React
+role: frontend_ui
+version: ^18 (pin in package.json)
+install: npm i react react-dom
+notes: SPA UI library for ROO frontend
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=frontend_ui; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-005
+STATUS: Active
+TITLE: Express
+STATEMENT: >>>
+name: Express
+role: backend_http
+version: ^4 (pin in package.json)
+install: npm i express
+notes: API/HTTP server for ROO backend
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=backend_http; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-009
+STATUS: Active
+TITLE: GitHub Actions
+STATEMENT: >>>
+name: GitHub Actions
+role: ci
+version: n/a (workflow YAML on default branch)
+install: .github/workflows/*.yml
+notes: only CI runner for ROO; no Jenkins/Circle unless superseding TOL
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=ci; bucket=present_intent
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-010
+STATUS: Active
+TITLE: ESLint
+STATEMENT: >>>
+name: ESLint
+role: linter
+version: ^9 (pin in package.json)
+install: npm i -D eslint
+notes: JS/TS lint; config is STD territory, not TOL
+bucket: present_intent
+<<<
+COMMENT: >>>
+role=linter; bucket=present_intent
+<<<
+
+[SECTION]
+TITLE: Greenfield / not yet pinned for execution (4)
+
+[REQUIREMENT]
+UID: TOL-ROO-006
+STATUS: Active
+TITLE: Vitest
+STATEMENT: >>>
+name: Vitest
+role: unit_test_runner
+version: ^2 (pin when introduced)
+install: npm i -D vitest
+notes: unit/component tests; introduce when Adepts start tests
+bucket: greenfield — blocks execution claims until Adepts pin in app repo
+<<<
+COMMENT: >>>
+role=unit_test_runner; bucket=greenfield
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-007
+STATUS: Active
+TITLE: MSW
+STATEMENT: >>>
+name: MSW
+role: api_mock
+version: ^2 (pin when introduced)
+install: npm i -D msw
+notes: network mocking for Vitest / browser; introduce with tests
+bucket: greenfield — blocks execution claims until Adepts pin in app repo
+<<<
+COMMENT: >>>
+role=api_mock; bucket=greenfield
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-008
+STATUS: Active
+TITLE: Playwright
+STATEMENT: >>>
+name: Playwright
+role: e2e_browser
+version: ^1 (pin when introduced)
+install: npm i -D @playwright/test && npx playwright install
+notes: E2E; introduce when UI flows need browser proof
+bucket: greenfield — blocks execution claims until Adepts pin in app repo
+<<<
+COMMENT: >>>
+role=e2e_browser; bucket=greenfield
+<<<
+
+[REQUIREMENT]
+UID: TOL-ROO-011
+STATUS: Active
+TITLE: @vitest/coverage-v8
+STATEMENT: >>>
+name: @vitest/coverage-v8
+role: unit_coverage
+version: ^2 (pin with Vitest; align major with TOL-ROO-006)
+install: npm i -D @vitest/coverage-v8
+notes: Pairs with TOL-ROO-006 Vitest. Introduce+pin when unit coverage is required for evidence. Reports coverage only — not a substitute for case pass/fail. Last Boss owns EVD acceptance. Greenfield on Develop today. Requested by Test Master (Phase 3 Auth TST batch-1 honesty).
+bucket: greenfield — blocks execution claims until Adepts pin in app repo
+<<<
+COMMENT: >>>
+role=unit_coverage; bucket=greenfield
+<<<
+

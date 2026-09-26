@@ -1,0 +1,99 @@
+{
+  "project": "ROO",
+  "gym": "ROOGuildApp",
+  "sot": "Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07",
+  "generated_at": "2026-09-26T23:12:34+09:00",
+  "generated_at_timezone": "Asia/Tokyo",
+  "copy_target": "docs/strictdoc/",
+  "counts": {
+    "usr": 42,
+    "req": 172,
+    "tst": 65,
+    "tol": 11,
+    "fnc_published": 173,
+    "api_published": 114,
+    "cmp_published": 28,
+    "int_published": 114,
+    "unt_published": 183,
+    "evd": 0
+  },
+  "tips": {
+    "FNC": "FNC-ROO-174",
+    "API": "API-ROO-115",
+    "CMP": "CMP-ROO-029",
+    "INT": "INT-ROO-115",
+    "UNT": "UNT-ROO-184",
+    "TOL": "TOL-ROO-012",
+    "TST": "TST-ROO-066"
+  },
+  "open_must": {
+    "auth": [
+      "REQ-ROO-008",
+      "REQ-ROO-015",
+      "REQ-ROO-017"
+    ],
+    "tenant_live_discord": [
+      "REQ-ROO-026",
+      "REQ-ROO-029",
+      "REQ-ROO-030"
+    ]
+  },
+  "honesty": {
+    "published_ne_proven": true,
+    "execution_status": "blocked_on_tooling",
+    "evidence_status": "none",
+    "evd_count": 0
+  },
+  "poison": "Requirements/Requirements.md is NOT SoT",
+  "skipped_nodes": {
+    "design_full_bodies": "FNC/API/CMP/INT/UNT full nodes summarized by domain ranges only (not every node inlined)",
+    "invented_requirements": "none \u2014 SSOT JSON only"
+  },
+  "missing_req_parents": [],
+  "files": [
+    {
+      "path": "DELIVERABLES.md",
+      "bytes": 4956
+    },
+    {
+      "path": "MANIFEST.json",
+      "bytes": 2149
+    },
+    {
+      "path": "README.md",
+      "bytes": 1290
+    },
+    {
+      "path": "deep_learn.sdoc",
+      "bytes": 3130
+    },
+    {
+      "path": "design/summary.sdoc",
+      "bytes": 5835
+    },
+    {
+      "path": "requirements/req.sdoc",
+      "bytes": 121824
+    },
+    {
+      "path": "requirements/usr.sdoc",
+      "bytes": 25490
+    },
+    {
+      "path": "strictdoc.toml",
+      "bytes": 386
+    },
+    {
+      "path": "tools/tol.sdoc",
+      "bytes": 4509
+    },
+    {
+      "path": "verification/tests.sdoc",
+      "bytes": 95516
+    }
+  ],
+  "total_bytes": 265085,
+  "notes": {
+    "freetext": "Narrative blocks use [TEXT]/STATEMENT (StrictDoc post-2024); classic [SECTION] retained per package spec"
+  }
+}
