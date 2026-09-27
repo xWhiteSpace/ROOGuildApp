@@ -1,0 +1,7 @@
+<div class="document">
+<p>TOL-ROO-001 .. TOL-ROO-011 published in SSOT tools registry.
+Tip next: TOL-ROO-012.
+present_intent = expected/live stack for ROOGuildApp.
+greenfield = catalogued for verification but not yet installed/pinned for execution (blocks TST execution_status).
+Catalog presence ≠ installed in repo ≠ proven.</p>
+</div>

@@ -1,0 +1,16 @@
+<div class="document">
+<p>### Platform/Auth open must
+- GAP-AUTH-TST-001: REQ-ROO-015 [must/open] — REQ-ROO-015 localhost Vite proxy (empty backend base)
+- GAP-AUTH-TST-002: REQ-ROO-017 [must/open] — REQ-ROO-017 exhaustive CORS host matrix
+- GAP-AUTH-TST-004: REQ-ROO-008 [must/open] — Production Discord token exchange live Vercel FRONTEND_URL oauth bridge (REQ-ROO-008)</p>
+<p>### Tenant/Workspace live Discord / open
+- GAP-TENANT-TST-001: priority=None coverage=watch_deferred topic=GAP-TENANT-TST-001
+- GAP-TENANT-TST-002: priority=must coverage=open topic=GAP-TENANT-TST-002
+- GAP-TENANT-TST-003: priority=None coverage=None topic=GAP-TENANT-TST-003
+- GAP-TENANT-TST-004: priority=None coverage=None topic=GAP-TENANT-TST-004
+- GAP-TENANT-TST-005: priority=None coverage=None topic=GAP-TENANT-TST-005</p>
+<p>### Games catalog gaps
+- GAP-GAMES-TST-001: priority=None coverage=watch_deferred topic=
+- GAP-GAMES-TST-002: priority=None coverage=deferred topic=
+- GAP-GAMES-TST-003: priority=None coverage=open topic=</p>
+</div>

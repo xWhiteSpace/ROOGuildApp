@@ -1,0 +1,13 @@
+<div class="document">
+<p>Phase 2 left-side DONE (tips = next free IDs from last publish).
+Published counts vs tips:
+- FNC published=173; tip=FNC-ROO-174
+- API published=114; tip=API-ROO-115
+- CMP published=28; tip=CMP-ROO-029
+- INT published=114; tip=INT-ROO-115
+- UNT published=183; tip=UNT-ROO-184</p>
+<p>This document summarizes by domain with ID ranges only (not every design node).
+Full node JSON remains in SSOT registries under interfaces/, structure/, units/.
+SoT: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a>.
+Poison: Requirements/Requirements.md is NOT SoT.</p>
+</div>

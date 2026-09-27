@@ -1,0 +1,3 @@
+<div class="document">
+<p>On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.</p>
+</div>

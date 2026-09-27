@@ -1,0 +1,3 @@
+<div class="document">
+<p>POST /auth/logout destroys the server session and clears the connect.sid cookie.</p>
+</div>

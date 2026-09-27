@@ -1,0 +1,3 @@
+<div class="document">
+<p>When OAuth callback finds zero or multiple onboarded guilds, or intent is signup, the user is redirected to /select-guild with auth_user context.</p>
+</div>

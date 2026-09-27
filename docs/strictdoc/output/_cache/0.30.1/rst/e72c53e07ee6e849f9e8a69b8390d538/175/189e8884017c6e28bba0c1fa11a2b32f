@@ -1,0 +1,3 @@
+<div class="document">
+<p>In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth exchange bridge so Discord never sees the Render IP; local development may exchange directly.</p>
+</div>

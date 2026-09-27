@@ -1,0 +1,8 @@
+<div class="document">
+<p>domain: Tenant/Workspace
+who: Guild owner / Manage Server
+why: Create tenant when bot present and officer roles set.
+spoken_constraints: 409 if already onboarded; bot invite when missing
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

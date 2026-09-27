@@ -2,8 +2,10 @@
 TITLE: ROO Verification Plans (TST)
 UID: DOC-ROO-TST
 VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
 
-[SECTION]
+[[SECTION]]
 TITLE: Honesty — published ≠ proven
 
 [TEXT]
@@ -24,7 +26,9 @@ Poison: Requirements/Requirements.md is NOT SoT.
 SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Open must & deferred gaps
 
 [TEXT]
@@ -47,7 +51,9 @@ STATEMENT: >>>
 - GAP-GAMES-TST-003: priority=None coverage=open topic=
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Platform/Auth — TST-ROO-001 .. TST-ROO-022 (22 plans)
 
 [REQUIREMENT]
@@ -633,7 +639,9 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-019
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Tenant/Workspace — TST-ROO-023 .. TST-ROO-045 (23 plans)
 
 [REQUIREMENT]
@@ -1261,7 +1269,9 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-037
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065 (20 plans)
 
 [REQUIREMENT]
@@ -1820,3 +1830,4 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-047
 
+[[/SECTION]]

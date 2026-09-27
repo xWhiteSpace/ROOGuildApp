@@ -1,0 +1,3 @@
+<div class="document">
+<p>When the Discord circuit is open, login and callback redirect to landing with discord_rate_limited (including until hint) instead of completing OAuth.</p>
+</div>

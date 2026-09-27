@@ -1,0 +1,8 @@
+<div class="document">
+<p>domain: Data isolation/Storage
+who: Platform / RO config
+why: Shared FE/BE helpers; isolation test script; timezone and RO seed defaults.
+spoken_constraints: default TZ Asia/Manila
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

@@ -1,0 +1,8 @@
+<div class="document">
+<p>name: npm
+role: package_manager
+version: bundled with Node 22
+install: comes with Node
+notes: default lockfile package-lock.json; do not introduce pnpm/yarn unless a later TOL supersedes
+bucket: present_intent</p>
+</div>

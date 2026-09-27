@@ -1,0 +1,3 @@
+<div class="document">
+<p>GET /auth/callback exchanges the OAuth code, persists a compact Discord guild list into session and DB, and builds the base user identity.</p>
+</div>

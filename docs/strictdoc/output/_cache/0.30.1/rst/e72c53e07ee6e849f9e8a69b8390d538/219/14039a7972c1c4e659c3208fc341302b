@@ -1,0 +1,8 @@
+<div class="document">
+<p>name: Node.js
+role: runtime
+version: 22 LTS (or current Active LTS)
+install: use project .nvmrc / engines field; nvm or official Node install
+notes: required for Vite, Express, Vitest, Playwright
+bucket: present_intent</p>
+</div>

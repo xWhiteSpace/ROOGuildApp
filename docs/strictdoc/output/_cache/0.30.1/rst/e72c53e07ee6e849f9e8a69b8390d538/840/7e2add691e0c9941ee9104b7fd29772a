@@ -1,0 +1,18 @@
+<div class="document">
+<p>Published count: 114
+ID span: INT-ROO-001 .. INT-ROO-114
+Next tip: INT-ROO-115</p>
+<p>Domain map:
+- Platform/Auth: count=5; range=INT-ROO-001 .. INT-ROO-005
+- Tenant/Workspace: count=9; range=INT-ROO-006 .. INT-ROO-014
+- Games catalog: count=3; range=INT-ROO-015 .. INT-ROO-017
+- Billing/Capacity: count=6; range=INT-ROO-018 .. INT-ROO-023
+- Discord bot/Channels: count=7; range=INT-ROO-024 .. INT-ROO-030
+- Auction/Requests: count=17; range=INT-ROO-031 .. INT-ROO-047
+- Attendance/Roster: count=12; range=INT-ROO-048 .. INT-ROO-059
+- Scheduler/RSVP: count=9; range=INT-ROO-060 .. INT-ROO-068
+- Raid compose/Party: count=20; range=INT-ROO-069 .. INT-ROO-088
+- Live Raid/Voice: count=11; range=INT-ROO-089 .. INT-ROO-099
+- OCR/GVG Attendance: count=8; range=INT-ROO-100 .. INT-ROO-107
+- Adventurer Guild: count=7; range=INT-ROO-108 .. INT-ROO-114</p>
+</div>

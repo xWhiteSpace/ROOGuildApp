@@ -1,0 +1,14 @@
+<div class="document">
+<p>CRITICAL HONESTY (Last Boss challenges accepted):
+- TST-ROO-001 .. TST-ROO-065 are published PLANS only.
+- execution_status for published nodes: blocked_on_tooling (runners catalogued, not pinned in app repo).
+- evidence_status: none. EVD node count: 0.
+- Zero evidences edges. Zero done claims.
+- verifies fields / graph edges are plan lineage — not execution proof.
+- Soft greens / coverage alone are NOT pass criteria.
+- Tip next: TST-ROO-066 (P3 paused after Games catalog TST-065).</p>
+<p>Open must gaps (Auth): REQ-ROO-008, REQ-ROO-015, REQ-ROO-017
+Open must live-Discord (Tenant): REQ-ROO-026, REQ-ROO-029, REQ-ROO-030</p>
+<p>Poison: Requirements/Requirements.md is NOT SoT.
+SoT: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a>.</p>
+</div>

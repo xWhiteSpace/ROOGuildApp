@@ -1,0 +1,20 @@
+<div class="document">
+<p>Published count: 183
+ID span: UNT-ROO-001 .. UNT-ROO-183
+Next tip: UNT-ROO-184</p>
+<p>Domain map:
+- Platform/Auth: count=17; range=UNT-ROO-001 .. UNT-ROO-017
+- Tenant/Workspace: count=9; range=UNT-ROO-018 .. UNT-ROO-026
+- Games catalog: count=9; range=UNT-ROO-027 .. UNT-ROO-035
+- Billing/Capacity: count=12; range=UNT-ROO-036 .. UNT-ROO-047
+- Discord bot/Channels: count=16; range=UNT-ROO-048 .. UNT-ROO-063
+- Auction/Requests: count=22; range=UNT-ROO-064 .. UNT-ROO-085
+- Attendance/Roster: count=14; range=UNT-ROO-086 .. UNT-ROO-099
+- Scheduler/RSVP: count=12; range=UNT-ROO-100 .. UNT-ROO-111
+- Raid compose/Party: count=24; range=UNT-ROO-112 .. UNT-ROO-135
+- Live Raid/Voice: count=16; range=UNT-ROO-136 .. UNT-ROO-151
+- OCR/GVG Attendance: count=9; range=UNT-ROO-152 .. UNT-ROO-160
+- Adventurer Guild: count=8; range=UNT-ROO-161 .. UNT-ROO-168
+- Data isolation/Storage: count=9; range=UNT-ROO-169 .. UNT-ROO-177
+- Frontend shell/UX: count=6; range=UNT-ROO-178 .. UNT-ROO-183</p>
+</div>

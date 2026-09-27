@@ -1,0 +1,10 @@
+<div class="document">
+<p>domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x-tenant-id headers when a session exists.
+source_draft: D-REQ-014
+ssot_status: published
+sot: Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</p>
+</div>

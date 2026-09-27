@@ -1,0 +1,3 @@
+<div class="document">
+<p>Operators and deploy pipelines need the API process to refuse to start without required secrets, migrate schema, start the Discord bot, and expose a health check that reflects DB reachability.</p>
+</div>

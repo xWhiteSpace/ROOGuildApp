@@ -1,0 +1,3 @@
+<div class="document">
+<p>Platform security need: Tenant isolation middleware. tenant_id stamp; runWithTenant; reject silent x-tenant-id switch.</p>
+</div>

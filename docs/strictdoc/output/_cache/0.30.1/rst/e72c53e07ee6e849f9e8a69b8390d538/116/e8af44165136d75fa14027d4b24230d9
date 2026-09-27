@@ -1,0 +1,3 @@
+<div class="document">
+<p>Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS uses secure:true and sameSite:none.</p>
+</div>

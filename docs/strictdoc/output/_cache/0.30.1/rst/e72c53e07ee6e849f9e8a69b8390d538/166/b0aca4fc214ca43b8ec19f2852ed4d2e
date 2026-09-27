@@ -1,0 +1,3 @@
+<div class="document">
+<p>Authenticated callers need a stable identity from session or signed profile header, a me endpoint that re-signs profile, and a logout that clears the session cookie.</p>
+</div>

@@ -53,6 +53,7 @@ export default function MimicBookTab({ user }) {
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   const isUserDraggingRef = useRef(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [allocatePreview, setAllocatePreview] = useState(null);
 
   useEffect(() => {
     setIsAdminMode(isOfficer);
@@ -540,15 +541,30 @@ const [rawMembers, setRawMembers] = useState({});
 
     const firstActiveCategory = items.find(i => calculatedSummary[i.id]?.qty > 0)?.id || items[0].id;
 
-    saveWorkspaceState({
-      activeStep: 2,
+    setAllocatePreview({
       lootSummary: calculatedSummary,
       categoryAllocations: initialAllocations,
       initialWinnersByItem: initialWinnersTrack,
       activeMatrixFilter: firstActiveCategory,
+    });
+  };
+
+  const handleCancelAllocatePreview = () => {
+    setAllocatePreview(null);
+  };
+
+  const handleConfirmAllocatePreview = () => {
+    if (!allocatePreview) return;
+    saveWorkspaceState({
+      activeStep: 2,
+      lootSummary: allocatePreview.lootSummary,
+      categoryAllocations: allocatePreview.categoryAllocations,
+      initialWinnersByItem: allocatePreview.initialWinnersByItem,
+      activeMatrixFilter: allocatePreview.activeMatrixFilter,
       sidebarTab: 'standby'
     });
     setSidebarSearch('');
+    setAllocatePreview(null);
   };
 
   const handleDropBidderBoxSlot = (slotIndex) => {
@@ -853,6 +869,68 @@ const [rawMembers, setRawMembers] = useState({});
   const copyableRows = namedLedgerRows(ledgerRows);
   const canCopy = Boolean(searchQuery.trim()) && copyableRows.length > 0;
   const canExport = namedLedgerRows(buildLedgerRows({ applySearch: false })).length > 0;
+
+  const allocatePreviewSummaryRows = allocatePreview
+    ? lootRows.map((row) => {
+        const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
+        const limit = row.limit >= 1 ? row.limit : 1;
+        return {
+          id: row.id,
+          itemName: items.find((i) => i.id === row.itemType)?.name || row.itemType,
+          pageFrom: row.startPage,
+          pageTo: row.endPage,
+          qty,
+          limit,
+          granted: Math.floor(qty / limit),
+        };
+      })
+    : [];
+
+  const allocatePreviewSelectedRows = [];
+  const allocatePreviewNotSelectedRows = [];
+  if (allocatePreview) {
+    items.forEach((item) => {
+      const rawSelected = allocatePreview.categoryAllocations[item.id]?.selected;
+      const boxes = Array.isArray(rawSelected) ? rawSelected : Object.values(rawSelected || {});
+      const slotCountByUid = {};
+      boxes.forEach((uid) => {
+        if (!uid) return;
+        slotCountByUid[uid] = (slotCountByUid[uid] || 0) + 1;
+      });
+      const ranking = rankingsByItem[item.id] || [];
+      const details = requestsByItemDetails[item.id] || {};
+      const seen = new Set();
+
+      ranking.forEach((uid) => {
+        if (!uid) return;
+        seen.add(uid);
+        const slots = slotCountByUid[uid] || 0;
+        const row = {
+          key: `${item.id}-${uid}`,
+          name: resolveDisplayName(uid) || details[uid]?.name || uid,
+          itemName: item.name,
+          requestedQty: details[uid]?.quantity || 1,
+          priority: details[uid]?.priority ?? 0,
+          slotsGranted: slots,
+        };
+        if (slots > 0) allocatePreviewSelectedRows.push(row);
+        else allocatePreviewNotSelectedRows.push(row);
+      });
+
+      Object.keys(slotCountByUid).forEach((uid) => {
+        if (seen.has(uid)) return;
+        const detailsRow = details[uid] || {};
+        allocatePreviewSelectedRows.push({
+          key: `${item.id}-${uid}`,
+          name: resolveDisplayName(uid) || detailsRow.name || uid,
+          itemName: item.name,
+          requestedQty: detailsRow.quantity || 1,
+          priority: detailsRow.priority ?? 0,
+          slotsGranted: slotCountByUid[uid],
+        });
+      });
+    });
+  }
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     return generatedSlots.find(s => s.page === bookCurrentPage && s.slot === (i + 1)) || null;
   });
@@ -1670,6 +1748,153 @@ const [rawMembers, setRawMembers] = useState({});
                 className="px-5 py-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-sm"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {allocatePreview && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[110] p-4 font-sans animate-fadeIn">
+          <div className="fixed inset-0 z-0" onClick={handleCancelAllocatePreview} />
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-6xl rounded-3xl shadow-2xl flex flex-col max-h-[80vh] relative z-10">
+            <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center select-none">
+              <div>
+                <h2 className="text-sm font-semibold tracking-wider uppercase text-slate-200 flex items-center gap-2">
+                  <IconEye /> Review allocation
+                </h2>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-mono">Confirm loot ranges and bid selections before allocating.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelAllocatePreview}
+                className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <IconX />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-grow space-y-5 scrollbar-thin">
+              <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
+                <table className="w-full text-left border-collapse text-xs font-mono">
+                  <thead>
+                    <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
+                      <th className="p-2.5">Item</th>
+                      <th className="p-2.5 text-center">Page from</th>
+                      <th className="p-2.5 text-center">Page to</th>
+                      <th className="p-2.5 text-center">Qty</th>
+                      <th className="p-2.5 text-center">Limit</th>
+                      <th className="p-2.5 text-center"># of request granted</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900 text-slate-300">
+                    {allocatePreviewSummaryRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-4 text-center text-slate-600 italic font-sans text-xs">No loot rows to preview.</td>
+                      </tr>
+                    ) : (
+                      allocatePreviewSummaryRows.map((row) => (
+                        <tr key={row.id} className="hover:bg-slate-900/10 transition-colors">
+                          <td className="p-2.5 font-sans font-semibold text-slate-200">{row.itemName}</td>
+                          <td className="p-2.5 text-center text-slate-400 font-bold">{row.pageFrom}</td>
+                          <td className="p-2.5 text-center text-slate-400 font-bold">{row.pageTo}</td>
+                          <td className="p-2.5 text-center text-slate-300 font-bold">{row.qty}</td>
+                          <td className="p-2.5 text-center text-amber-500 font-bold">{row.limit}</td>
+                          <td className="p-2.5 text-center text-emerald-400 font-bold">{row.granted}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="border border-slate-800 rounded-xl bg-slate-950/40 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-emerald-400 select-none">
+                    Bid Request Selected
+                  </div>
+                  <div className="overflow-x-auto max-h-[22rem] scrollbar-thin">
+                    <table className="w-full text-left border-collapse text-xs font-mono">
+                      <thead>
+                        <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
+                          <th className="p-2.5">Member</th>
+                          <th className="p-2.5">Item</th>
+                          <th className="p-2.5 text-center">Requested</th>
+                          <th className="p-2.5 text-center">Priority</th>
+                          <th className="p-2.5 text-center">Slots granted</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-900 text-slate-300">
+                        {allocatePreviewSelectedRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests selected.</td>
+                          </tr>
+                        ) : (
+                          allocatePreviewSelectedRows.map((row) => (
+                            <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
+                              <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
+                              <td className="p-2.5 text-slate-400">{row.itemName}</td>
+                              <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
+                              <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
+                              <td className="p-2.5 text-center text-emerald-400 font-bold">{row.slotsGranted}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="border border-slate-800 rounded-xl bg-slate-950/40 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                    Bid Request not Selected
+                  </div>
+                  <div className="overflow-x-auto max-h-[22rem] scrollbar-thin">
+                    <table className="w-full text-left border-collapse text-xs font-mono">
+                      <thead>
+                        <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
+                          <th className="p-2.5">Member</th>
+                          <th className="p-2.5">Item</th>
+                          <th className="p-2.5 text-center">Requested</th>
+                          <th className="p-2.5 text-center">Priority</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-900 text-slate-300">
+                        {allocatePreviewNotSelectedRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests left out.</td>
+                          </tr>
+                        ) : (
+                          allocatePreviewNotSelectedRows.map((row) => (
+                            <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
+                              <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
+                              <td className="p-2.5 text-slate-400">{row.itemName}</td>
+                              <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
+                              <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex justify-between items-center rounded-b-3xl select-none">
+              <button
+                type="button"
+                onClick={handleCancelAllocatePreview}
+                className="px-4 py-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition cursor-pointer shadow-sm"
+              >
+                Back to Registry
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAllocatePreview}
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-xs font-semibold uppercase tracking-wider text-white transition shadow-xl cursor-pointer"
+              >
+                Confirm Allocate
               </button>
             </div>
           </div>

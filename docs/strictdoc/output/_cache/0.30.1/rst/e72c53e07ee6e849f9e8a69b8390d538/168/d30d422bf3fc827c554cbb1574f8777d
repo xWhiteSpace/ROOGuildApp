@@ -1,0 +1,3 @@
+<div class="document">
+<p>When OAuth callback finds exactly one onboarded guild and intent is not signup, the user is redirected into that tenant path (home, billing, or onboard as applicable).</p>
+</div>

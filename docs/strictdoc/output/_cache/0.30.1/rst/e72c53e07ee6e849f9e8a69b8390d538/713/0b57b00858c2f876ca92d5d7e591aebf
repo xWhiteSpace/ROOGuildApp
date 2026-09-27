@@ -1,0 +1,21 @@
+<div class="document">
+<dl class="docutils">
+<dt>P1 Requirements — DONE</dt>
+<dd>USR 42 (USR-ROO-001..042)
+REQ 172 (REQ-ROO-001..172)</dd>
+<dt>P2 Left-side design — DONE</dt>
+<dd>FNC 173 tip FNC-ROO-174
+API 114 tip API-ROO-115
+CMP 28 tip CMP-ROO-029
+INT 114 tip INT-ROO-115
+UNT 183 tip UNT-ROO-184</dd>
+<dt>P3 Right-side verification — PAUSED after Games</dt>
+<dd>TST 65 published (TST-ROO-001..065); tip TST-ROO-066
+Domains planned: Platform/Auth (22), Tenant/Workspace (23), Games catalog (20)
+Remaining domains (Billing, Discord, Auction, Attendance, Scheduler, Raid, Live Raid, OCR, Guild, Isolation, Frontend) have no TST yet
+EVD: 0</dd>
+<dt>P4 This StrictDoc export — THIS PACKAGE</dt>
+<dd>Human entry: DELIVERABLES.md
+Copy target on Staging: docs/strictdoc/ inside xWhiteSpace/ROOGuildApp</dd>
+</dl>
+</div>

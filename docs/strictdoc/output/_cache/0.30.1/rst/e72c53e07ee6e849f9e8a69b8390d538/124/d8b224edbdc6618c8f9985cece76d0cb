@@ -1,0 +1,3 @@
+<div class="document">
+<p>Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-profile verified with DISCORD_CLIENT_SECRET.</p>
+</div>

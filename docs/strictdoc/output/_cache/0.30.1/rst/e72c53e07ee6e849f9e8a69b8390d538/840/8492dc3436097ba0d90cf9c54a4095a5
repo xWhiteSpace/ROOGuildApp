@@ -1,0 +1,18 @@
+<div class="document">
+<p>Published count: 114
+ID span: API-ROO-001 .. API-ROO-114
+Next tip: API-ROO-115</p>
+<p>Domain map:
+- Platform/Auth: count=5; range=API-ROO-001 .. API-ROO-005
+- Tenant/Workspace: count=9; range=API-ROO-006 .. API-ROO-014
+- Games catalog: count=3; range=API-ROO-015 .. API-ROO-017
+- Billing/Capacity: count=6; range=API-ROO-018 .. API-ROO-023
+- Discord bot/Channels: count=7; range=API-ROO-024 .. API-ROO-030
+- Auction/Requests: count=17; range=API-ROO-031 .. API-ROO-047
+- Attendance/Roster: count=12; range=API-ROO-048 .. API-ROO-059
+- Scheduler/RSVP: count=9; range=API-ROO-060 .. API-ROO-068
+- Raid compose/Party: count=20; range=API-ROO-069 .. API-ROO-088
+- Live Raid/Voice: count=11; range=API-ROO-089 .. API-ROO-099
+- OCR/GVG Attendance: count=8; range=API-ROO-100 .. API-ROO-107
+- Adventurer Guild: count=7; range=API-ROO-108 .. API-ROO-114</p>
+</div>

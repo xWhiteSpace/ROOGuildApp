@@ -1,0 +1,8 @@
+<div class="document">
+<p>name: Vite
+role: frontend_bundler
+version: ^5 (pin in package.json)
+install: npm i -D vite
+notes: React frontend build/dev server
+bucket: present_intent</p>
+</div>

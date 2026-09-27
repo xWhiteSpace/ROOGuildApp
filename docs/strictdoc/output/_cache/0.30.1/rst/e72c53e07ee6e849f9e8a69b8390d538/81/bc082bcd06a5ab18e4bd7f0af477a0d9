@@ -1,0 +1,3 @@
+<div class="document">
+<p>On successful start, backend runs migrate() before initializing the Discord bot.</p>
+</div>

@@ -1,0 +1,8 @@
+<div class="document">
+<p>domain: Platform/Auth
+who: Platform operators / deploy
+why: Avoid silent half-starts and false-online production.
+spoken_constraints: Develop live behavior only; No Firebase SRS import
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

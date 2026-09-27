@@ -1,0 +1,3 @@
+<div class="document">
+<p>Billing system need: Stripe webhooks and billing permanence. Webhook lifecycle, overflow refund, grace, permanent invite/grandfathered.</p>
+</div>

@@ -1,0 +1,3 @@
+<div class="document">
+<p>SPA restores session from auth_user query first, then guild_raid_session localStorage (migrating legacy dynasty_raid_session if present), then verifies with GET /auth/me.</p>
+</div>

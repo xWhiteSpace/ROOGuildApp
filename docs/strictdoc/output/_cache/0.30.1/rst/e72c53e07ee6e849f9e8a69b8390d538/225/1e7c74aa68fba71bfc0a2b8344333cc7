@@ -1,0 +1,3 @@
+<div class="document">
+<p>Users must sign in (or sign up) via Discord OAuth and land in the correct post-auth path based on onboarded guild count and intent, including production token-exchange via the Vercel bridge and rate-limit friendly redirects.</p>
+</div>

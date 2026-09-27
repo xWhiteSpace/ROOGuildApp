@@ -2,8 +2,10 @@
 TITLE: ROO Design Summary (left-side tips)
 UID: DOC-ROO-DESIGN
 VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
 
-[SECTION]
+[[SECTION]]
 TITLE: Phase 2 left-side status
 
 [TEXT]
@@ -22,7 +24,9 @@ SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
 Poison: Requirements/Requirements.md is NOT SoT.
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: FNC — Functional specs
 
 [TEXT]
@@ -48,7 +52,9 @@ Domain map:
 - Frontend shell/UX: count=6; range=FNC-ROO-168 .. FNC-ROO-173
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: API — Interfaces
 
 [TEXT]
@@ -72,7 +78,9 @@ Domain map:
 - Adventurer Guild: count=7; range=API-ROO-108 .. API-ROO-114
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: CMP — Components
 
 [TEXT]
@@ -97,7 +105,9 @@ Domain map:
 - Data isolation/Storage: count=2; range=CMP-ROO-027 .. CMP-ROO-028
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: INT — Integration seams
 
 [TEXT]
@@ -121,7 +131,9 @@ Domain map:
 - Adventurer Guild: count=7; range=INT-ROO-108 .. INT-ROO-114
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: UNT — Units
 
 [TEXT]
@@ -147,7 +159,9 @@ Domain map:
 - Frontend shell/UX: count=6; range=UNT-ROO-178 .. UNT-ROO-183
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Cross-kind tip snapshot
 
 [TEXT]
@@ -156,3 +170,4 @@ Tips (next free): FNC=FNC-ROO-174, API=API-ROO-115, CMP=CMP-ROO-029, INT=INT-ROO
 Note: Frontend shell UNT batch closed Phase 2 left-side (UNT tip 184).
 <<<
 
+[[/SECTION]]

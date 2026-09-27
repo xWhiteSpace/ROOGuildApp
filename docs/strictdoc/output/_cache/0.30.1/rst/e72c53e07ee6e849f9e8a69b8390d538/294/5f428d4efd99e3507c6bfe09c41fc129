@@ -1,0 +1,8 @@
+<div class="document">
+<p>domain: Platform/Auth
+who: End users (members/officers)
+why: Single identity provider; guild membership drives tenant access.
+spoken_constraints: Scopes identify guilds guilds.members.read; state intent signin|signup
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

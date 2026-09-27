@@ -1,0 +1,3 @@
+<div class="document">
+<p>GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, and guilds.members.read, carrying state intent signin or signup.</p>
+</div>

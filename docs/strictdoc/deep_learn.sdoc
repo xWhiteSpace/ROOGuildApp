@@ -2,8 +2,10 @@
 TITLE: ROO Deep Learn — V-model gym overview
 UID: DOC-ROO-DEEP
 VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
 
-[SECTION]
+[[SECTION]]
 TITLE: What this gym taught
 
 [TEXT]
@@ -25,7 +27,9 @@ Learnings:
 6. Tooling must be pinned before execution claims (Vitest/MSW/Playwright/coverage still greenfield).
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Phase status
 
 [TEXT]
@@ -52,7 +56,9 @@ P4 This StrictDoc export — THIS PACKAGE
   Copy target on Staging: docs/strictdoc/ inside xWhiteSpace/ROOGuildApp
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Gaps & honesty board
 
 [TEXT]
@@ -75,7 +81,9 @@ Challenge sequence accepted:
 Do not claim Auth/Tenant/Games 'tested done' because plans are published.
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: How to navigate StrictDoc package
 
 [TEXT]
@@ -91,3 +99,4 @@ Then:
 Use strictdoc.toml to render HTML if StrictDoc CLI is available.
 <<<
 
+[[/SECTION]]

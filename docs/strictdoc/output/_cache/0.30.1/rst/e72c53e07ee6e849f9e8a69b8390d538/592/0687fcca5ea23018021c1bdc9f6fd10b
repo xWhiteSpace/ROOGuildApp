@@ -1,0 +1,14 @@
+<div class="document">
+<p>Zero EVD. All TST execution_status=blocked_on_tooling.</p>
+<p>Open must (Auth):
+- REQ-ROO-008 production Vercel OAuth bridge (must not soft-pass via config-only)
+- REQ-ROO-015 localhost Vite proxy
+- REQ-ROO-017 CORS host matrix</p>
+<p>Open must live Discord (Tenant):
+- REQ-ROO-026 / 029 / 030 — MSW lineage may exist; live bot invite / guild onboard E2E still open</p>
+<p>Challenge sequence accepted:
+- platform-auth-tst CHALLENGE + AMEND
+- tenant-workspace-tst CHALLENGE + AMEND (+ LIVE)
+- games-catalog-tst LIVE + AMEND RECHALLENGE</p>
+<p>Do not claim Auth/Tenant/Games 'tested done' because plans are published.</p>
+</div>

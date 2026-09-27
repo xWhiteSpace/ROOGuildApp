@@ -1,0 +1,20 @@
+<div class="document">
+<p>ROO deep rebuild gym for WhiteSpace / ROOGuildApp (VALHALLA).
+SoT branch/commit: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a>.
+SSOT Gate is the only publisher; sibling bots propose only.</p>
+<dl class="docutils">
+<dt>V-model shape used:</dt>
+<dd><dl class="first last docutils">
+<dt>USR → REQ → FNC/API → CMP/INT → UNT</dt>
+<dd>↘ TST (plans) → EVD (proof; Last Boss only)</dd>
+</dl>
+</dd>
+</dl>
+<p>Learnings:
+1. Poison SRS: Requirements/Requirements.md (Firebase RTDB) must never enter USR/REQ. Policy quarantine id poison-srs-firebase-requirements-md.
+2. Develop live behavior is SoT; Staging tip may be newer chronologically but is not SoT unless promoted.
+3. published ≠ proven. Registry acceptance of TST plans is not left–right proof.
+4. Edge authorship matters: Test Master authors verifies (plan lineage); depends_on is design-only; evidences is Last Boss only; requires_tol is node field only.
+5. Open musts stay open — deferred ≠ waived (Auth 008/015/017; Tenant live Discord 026/029/030).
+6. Tooling must be pinned before execution claims (Vitest/MSW/Playwright/coverage still greenfield).</p>
+</div>

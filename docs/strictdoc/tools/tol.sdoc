@@ -2,8 +2,10 @@
 TITLE: ROO Tool Catalog (TOL)
 UID: DOC-ROO-TOL
 VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
 
-[SECTION]
+[[SECTION]]
 TITLE: About
 
 [TEXT]
@@ -15,7 +17,9 @@ greenfield = catalogued for verification but not yet installed/pinned for execut
 Catalog presence ≠ installed in repo ≠ proven.
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Present intent (7)
 
 [REQUIREMENT]
@@ -130,7 +134,9 @@ COMMENT: >>>
 role=linter; bucket=present_intent
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Greenfield / not yet pinned for execution (4)
 
 [REQUIREMENT]
@@ -197,3 +203,4 @@ COMMENT: >>>
 role=unit_coverage; bucket=greenfield
 <<<
 
+[[/SECTION]]

@@ -1,0 +1,3 @@
+<div class="document">
+<p>SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x-tenant-id headers when a session exists.</p>
+</div>

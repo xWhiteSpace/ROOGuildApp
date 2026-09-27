@@ -1,0 +1,8 @@
+<div class="document">
+<p>domain: Billing/Capacity
+who: Billing system
+why: Webhook lifecycle, overflow refund, grace, permanent invite/grandfathered.
+spoken_constraints: Stripe env optional at boot
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

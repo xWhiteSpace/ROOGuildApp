@@ -2,8 +2,10 @@
 TITLE: ROO User Requirements (USR)
 UID: DOC-ROO-USR
 VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
 
-[SECTION]
+[[SECTION]]
 TITLE: About
 
 [TEXT]
@@ -16,7 +18,9 @@ Phase 1 complete: USR-ROO-001 .. USR-ROO-042 (42 nodes).
 STATUS Active means published in SSOT registry, not proven by evidence.
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Platform/Auth (USR-ROO-001 .. USR-ROO-005)
 
 [REQUIREMENT]
@@ -114,7 +118,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Tenant/Workspace (USR-ROO-006 .. USR-ROO-010)
 
 [REQUIREMENT]
@@ -212,7 +218,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Games catalog (USR-ROO-011 .. USR-ROO-012)
 
 [REQUIREMENT]
@@ -253,7 +261,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Billing/Capacity (USR-ROO-013 .. USR-ROO-016)
 
 [REQUIREMENT]
@@ -332,7 +342,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Discord bot/Channels (USR-ROO-017 .. USR-ROO-020)
 
 [REQUIREMENT]
@@ -411,7 +423,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Auction/Requests (USR-ROO-021 .. USR-ROO-024)
 
 [REQUIREMENT]
@@ -490,7 +504,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Attendance/Roster (USR-ROO-025 .. USR-ROO-027)
 
 [REQUIREMENT]
@@ -550,7 +566,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Scheduler/RSVP (USR-ROO-028 .. USR-ROO-029)
 
 [REQUIREMENT]
@@ -591,7 +609,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Raid compose/Party (USR-ROO-030 .. USR-ROO-031)
 
 [REQUIREMENT]
@@ -632,7 +652,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Live Raid/Voice (USR-ROO-032 .. USR-ROO-034)
 
 [REQUIREMENT]
@@ -692,7 +714,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: OCR/GVG Attendance (USR-ROO-035 .. USR-ROO-035)
 
 [REQUIREMENT]
@@ -714,7 +738,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Adventurer Guild (USR-ROO-036 .. USR-ROO-037)
 
 [REQUIREMENT]
@@ -755,7 +781,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Data isolation/Storage (USR-ROO-038 .. USR-ROO-040)
 
 [REQUIREMENT]
@@ -815,7 +843,9 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
-[SECTION]
+[[/SECTION]]
+
+[[SECTION]]
 TITLE: Frontend shell/UX (USR-ROO-041 .. USR-ROO-042)
 
 [REQUIREMENT]
@@ -856,3 +886,4 @@ ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
+[[/SECTION]]

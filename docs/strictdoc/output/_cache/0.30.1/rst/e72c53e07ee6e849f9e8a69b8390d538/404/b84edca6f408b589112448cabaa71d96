@@ -1,0 +1,11 @@
+<div class="document">
+<p>Open DELIVERABLES.md first (human index).
+Then:
+- requirements/usr.sdoc — user desires
+- requirements/req.sdoc — system REQs with Parent → USR
+- design/summary.sdoc — tip counts + domain ID ranges
+- verification/tests.sdoc — TST plans + honesty + open musts
+- tools/tol.sdoc — present vs greenfield tools
+- deep_learn.sdoc — this overview
+Use strictdoc.toml to render HTML if StrictDoc CLI is available.</p>
+</div>

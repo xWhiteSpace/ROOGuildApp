@@ -1,0 +1,3 @@
+<div class="document">
+<p>GET /auth/me returns {authenticated,user} with a re-signed profile when authenticated; returns authenticated:false when not.</p>
+</div>

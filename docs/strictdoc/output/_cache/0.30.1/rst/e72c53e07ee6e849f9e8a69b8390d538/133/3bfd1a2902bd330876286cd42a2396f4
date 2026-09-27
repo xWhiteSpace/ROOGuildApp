@@ -1,0 +1,3 @@
+<div class="document">
+<p>GET / returns an online body when the database ping succeeds, and returns HTTP 503 with a failure body when the database ping fails.</p>
+</div>

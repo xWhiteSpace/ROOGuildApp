@@ -1,0 +1,3 @@
+<div class="document">
+<p>Platform need: Bot boot intents and slash cleanup. Required intents; fatal without token; clear slash on ready.</p>
+</div>

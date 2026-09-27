@@ -1,0 +1,3 @@
+<div class="document">
+<p>Session cookies and CORS must match local HTTP vs deployed HTTPS realities; unauthenticated users hitting protected shells go to landing; /login permanently redirects to /landing; document title reflects product vs guild.</p>
+</div>

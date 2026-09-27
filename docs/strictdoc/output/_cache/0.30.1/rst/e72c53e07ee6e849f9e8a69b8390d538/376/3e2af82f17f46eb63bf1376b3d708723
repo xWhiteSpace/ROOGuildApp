@@ -1,0 +1,10 @@
+<div class="document">
+<p>domain: Platform/Auth
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS uses secure:true and sameSite:none.
+source_draft: D-REQ-016
+ssot_status: published
+sot: Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</p>
+</div>

@@ -1,0 +1,10 @@
+<div class="document">
+<p>domain: Platform/Auth
+priority: must
+type: software
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: SPA restores session from auth_user query first, then guild_raid_session localStorage (migrating legacy dynasty_raid_session if present), then verifies with GET /auth/me.
+source_draft: D-REQ-013
+ssot_status: published
+sot: <a class="reference external" href="mailto:Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07">Develop&#64;a8a1edd713d6db6db61d42ed4eacf6a9e8737d07</a></p>
+</div>

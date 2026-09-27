@@ -1,0 +1,3 @@
+<div class="document">
+<p>The browser app must restore session from auth_user query then localStorage (migrating legacy keys), verify via /auth/me, always send credentials, and attach profile/tenant headers; local dev uses Vite proxy.</p>
+</div>

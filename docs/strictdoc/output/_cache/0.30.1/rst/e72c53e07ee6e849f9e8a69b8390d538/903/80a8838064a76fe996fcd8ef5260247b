@@ -1,0 +1,19 @@
+<div class="document">
+<p>Published count: 28
+ID span: CMP-ROO-001 .. CMP-ROO-028
+Next tip: CMP-ROO-029</p>
+<p>Domain map:
+- Platform/Auth: count=4; range=CMP-ROO-001 .. CMP-ROO-004
+- Tenant/Workspace: count=2; range=CMP-ROO-005 .. CMP-ROO-006
+- Games catalog: count=2; range=CMP-ROO-007 .. CMP-ROO-008
+- Billing/Capacity: count=1; range=CMP-ROO-009 .. CMP-ROO-009
+- Discord bot/Channels: count=2; range=CMP-ROO-010 .. CMP-ROO-011
+- Auction/Requests: count=2; range=CMP-ROO-012 .. CMP-ROO-013
+- Attendance/Roster: count=3; range=CMP-ROO-014 .. CMP-ROO-016
+- Scheduler/RSVP: count=2; range=CMP-ROO-017 .. CMP-ROO-018
+- Raid compose/Party: count=3; range=CMP-ROO-019 .. CMP-ROO-021
+- Live Raid/Voice: count=2; range=CMP-ROO-022 .. CMP-ROO-023
+- OCR/GVG Attendance: count=1; range=CMP-ROO-024 .. CMP-ROO-024
+- Adventurer Guild: count=2; range=CMP-ROO-025 .. CMP-ROO-026
+- Data isolation/Storage: count=2; range=CMP-ROO-027 .. CMP-ROO-028</p>
+</div>

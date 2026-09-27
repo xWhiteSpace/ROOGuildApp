@@ -1,0 +1,8 @@
+<div class="document">
+<p>name: React
+role: frontend_ui
+version: ^18 (pin in package.json)
+install: npm i react react-dom
+notes: SPA UI library for ROO frontend
+bucket: present_intent</p>
+</div>

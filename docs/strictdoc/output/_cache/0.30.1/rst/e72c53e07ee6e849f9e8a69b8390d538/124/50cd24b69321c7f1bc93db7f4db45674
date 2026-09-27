@@ -1,0 +1,3 @@
+<div class="document">
+<p>Platform need: Postgres schema and json_docs store. Core tables; Firebase-compatible json_docs; platform_state for circuit.</p>
+</div>
