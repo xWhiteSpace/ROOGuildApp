@@ -16,6 +16,7 @@ import {
   DEFAULT_TZ,
 } from '../../../utils/guildTime.js';
 import { resolveAnchoredComposition } from './publishedComposition.js';
+import { getRaidCycleStatus } from '../raidTimeWindow.js';
 
 export const DEFAULT_LEAVE_CREDITS = 3;
 const DEADLINE_OFFSET_MS = 24 * 60 * 60 * 1000;
@@ -41,14 +42,27 @@ function isRaidRosterMember(m) {
   return m?.isRaidRoster === true && m?.status !== 'Ghost';
 }
 
-async function loadInstance(db, compositeKey) {
+async function loadInstance(db, compositeKey, timezone = DEFAULT_TZ) {
   const snap = await db.ref(`scheduler/instances/${compositeKey}`).once('value');
   if (snap.exists()) return { key: compositeKey, ...snap.val() };
   const parsed = parseCompositeKey(compositeKey);
   if (!parsed) return null;
-  const ensured = await ensureWeekInstances({ weekMonday: getWeekMonday() });
+  const ensured = await ensureWeekInstances({
+    weekMonday: getWeekMonday(timezone, parsed.dateStr),
+  });
   const inst = ensured.instances?.[compositeKey];
   return inst ? { key: compositeKey, ...inst } : null;
+}
+
+function raidCycleTargetsWar(cycle) {
+  return Boolean(
+    cycle
+    && cycle.needsSetup !== true
+    && cycle.isForceLocked !== true
+    && cycle.warDate
+    && cycle.activeEventId
+    && cycle.warStartTime
+  );
 }
 
 /**
@@ -94,16 +108,50 @@ export async function resolveNextAttendanceEvent({ timezone, nowMs = Date.now() 
 }
 
 /**
- * Attendance card target: Set Active published composition when present,
- * otherwise the next upcoming event with an open RSVP window.
+ * Attendance card target: the raid-cycle War occurrence when a raid is configured,
+ * otherwise the Set Active published composition, otherwise the next open RSVP.
+ * A configured war stays the target after its RSVP deadline; buttons lock in place.
  */
 export async function resolveAttendanceTargetEvent({ timezone, nowMs = Date.now() } = {}) {
   const db = getTenantStore();
   const tz = timezone || (await resolveGuildTimezone(db));
+  const cycle = getRaidCycleStatus(new Date(nowMs));
+  if (raidCycleTargetsWar(cycle)) {
+    const cycleTz = cycle.timezone || tz;
+    const compositeKey = buildCompositeKey(cycle.warDate, cycle.activeEventId);
+    const instance = await loadInstance(db, compositeKey, cycleTz);
+    if (!instance || instance.isCancelled === true) {
+      return {
+        event: null,
+        timezone: cycleTz,
+        startMs: null,
+        deadlineMs: null,
+        anchored: false,
+        missing: true,
+      };
+    }
+    const event = {
+      ...instance,
+      key: compositeKey,
+      date: cycle.warDate,
+      eventId: cycle.activeEventId,
+      title: cycle.activeEventTitle || instance.title || cycle.activeEventId,
+      timeStart: cycle.warStartTime || instance.timeStart,
+      timeEnd: cycle.warEndTime || instance.timeEnd,
+    };
+    return {
+      event,
+      timezone: cycleTz,
+      startMs: getEventStartMs(event, cycleTz),
+      deadlineMs: getEventDeadlineMs(event, cycleTz),
+      anchored: false,
+      missing: false,
+    };
+  }
   const anchored = await resolveAnchoredComposition(db);
   if (anchored?.eventKey && anchored?.eventDate) {
     const compositeKey = buildCompositeKey(anchored.eventDate, anchored.eventKey);
-    const instance = await loadInstance(db, compositeKey);
+    const instance = await loadInstance(db, compositeKey, tz);
     if (!instance || instance.isCancelled === true) {
       return {
         event: null,
@@ -172,7 +220,7 @@ export async function applyAttendanceDecision({
   const compositeKey = buildCompositeKey(date, eid);
   const uid = String(userId);
   const timezone = await resolveGuildTimezone(db);
-  const instance = await loadInstance(db, compositeKey);
+  const instance = await loadInstance(db, compositeKey, timezone);
   if (!instance) {
     throw new AttendanceDecisionError('not_found', 'Scheduled event not found.');
   }

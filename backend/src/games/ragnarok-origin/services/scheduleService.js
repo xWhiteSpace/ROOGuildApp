@@ -215,6 +215,11 @@ async function materializeWeek({ db, weekMonday, timezone, force, batch }) {
     if (instancePayloadEqual(weekExisting[key], instance)) continue;
     updates[`scheduler/instances/${key}`] = instance;
   }
+  for (const [key, prior] of Object.entries(weekExisting)) {
+    if (map[key]) continue;
+    if (prior?.isSpecial === true || prior?.source === 'special') continue;
+    updates[`scheduler/instances/${key}`] = null;
+  }
   if (Object.keys(updates).length > 0) {
     await db.ref().update(updates);
   }

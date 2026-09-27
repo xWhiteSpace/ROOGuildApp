@@ -21,6 +21,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiFetch, getBackendUrl } from '../../../services/apiClient';
+import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import {
   formatGuildDate,
   getWeekMonday,
@@ -28,6 +29,11 @@ import {
   DEFAULT_TZ,
   guildWallTimeToUtcMs,
 } from '../../../utils/guildTime';
+
+function schedulePhase3(ev) {
+  if (isRaidEnabled(ev)) return ev.raid.phases[3];
+  return ev?.phases?.[3];
+}
 
 const backendUrl = getBackendUrl();
 
@@ -188,7 +194,7 @@ export default function Scheduler({ user }) {
 
     // 1. Weekly Base Template Events (FullCalendar handles daysOfWeek repetition natively)
     Object.entries(eventsCatalog).forEach(([id, ev]) => {
-      const p3 = ev.phases?.[3];
+      const p3 = schedulePhase3(ev);
       if (p3) {
         list.push({
           id,
@@ -262,11 +268,14 @@ export default function Scheduler({ user }) {
 
   // 🛡️ MEMOIZED BACKGROUND SHADING: Generates custom baseline operational indicators safely
   const recurringBusinessHours = useMemo(() => {
-    return Object.values(eventsCatalog).map(ev => ({
-      daysOfWeek: [ parseInt(ev.phases?.[3]?.dayStart, 10) ],
-      startTime: ev.phases?.[3]?.timeStart || '20:55',
-      endTime: ev.phases?.[3]?.timeEnd || '22:15'
-    }));
+    return Object.values(eventsCatalog).map(ev => {
+      const p3 = schedulePhase3(ev);
+      return {
+        daysOfWeek: [ parseInt(p3?.dayStart, 10) ],
+        startTime: p3?.timeStart || '20:55',
+        endTime: p3?.timeEnd || '22:15'
+      };
+    });
   }, [eventsCatalog]);
 
   const weeklyUpcomingInstances = useMemo(() => {
@@ -661,7 +670,7 @@ export default function Scheduler({ user }) {
                 <Clock size={14} className="text-slate-500" /> Time
               </div>
               <div className="text-xs font-mono font-bold text-slate-300 pl-5">
-                {activeDayFocus.config.phases?.[3]?.timeStart || '21:30'} ~ {activeDayFocus.config.phases?.[3]?.timeEnd || '23:00'}
+                {schedulePhase3(activeDayFocus.config)?.timeStart || '21:30'} ~ {schedulePhase3(activeDayFocus.config)?.timeEnd || '23:00'}
               </div>
             </div>
 
@@ -713,10 +722,10 @@ export default function Scheduler({ user }) {
 
             <div className="space-y-2 pt-1">
               <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest block mb-1">Select Availability:</span>
-              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || eventsCatalog[activeDayFocus.eventId]?.phases?.[3]?.timeStart })} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Confirmed' ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || schedulePhase3(eventsCatalog[activeDayFocus.eventId])?.timeStart })} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Confirmed' ? 'None' : 'Confirmed')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Confirmed' ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
                 <span>Confirm Attendance</span> {userCurrentStatus === 'Confirmed' && <Check size={16} />}
               </button>
-              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || eventsCatalog[activeDayFocus.eventId]?.phases?.[3]?.timeStart }) || (Number.isInteger(leaveCreditsRemaining) && leaveCreditsRemaining <= 0 && userCurrentStatus !== 'Leave')} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Leave' ? 'None' : 'Leave')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Leave' ? 'border-amber-500 bg-amber-950/20 text-amber-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
+              <button type="button" disabled={isPastDeadline({ dateStr: activeDayFocus.dateStr, timeStart: weekInstances[`${activeDayFocus.dateStr}_${activeDayFocus.eventId}`]?.timeStart || schedulePhase3(eventsCatalog[activeDayFocus.eventId])?.timeStart }) || (Number.isInteger(leaveCreditsRemaining) && leaveCreditsRemaining <= 0 && userCurrentStatus !== 'Leave')} onClick={() => handleLogCommitment(activeDayFocus.dateStr, activeDayFocus.eventId, userCurrentStatus === 'Leave' ? 'None' : 'Leave')} className={`w-full p-3 rounded-2xl border text-xs font-bold uppercase tracking-wide flex items-center justify-between transition active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${userCurrentStatus === 'Leave' ? 'border-amber-500 bg-amber-950/20 text-amber-400' : 'border-slate-800 bg-slate-900/40 text-slate-400'}`}>
                 <span>Request Leave</span> {userCurrentStatus === 'Leave' && <X size={16} />}
               </button>
             </div>

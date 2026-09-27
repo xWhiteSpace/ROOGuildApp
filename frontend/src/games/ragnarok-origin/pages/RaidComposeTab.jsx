@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Megaphone, Send } from 'lucide-react';
+import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import { upcomingDatesForWeekday, DEFAULT_TZ } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
+
+function eventPhase3(ev) {
+  if (isRaidEnabled(ev)) return ev.raid.phases[3];
+  return ev?.phases?.[3];
+}
 
 function formatTimeDigits(raw) {
   const digits = String(raw || '').replace(/\D/g, '').slice(0, 4);
@@ -75,7 +81,7 @@ export default function RaidComposeTab({ user }) {
 
   const computedEventDates = useMemo(() => {
     if (!selectedEventKey || !eventsCatalog[selectedEventKey]) return [];
-    const p3 = eventsCatalog[selectedEventKey].phases?.[3];
+    const p3 = eventPhase3(eventsCatalog[selectedEventKey]);
     if (!p3) return [];
     const targetDayOfWeek = parseInt(p3.dayStart, 10);
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -92,7 +98,7 @@ export default function RaidComposeTab({ user }) {
 
   useEffect(() => {
     if (!selectedEventKey) return;
-    const p3 = eventsCatalog[selectedEventKey]?.phases?.[3];
+    const p3 = eventPhase3(eventsCatalog[selectedEventKey]);
     const fallback = p3?.timeStart || '20:55';
     const existingId = selectedEventDate ? `${selectedEventDate}_${selectedEventKey}` : '';
     const existing = existingId ? published[existingId] : null;

@@ -522,12 +522,19 @@ export async function ensureGvgReadinessBoardIfMissing() {
   return ensureGvgReadinessBoard({ forcePost: false });
 }
 
-function readinessFingerprint(eventKey, commitments) {
+function readinessFingerprint(event, commitments, pastDeadline) {
   const rsvps = Object.entries(commitments || {})
     .map(([uid, row]) => `${uid}:${row?.status || ''}`)
     .sort()
     .join(';');
-  return createHash('sha1').update(`${eventKey || ''}|${rsvps}`).digest('hex');
+  const schedule = [
+    event?.key || '',
+    event?.date || '',
+    event?.timeStart || '',
+    event?.title || '',
+    pastDeadline ? 'locked' : 'open',
+  ].join('|');
+  return createHash('sha1').update(`${schedule}|${rsvps}`).digest('hex');
 }
 
 export async function refreshGvgReadinessBoard() {
@@ -537,13 +544,14 @@ export async function refreshGvgReadinessBoard() {
     const storedSnap = await db.ref(CARD_PATH).once('value');
     if (!storedSnap.exists() || !storedSnap.val()?.messageId) return { skipped: true };
     const stored = storedSnap.val();
-    const { event } = await resolveAttendanceTargetEvent();
+    const { event, deadlineMs } = await resolveAttendanceTargetEvent();
     const eventKey = event?.key || '';
     const commitSnap = eventKey
       ? await db.ref(`attendance/commitments/${eventKey}`).once('value')
       : { exists: () => false, val: () => ({}) };
     const commitments = commitSnap.exists() ? commitSnap.val() : {};
-    const fingerprint = readinessFingerprint(eventKey, commitments);
+    const pastDeadline = Number.isFinite(deadlineMs) && Date.now() > deadlineMs;
+    const fingerprint = readinessFingerprint(event, commitments, pastDeadline);
     if (stored.fingerprint === fingerprint && stored.eventKey === eventKey) {
       return { skipped: true, unchanged: true };
     }

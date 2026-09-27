@@ -38,6 +38,45 @@ function dateForWeekdayInWeek(weekMonday, dayOfWeek) {
   return match?.dateStr || null;
 }
 
+/** Days to walk backward from the war weekday to this phase weekday, wrapping the week. */
+function daysBeforeWar(warDayStart, phaseDay) {
+  return (Number(warDayStart) - Number(phaseDay) + 7) % 7;
+}
+
+/**
+ * War date is the next occurrence whose end is still ahead.
+ * Sunday sits at the start of the minute circle and at the end of the Monday week,
+ * so a Tuesday war already on the calendar must roll to next week once it has ended.
+ * Phase 3 keeps the war that is in progress.
+ */
+function resolveUpcomingWar(timezone, instant, p3, currentPhase) {
+  let weekMonday = getWeekMonday(timezone, instant);
+  for (let i = 0; i < 3; i += 1) {
+    const warDate = dateForWeekdayInWeek(weekMonday, p3.dayStart);
+    const warEndDate = warDate
+      ? addDaysToDateStr(warDate, dayDelta(p3.dayStart, p3.dayEnd))
+      : null;
+    const warEndsAt = warEndDate
+      ? guildWallTimeToUtcMs(p3.timeEnd, timezone, warEndDate)
+      : NaN;
+    const ended = Number.isFinite(warEndsAt) && instant.getTime() > warEndsAt;
+    if (warDate && (currentPhase === 3 || !ended)) {
+      return { warDate, warEndDate, warEndsAt };
+    }
+    weekMonday = addDaysToDateStr(weekMonday, 7);
+  }
+  const fallbackMonday = getWeekMonday(timezone, instant);
+  const warDate = dateForWeekdayInWeek(fallbackMonday, p3.dayStart);
+  const warEndDate = warDate
+    ? addDaysToDateStr(warDate, dayDelta(p3.dayStart, p3.dayEnd))
+    : null;
+  return {
+    warDate,
+    warEndDate,
+    warEndsAt: warEndDate ? guildWallTimeToUtcMs(p3.timeEnd, timezone, warEndDate) : NaN,
+  };
+}
+
 function dayDelta(dayStart, dayEnd) {
   const start = Number(dayStart) || 0;
   const end = Number(dayEnd) || 0;
@@ -155,22 +194,19 @@ export function getRaidCycleStatus(instant = new Date()) {
   }
 
   const p3 = raid.phases[3];
-  const warEndAbs = getAbsoluteMinutes(p3.dayEnd, p3.timeEnd);
-  const useNextWeek = currentAbs > warEndAbs && currentPhase !== 3;
-
-  let weekMonday = getWeekMonday(timezone, instant);
-  if (useNextWeek) {
-    weekMonday = addDaysToDateStr(weekMonday, 7);
-  }
-
-  const warDate = dateForWeekdayInWeek(weekMonday, p3.dayStart) || todayStr;
-  const warEndDate = addDaysToDateStr(warDate, dayDelta(p3.dayStart, p3.dayEnd));
+  const upcoming = resolveUpcomingWar(timezone, instant, p3, currentPhase);
+  const warDate = upcoming.warDate || todayStr;
+  const warEndDate = upcoming.warEndDate || addDaysToDateStr(warDate, dayDelta(p3.dayStart, p3.dayEnd));
   const warStartsAt = guildWallTimeToUtcMs(p3.timeStart, timezone, warDate);
-  const warEndsAt = guildWallTimeToUtcMs(p3.timeEnd, timezone, warEndDate);
+  const warEndsAt = Number.isFinite(upcoming.warEndsAt)
+    ? upcoming.warEndsAt
+    : guildWallTimeToUtcMs(p3.timeEnd, timezone, warEndDate);
   const publishedId = publishedIdForRaid(warDate, targetEventId);
 
   const p1 = raid.phases?.[1];
-  const prepDate = p1 ? dateForWeekdayInWeek(weekMonday, p1.dayStart) : null;
+  const prepDate = p1
+    ? addDaysToDateStr(warDate, -daysBeforeWar(p3.dayStart, p1.dayStart))
+    : null;
   const prepStartsAt = p1 && prepDate
     ? guildWallTimeToUtcMs(p1.timeStart, timezone, prepDate)
     : null;

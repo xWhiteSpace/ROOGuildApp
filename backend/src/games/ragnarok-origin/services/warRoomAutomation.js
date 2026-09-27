@@ -76,6 +76,7 @@ async function ensurePublishedForCycle(db, cycle) {
   const presentIds = collectPublishedConfigIds(published);
   const alreadySynced = presentIds.length === 1 && presentIds[0] === targetConfigId;
   if (alreadySynced) {
+    await setPublishedAnchor({ db, id: publishedId, active: true });
     return { ok: true, id: publishedId };
   }
 
