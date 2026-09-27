@@ -17,6 +17,8 @@ import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
 import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
 import { asItemsList, buildMemberAuctionStats } from '../utils/memberAuctionStats.js';
 import { buildRequestLobby, submitSelections, cancelPending, RequestDeckError } from '../games/ragnarok-origin/services/requestDeck.js';
+import { formatGuildDate } from '../utils/guildTime.js';
+import { resolveSessionDate, toIsoDate } from '../games/ragnarok-origin/services/requestLedger.js';
 
 function pickKeys(source, keys) {
   const out = {};
@@ -623,6 +625,11 @@ export async function performCommitSession({ event, date, allocations, summary }
     
     // 🛡️ ATOMIC TRANSACTION BUNDLE: Consolidate all database actions into a single operational pass
     const atomicUpdates = {};
+    const sessionDate = toIsoDate(date) || formatGuildDate(new Date(), timezone);
+    const stampRequest = (key, status) => {
+      atomicUpdates[`auction/web_requests/${key}/selectionStatus`] = status;
+      atomicUpdates[`auction/web_requests/${key}/eventDate`] = sessionDate;
+    };
 
     const membersListSnap = await db.ref('auction/members').once('value');
     const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
@@ -687,9 +694,9 @@ export async function performCommitSession({ event, date, allocations, summary }
         const keyList = getKeysForUid(uid);
         if (keyList.length > 0) {
           const finalKey = keyList[keyList.length - 1];
-          atomicUpdates[`auction/web_requests/${finalKey}/selectionStatus`] = 'Absent';
+          stampRequest(finalKey, 'Absent');
           const redundant = keyList.slice(0, keyList.length - 1);
-          for (const k of redundant) atomicUpdates[`auction/web_requests/${k}/selectionStatus`] = 'Superseded';
+          for (const k of redundant) stampRequest(k, 'Superseded');
         }
       }
 
@@ -697,9 +704,9 @@ export async function performCommitSession({ event, date, allocations, summary }
         const keyList = getKeysForUid(uid);
         if (keyList.length > 0) {
           const finalKey = keyList[keyList.length - 1];
-          atomicUpdates[`auction/web_requests/${finalKey}/selectionStatus`] = 'NotSelected';
+          stampRequest(finalKey, 'NotSelected');
           const redundant = keyList.slice(0, keyList.length - 1);
-          for (const k of redundant) atomicUpdates[`auction/web_requests/${k}/selectionStatus`] = 'Superseded';
+          for (const k of redundant) stampRequest(k, 'Superseded');
         }
       }
 
@@ -710,13 +717,13 @@ export async function performCommitSession({ event, date, allocations, summary }
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];
-          atomicUpdates[`auction/web_requests/${primaryWinnerKey}/selectionStatus`] = 'Selected';
+          stampRequest(primaryWinnerKey, 'Selected');
           atomicUpdates[`auction/web_requests/${primaryWinnerKey}/quantity`] = slots;
           atomicUpdates[`auction/web_requests/${primaryWinnerKey}/liveStatus`] = 'Done';
 
           const intermediateRedundantLines = keyList.slice(0, keyList.length - 1);
           for (const duplicateKey of intermediateRedundantLines) {
-            atomicUpdates[`auction/web_requests/${duplicateKey}/selectionStatus`] = 'Superseded';
+            stampRequest(duplicateKey, 'Superseded');
           }
         } else {
           const newRequestKey = db.ref('auction/web_requests').push().key;
@@ -724,6 +731,7 @@ export async function performCommitSession({ event, date, allocations, summary }
             id: newRequestKey,
             userId: userId,
             date: timestampDate,
+            eventDate: sessionDate,
             member: resolvedName,
             item: resolvedItem.name,
             itemId: targetItemId,
@@ -823,6 +831,7 @@ router.post('/reset-priority', async (req, res) => {
       id: newResetRef.key,
       userId: targetUserId,
       date: new Date().toLocaleDateString("en-US", { timeZone: timezone }),
+      eventDate: resolveSessionDate(dynamicConfig, timezone),
       member: resolvedName,
       item: resolvedItem.name,
       itemId,

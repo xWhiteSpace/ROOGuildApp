@@ -105,11 +105,15 @@ export async function maybeAutoCommitAuction() {
 
     // Rebuild allocations server-side exactly like the frontend
     // handleCommitSessionAndFlash so the auto path and manual path are identical.
-    const { loadAuctionRequests } = await import('../db/database.js');
-    const pendingMap = await loadAuctionRequests({ status: 'Pending' });
-    const { compileLeaderboard, requestsFromSnapshot } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
-    const firebaseRequests = requestsFromSnapshot(pendingMap);
-    const { rankingsByItem } = compileLeaderboard(firebaseRequests, itemsList, membersData);
+    const { loadBoardScoreContext } = await import('../games/ragnarok-origin/services/requestDeck.js');
+    const { resolveSessionDate } = await import('../games/ragnarok-origin/services/requestLedger.js');
+    const { pendingRows, ledgerRows, lookbackDays, today } = await loadBoardScoreContext(dynamicConfig);
+    const { compileLeaderboard } = await import('../games/ragnarok-origin/utils/sortingEngine.js');
+    const { rankingsByItem } = compileLeaderboard(pendingRows, itemsList, membersData, {
+      ledgerRows,
+      lookbackDays,
+      today,
+    });
 
     const categoryAllocations = session.categoryAllocations || {};
     const initialWinnersByItem = session.initialWinnersByItem || {};
@@ -150,8 +154,7 @@ export async function maybeAutoCommitAuction() {
 
     try {
       const { performCommitSession } = await import('../api/request.routes.js');
-      const commitDate = dynamicConfig.targetSessionDate
-        || new Date().toLocaleDateString('en-US', { timeZone: timezone });
+      const commitDate = resolveSessionDate(dynamicConfig, timezone);
 
       await performCommitSession({
         event: eventTitle,

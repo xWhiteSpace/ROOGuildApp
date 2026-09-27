@@ -1,5 +1,7 @@
 // backend/src/utils/sortingEngine.js
 
+import { scorePriority } from '../services/requestLedger.js';
+
 export const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
 
 /**
@@ -33,7 +35,6 @@ export function pushIdAt(ms) {
   return `${id}------------`;
 }
 
-/** Flatten a web_requests snapshot/map and keep the row id (object key). */
 export function requestsFromSnapshot(snapOrMap) {
   const map = snapOrMap && typeof snapOrMap.val === 'function' ? snapOrMap.val() : snapOrMap;
   if (!map || typeof map !== 'object') return [];
@@ -51,7 +52,7 @@ function ledgerSortKey(req) {
 /**
  * Gold-Standard Deterministic Leaderboard Compiler Engine
  */
-export function compileLeaderboard(firebaseRequests, itemsList, membersData) {
+export function compileLeaderboard(firebaseRequests, itemsList, membersData, scoreOptions = null) {
   const rankingsByItem = {};
   const requestsByItemDetails = {};
 
@@ -117,6 +118,23 @@ export function compileLeaderboard(firebaseRequests, itemsList, membersData) {
       }
     }
   });
+
+  const ledgerRows = scoreOptions?.ledgerRows;
+  const today = scoreOptions?.today;
+  if (ledgerRows && today) {
+    itemsList.forEach(item => {
+      Object.values(userCalculationsMap[item.id] || {}).forEach(applicant => {
+        applicant.priority = scorePriority(ledgerRows, {
+          userId: applicant.userId,
+          itemId: item.id,
+          itemName: item.name,
+          isHighValue: item.isHighValue === true,
+          lookbackDays: scoreOptions.lookbackDays,
+          today,
+        });
+      });
+    });
+  }
 
   itemsList.forEach(item => {
     const activeApplicants = Object.values(userCalculationsMap[item.id]).filter(u => u.netQty > 0);

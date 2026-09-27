@@ -514,7 +514,7 @@ export default function RequestHistoryTab({ user }) {
                         </span>
                       </td>
                       <td className="p-3 text-slate-500 group-hover:text-slate-400 transition-colors font-semibold whitespace-nowrap text-right pr-5">
-                        {row.eventDate === "" ? "---" : row.eventDate}
+                        {row.eventDate ? row.eventDate : "---"}
                       </td>
                     </tr>
                   );

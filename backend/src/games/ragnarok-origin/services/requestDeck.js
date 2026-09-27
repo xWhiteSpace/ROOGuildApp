@@ -7,6 +7,8 @@ import { getTenantStore, loadAuctionRequests } from '../../../db/database.js';
 import { clampLookbackDays } from '../defaults.js';
 import { getGateStatusDetails } from '../timeWindow.js';
 import { compileLeaderboard, requestsFromSnapshot } from '../utils/sortingEngine.js';
+import { formatGuildDate } from '../../../utils/guildTime.js';
+import { lookbackStartDay, resolveSessionDate, scorePriority } from './requestLedger.js';
 
 export class RequestDeckError extends Error {
   constructor(message, status = 400) {
@@ -16,74 +18,48 @@ export class RequestDeckError extends Error {
   }
 }
 
+export async function loadBoardScoreContext(dynamicConfig) {
+  const timezone = dynamicConfig?.timezone || 'Asia/Manila';
+  const lookbackDays = clampLookbackDays(dynamicConfig?.priorityLookbackDays);
+  const today = formatGuildDate(new Date(), timezone);
+  const pendingMap = await loadAuctionRequests({ status: 'Pending' });
+  const historyMap = await loadAuctionRequests({
+    sinceCalendarDay: lookbackStartDay(today, lookbackDays),
+  });
+  return {
+    pendingRows: requestsFromSnapshot(pendingMap),
+    ledgerRows: requestsFromSnapshot(historyMap),
+    lookbackDays,
+    today,
+  };
+}
+
 async function calculatePriorityScore(db, userId, itemId, itemNameFallback) {
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const lookbackDays = clampLookbackDays(dynamicConfig.priorityLookbackDays);
-  const records = await loadAuctionRequests({ userId, sinceDays: lookbackDays });
-
-  if (!records || !Object.keys(records).length) return 0;
-  const sortedKeys = Object.keys(records).sort();
-  const combinedItemTimeline = [];
-
-  const expirationWindowInMs = lookbackDays * 24 * 60 * 60 * 1000;
-  const nowMs = Date.now();
-
-  const itemsList = dynamicConfig.items || [];
-  const targetItemMeta = itemsList.find(i => {
-    if (i.id && itemId) return i.id.trim().toLowerCase() === itemId.trim().toLowerCase();
-    return false;
-  }) || (itemNameFallback ? itemsList.find(i => (i.name || '').trim().toLowerCase() === itemNameFallback.trim().toLowerCase()) : null);
-  const isHighValueItem = targetItemMeta?.isHighValue === true;
-
-  sortedKeys.forEach(key => {
-    const record = records[key];
-
-    const recordDateStr = record.date || '';
-    const recordTimeMs = Date.parse(recordDateStr);
-    if (!isNaN(recordTimeMs) && (nowMs - recordTimeMs) > expirationWindowInMs) {
-      return;
-    }
-
-    const recordItemId = record.itemId;
-    let isMatch = false;
-    if (recordItemId) {
-      if (recordItemId.trim().toLowerCase() === itemId.trim().toLowerCase()) isMatch = true;
-    } else if (record.item && itemNameFallback) {
-      if (record.item.trim().toLowerCase() === itemNameFallback.trim().toLowerCase()) isMatch = true;
-    }
-
-    if (isMatch) {
-      combinedItemTimeline.push({
-        status: (record.selectionStatus || 'pending').toLowerCase(),
-        date: record.date || record.eventDate,
-      });
-    }
+  const timezone = dynamicConfig.timezone || 'Asia/Manila';
+  const today = formatGuildDate(new Date(), timezone);
+  const records = await loadAuctionRequests({
+    userId,
+    sinceCalendarDay: lookbackStartDay(today, lookbackDays),
   });
+  const itemsList = dynamicConfig.items || [];
+  const targetItemMeta = itemsList.find((i) => {
+    if (i.id && itemId) return i.id.trim().toLowerCase() === String(itemId).trim().toLowerCase();
+    return false;
+  }) || (itemNameFallback
+    ? itemsList.find((i) => (i.name || '').trim().toLowerCase() === itemNameFallback.trim().toLowerCase())
+    : null);
 
-  let lastSelectedIdx = -1;
-  for (let i = combinedItemTimeline.length - 1; i >= 0; i--) {
-    const { status } = combinedItemTimeline[i];
-    const isTerminal = status === 'selected' || status === 'reset' || (status === 'absent' && !isHighValueItem);
-    if (isTerminal) {
-      lastSelectedIdx = i;
-      break;
-    }
-  }
-
-  let priorityPoints = 0;
-  const countedDates = new Set();
-  const searchStart = lastSelectedIdx !== -1 ? lastSelectedIdx + 1 : 0;
-  for (let i = searchStart; i < combinedItemTimeline.length; i++) {
-    const { status, date: uniqueNightKey } = combinedItemTimeline[i];
-    const countsTowardPity = status === 'notselected' || (status === 'absent' && isHighValueItem);
-    if (countsTowardPity && uniqueNightKey && !countedDates.has(uniqueNightKey)) {
-      priorityPoints++;
-      countedDates.add(uniqueNightKey);
-    }
-  }
-
-  return priorityPoints;
+  return scorePriority(requestsFromSnapshot(records), {
+    userId,
+    itemId,
+    itemName: itemNameFallback,
+    isHighValue: targetItemMeta?.isHighValue === true,
+    lookbackDays,
+    today,
+  });
 }
 
 function resolveItemId(reqRow, itemsList) {
@@ -103,7 +79,7 @@ export async function buildRequestLobby(userId, displayName) {
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const itemsList = dynamicConfig.items || [];
   const timezone = dynamicConfig.timezone || 'Asia/Manila';
-  const targetSessionDate = dynamicConfig.targetSessionDate || new Date().toLocaleDateString('en-US', { timeZone: timezone });
+  const targetSessionDate = resolveSessionDate(dynamicConfig, timezone);
   const isForceLocked = dynamicConfig.isForceLocked === true;
 
   const timeGateStatus = getGateStatusDetails();
@@ -122,8 +98,7 @@ export async function buildRequestLobby(userId, displayName) {
     }
   });
 
-  const pendingMap = await loadAuctionRequests({ status: 'Pending' });
-  const firebaseRequests = requestsFromSnapshot(pendingMap);
+  const { pendingRows: firebaseRequests, ledgerRows: historyRows, lookbackDays, today } = await loadBoardScoreContext(dynamicConfig);
 
   const liveCounts = {};
   const rankingsByItem = {};
@@ -162,7 +137,11 @@ export async function buildRequestLobby(userId, displayName) {
   }
 
   const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
-  const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
+  const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData, {
+    ledgerRows: historyRows,
+    lookbackDays,
+    today,
+  });
 
   Object.assign(rankingsByItem, computedLists.rankingsByItem);
   Object.assign(requestsByItemDetails, computedLists.requestsByItemDetails);
@@ -213,7 +192,7 @@ export async function submitSelections(userId, displayName, selections) {
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const itemsList = dynamicConfig.items || [];
   const timezone = dynamicConfig.timezone || 'Asia/Manila';
-  const targetSessionDate = dynamicConfig.targetSessionDate || '';
+  const targetSessionDate = resolveSessionDate(dynamicConfig, timezone);
 
   if (userId && !String(userId).startsWith('dummy_')) {
     const memberSnap = await db.ref(`auction/members/${userId}`).once('value');
@@ -313,7 +292,7 @@ export async function cancelPending(userId, displayName, { itemId, itemName } = 
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
   const timezone = dynamicConfig.timezone || 'Asia/Manila';
-  const targetSessionDate = dynamicConfig.targetSessionDate || '';
+  const targetSessionDate = resolveSessionDate(dynamicConfig, timezone);
   const itemsList = dynamicConfig.items || [];
 
   const pendingMap = await loadAuctionRequests({ status: 'Pending', userId });

@@ -1,9 +1,10 @@
 import { query } from './pool.js';
 import { getCurrentTenantId, setCachedConfig } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
-import { DEFAULT_TZ, getWeekMonday, weekKeyBounds } from '../utils/guildTime.js';
+import { DEFAULT_TZ, formatGuildDate, getWeekMonday, weekKeyBounds } from '../utils/guildTime.js';
 import { clampLookbackDays } from '../games/ragnarok-origin/defaults.js';
-import { pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
+import { PUSH_CHARS, pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
+import { ledgerCalendarDaySql, lookbackStartDay } from '../games/ragnarok-origin/services/requestLedger.js';
 
 const COLLECTION_MAP = {
   'auction/members': { table: 'members', idCol: 'discord_id' },
@@ -82,9 +83,12 @@ function isPlatformPath(path) {
 }
 
 function encodePushKey() {
-  const now = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 10);
-  return `-${now}${rand}`;
+  const time = pushIdAt(Date.now()).slice(0, 8);
+  let tail = '';
+  for (let i = 0; i < 12; i++) {
+    tail += PUSH_CHARS.charAt(Math.floor(Math.random() * PUSH_CHARS.length));
+  }
+  return time + tail;
 }
 
 class DataSnapshot {
@@ -151,6 +155,7 @@ export async function loadAuctionRequests({
   status,
   userId,
   sinceDays,
+  sinceCalendarDay,
   sinceId,
   untilId,
 } = {}, tenantId) {
@@ -166,10 +171,18 @@ export async function loadAuctionRequests({
     clauses.push(`data->>'userId' = $${i++}`);
     params.push(String(userId));
   }
-  const minId = sinceId || (sinceDays != null ? pushIdAt(Date.now() - clampLookbackDays(sinceDays) * 86400000) : null);
-  if (minId) {
+  let calendarStart = sinceCalendarDay ? String(sinceCalendarDay) : '';
+  if (!calendarStart && sinceDays != null && !sinceId) {
+    const today = formatGuildDate(new Date(), DEFAULT_TZ);
+    calendarStart = lookbackStartDay(today, sinceDays);
+  }
+  if (calendarStart) {
+    clauses.push(`${ledgerCalendarDaySql(`data->>'date'`)} >= $${i++}`);
+    params.push(calendarStart);
+  }
+  if (sinceId) {
     clauses.push(`id >= $${i++}`);
-    params.push(minId);
+    params.push(sinceId);
   }
   if (untilId) {
     clauses.push(`id <= $${i++}`);
@@ -183,7 +196,6 @@ export async function loadAuctionRequests({
 }
 
 const HISTORY_SORT = {
-  date: 'id',
   member: `data->>'member'`,
   item: `data->>'item'`,
   priority: `COALESCE((data->>'priority')::int, 0)`,
@@ -250,14 +262,16 @@ export async function listAuctionHistory({
   const total = countRes.rows[0]?.n || 0;
   if (countOnly) return { history: [], total, page: 1, limit: 0 };
 
-  const orderCol = HISTORY_SORT[sort] || HISTORY_SORT.date;
+  const orderByDate = !sort || sort === 'date' || !HISTORY_SORT[sort];
+  const orderCol = orderByDate ? ledgerCalendarDaySql(`data->>'date'`) : HISTORY_SORT[sort];
   const orderDir = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const nulls = orderByDate ? (orderDir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST') : '';
   const safeLimit = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));
   const safePage = Math.max(1, parseInt(page, 10) || 1);
   const offset = (safePage - 1) * safeLimit;
   const { rows } = await query(
     `SELECT id, data FROM auction_requests WHERE ${where}
-     ORDER BY ${orderCol} ${orderDir}
+     ORDER BY ${orderCol} ${orderDir} ${nulls}, id ${orderDir}
      LIMIT $${i} OFFSET $${i + 1}`,
     [...params, safeLimit, offset]
   );
