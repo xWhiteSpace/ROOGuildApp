@@ -1,6 +1,7 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
-import { getTenantStore } from '../db/database.js';
+import { getTenantStore, listAuctionHistory, listLootHistoryDates, listLootHistoryForDate, listPastAuctionDates, listPastAuctionsForDate, loadAuctionRequests, countLootHistoryBattles, loadPastAuctionsForMember } from '../db/database.js';
+import { pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
 import { getGateStatusDetails, readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 import { findOverlappingRaidCyclePair } from '@guildname/shared/raidCycle';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
@@ -13,6 +14,7 @@ import { discordEnv } from '../config/discordEnv.js';
 import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure } from '../utils/discordRateLimit.js';
 
 import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
+import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
 import { asItemsList, buildMemberAuctionStats } from '../utils/memberAuctionStats.js';
 import { buildRequestLobby, submitSelections, cancelPending, RequestDeckError } from '../games/ragnarok-origin/services/requestDeck.js';
 
@@ -31,6 +33,20 @@ function omitKeys(source, keys) {
     if (!skip.has(key)) out[key] = value;
   }
   return out;
+}
+
+const SETTINGS_FIELD_ALLOW = new Set([
+  'jobs', 'items', 'timezone', 'roles', 'events', 'specialEventCategories',
+  'expectedAttendanceRate', 'warRooms', 'liveRaidMaxWarRooms', 'liveRaidMaxConfigs',
+  'helpEmbedUrl', 'raidHelpEmbedUrl', 'guildDisplayName', 'guildLogoUrl',
+  'defaultLeaveCredits', 'isForceLocked',
+]);
+
+function parseSettingsFields(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter((key) => SETTINGS_FIELD_ALLOW.has(key));
 }
 
 const router = Router();
@@ -155,6 +171,16 @@ router.get('/settings/get', async (req, res) => {
     const config = configSnap.exists() ? configSnap.val() : { ...DEFAULT_CONFIGURATION };
     const needsSetup = configNeedsSetup(config);
     const { ok } = await checkOfficer(req, config);
+    const fieldKeys = parseSettingsFields(req.query.fields);
+    if (fieldKeys.length > 0) {
+      const base = ok ? config : publicSettingsView(config);
+      return res.json({
+        success: true,
+        config: pickKeys(base, fieldKeys),
+        needsSetup,
+        publicOnly: !ok,
+      });
+    }
     const tenantId = req.tenantId || getCurrentTenantId();
     const { discordChannels } = tenantId
       ? await loadTenantSettings(tenantId)
@@ -240,6 +266,11 @@ router.get('/active-session', async (req, res) => {
     const sessionSnap = await db.ref('auction/active_session').once('value');
 
     if (!sessionSnap.exists()) {
+      const emptyTag = 'empty';
+      if (normalizeEtag(req.headers['if-none-match']) === emptyTag) {
+        return sendNotModified(res, emptyTag);
+      }
+      setEtag(res, emptyTag);
       return res.json({ success: true, session: null });
     }
 
@@ -268,6 +299,8 @@ router.get('/active-session', async (req, res) => {
         freshReset.initialWinnersByItem[item.id] = [];
       });
       await db.ref('auction/active_session').set(freshReset);
+      const resetTag = `s:${freshReset.version || 0}:${freshReset.lastUpdated || 0}`;
+      setEtag(res, resetTag);
       return res.json({ success: true, session: freshReset });
     }
 
@@ -289,6 +322,11 @@ router.get('/active-session', async (req, res) => {
       currentSessionData.qtyPerPage = 4;
     }
 
+    const sessionTag = `s:${currentSessionData.version || 0}:${currentSessionData.lastUpdated || 0}`;
+    if (normalizeEtag(req.headers['if-none-match']) === sessionTag) {
+      return sendNotModified(res, sessionTag);
+    }
+    setEtag(res, sessionTag);
     return res.json({ success: true, session: currentSessionData });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -336,6 +374,57 @@ router.post('/update-session', async (req, res) => {
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/requests/announce-allocate
+ * Reads active_session + request lobby. Does not accept client winner lists.
+ */
+router.post('/announce-allocate', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to authorized Discord Management Officers only.' });
+    }
+
+    const sessionSnap = await db.ref('auction/active_session').once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(400).json({ success: false, error: 'No active Mimic Book session.' });
+    }
+
+    const session = sessionSnap.val() || {};
+    const lobby = await buildRequestLobby(user.id, user.displayName || user.username);
+    const {
+      foldUniqueExclusiveAllocate,
+      buildAllocateOpenAnnounceChunks,
+      sendGenRoomMessage,
+    } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
+
+    const { selectedUserIds, notSelectedUserIds } = foldUniqueExclusiveAllocate(
+      session.categoryAllocations,
+      lobby.rankingsByItem
+    );
+    const chunks = buildAllocateOpenAnnounceChunks({ selectedUserIds, notSelectedUserIds });
+    const mentionOptions = { allowedMentions: { parse: ['everyone', 'users'] } };
+    for (const chunk of chunks) {
+      await sendGenRoomMessage(chunk, mentionOptions);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    const msg = err.message || 'Failed to announce allocation.';
+    const status = /not configured/i.test(msg) ? 400
+      : /offline|not connected|rate-limited|temporarily blocking/i.test(msg) ? 503
+      : /not found/i.test(msg) ? 404
+      : 500;
+    return res.status(status).json({ success: false, error: msg });
   }
 });
 
@@ -515,8 +604,7 @@ export async function performCommitSession({ event, date, allocations, summary }
   }
 
   {
-    const snapshot = await db.ref('auction/web_requests').once('value');
-    const firebaseRequests = snapshot.exists() ? snapshot.val() : {};
+    const firebaseRequests = await loadAuctionRequests({ status: 'Pending' });
 
     const itemIds = Object.keys(allocations);
         let timestampDate = date || new Date().toLocaleDateString("en-US", { timeZone: timezone });
@@ -777,8 +865,12 @@ router.post('/clear-history', async (req, res) => {
   }
 
   try {
-    const snapshot = await db.ref('auction/web_requests').once('value');
-    const records = snapshot.exists() ? snapshot.val() : {};
+    const rangeStartMs = rangeStart.getTime();
+    const rangeEndMs = rangeEnd.getTime() + 1;
+    const records = await loadAuctionRequests({
+      sinceId: pushIdAt(rangeStartMs),
+      untilId: pushIdAt(rangeEndMs),
+    });
 
     const atomicUpdates = {};
     let deletedCount = 0;
@@ -802,30 +894,20 @@ router.post('/clear-history', async (req, res) => {
 
 /**
  * GET /api/requests/loot-history
+ * No date → nights that have loot rows (picker). ?date= → that night only.
  */
 router.get('/loot-history', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getTenantStore();
-    const lootHistorySnap = await db.ref('auction/loot_history').once('value');
-    if (!lootHistorySnap.exists()) return res.json({ success: true, history: [] });
-
-    const rawData = lootHistorySnap.val();
-    const sortedKeys = Object.keys(rawData).sort();
-    const lootHistoryArray = sortedKeys.map(key => ({
-      id: key,
-      date: rawData[key].date || "",
-      event: rawData[key].event || "",
-      item: rawData[key].item || "", 
-      itemId: rawData[key].itemId || "",
-      quantity: parseInt(rawData[key].quantity, 10) || 0,
-      max: parseInt(rawData[key].max, 10) || 1,
-      mem: parseInt(rawData[key].mem, 10) || 0
-    }));
-
-    return res.json({ success: true, history: lootHistoryArray.reverse() });
+    const date = String(req.query.date || '').trim();
+    if (!date) {
+      const dates = await listLootHistoryDates();
+      return res.json({ success: true, dates });
+    }
+    const history = await listLootHistoryForDate(date);
+    return res.json({ success: true, date, history });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -833,34 +915,20 @@ router.get('/loot-history', async (req, res) => {
 
 /**
  * GET /api/requests/past-auctions
+ * No date → nights that have awards (picker). ?date= → that night only.
  */
 router.get('/past-auctions', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getTenantStore();
-    const pastAuctionsSnap = await db.ref('auction/past_auctions').once('value');
-    const membersSnap = await db.ref('auction/members').once('value');
-    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
-
-    if (!pastAuctionsSnap.exists()) return res.json({ success: true, history: [], members: membersMap });
-
-    const rawData = pastAuctionsSnap.val();
-    const sortedKeys = Object.keys(rawData).sort();
-    const pastAuctionsArray = sortedKeys.map(key => ({
-      id: key,
-      date: rawData[key].date || "",
-      event: rawData[key].event || "",
-      item: rawData[key].item || "", 
-      itemId: rawData[key].itemId || "",
-      quantity: parseInt(rawData[key].quantity, 10) || 0,
-      userId: rawData[key].userId || "",
-      // Read the historical member name directly from the row's 'mem' attribute fallback
-      mem: rawData[key].mem || "Unknown Member"
-    }));
-
-    return res.json({ success: true, history: pastAuctionsArray.reverse(), members: membersMap });
+    const date = String(req.query.date || '').trim();
+    if (!date) {
+      const dates = await listPastAuctionDates();
+      return res.json({ success: true, dates });
+    }
+    const history = await listPastAuctionsForDate(date);
+    return res.json({ success: true, history, date });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -874,32 +942,36 @@ router.get('/request-history', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
-    const db = getTenantStore();
-    const historySnap = await db.ref('auction/web_requests').once('value');
-    if (!historySnap.exists()) return res.json({ success: true, history: [] });
-
-    // Grab the live presentation directory to resolve past names dynamically
-    const membersSnap = await db.ref('auction/members').once('value');
-    const membersMap = membersSnap.exists() ? membersSnap.val() : {};
-
-    const rawData = historySnap.val();
-    const sortedKeys = Object.keys(rawData).sort();
-    const historyArray = sortedKeys.map(key => ({
-      id: rawData[key].id || key,
-      userId: rawData[key].userId || "",
-      date: rawData[key].date || "",
-      member: rawData[key].member || "Unknown Member",
-      item: rawData[key].item || "",
-      itemId: rawData[key].itemId || "",
-      quantity: parseInt(rawData[key].quantity, 10) || 0,
-      applicationStatus: rawData[key].applicationStatus || "Requested",
-      selectionStatus: rawData[key].selectionStatus || "Pending",
-      liveStatus: rawData[key].liveStatus || "", 
-      priority: parseInt(rawData[key].priority, 10) || 0,
-      eventDate: rawData[key].eventDate || ""
-    }));
-
-    return res.json({ success: true, history: historyArray.reverse() });
+    const mine = req.query.mine === '1' || req.query.mine === 'true';
+    const exportAll = req.query.export === '1' || req.query.export === 'true';
+    const countOnly = req.query.preview === '1' || req.query.preview === 'true';
+    const startDate = String(req.query.startDate || '').trim();
+    const endDate = String(req.query.endDate || '').trim();
+    let sinceId;
+    let untilId;
+    if (startDate && endDate) {
+      const rangeStart = new Date(startDate);
+      const rangeEnd = new Date(`${endDate}T23:59:59.999`);
+      if (!isNaN(rangeStart) && !isNaN(rangeEnd) && rangeStart <= rangeEnd) {
+        sinceId = pushIdAt(rangeStart.getTime());
+        untilId = pushIdAt(rangeEnd.getTime() + 1);
+      }
+    }
+    const page = exportAll ? 1 : (parseInt(req.query.page, 10) || 1);
+    const limit = exportAll ? 10000 : (parseInt(req.query.limit, 10) || 20);
+    const result = await listAuctionHistory({
+      userId: mine ? user.id : undefined,
+      status: req.query.status && req.query.status !== 'all' ? req.query.status : undefined,
+      q: req.query.q,
+      sort: req.query.sort,
+      dir: req.query.dir,
+      limit,
+      page,
+      sinceId,
+      untilId,
+      countOnly,
+    });
+    return res.json({ success: true, ...result });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -932,19 +1004,19 @@ router.get('/member-auction-stats', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access Denied.' });
     }
 
-    const [lootSnap, awardsSnap] = await Promise.all([
-      db.ref('auction/loot_history').once('value'),
-      db.ref('auction/past_auctions').once('value'),
+    const [recordedBattles, pastAuctions] = await Promise.all([
+      countLootHistoryBattles(),
+      loadPastAuctionsForMember(uid),
     ]);
 
     const stats = buildMemberAuctionStats({
-      lootHistory: lootSnap.exists() ? lootSnap.val() : {},
-      pastAuctions: awardsSnap.exists() ? awardsSnap.val() : {},
+      lootHistory: {},
+      pastAuctions,
       memberUid: uid,
       itemsList: asItemsList(dynamicConfig.items),
     });
 
-    return res.json({ success: true, ...stats });
+    return res.json({ success: true, ...stats, recordedBattles });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

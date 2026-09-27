@@ -29,13 +29,14 @@ export async function processAndPostDiscordSnapshot(isFinalThreshold = false, ex
     const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
     const itemsList = dynamicConfig.items || [];
 
-    const requestsSnap = await db.ref('auction/web_requests').once('value');
+    const { loadAuctionRequests } = await import('../../../db/database.js');
+    const pendingMap = await loadAuctionRequests({ status: 'Pending' });
     const membersSnap = await db.ref('auction/members').once('value');
     const membersData = membersSnap.exists() ? membersSnap.val() : {};
 
     console.log(`📊 [SNAPSHOT ENGINE]: Compiling active scoreboard layouts for target event.`);
     const { compileLeaderboard, requestsFromSnapshot } = await import('../utils/sortingEngine.js');
-    const firebaseRequests = requestsFromSnapshot(requestsSnap);
+    const firebaseRequests = requestsFromSnapshot(pendingMap);
     const globalStandings = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
     // Establish the text template header layout

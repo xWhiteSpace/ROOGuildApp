@@ -1,6 +1,6 @@
 // backend/src/api/liveRaid.routes.js
 import { Router } from 'express';
-import { getTenantStore } from '../db/database.js';
+import { getTenantStore, loadSessionArchive } from '../db/database.js';
 import { getCurrentTenantId, runWithTenant } from '../db/tenantContext.js';
 import { discordClient } from '../discord-bot/client.js';
 import { resolveUserIdentity } from '../auth/identity.js';
@@ -552,11 +552,11 @@ async function endLiveRaidSessionInternal(s) {
   const membersData = membersSnap.exists() ? membersSnap.val() : {};
 
   const excusedUids = [];
-  const commitmentsSnap = await db.ref('attendance/commitments').once('value');
   const eventCommitmentsKey = buildCompositeKey(s.eventDate, s.eventKey);
+  const commitmentsSnap = await db.ref(`attendance/commitments/${eventCommitmentsKey}`).once('value');
   let commitmentsData = {};
-  if (commitmentsSnap.exists() && commitmentsSnap.val()[eventCommitmentsKey]) {
-    commitmentsData = commitmentsSnap.val()[eventCommitmentsKey];
+  if (commitmentsSnap.exists()) {
+    commitmentsData = commitmentsSnap.val() || {};
     Object.entries(commitmentsData).forEach(([uid, commitment]) => {
       if (normalizeCommitmentStatus(commitment?.status) === 'Leave') {
         excusedUids.push(uid);
@@ -914,10 +914,17 @@ router.get('/history/all', async (req, res) => {
 
   try {
     const db = getTenantStore();
-    const archiveSnap = await db.ref('attendance/session_archive').once('value');
+    const sessionId = String(req.query.sessionId || '').trim();
+    const limit = parseInt(req.query.limit, 10) || 12;
+    const fields = req.query.fields === 'full' || sessionId ? 'full' : 'trend';
+    const sessions = await loadSessionArchive({
+      sessionId: sessionId || undefined,
+      limit,
+      fields,
+    });
     return res.json({
       success: true,
-      sessions: archiveSnap.exists() ? archiveSnap.val() : {},
+      sessions,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

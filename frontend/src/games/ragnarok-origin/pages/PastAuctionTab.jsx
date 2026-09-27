@@ -1,11 +1,7 @@
-// frontend/src/pages/PastAuctionTab.jsx
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../../services/apiClient';
 
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
-
-// --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconSearch = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-const IconAward = () => <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>;
 const IconChevron = ({ expanded }) => (
   <svg className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${expanded ? 'rotate-90 text-slate-300' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6"/>
@@ -13,56 +9,69 @@ const IconChevron = ({ expanded }) => (
 );
 
 export default function PastAuctionTab() {
-  const [loading, setLoading] = useState(false);
+  const [loadingDates, setLoadingDates] = useState(true);
+  const [loadingNight, setLoadingNight] = useState(false);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [selectedDate, setSelectedDate] = useState('');
   const [pastAuctionsData, setPastAuctionsData] = useState([]);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
-  const [searchQuery, setSearchQuery] = useState(''); // 🔍 Live audit tree filtration anchor
+  const [searchQuery, setSearchQuery] = useState('');
   const [configItems, setConfigItems] = useState([]);
 
-  const fetchPastAuctionsLog = async () => {
-    try {
-      setLoading(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingDates(true);
+        const res = await apiFetch('/api/requests/past-auctions', { method: 'GET' });
+        const data = await res.json();
+        if (!cancelled && data.success) setAvailableDates(data.dates || []);
+      } catch (err) {
+        console.error('Failed to load past auction dates:', err);
+      } finally {
+        if (!cancelled) setLoadingDates(false);
       }
-      const res = await fetch(`${backendUrl}/api/requests/past-auctions`, { 
-        method: 'GET', 
-        headers: customHeaders, 
-        credentials: 'include' 
-      });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const loadNight = async (date) => {
+    if (!date) {
+      setSelectedDate('');
+      setPastAuctionsData([]);
+      setActiveGroupKey(null);
+      return;
+    }
+    try {
+      setLoadingNight(true);
+      setSelectedDate(date);
+      setActiveGroupKey(null);
+      const res = await apiFetch(`/api/requests/past-auctions?date=${encodeURIComponent(date)}`, { method: 'GET' });
       const data = await res.json();
-        if (data.success) {
+      if (data.success) {
         setPastAuctionsData(data.history || []);
-        try {
-          const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, {
-            headers: customHeaders,
-            credentials: 'include'
-          });
-          const configData = await configRes.json();
-          if (configData.success && configData.config?.items) {
-            setConfigItems(configData.config.items);
+        if (configItems.length === 0) {
+          try {
+            const configRes = await apiFetch('/api/requests/settings/get?fields=items', { method: 'GET' });
+            const configData = await configRes.json();
+            if (configData.success && configData.config?.items) {
+              setConfigItems(configData.config.items);
+            }
+          } catch (err) {
+            console.error('Failed to map live configuration styles:', err);
           }
-        } catch (err) {
-          console.error("Failed to map live configuration styles:", err);
         }
       }
     } catch (err) {
-      console.error("Failed to extract past auction records:", err);
+      console.error('Failed to extract past auction records:', err);
     } finally {
-      setLoading(false);
+      setLoadingNight(false);
     }
   };
 
-  useEffect(() => {
-    fetchPastAuctionsLog();
-  }, []);
-
-  // 📊 SPREADSHEET EXTRACTION ENGINE: Serializes filtered historical matrix datasets directly into a standard text/csv layout
   const handleDownloadPastAuctionsCSV = () => {
     if (filteredAuctions.length === 0) return;
-    
+
     const csvHeaders = ["Date", "Event Category", "Member Name", "Item Distributed", "Item ID", "Quantity Ordered"];
     const csvRows = filteredAuctions.map(row => [
       `"${row.date || ''}"`,
@@ -76,17 +85,18 @@ export default function PastAuctionTab() {
     const csvContent = [csvHeaders.join(","), ...csvRows.map(e => e.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `PastAuctions_DistributionLedger_${new Date().toISOString().slice(0, 10)}.csv`);
-    
+    const stamp = selectedDate.replaceAll('/', '-');
+    link.setAttribute("download", `PastAuctions_${stamp || new Date().toISOString().slice(0, 10)}.csv`);
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-    const getItemStyleProfile = (itemType, itemId) => {
+  const getItemStyleProfile = (itemType, itemId) => {
     const THEME_MAP = {
       purple: 'text-violet-400 border-violet-500/30 bg-violet-950/20 shadow-[0_0_15px_rgba(139,92,246,0.1)]',
       yellow: 'text-yellow-400 border-yellow-500/30 bg-yellow-950/10 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
@@ -94,12 +104,11 @@ export default function PastAuctionTab() {
       red:    'text-red-500 border-red-950 bg-black/60 border-l-4 border-l-red-600'
     };
 
-    const matchedItem = configItems.find(i => 
-      (itemId && i.id.toLowerCase() === itemId.toLowerCase()) || 
+    const matchedItem = configItems.find(i =>
+      (itemId && i.id.toLowerCase() === itemId.toLowerCase()) ||
       (itemType && i.name.toLowerCase() === itemType.toLowerCase())
     );
 
-    // If it's a dynamic Hex Color from the system color wheel
     if (matchedItem?.colorTheme?.startsWith('#')) {
       return {
         className: 'px-2.5 py-0.5 rounded border text-[10px] font-sans font-semibold',
@@ -112,7 +121,6 @@ export default function PastAuctionTab() {
       };
     }
 
-    // Fallback to presets or legacy keyword matching
     let baseClass = THEME_MAP.slate;
     if (matchedItem && matchedItem.colorTheme) {
       baseClass = THEME_MAP[matchedItem.colorTheme] || THEME_MAP.slate;
@@ -131,7 +139,6 @@ export default function PastAuctionTab() {
     };
   };
 
-  // 📋 Filter the historical auction records based on discovery query strings
   const filteredAuctions = pastAuctionsData.filter(row => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
@@ -143,17 +150,14 @@ export default function PastAuctionTab() {
     );
   });
 
-  // Pre-calculate unique date-event headers to build the accordion tabs
   const uniqueEventGroups = Array.from(new Set(filteredAuctions.map(row => `${row.date} - ${row.event}`)));
 
   return (
     <div className="space-y-4 text-slate-200 select-none font-sans max-w-6xl mx-auto p-4 sm:p-1">
-      
-      {/* BRANDING PANEL */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Past Auction Distributions</h1>
-          <p className="text-[11px] font-mono text-slate-500 mt-1">PAST AUCTION HISTORY & FINAL ENTRY ARCHIVES</p>
+          <p className="text-[11px] font-mono text-slate-500 mt-1">SELECT A DATE TO LOAD THAT NIGHT</p>
         </div>
         <button
           type="button"
@@ -165,27 +169,47 @@ export default function PastAuctionTab() {
         </button>
       </div>
 
-      {/* LIVE DISCOVERY SEARCH BAR */}
       <div className="bg-slate-900/40 border border-slate-800/60 p-4 rounded-2xl shadow-md">
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 select-none">
-            <IconSearch /> Filter
-          </label>
-          <input 
-            type="text"
-            placeholder="Search by player name, item name, or event name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 placeholder-slate-650 outline-none focus:border-slate-700 transition shadow-inner font-sans"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider select-none">Date</label>
+            <select
+              value={selectedDate}
+              onChange={(e) => loadNight(e.target.value)}
+              disabled={loadingDates || availableDates.length === 0}
+              className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 outline-none focus:border-slate-700 transition shadow-inner font-sans"
+            >
+              <option value="">{loadingDates ? 'Loading dates…' : 'Select a date'}</option>
+              {availableDates.map((row) => (
+                <option key={row.date} value={row.date}>
+                  {row.date} · {row.count} award{row.count === 1 ? '' : 's'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 select-none">
+              <IconSearch /> Filter
+            </label>
+            <input
+              type="text"
+              placeholder="Search by player name, item name, or event name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={!selectedDate}
+              className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 placeholder-slate-650 outline-none focus:border-slate-700 transition shadow-inner font-sans disabled:opacity-40"
+            />
+          </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 sm:p-6 shadow-md min-h-[300px]">
-        {loading ? (
-          <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting completed award parameters...</div>
+        {loadingNight ? (
+          <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Loading that night's awards...</div>
+        ) : !selectedDate ? (
+          <div className="text-slate-500 italic text-sm text-center py-12">Select a date to load that night's awards.</div>
         ) : uniqueEventGroups.length === 0 ? (
-          <div className="text-slate-500 italic text-sm text-center py-12">No past auction distribution ledgers tracked within the database folder files.</div>
+          <div className="text-slate-500 italic text-sm text-center py-12">No awards on this date.</div>
         ) : (
           <div className="space-y-2 max-w-3xl mx-auto">
             {uniqueEventGroups.map((groupKey) => {
@@ -195,8 +219,7 @@ export default function PastAuctionTab() {
 
               return (
                 <div key={groupKey} className="border border-slate-800/80 bg-slate-950/10 rounded-xl overflow-hidden shadow-sm">
-                  {/* ACCORDION BAR TRIPPERS */}
-                  <div 
+                  <div
                     onClick={() => setActiveGroupKey(isGroupExpanded ? null : groupKey)}
                     className="p-3 px-4 bg-slate-950/40 hover:bg-slate-900/80 text-slate-300 font-sans flex items-center justify-between cursor-pointer transition-all duration-150 text-xs select-none"
                   >
@@ -204,7 +227,7 @@ export default function PastAuctionTab() {
                       <span className="text-slate-500 font-mono font-medium w-24 shrink-0">{groupDate}</span>
                       <span className="text-slate-200 font-semibold truncate uppercase tracking-wider text-[11px]">{groupEventName}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-[10px] text-slate-500 font-mono tracking-wide font-medium uppercase">
                         {nestedGroupItems.length} Members
@@ -213,7 +236,6 @@ export default function PastAuctionTab() {
                     </div>
                   </div>
 
-                  {/* NESTED SUB-ITEMS CONTAINER */}
                   {isGroupExpanded && (
                     <div className="border-t border-slate-800/60 bg-[#121317] animate-fadeIn">
                       <table className="w-full text-left border-collapse table-fixed font-sans text-xs">

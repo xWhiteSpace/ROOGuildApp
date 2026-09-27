@@ -103,14 +103,18 @@ export default function RaidPartyTab({ user }) {
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
+      const initRes = await fetch(`${backendUrl}/api/attendance/members`, { method: 'GET', headers, credentials: 'include' });
       const initData = await initRes.json();
       if (initData.success) {
         setMembers(initData.members || {});
-        setCommitments(initData.commitments || {});
+      }
+      const commitRes = await fetch(`${backendUrl}/api/attendance/commitments`, { method: 'GET', headers, credentials: 'include' });
+      const commitData = await commitRes.json();
+      if (commitData.success) {
+        setCommitments(commitData.commitments || {});
       }
 
-      const configRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
+      const configRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs,timezone`, { method: 'GET', headers, credentials: 'include' });
       const configData = await configRes.json();
       if (configData.success && configData.config) {
         if (configData.config.jobs) setJobsCatalog(configData.config.jobs);
@@ -120,18 +124,23 @@ export default function RaidPartyTab({ user }) {
         }
       }
 
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
+      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
-        const normalized = normalizeCompositionsMap(compsData.compositions || {});
-        setCompositions(normalized);
-        if (Object.keys(normalized).length > 0 && !selectedConfigId) {
-          const firstKey = Object.keys(normalized)[0];
-          setSelectedConfigId(firstKey);
+        const list = compsData.compositions || {};
+        setCompositions(list);
+        const firstKey = selectedConfigId || Object.keys(list)[0] || '';
+        if (firstKey && !selectedConfigId) setSelectedConfigId(firstKey);
+        if (firstKey) {
+          const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(firstKey)}`, { method: 'GET', headers, credentials: 'include' });
+          const detailData = await detailRes.json();
+          if (detailData.success) {
+            setCompositions((prev) => ({ ...prev, ...normalizeCompositionsMap(detailData.compositions || {}) }));
+          }
         }
       }
 
-      const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
+      const histRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
       const histData = await histRes.json();
       if (histData.success) {
         setHistorySessions(histData.sessions || {});
@@ -149,10 +158,20 @@ export default function RaidPartyTab({ user }) {
       const headers = { 'Content-Type': 'application/json' };
       if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
 
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
+      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
-        setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
+        const list = compsData.compositions || {};
+        const keepId = selectedConfigId;
+        let next = { ...list };
+        if (keepId) {
+          const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(keepId)}`, { method: 'GET', headers, credentials: 'include' });
+          const detailData = await detailRes.json();
+          if (detailData.success) {
+            next = { ...next, ...normalizeCompositionsMap(detailData.compositions || {}) };
+          }
+        }
+        setCompositions(next);
       }
     } catch (err) {
       console.error(err);
@@ -226,8 +245,35 @@ export default function RaidPartyTab({ user }) {
   };
   
   useEffect(() => {
+    if (!selectedConfigId) return undefined;
+    const current = compositions[selectedConfigId];
+    if (current?.tabs) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const savedUserSession = localStorage.getItem('guild_raid_session');
+        const headers = { 'Content-Type': 'application/json' };
+        if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+        const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(selectedConfigId)}`, {
+          method: 'GET',
+          headers,
+          credentials: 'include',
+        });
+        const detailData = await detailRes.json();
+        if (!cancelled && detailData.success) {
+          setCompositions((prev) => ({ ...prev, ...normalizeCompositionsMap(detailData.compositions || {}) }));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedConfigId, compositions]);
+
+  useEffect(() => {
     if (selectedConfigId && compositions[selectedConfigId]) {
       const activeConfig = normalizeComposition(compositions[selectedConfigId], selectedConfigId);
+      if (!activeConfig.tabs || Object.keys(activeConfig.tabs).length === 0) return;
 
       if (selectedConfigId !== prevConfigId) {
         setLocalTitle(activeConfig.title || '');
@@ -408,7 +454,22 @@ export default function RaidPartyTab({ user }) {
   const handleDuplicateConfig = async (targetId) => {
     if (!isOfficer || !compositions[targetId]) return;
     try {
-      const sourceConfig = normalizeComposition(compositions[targetId], targetId);
+      let sourceRaw = compositions[targetId];
+      if (!sourceRaw?.tabs) {
+        const savedUserSession = localStorage.getItem('guild_raid_session');
+        const headers = { 'Content-Type': 'application/json' };
+        if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
+        const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(targetId)}`, {
+          method: 'GET',
+          headers,
+          credentials: 'include',
+        });
+        const detailData = await detailRes.json();
+        sourceRaw = detailData.success ? detailData.compositions?.[targetId] : null;
+        if (!sourceRaw) return;
+        setCompositions((prev) => ({ ...prev, [targetId]: normalizeComposition(sourceRaw, targetId) }));
+      }
+      const sourceConfig = normalizeComposition(sourceRaw, targetId);
       const blacklistedLeaveUids = new Set(categorizedRosterPools.leave.map(u => u.uid));
       const cleanTabsPayload = {};
 

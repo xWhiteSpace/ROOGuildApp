@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS auction_requests (
   PRIMARY KEY (tenant_id, id)
 );
 CREATE INDEX IF NOT EXISTS auction_requests_tenant_idx ON auction_requests (tenant_id);
+CREATE INDEX IF NOT EXISTS auction_requests_status_idx
+  ON auction_requests (tenant_id, (data->>'selectionStatus'));
 
 CREATE TABLE IF NOT EXISTS past_auction_awards (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

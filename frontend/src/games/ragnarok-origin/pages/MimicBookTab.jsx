@@ -1,7 +1,7 @@
 // frontend/src/pages/MimicBookTab.jsx
 import { useState, useEffect, useRef, useContext } from 'react';
 import { MimicBookContext } from '../../../App';
-import { pollWhileVisible } from '../../../utils/pollWhileVisible';
+import { apiFetch } from '../../../services/apiClient';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -48,12 +48,16 @@ export default function MimicBookTab({ user }) {
     autoCommitArmed, setAutoCommitArmed,
     lastLocalWriteTimeRef, clientVersionRef
   } = useContext(MimicBookContext);
+  const [lootHistoryDates, setLootHistoryDates] = useState([]);
+  const [selectedLootDate, setSelectedLootDate] = useState('');
+  const sessionEtagRef = useRef('');
 
   const popoverAnchorRef = useRef(null);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
   const isUserDraggingRef = useRef(false);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [allocatePreview, setAllocatePreview] = useState(null);
+  const [announcingAllocate, setAnnouncingAllocate] = useState(false);
 
   useEffect(() => {
     setIsAdminMode(isOfficer);
@@ -200,13 +204,31 @@ const [rawMembers, setRawMembers] = useState({});
   const fetchLootHistoryLog = async () => {
     try {
       setLoadingLootHistory(true);
-      setExpandedGroups({}); 
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-      const res = await fetch(`${backendUrl}/api/requests/loot-history`, { method: 'GET', headers: customHeaders, credentials: 'include' });
+      setExpandedGroups({});
+      setSelectedLootDate('');
+      setLootHistoryData([]);
+      const res = await apiFetch('/api/requests/loot-history', { method: 'GET' });
+      const data = await res.json();
+      if (data.success) setLootHistoryDates(data.dates || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingLootHistory(false);
+    }
+  };
+
+  const fetchLootHistoryNight = async (date) => {
+    if (!date) {
+      setSelectedLootDate('');
+      setLootHistoryData([]);
+      setExpandedGroups({});
+      return;
+    }
+    try {
+      setLoadingLootHistory(true);
+      setSelectedLootDate(date);
+      setExpandedGroups({});
+      const res = await apiFetch(`/api/requests/loot-history?date=${encodeURIComponent(date)}`, { method: 'GET' });
       const data = await res.json();
       if (data.success) setLootHistoryData(data.history || []);
     } catch (err) {
@@ -222,20 +244,13 @@ const [rawMembers, setRawMembers] = useState({});
     // 🛡️ CIRCUIT BREAKER: Mute background poll snapshots if user performed a local write within 4 seconds
       if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
 
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-
-      const res = await fetch(`${backendUrl}/api/requests/active-session`, { 
-        method: 'GET', 
-        headers: {
-          ...customHeaders,
-          ...(backendUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {})
-        }, 
-        credentials: 'include' 
+      const res = await apiFetch('/api/requests/active-session', {
+        method: 'GET',
+        headers: sessionEtagRef.current ? { 'If-None-Match': `"${sessionEtagRef.current}"` } : {},
       });
+      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
+      if (nextTag) sessionEtagRef.current = nextTag;
+      if (res.status === 304) return;
     const data = await res.json();
     if (data.success && data.session) {
       const s = data.session;
@@ -273,14 +288,20 @@ const [rawMembers, setRawMembers] = useState({});
       if (savedUserSession) {
         customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
       }
-      await fetch(`${backendUrl}/api/requests/update-session`, {
+      const res = await fetch(`${backendUrl}/api/requests/update-session`, {
         method: 'POST',
         headers: customHeaders,
         body: JSON.stringify({ session: updatedWorkspaceSnapshot }),
         credentials: 'include'
       });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save session.');
+      }
+      return true;
     } catch (err) {
       console.error(err);
+      return false;
     }
   };
 
@@ -316,13 +337,44 @@ const [rawMembers, setRawMembers] = useState({});
       version: clientVersionRef.current
     };
 
-    pushActiveSessionToBackend(transactionalSnapshot);
+    return pushActiveSessionToBackend(transactionalSnapshot);
+  };
+
+  const officerRequestHeaders = () => {
+    const customHeaders = { 'Content-Type': 'application/json' };
+    const savedUserSession = localStorage.getItem('guild_raid_session');
+    if (savedUserSession) customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
+    return customHeaders;
+  };
+
+  const postAnnounceAllocate = async () => {
+    const res = await fetch(`${backendUrl}/api/requests/announce-allocate`, {
+      method: 'POST',
+      headers: officerRequestHeaders(),
+      body: JSON.stringify({}),
+      credentials: 'include'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to announce to GEN Room.');
+    }
+  };
+
+  const handleAnnounceAllocate = async () => {
+    if (!isOfficer || announcingAllocate) return;
+    setAnnouncingAllocate(true);
+    try {
+      await postAnnounceAllocate();
+    } catch (err) {
+      alert(err.message || 'Failed to announce to GEN Room.');
+    } finally {
+      setAnnouncingAllocate(false);
+    }
   };
 
   useEffect(() => {
     loadTrueRequestPool();
     fetchActiveSessionFromBackend(true);
-    return pollWhileVisible(() => { fetchActiveSessionFromBackend(false); }, 3500);
   }, [user]);
 
   const handleAddLootRow = () => {
@@ -553,9 +605,9 @@ const [rawMembers, setRawMembers] = useState({});
     setAllocatePreview(null);
   };
 
-  const handleConfirmAllocatePreview = () => {
-    if (!allocatePreview) return;
-    saveWorkspaceState({
+  const handleConfirmAllocatePreview = async () => {
+    if (!allocatePreview || announcingAllocate) return;
+    const persistPromise = saveWorkspaceState({
       activeStep: 2,
       lootSummary: allocatePreview.lootSummary,
       categoryAllocations: allocatePreview.categoryAllocations,
@@ -565,6 +617,21 @@ const [rawMembers, setRawMembers] = useState({});
     });
     setSidebarSearch('');
     setAllocatePreview(null);
+    setAnnouncingAllocate(true);
+    try {
+      const saved = await persistPromise;
+      if (!saved) {
+        alert('Session saved locally, but the server write failed. Discord announce skipped.');
+        return;
+      }
+      try {
+        await postAnnounceAllocate();
+      } catch (err) {
+        alert(err.message || 'Failed to announce to GEN Room.');
+      }
+    } finally {
+      setAnnouncingAllocate(false);
+    }
   };
 
   const handleDropBidderBoxSlot = (slotIndex) => {
@@ -870,6 +937,42 @@ const [rawMembers, setRawMembers] = useState({});
   const canCopy = Boolean(searchQuery.trim()) && copyableRows.length > 0;
   const canExport = namedLedgerRows(buildLedgerRows({ applySearch: false })).length > 0;
 
+  const foldUniqueExclusiveAllocate = (categoryAllocations = {}, rankingsMap = {}) => {
+    const selectedUserIds = [];
+    const selectedSet = new Set();
+    Object.values(categoryAllocations || {}).forEach((cat) => {
+      const raw = cat?.selected;
+      const boxes = Array.isArray(raw) ? raw : Object.values(raw || {});
+      boxes.forEach((uid) => {
+        if (!uid) return;
+        const key = String(uid);
+        if (selectedSet.has(key)) return;
+        selectedSet.add(key);
+        selectedUserIds.push(key);
+      });
+    });
+    const notSelectedUserIds = [];
+    const seenNotSelected = new Set();
+    Object.values(rankingsMap || {}).forEach((list) => {
+      (Array.isArray(list) ? list : []).forEach((uid) => {
+        if (!uid) return;
+        const key = String(uid);
+        if (selectedSet.has(key) || seenNotSelected.has(key)) return;
+        seenNotSelected.add(key);
+        notSelectedUserIds.push(key);
+      });
+    });
+    return { selectedUserIds, notSelectedUserIds };
+  };
+
+  const lobbyDetailsForUid = (uid) => {
+    for (const item of items) {
+      const details = requestsByItemDetails[item.id]?.[uid];
+      if (details) return details;
+    }
+    return {};
+  };
+
   const allocatePreviewSummaryRows = allocatePreview
     ? lootRows.map((row) => {
         const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
@@ -881,56 +984,34 @@ const [rawMembers, setRawMembers] = useState({});
           pageTo: row.endPage,
           qty,
           limit,
-          granted: Math.floor(qty / limit),
+          granted: allocatePreview.lootSummary?.[row.itemType]?.seats ?? 0,
         };
       })
     : [];
 
-  const allocatePreviewSelectedRows = [];
-  const allocatePreviewNotSelectedRows = [];
-  if (allocatePreview) {
-    items.forEach((item) => {
-      const rawSelected = allocatePreview.categoryAllocations[item.id]?.selected;
-      const boxes = Array.isArray(rawSelected) ? rawSelected : Object.values(rawSelected || {});
-      const slotCountByUid = {};
-      boxes.forEach((uid) => {
-        if (!uid) return;
-        slotCountByUid[uid] = (slotCountByUid[uid] || 0) + 1;
-      });
-      const ranking = rankingsByItem[item.id] || [];
-      const details = requestsByItemDetails[item.id] || {};
-      const seen = new Set();
+  const allocatePreviewLists = allocatePreview
+    ? foldUniqueExclusiveAllocate(allocatePreview.categoryAllocations, rankingsByItem)
+    : { selectedUserIds: [], notSelectedUserIds: [] };
 
-      ranking.forEach((uid) => {
-        if (!uid) return;
-        seen.add(uid);
-        const slots = slotCountByUid[uid] || 0;
-        const row = {
-          key: `${item.id}-${uid}`,
-          name: resolveDisplayName(uid) || details[uid]?.name || uid,
-          itemName: item.name,
-          requestedQty: details[uid]?.quantity || 1,
-          priority: details[uid]?.priority ?? 0,
-          slotsGranted: slots,
-        };
-        if (slots > 0) allocatePreviewSelectedRows.push(row);
-        else allocatePreviewNotSelectedRows.push(row);
-      });
+  const allocatePreviewSelectedRows = allocatePreviewLists.selectedUserIds.map((uid) => {
+    const details = lobbyDetailsForUid(uid);
+    return {
+      key: uid,
+      name: resolveDisplayName(uid) || details.name || uid,
+      requestedQty: details.quantity || 1,
+      priority: details.priority ?? 0,
+    };
+  });
 
-      Object.keys(slotCountByUid).forEach((uid) => {
-        if (seen.has(uid)) return;
-        const detailsRow = details[uid] || {};
-        allocatePreviewSelectedRows.push({
-          key: `${item.id}-${uid}`,
-          name: resolveDisplayName(uid) || detailsRow.name || uid,
-          itemName: item.name,
-          requestedQty: detailsRow.quantity || 1,
-          priority: detailsRow.priority ?? 0,
-          slotsGranted: slotCountByUid[uid],
-        });
-      });
-    });
-  }
+  const allocatePreviewNotSelectedRows = allocatePreviewLists.notSelectedUserIds.map((uid) => {
+    const details = lobbyDetailsForUid(uid);
+    return {
+      key: uid,
+      name: resolveDisplayName(uid) || details.name || uid,
+      requestedQty: details.quantity || 1,
+      priority: details.priority ?? 0,
+    };
+  });
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     return generatedSlots.find(s => s.page === bookCurrentPage && s.slot === (i + 1)) || null;
   });
@@ -1351,6 +1432,15 @@ const [rawMembers, setRawMembers] = useState({});
                   >
                     {isDiscordGateOpen ? '● Live Auction Online' : '○ Live Auction Offline'}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAnnounceAllocate}
+                    disabled={announcingAllocate}
+                    className="px-3 py-2 rounded-xl text-[10px] font-mono font-bold uppercase tracking-wider transition-all border duration-150 cursor-pointer select-none bg-slate-900 border-slate-800 text-slate-400 hover:text-white disabled:opacity-40 disabled:cursor-wait"
+                  >
+                    {announcingAllocate ? 'Announcing…' : 'Announce Live Auction'}
+                  </button>
                 </div>
 
                 <button 
@@ -1677,8 +1767,26 @@ const [rawMembers, setRawMembers] = useState({});
             </div>
 
             <div className="p-6 overflow-y-auto flex-grow space-y-2.5 scrollbar-thin">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider select-none">Date</label>
+                <select
+                  value={selectedLootDate}
+                  onChange={(e) => fetchLootHistoryNight(e.target.value)}
+                  disabled={loadingLootHistory || lootHistoryDates.length === 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono"
+                >
+                  <option value="">Select a date</option>
+                  {lootHistoryDates.map((row) => (
+                    <option key={row.date} value={row.date}>
+                      {row.date}{row.count ? ` (${row.count})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {loadingLootHistory ? (
                 <div className="text-center py-12 text-slate-500 animate-pulse font-mono text-xs">Extracting historical snapshot folders...</div>
+              ) : !selectedLootDate ? (
+                <div className="text-center py-12 text-slate-600 italic font-sans text-xs select-none">Select a date to load that night.</div>
               ) : getGroupedHistoryTimeline().length === 0 ? (
                 <div className="text-center py-12 text-slate-600 italic font-sans text-xs select-none">No legacy loot files cataloged inside the database.</div>
               ) : (
@@ -1818,25 +1926,21 @@ const [rawMembers, setRawMembers] = useState({});
                       <thead>
                         <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
                           <th className="p-2.5">Member</th>
-                          <th className="p-2.5">Item</th>
                           <th className="p-2.5 text-center">Requested</th>
                           <th className="p-2.5 text-center">Priority</th>
-                          <th className="p-2.5 text-center">Slots granted</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-900 text-slate-300">
                         {allocatePreviewSelectedRows.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests selected.</td>
+                            <td colSpan={3} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests selected.</td>
                           </tr>
                         ) : (
                           allocatePreviewSelectedRows.map((row) => (
                             <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
                               <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
-                              <td className="p-2.5 text-slate-400">{row.itemName}</td>
                               <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
                               <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
-                              <td className="p-2.5 text-center text-emerald-400 font-bold">{row.slotsGranted}</td>
                             </tr>
                           ))
                         )}
@@ -1854,7 +1958,6 @@ const [rawMembers, setRawMembers] = useState({});
                       <thead>
                         <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
                           <th className="p-2.5">Member</th>
-                          <th className="p-2.5">Item</th>
                           <th className="p-2.5 text-center">Requested</th>
                           <th className="p-2.5 text-center">Priority</th>
                         </tr>
@@ -1862,13 +1965,12 @@ const [rawMembers, setRawMembers] = useState({});
                       <tbody className="divide-y divide-slate-900 text-slate-300">
                         {allocatePreviewNotSelectedRows.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests left out.</td>
+                            <td colSpan={3} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests left out.</td>
                           </tr>
                         ) : (
                           allocatePreviewNotSelectedRows.map((row) => (
                             <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
                               <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
-                              <td className="p-2.5 text-slate-400">{row.itemName}</td>
                               <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
                               <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
                             </tr>
@@ -1892,9 +1994,10 @@ const [rawMembers, setRawMembers] = useState({});
               <button
                 type="button"
                 onClick={handleConfirmAllocatePreview}
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-xs font-semibold uppercase tracking-wider text-white transition shadow-xl cursor-pointer"
+                disabled={announcingAllocate}
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-xs font-semibold uppercase tracking-wider text-white transition shadow-xl cursor-pointer disabled:opacity-40 disabled:cursor-wait"
               >
-                Confirm Allocate
+                {announcingAllocate ? 'Allocating…' : 'Confirm Allocate'}
               </button>
             </div>
           </div>

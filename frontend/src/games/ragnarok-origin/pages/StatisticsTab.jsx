@@ -22,18 +22,18 @@ export default function StatisticsTab({ user }) {
   const loadAnalyticsMetrics = async () => {
     try {
       setLoading(true);
-      const initRes = await apiFetch('/api/requests/init', { method: 'GET' });
+      const initRes = await apiFetch('/api/attendance/members?view=card', { method: 'GET' });
       const initData = await initRes.json();
       if (initData.success) {
         setMembers(initData.members || {});
-        const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
+        const configRes = await apiFetch('/api/requests/settings/get?fields=expectedAttendanceRate', { method: 'GET' });
         const configData = await configRes.json();
         if (configData.success && configData.config?.expectedAttendanceRate != null) {
           setExpectedRate(parseInt(configData.config.expectedAttendanceRate, 10) || DEFAULT_EXPECTED_RATE);
         }
       }
 
-      const historyRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
+      const historyRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
       const historyData = await historyRes.json();
       if (historyData.success) {
         setSessions(historyData.sessions || {});

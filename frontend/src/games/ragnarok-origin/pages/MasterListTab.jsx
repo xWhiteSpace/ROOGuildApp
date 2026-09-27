@@ -86,7 +86,7 @@ export default function MasterListTab({ user }) {
     try {
       if (showLoader) setLoading(true);
 
-      const res = await apiFetch('/api/requests/init', { method: 'GET' });
+      const res = await apiFetch('/api/attendance/members', { method: 'GET' });
       const data = await res.json();
       if (data.success) {
         const members = data.members || {};
@@ -100,7 +100,7 @@ export default function MasterListTab({ user }) {
           return next;
         });
         
-        const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
+        const configRes = await apiFetch('/api/requests/settings/get?fields=jobs,roles', { method: 'GET' });
         const configData = await configRes.json();
         if (configData.success) {
           setJobsCatalog(configData.config?.jobs || {});

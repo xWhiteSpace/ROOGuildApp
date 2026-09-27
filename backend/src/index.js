@@ -37,9 +37,7 @@ initializeDiscordBot();
 
 const oauthBridge = resolveOAuthExchangeUrl();
 if (oauthBridge) {
-  console.log(`🔐 [OAUTH]: Token exchange off Render → ${oauthBridge}`);
-} else {
-  console.warn('🔐 [OAUTH]: Local token exchange (Render will POST /oauth2/token). Production must use FRONTEND_URL on Vercel so Discord never sees this IP.');
+  console.log(`[OAUTH] Token exchange via ${oauthBridge}`);
 } 
 
 // ✅ REFACTORED: Duplicate gateway interceptor completely removed. 
@@ -89,8 +87,10 @@ app.use(cors({
     'x-user-profile',
     'x-authorized-user',
     'x-tenant-id',
-    'ngrok-skip-browser-warning'
-  ]
+    'ngrok-skip-browser-warning',
+    'If-None-Match'
+  ],
+  exposedHeaders: ['ETag']
 }));
 
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
@@ -232,8 +232,7 @@ app.get('/api/deploy-ocr-card', requireOfficerTenant, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 [SERVER ONLINE] Listening smoothly on port ${PORT}`);
-  console.log(`🚀 [TASK001 PASS]: Event-driven architecture active. 5-second loop decommissioned.`);
+  console.log(`Listening on port ${PORT}`);
 
   forEachOnboardedTenant(async () => {
     const { seedMissingLeaveCredits } = await import('./games/ragnarok-origin/services/attendanceDecision.js');

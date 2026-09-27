@@ -3,7 +3,8 @@
  * HTTP `/api/requests/*` and the Discord Request Card both call these so the
  * `auction/web_requests` ledger stays a single source of truth.
  */
-import { getTenantStore } from '../../../db/database.js';
+import { getTenantStore, loadAuctionRequests } from '../../../db/database.js';
+import { clampLookbackDays } from '../defaults.js';
 import { getGateStatusDetails } from '../timeWindow.js';
 import { compileLeaderboard, requestsFromSnapshot } from '../utils/sortingEngine.js';
 
@@ -16,20 +17,14 @@ export class RequestDeckError extends Error {
 }
 
 async function calculatePriorityScore(db, userId, itemId, itemNameFallback) {
-  const playerHistorySnap = await db.ref('auction/web_requests')
-    .orderByChild('userId')
-    .equalTo(userId)
-    .once('value');
-
-  if (!playerHistorySnap.exists()) return 0;
-
-  const records = playerHistorySnap.val();
-  const sortedKeys = Object.keys(records).sort();
-  const combinedItemTimeline = [];
-
   const configSnap = await db.ref('settings/configuration').once('value');
   const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
-  const lookbackDays = parseInt(dynamicConfig.priorityLookbackDays, 10) || 30;
+  const lookbackDays = clampLookbackDays(dynamicConfig.priorityLookbackDays);
+  const records = await loadAuctionRequests({ userId, sinceDays: lookbackDays });
+
+  if (!records || !Object.keys(records).length) return 0;
+  const sortedKeys = Object.keys(records).sort();
+  const combinedItemTimeline = [];
 
   const expirationWindowInMs = lookbackDays * 24 * 60 * 60 * 1000;
   const nowMs = Date.now();
@@ -127,11 +122,8 @@ export async function buildRequestLobby(userId, displayName) {
     }
   });
 
-  const snapshot = await db.ref('auction/web_requests')
-    .orderByChild('selectionStatus')
-    .equalTo('Pending')
-    .once('value');
-  const firebaseRequests = requestsFromSnapshot(snapshot);
+  const pendingMap = await loadAuctionRequests({ status: 'Pending' });
+  const firebaseRequests = requestsFromSnapshot(pendingMap);
 
   const liveCounts = {};
   const rankingsByItem = {};
@@ -160,18 +152,16 @@ export async function buildRequestLobby(userId, displayName) {
 
   const membersListSnap = await db.ref('auction/members').once('value');
   const fullRosterArray = [];
+  const membersByName = {};
   if (membersListSnap.exists()) {
-    Object.values(membersListSnap.val()).forEach(m => {
-      if (m?.displayName) fullRosterArray.push(m.displayName);
+    Object.entries(membersListSnap.val()).forEach(([uid, m]) => {
+      const displayName = m?.displayName || '';
+      membersByName[uid] = { displayName };
+      if (displayName) fullRosterArray.push(displayName);
     });
   }
 
-  const commitmentsSnap = await db.ref('attendance/commitments').once('value');
-  const commitmentsData = commitmentsSnap.exists() ? commitmentsSnap.val() : {};
   const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
-
-  const instancesSnap = await db.ref('scheduler/active_instances').once('value');
-  const activeInstancesData = instancesSnap.exists() ? instancesSnap.val() : {};
   const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData);
 
   Object.assign(rankingsByItem, computedLists.rankingsByItem);
@@ -193,12 +183,10 @@ export async function buildRequestLobby(userId, displayName) {
     helpEmbedUrl: timeGateStatus.helpEmbedUrl || '',
     announcementMinutes: timeGateStatus.announcementMinutes || { phase1: [], phase2: null, phase3: null },
     events: dynamicConfig.events || {},
-    commitments: commitmentsData,
-    activeInstances: activeInstancesData,
     rankingsByItem,
     requestsByItemDetails,
     fullRoster: fullRosterArray.sort(),
-    members: membersListSnap.exists() ? membersListSnap.val() : {},
+    members: membersByName,
   };
 }
 
@@ -240,11 +228,8 @@ export async function submitSelections(userId, displayName, selections) {
   }
 
   const chosenItemIds = Object.keys(selections);
-  const snapshot = await db.ref('auction/web_requests')
-    .orderByChild('userId')
-    .equalTo(userId)
-    .once('value');
-  const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+  const pendingMap = await loadAuctionRequests({ status: 'Pending', userId });
+  const firebaseRequests = Object.values(pendingMap);
 
   const currentNetCounts = {};
   itemsList.forEach(item => { currentNetCounts[item.id] = 0; });
@@ -331,8 +316,8 @@ export async function cancelPending(userId, displayName, { itemId, itemName } = 
   const targetSessionDate = dynamicConfig.targetSessionDate || '';
   const itemsList = dynamicConfig.items || [];
 
-  const snapshot = await db.ref('auction/web_requests').once('value');
-  const firebaseRequests = snapshot.exists() ? Object.values(snapshot.val()) : [];
+  const pendingMap = await loadAuctionRequests({ status: 'Pending', userId });
+  const firebaseRequests = Object.values(pendingMap);
 
   let activeNetQty = 0;
   firebaseRequests.forEach(reqRow => {

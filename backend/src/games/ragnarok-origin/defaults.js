@@ -19,3 +19,10 @@ export const RAGNAROK_ORIGIN_DEFAULTS = {
 };
 
 export default RAGNAROK_ORIGIN_DEFAULTS;
+
+/** Same 1–365 window as Game Settings `priorityLookbackDays`. */
+export function clampLookbackDays(raw) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return RAGNAROK_ORIGIN_DEFAULTS.priorityLookbackDays;
+  return Math.min(365, Math.max(1, n));
+}

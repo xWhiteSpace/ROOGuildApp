@@ -75,7 +75,7 @@ export default function Profile({ user }) {
 
       try {
         const [histRes, statsRes] = await Promise.all([
-          apiFetch('/api/live-raid/history/all', { method: 'GET' }),
+          apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' }),
           apiFetch(`/api/requests/member-auction-stats?uid=${encodeURIComponent(String(targetUid))}`),
         ]);
         const histData = await histRes.json();
@@ -113,7 +113,7 @@ export default function Profile({ user }) {
     let cancelled = false;
     (async () => {
       try {
-        const initRes = await apiFetch('/api/requests/init', { method: 'GET' });
+        const initRes = await apiFetch('/api/attendance/members?view=card', { method: 'GET' });
         const initData = await initRes.json();
         if (!cancelled && initData.success) {
           setRosterMembers(initData.members || {});

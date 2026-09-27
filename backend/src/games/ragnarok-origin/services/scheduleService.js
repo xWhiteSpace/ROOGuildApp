@@ -2,7 +2,7 @@
  * Schedule SSOT: materialize weekly instances + shared commitment writes.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { getTenantStore } from '../../../db/database.js';
+import { getTenantStore, loadInstancesForWeek } from '../../../db/database.js';
 import { getCachedConfig } from '../../../db/tenantContext.js';
 import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import {
@@ -59,17 +59,12 @@ function instancePayloadEqual(a, b) {
   );
 }
 
-async function loadAllInstances(db, batch) {
-  if (!batch) {
-    const snap = await db.ref('scheduler/instances').once('value');
-    return snap.exists() ? snap.val() : {};
-  }
-  if (!batch.allInstancesPromise) {
-    batch.allInstancesPromise = db.ref('scheduler/instances').once('value').then((snap) => (
-      snap.exists() ? snap.val() : {}
-    ));
-  }
-  return batch.allInstancesPromise;
+async function loadAllInstances(db, batch, weekMonday) {
+  const read = () => loadInstancesForWeek(weekMonday);
+  if (!batch) return read();
+  const memoKey = `instances:${weekMonday || ''}`;
+  if (!batch[memoKey]) batch[memoKey] = read();
+  return batch[memoKey];
 }
 
 async function loadSpecialEvents(db, batch) {
@@ -180,7 +175,7 @@ async function materializeWeek({ db, weekMonday, timezone, force, batch }) {
   const [events, specialEvents, loadedInstances] = await Promise.all([
     loadEvents(db),
     loadSpecialEvents(db, batch),
-    loadAllInstances(db, batch),
+    loadAllInstances(db, batch, weekMonday),
   ]);
   const allExisting = loadedInstances && typeof loadedInstances === 'object' ? loadedInstances : {};
 
@@ -300,8 +295,7 @@ export async function getWeekInstances(weekMonday) {
   const timezone = await resolveGuildTimezone(db);
   const monday = weekMonday || getWeekMonday(timezone);
 
-  let snap = await db.ref('scheduler/instances').once('value');
-  let all = snap.exists() ? snap.val() : {};
+  let all = await loadInstancesForWeek(monday);
   const weekDates = new Set(enumerateWeekDates(monday).map((d) => d.dateStr));
 
   let filtered = {};

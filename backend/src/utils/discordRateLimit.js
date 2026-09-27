@@ -191,7 +191,6 @@ export async function hydrateDiscordCircuit() {
   // Home/ngrok IP is not Render's Singapore IP — do not inherit a datacenter Cloudflare ban.
   if (isLocalOAuthRedirect()) {
     lastCooldownUntil = 0;
-    console.log('🔌 [DISCORD CIRCUIT] Skip store hydrate on local/ngrok — this machine is not the Render IP.');
     return;
   }
   try {

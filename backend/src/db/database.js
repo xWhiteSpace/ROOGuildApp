@@ -1,6 +1,9 @@
 import { query } from './pool.js';
 import { getCurrentTenantId, setCachedConfig } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
+import { DEFAULT_TZ, getWeekMonday, weekKeyBounds } from '../utils/guildTime.js';
+import { clampLookbackDays } from '../games/ragnarok-origin/defaults.js';
+import { pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
 
 const COLLECTION_MAP = {
   'auction/members': { table: 'members', idCol: 'discord_id' },
@@ -119,6 +122,456 @@ async function loadCollection(tenantId, spec) {
   return out;
 }
 
+function rowsToMap(rows) {
+  if (!rows.length) return null;
+  const out = {};
+  for (const row of rows) out[row.id] = row.data;
+  return out;
+}
+
+async function loadCollectionFiltered(tenantId, spec, field, value) {
+  if (!/^[A-Za-z0-9_]+$/.test(String(field || ''))) {
+    const all = await loadCollection(tenantId, spec);
+    if (!all) return all;
+    const filtered = {};
+    for (const [k, row] of Object.entries(all)) {
+      if (row && typeof row === 'object' && row[field] === value) filtered[k] = row;
+    }
+    return Object.keys(filtered).length ? filtered : null;
+  }
+  const { rows } = await query(
+    `SELECT ${spec.idCol} AS id, data FROM ${spec.table}
+     WHERE tenant_id = $1 AND data->>$2 = $3`,
+    [tenantId, field, value == null ? '' : String(value)]
+  );
+  return rowsToMap(rows);
+}
+
+export async function loadAuctionRequests({
+  status,
+  userId,
+  sinceDays,
+  sinceId,
+  untilId,
+} = {}, tenantId) {
+  const id = requireTenant(tenantId);
+  const clauses = ['tenant_id = $1'];
+  const params = [id];
+  let i = 2;
+  if (status != null && status !== '') {
+    clauses.push(`data->>'selectionStatus' = $${i++}`);
+    params.push(String(status));
+  }
+  if (userId != null && userId !== '') {
+    clauses.push(`data->>'userId' = $${i++}`);
+    params.push(String(userId));
+  }
+  const minId = sinceId || (sinceDays != null ? pushIdAt(Date.now() - clampLookbackDays(sinceDays) * 86400000) : null);
+  if (minId) {
+    clauses.push(`id >= $${i++}`);
+    params.push(minId);
+  }
+  if (untilId) {
+    clauses.push(`id <= $${i++}`);
+    params.push(untilId);
+  }
+  const { rows } = await query(
+    `SELECT id, data FROM auction_requests WHERE ${clauses.join(' AND ')}`,
+    params
+  );
+  return rowsToMap(rows) || {};
+}
+
+const HISTORY_SORT = {
+  date: 'id',
+  member: `data->>'member'`,
+  item: `data->>'item'`,
+  priority: `COALESCE((data->>'priority')::int, 0)`,
+};
+
+function mapAuctionHistoryRow(row) {
+  const data = row.data || {};
+  return {
+    id: data.id || row.id,
+    userId: data.userId || '',
+    date: data.date || '',
+    member: data.member || 'Unknown Member',
+    item: data.item || '',
+    itemId: data.itemId || '',
+    quantity: parseInt(data.quantity, 10) || 0,
+    applicationStatus: data.applicationStatus || 'Requested',
+    selectionStatus: data.selectionStatus || 'Pending',
+    liveStatus: data.liveStatus || '',
+    priority: parseInt(data.priority, 10) || 0,
+    eventDate: data.eventDate || '',
+  };
+}
+
+export async function listAuctionHistory({
+  userId,
+  status,
+  q,
+  sort = 'date',
+  dir = 'desc',
+  limit = 20,
+  page = 1,
+  sinceId,
+  untilId,
+  countOnly = false,
+} = {}, tenantId) {
+  const id = requireTenant(tenantId);
+  const clauses = ['tenant_id = $1'];
+  const params = [id];
+  let i = 2;
+  if (userId) {
+    clauses.push(`data->>'userId' = $${i++}`);
+    params.push(String(userId));
+  }
+  if (status) {
+    clauses.push(`lower(data->>'selectionStatus') = $${i++}`);
+    params.push(String(status).toLowerCase());
+  }
+  const queryText = String(q || '').trim();
+  if (queryText) {
+    clauses.push(`(data->>'member' ILIKE $${i} OR data->>'item' ILIKE $${i})`);
+    params.push(`%${queryText}%`);
+    i += 1;
+  }
+  if (sinceId) {
+    clauses.push(`id >= $${i++}`);
+    params.push(sinceId);
+  }
+  if (untilId) {
+    clauses.push(`id <= $${i++}`);
+    params.push(untilId);
+  }
+  const where = clauses.join(' AND ');
+  const countRes = await query(`SELECT COUNT(*)::int AS n FROM auction_requests WHERE ${where}`, params);
+  const total = countRes.rows[0]?.n || 0;
+  if (countOnly) return { history: [], total, page: 1, limit: 0 };
+
+  const orderCol = HISTORY_SORT[sort] || HISTORY_SORT.date;
+  const orderDir = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const safeLimit = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));
+  const safePage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (safePage - 1) * safeLimit;
+  const { rows } = await query(
+    `SELECT id, data FROM auction_requests WHERE ${where}
+     ORDER BY ${orderCol} ${orderDir}
+     LIMIT $${i} OFFSET $${i + 1}`,
+    [...params, safeLimit, offset]
+  );
+  return {
+    history: rows.map(mapAuctionHistoryRow),
+    total,
+    page: safePage,
+    limit: safeLimit,
+  };
+}
+
+export async function loadCollectionSince(path, { sinceDays, userId, sinceId } = {}, tenantId) {
+  const id = requireTenant(tenantId);
+  const spec = COLLECTION_MAP[path];
+  if (!spec) return {};
+  const clauses = ['tenant_id = $1'];
+  const params = [id];
+  let i = 2;
+  if (userId != null && userId !== '') {
+    clauses.push(`data->>'userId' = $${i++}`);
+    params.push(String(userId));
+  }
+  const minId = sinceId || (sinceDays != null ? pushIdAt(Date.now() - clampLookbackDays(sinceDays) * 86400000) : null);
+  if (minId) {
+    clauses.push(`${spec.idCol} >= $${i++}`);
+    params.push(minId);
+  }
+  const { rows } = await query(
+    `SELECT ${spec.idCol} AS id, data FROM ${spec.table} WHERE ${clauses.join(' AND ')}`,
+    params
+  );
+  return rowsToMap(rows) || {};
+}
+
+function pastAuctionDateVariants(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return [];
+  const variants = new Set([value]);
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (iso) {
+    const year = iso[1];
+    const month = parseInt(iso[2], 10);
+    const day = parseInt(iso[3], 10);
+    variants.add(`${month}/${day}/${year}`);
+    variants.add(`${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}/${year}`);
+  } else if (us) {
+    const month = parseInt(us[1], 10);
+    const day = parseInt(us[2], 10);
+    const year = us[3];
+    variants.add(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+    variants.add(`${month}/${day}/${year}`);
+  }
+  return [...variants];
+}
+
+function pastAuctionIso(raw) {
+  const value = String(raw || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!us) return value;
+  return `${us[3]}-${String(us[1]).padStart(2, '0')}-${String(us[2]).padStart(2, '0')}`;
+}
+
+function mapPastAuctionRow(row) {
+  const data = row.data || {};
+  return {
+    id: data.id || row.id,
+    date: data.date || '',
+    event: data.event || '',
+    item: data.item || '',
+    itemId: data.itemId || '',
+    quantity: parseInt(data.quantity, 10) || 0,
+    userId: data.userId || '',
+    mem: data.mem || 'Unknown Member',
+  };
+}
+
+export async function listPastAuctionDates(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT data->>'date' AS date, COUNT(*)::int AS n
+     FROM past_auction_awards
+     WHERE tenant_id = $1 AND COALESCE(data->>'date', '') <> ''
+     GROUP BY 1`,
+    [id]
+  );
+  return rows
+    .map((row) => ({
+      date: row.date,
+      iso: pastAuctionIso(row.date),
+      count: row.n,
+    }))
+    .sort((a, b) => String(b.iso).localeCompare(String(a.iso)) || String(b.date).localeCompare(String(a.date)));
+}
+
+export async function listPastAuctionsForDate(date, tenantId) {
+  const id = requireTenant(tenantId);
+  const variants = pastAuctionDateVariants(date);
+  if (!variants.length) return [];
+  const { rows } = await query(
+    `SELECT id, data FROM past_auction_awards
+     WHERE tenant_id = $1 AND data->>'date' = ANY($2::text[])
+     ORDER BY id DESC`,
+    [id, variants]
+  );
+  return rows.map(mapPastAuctionRow);
+}
+
+export async function listLootHistoryDates(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT data->>'date' AS date, COUNT(*)::int AS n
+     FROM loot_history
+     WHERE tenant_id = $1 AND COALESCE(data->>'date', '') <> ''
+     GROUP BY 1`,
+    [id]
+  );
+  return rows
+    .map((row) => ({
+      date: row.date,
+      iso: pastAuctionIso(row.date),
+      count: row.n,
+    }))
+    .sort((a, b) => String(b.iso).localeCompare(String(a.iso)) || String(b.date).localeCompare(String(a.date)));
+}
+
+export async function listLootHistoryForDate(date, tenantId) {
+  const id = requireTenant(tenantId);
+  const variants = pastAuctionDateVariants(date);
+  if (!variants.length) return [];
+  const { rows } = await query(
+    `SELECT id, data FROM loot_history
+     WHERE tenant_id = $1 AND data->>'date' = ANY($2::text[])
+     ORDER BY id DESC`,
+    [id, variants]
+  );
+  return rows.map((row) => {
+    const data = row.data || {};
+    return {
+      id: data.id || row.id,
+      date: data.date || '',
+      event: data.event || '',
+      item: data.item || '',
+      itemId: data.itemId || '',
+      quantity: parseInt(data.quantity, 10) || 0,
+      max: parseInt(data.max, 10) || 1,
+      mem: parseInt(data.mem, 10) || 0,
+    };
+  });
+}
+
+export async function countLootHistoryBattles(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS n FROM (
+       SELECT DISTINCT COALESCE(data->>'date', ''), COALESCE(data->>'event', '')
+       FROM loot_history WHERE tenant_id = $1
+     ) t`,
+    [id]
+  );
+  return rows[0]?.n || 0;
+}
+
+export async function loadPastAuctionsForMember(userId, tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT id, data FROM past_auction_awards
+     WHERE tenant_id = $1 AND data->>'userId' = $2`,
+    [id, String(userId)]
+  );
+  return rowsToMap(rows) || {};
+}
+
+export async function loadInstancesForWeek(weekMonday, tenantId) {
+  const id = requireTenant(tenantId);
+  const bounds = weekKeyBounds(weekMonday);
+  if (!bounds) return {};
+  const { rows } = await query(
+    `SELECT id, data FROM schedule_instances
+     WHERE tenant_id = $1
+       AND (data->>'weekMonday' = $2 OR (id >= $2 AND id < $3))`,
+    [id, bounds.start, bounds.endExclusive]
+  );
+  return rowsToMap(rows) || {};
+}
+
+export async function loadCommitmentsForWeek(weekMonday, tenantId) {
+  const id = requireTenant(tenantId);
+  return (await loadCommitments(id, null, null, weekMonday)) || {};
+}
+
+export async function listCommitmentKeysForEventId(eventId, tenantId) {
+  const id = requireTenant(tenantId);
+  const suffix = `_${String(eventId || '')}`;
+  if (suffix === '_') return [];
+  const { rows } = await query(
+    `SELECT DISTINCT event_key FROM attendance_commitments
+     WHERE tenant_id = $1 AND event_key LIKE $2`,
+    [id, `%${suffix}`]
+  );
+  return rows.map((row) => row.event_key);
+}
+
+export async function loadPublishedByIds(ids, tenantId) {
+  const id = requireTenant(tenantId);
+  const keys = [...new Set((ids || []).map((key) => String(key || '').trim()).filter(Boolean))];
+  if (!keys.length) return {};
+  const { rows } = await query(
+    `SELECT e.key AS id, e.value AS data
+     FROM json_docs d
+     CROSS JOIN LATERAL jsonb_each(d.data) e
+     WHERE d.tenant_id = $1 AND d.path = 'attendance/published' AND e.key = ANY($2::text[])`,
+    [id, keys]
+  );
+  return rowsToMap(rows) || {};
+}
+
+function sessionArchiveTrend(row, sessionId) {
+  if (!row || typeof row !== 'object') return { id: sessionId };
+  return {
+    id: row.id || sessionId,
+    eventTitle: row.eventTitle || '',
+    eventDate: row.eventDate || '',
+    eventKey: row.eventKey || '',
+    endedAt: row.endedAt || 0,
+    endedEarly: row.endedEarly === true,
+    committedBy: row.committedBy || '',
+    totalPulses: row.totalPulses || 0,
+    expectedPulses: row.expectedPulses || 0,
+    userTallies: row.userTallies || {},
+    commitments: row.commitments || {},
+    inGameStatus: row.inGameStatus || {},
+  };
+}
+
+export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } = {}, tenantId) {
+  const id = requireTenant(tenantId);
+  const full = fields === 'full';
+  if (sessionId) {
+    const { rows } = await query(
+      `SELECT data -> $2 AS data FROM json_docs
+       WHERE tenant_id = $1 AND path = 'attendance/session_archive'`,
+      [id, String(sessionId)]
+    );
+    const data = rows[0]?.data;
+    if (data == null) return {};
+    return { [sessionId]: full ? data : sessionArchiveTrend(data, sessionId) };
+  }
+  const n = Math.min(50, Math.max(1, parseInt(limit, 10) || 12));
+  const { rows } = await query(
+    `SELECT e.key AS id, e.value AS data
+     FROM json_docs d
+     CROSS JOIN LATERAL jsonb_each(d.data) e
+     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
+     ORDER BY COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) DESC
+     LIMIT $2`,
+    [id, n]
+  );
+  const mapped = rowsToMap(rows) || {};
+  if (full) return mapped;
+  const slim = {};
+  for (const [key, row] of Object.entries(mapped)) {
+    slim[key] = sessionArchiveTrend(row, key);
+  }
+  return slim;
+}
+
+export async function findArchiveForEvent(eventDate, eventKey, tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT e.key AS id, e.value AS data
+     FROM json_docs d
+     CROSS JOIN LATERAL jsonb_each(d.data) e
+     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
+       AND e.value->>'eventDate' = $2 AND e.value->>'eventKey' = $3
+     ORDER BY COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) DESC
+     LIMIT 1`,
+    [id, String(eventDate || ''), String(eventKey || '')]
+  );
+  if (!rows[0]?.data) return null;
+  return { ...rows[0].data, id: rows[0].id };
+}
+
+export async function sqlFingerprint(tenantId, {
+  members = false,
+  commitments = false,
+  docPaths = [],
+  config = false,
+  commitmentWeekMonday = null,
+} = {}) {
+  const id = requireTenant(tenantId);
+  const paths = Array.isArray(docPaths) ? docPaths.filter(Boolean) : [];
+  const bounds = commitmentWeekMonday ? weekKeyBounds(commitmentWeekMonday) : null;
+  const { rows } = await query(
+    `SELECT md5(concat(
+       CASE WHEN $2 THEN COALESCE((SELECT md5(string_agg(discord_id || data::text, chr(30) ORDER BY discord_id)) FROM members WHERE tenant_id = $1), '') ELSE '' END,
+       CASE WHEN $3 THEN COALESCE((SELECT md5(string_agg(event_key || member_id || data::text, chr(30) ORDER BY event_key, member_id))
+         FROM attendance_commitments
+         WHERE tenant_id = $1
+           AND ($7::text IS NULL OR (event_key >= $7 AND event_key < $8))), '') ELSE '' END,
+       CASE WHEN $4 THEN COALESCE((SELECT md5(string_agg(
+         path || CASE
+           WHEN path = 'attendance/live_session'
+           THEN (data - 'lastVoicePoll' - 'userTallies' - 'totalPulses' - 'expectedPulses')::text
+           ELSE data::text
+         END, chr(30) ORDER BY path)) FROM json_docs WHERE tenant_id = $1 AND path = ANY($6::text[])), '') ELSE '' END,
+       CASE WHEN $5 THEN COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), '') ELSE '' END
+     )) AS fp`,
+    [id, members, commitments, paths.length > 0, config, paths, bounds?.start || null, bounds?.endExclusive || null]
+  );
+  return String(rows[0]?.fp || '');
+}
+
 async function loadCollectionRow(tenantId, spec, id) {
   const { rows } = await query(
     `SELECT data FROM ${spec.table} WHERE tenant_id = $1 AND ${spec.idCol} = $2`,
@@ -149,11 +602,16 @@ async function replaceCollection(tenantId, spec, obj) {
   }
 }
 
-async function loadCommitments(tenantId, eventKey, memberId) {
+async function loadCommitments(tenantId, eventKey, memberId, weekMonday) {
   if (!eventKey) {
+    const config = await loadConfig(tenantId);
+    const monday = weekMonday || getWeekMonday(config?.timezone || DEFAULT_TZ);
+    const bounds = weekKeyBounds(monday);
+    if (!bounds) return {};
     const { rows } = await query(
-      'SELECT event_key, member_id, data FROM attendance_commitments WHERE tenant_id = $1',
-      [tenantId]
+      `SELECT event_key, member_id, data FROM attendance_commitments
+       WHERE tenant_id = $1 AND event_key >= $2 AND event_key < $3`,
+      [tenantId, bounds.start, bounds.endExclusive]
     );
     const tree = {};
     for (const row of rows) {
@@ -433,15 +891,23 @@ class QueryRef {
   }
 
   async once() {
-    let value = await readPath(this._tenantId, this.path);
+    const parts = pathParts(this.path);
+    const two = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+    const spec = COLLECTION_MAP[two];
     const order = this._filters.find((f) => f.type === 'orderByChild');
     const eq = this._filters.find((f) => f.type === 'equalTo');
-    if (order && eq && value && typeof value === 'object' && !Array.isArray(value)) {
-      const filtered = {};
-      for (const [k, row] of Object.entries(value)) {
-        if (row && typeof row === 'object' && row[order.field] === eq.value) filtered[k] = row;
+    let value;
+    if (spec && parts.length === 2 && order && eq) {
+      value = await loadCollectionFiltered(this._tenantId, spec, order.field, eq.value);
+    } else {
+      value = await readPath(this._tenantId, this.path);
+      if (order && eq && value && typeof value === 'object' && !Array.isArray(value)) {
+        const filtered = {};
+        for (const [k, row] of Object.entries(value)) {
+          if (row && typeof row === 'object' && row[order.field] === eq.value) filtered[k] = row;
+        }
+        value = filtered;
       }
-      value = filtered;
     }
     const key = this.key;
     return new DataSnapshot(key, value);
@@ -474,19 +940,8 @@ class QueryRef {
     return { committed: true, snapshot: new DataSnapshot(this.key, next) };
   }
 
-  on(event, callback, errorCallback) {
-    if (event !== 'value') return () => {};
-    const tick = () => {
-      this.once('value')
-        .then((snap) => callback(snap))
-        .catch((err) => {
-          if (errorCallback) errorCallback(err);
-          else console.error('tenant store listener:', err.message);
-        });
-    };
-    tick();
-    const id = setInterval(tick, 15_000);
-    return () => clearInterval(id);
+  on() {
+    return () => {};
   }
 
   off() {}

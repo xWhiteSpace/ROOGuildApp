@@ -48,7 +48,87 @@ export function buildPartyReadyAnnounce({ eventTitle, eventDate }) {
   return `Party is ready for **${title}** (${date}). See your party in ${warAnnounceMention()}.`;
 }
 
-export async function sendGenRoomMessage(content) {
+const DISCORD_MESSAGE_LIMIT = 2000;
+
+function isDiscordSnowflake(uid) {
+  return /^\d{5,22}$/.test(String(uid || '').trim());
+}
+
+/** Union of filled session slots vs lobby rankings. Presentation fold only. */
+export function foldUniqueExclusiveAllocate(categoryAllocations = {}, rankingsByItem = {}) {
+  const selectedUserIds = [];
+  const selectedSet = new Set();
+
+  Object.values(categoryAllocations || {}).forEach((cat) => {
+    const raw = cat?.selected;
+    const boxes = Array.isArray(raw) ? raw : Object.values(raw || {});
+    boxes.forEach((uid) => {
+      if (!uid) return;
+      const key = String(uid);
+      if (selectedSet.has(key)) return;
+      selectedSet.add(key);
+      selectedUserIds.push(key);
+    });
+  });
+
+  const notSelectedUserIds = [];
+  const seenNotSelected = new Set();
+  Object.values(rankingsByItem || {}).forEach((list) => {
+    (Array.isArray(list) ? list : []).forEach((uid) => {
+      if (!uid) return;
+      const key = String(uid);
+      if (selectedSet.has(key) || seenNotSelected.has(key)) return;
+      seenNotSelected.add(key);
+      notSelectedUserIds.push(key);
+    });
+  });
+
+  return { selectedUserIds, notSelectedUserIds };
+}
+
+export function formatMentionColumns(userIds, columns = 3) {
+  const tags = (userIds || []).filter(isDiscordSnowflake).map((uid) => `<@${uid}>`);
+  if (tags.length === 0) return '_None_';
+  const lines = [];
+  for (let i = 0; i < tags.length; i += columns) {
+    lines.push(tags.slice(i, i + columns).join('    '));
+  }
+  return lines.join('\n');
+}
+
+export function chunkDiscordMessages(text, limit = DISCORD_MESSAGE_LIMIT) {
+  const body = String(text || '');
+  if (body.length <= limit) return [body];
+  const chunks = [];
+  let remaining = body;
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf('\n', limit);
+    if (cut < Math.floor(limit * 0.5)) cut = limit;
+    chunks.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).replace(/^\n/, '');
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
+export function buildAllocateOpenAnnounce({ selectedUserIds, notSelectedUserIds }) {
+  const selectedBlock = formatMentionColumns(selectedUserIds);
+  const notSelectedBlock = formatMentionColumns(notSelectedUserIds);
+  return [
+    '@everyone',
+    'The Live Auction is now Open. The members whos request are selected are as follows:',
+    selectedBlock,
+    '',
+    'For members who were not selected by the system, dont worry, as your priority on the next Auction has increased.',
+    notSelectedBlock,
+  ].join('\n');
+}
+
+export function buildAllocateOpenAnnounceChunks({ selectedUserIds, notSelectedUserIds }) {
+  return chunkDiscordMessages(buildAllocateOpenAnnounce({ selectedUserIds, notSelectedUserIds }));
+}
+
+export async function sendGenRoomMessage(content, options = {}) {
   const genRoomId = (discordChannel('DISCORD_GENROOM_ID_1') || '').trim();
   if (!genRoomId) {
     throw new Error('DISCORD_GENROOM_ID_1 is not configured.');
@@ -76,7 +156,9 @@ export async function sendGenRoomMessage(content) {
     if (!channel) {
       throw new Error('GEN Room channel not found.');
     }
-    await channel.send({ content });
+    const payload = { content };
+    if (options.allowedMentions) payload.allowedMentions = options.allowedMentions;
+    await channel.send(payload);
   });
 
   return { posted: true };

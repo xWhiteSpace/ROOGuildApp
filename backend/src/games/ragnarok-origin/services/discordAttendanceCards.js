@@ -13,6 +13,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
+import { createHash } from 'node:crypto';
 import { sanitizeInGameName } from '@guildname/shared/inGameAlias';
 import { getTenantStore } from '../../../db/database.js';
 import { loadRosterMembers } from './scheduleService.js';
@@ -521,13 +522,34 @@ export async function ensureGvgReadinessBoardIfMissing() {
   return ensureGvgReadinessBoard({ forcePost: false });
 }
 
+function readinessFingerprint(eventKey, commitments) {
+  const rsvps = Object.entries(commitments || {})
+    .map(([uid, row]) => `${uid}:${row?.status || ''}`)
+    .sort()
+    .join(';');
+  return createHash('sha1').update(`${eventKey || ''}|${rsvps}`).digest('hex');
+}
+
 export async function refreshGvgReadinessBoard() {
   try {
     if (isDiscordCircuitOpen()) return { skipped: true };
     const db = getTenantStore();
     const storedSnap = await db.ref(CARD_PATH).once('value');
     if (!storedSnap.exists() || !storedSnap.val()?.messageId) return { skipped: true };
-    return await ensureGvgReadinessBoard({ forcePost: false });
+    const stored = storedSnap.val();
+    const { event } = await resolveAttendanceTargetEvent();
+    const eventKey = event?.key || '';
+    const commitSnap = eventKey
+      ? await db.ref(`attendance/commitments/${eventKey}`).once('value')
+      : { exists: () => false, val: () => ({}) };
+    const commitments = commitSnap.exists() ? commitSnap.val() : {};
+    const fingerprint = readinessFingerprint(eventKey, commitments);
+    if (stored.fingerprint === fingerprint && stored.eventKey === eventKey) {
+      return { skipped: true, unchanged: true };
+    }
+    const result = await ensureGvgReadinessBoard({ forcePost: false });
+    await db.ref(CARD_PATH).update({ fingerprint, eventKey, updatedAt: Date.now() }).catch(() => {});
+    return result;
   } catch (err) {
     console.error('[gvg-readiness] refresh failed:', err.message);
     return { ok: false, error: err.message };

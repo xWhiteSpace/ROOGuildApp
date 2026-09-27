@@ -66,19 +66,19 @@ export default function AttendanceHistoryTab({ user }) {
       setLoading(true);
       const headers = getRequestHeaders();
 
-      const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
+      const initRes = await fetch(`${backendUrl}/api/attendance/members?view=card`, { method: 'GET', headers, credentials: 'include' });
       const initData = await initRes.json();
       if (initData.success) {
         setMembers(initData.members || {});
       }
 
-      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
+      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs`, { method: 'GET', headers, credentials: 'include' });
       const settingsData = await settingsRes.json();
       if (settingsData.success && settingsData.config) {
         setJobsCatalog(settingsData.config.jobs || {});
       }
 
-      const res = await fetch(`${backendUrl}/api/live-raid/history/all`, {
+      const res = await fetch(`${backendUrl}/api/live-raid/history/all?limit=12`, {
         method: 'GET',
         headers,
         credentials: 'include'

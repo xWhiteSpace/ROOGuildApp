@@ -2,7 +2,7 @@
  * Attendance RSVP SSOT: leave credits, deadline lock, next-event targeting,
  * deadline closer, and monthly leave-credit refresh.
  */
-import { getTenantStore } from '../../../db/database.js';
+import { getTenantStore, loadInstancesForWeek } from '../../../db/database.js';
 import { getCachedConfig } from '../../../db/tenantContext.js';
 import { writeCommitment, ensureWeekInstances, resolveGuildTimezone, loadRosterMembers } from './scheduleService.js';
 import {
@@ -11,6 +11,8 @@ import {
   buildCompositeKey,
   guildWallTimeToUtcMs,
   getGuildNowParts,
+  addDaysToDateStr,
+  enumerateWeekDates,
   DEFAULT_TZ,
 } from '../../../utils/guildTime.js';
 import { resolveAnchoredComposition } from './publishedComposition.js';
@@ -57,14 +59,9 @@ export async function listUpcomingInstances({ timezone, includePreviousWeek = fa
   const db = getTenantStore();
   const tz = timezone || (await resolveGuildTimezone(db));
   const thisMonday = getWeekMonday(tz);
-  const shiftMonday = (base, days) => {
-    const d = new Date(`${base}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + days);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-  };
-  const nextMonday = shiftMonday(thisMonday, 7);
+  const nextMonday = addDaysToDateStr(thisMonday, 7);
   const weekMondays = includePreviousWeek
-    ? [shiftMonday(thisMonday, -7), thisMonday, nextMonday]
+    ? [addDaysToDateStr(thisMonday, -7), thisMonday, nextMonday]
     : [thisMonday, nextMonday];
 
   const weeks = await Promise.all(weekMondays.map((weekMonday) => ensureWeekInstances({ weekMonday })));
@@ -237,19 +234,65 @@ export async function applyAttendanceDecision({
  * When an event's deadline has passed, mark unanswered raid-roster members NoConfirm.
  * Idempotent per event/member.
  */
+function instanceIsDue(ev, timezone, nowMs) {
+  const startMs = getEventStartMs(ev, timezone);
+  const deadlineMs = getEventDeadlineMs(ev, timezone);
+  if (!Number.isFinite(deadlineMs) || deadlineMs > nowMs) return false;
+  if (Number.isFinite(startMs) && startMs + 7 * 24 * 60 * 60 * 1000 < nowMs) return false;
+  return true;
+}
+
+function theoreticalDueKeys(events, timezone, nowMs) {
+  const thisMonday = getWeekMonday(timezone);
+  const mondays = [addDaysToDateStr(thisMonday, -7), thisMonday, addDaysToDateStr(thisMonday, 7)];
+  const keys = [];
+  for (const monday of mondays) {
+    for (const { dateStr, dayOfWeek } of enumerateWeekDates(monday)) {
+      for (const [eventId, ev] of Object.entries(events || {})) {
+        const p3 = ev?.raid?.phases?.[3] || ev?.phases?.[3];
+        if (!p3 || parseInt(p3.dayStart, 10) !== dayOfWeek) continue;
+        const candidate = {
+          key: buildCompositeKey(dateStr, eventId),
+          date: dateStr,
+          timeStart: p3.timeStart || '20:55',
+        };
+        if (instanceIsDue(candidate, timezone, nowMs)) keys.push(candidate.key);
+      }
+    }
+  }
+  return keys;
+}
+
 export async function closeExpiredDeadlines({ nowMs = Date.now() } = {}) {
   const db = getTenantStore();
   const timezone = await resolveGuildTimezone(db);
+  const thisMonday = getWeekMonday(timezone);
+  const weekMondays = [addDaysToDateStr(thisMonday, -7), thisMonday, addDaysToDateStr(thisMonday, 7)];
+  const existingMaps = await Promise.all(weekMondays.map((monday) => loadInstancesForWeek(monday)));
+  const existing = existingMaps.reduce((acc, map) => ({ ...acc, ...(map || {}) }), {});
+  const closedSnap = await db.ref('attendance/deadline_closed').once('value');
+  const closedMarkers = closedSnap.exists() ? closedSnap.val() : {};
+
+  const dueFromExisting = Object.entries(existing)
+    .map(([key, inst]) => ({ key, ...inst }))
+    .filter((ev) => ev.isCancelled !== true && instanceIsDue(ev, timezone, nowMs) && !closedMarkers[ev.key]);
+
+  if (dueFromExisting.length === 0) {
+    let events = getCachedConfig()?.events;
+    if (!events) {
+      const eventsSnap = await db.ref('settings/configuration/events').once('value');
+      events = eventsSnap.exists() ? eventsSnap.val() : {};
+    }
+    const theoretical = theoreticalDueKeys(events, timezone, nowMs).filter((key) => !closedMarkers[key]);
+    if (theoretical.length === 0) return { closed: 0 };
+  }
+
   const upcoming = await listUpcomingInstances({ timezone, includePreviousWeek: true });
 
   const due = [];
   for (const ev of upcoming) {
-    const startMs = getEventStartMs(ev, timezone);
-    const deadlineMs = getEventDeadlineMs(ev, timezone);
-    if (!Number.isFinite(deadlineMs) || deadlineMs > nowMs) continue;
-    if (Number.isFinite(startMs) && startMs + 7 * 24 * 60 * 60 * 1000 < nowMs) continue;
-    const markerSnap = await db.ref(`attendance/deadline_closed/${ev.key}`).once('value');
-    if (markerSnap.exists()) continue;
+    if (!instanceIsDue(ev, timezone, nowMs)) continue;
+    if (closedMarkers[ev.key]) continue;
     due.push(ev);
   }
   if (due.length === 0) return { closed: 0 };

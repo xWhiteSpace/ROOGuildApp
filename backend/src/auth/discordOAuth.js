@@ -243,7 +243,6 @@ router.get('/login', async (req, res) => {
   const intent = normalizeAuthIntent(req.query.intent);
   const clientId = discordEnv().clientId;
   const redirectUriRaw = discordEnv().oauthRedirectUri;
-  console.log(`🔐 [OAUTH] /auth/login redirect_uri=${redirectUriRaw}`);
   const redirectUri = encodeURIComponent(redirectUriRaw);
   const scope = encodeURIComponent('identify guilds guilds.members.read');
   res.redirect(`${discordApi}/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${encodeURIComponent(intent)}`);

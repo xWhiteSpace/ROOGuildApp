@@ -6,6 +6,7 @@ import { DEFAULT_CONFIGURATION } from '../../config/defaultConfiguration.js';
 import { getCachedConfig } from '../../db/tenantContext.js';
 import {
   DEFAULT_TZ,
+  addDaysToDateStr,
   enumerateWeekDates,
   formatGuildDate,
   getGuildNowParts,
@@ -29,17 +30,6 @@ const DAYS_SHORT_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function activeConfig() {
   return getCachedConfig() || { ...DEFAULT_CONFIGURATION };
-}
-
-function padDate(n) {
-  return String(n).padStart(2, '0');
-}
-
-function addDaysToDateStr(dateStr, days) {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  const base = new Date(`${dateStr}T12:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + Number(days || 0));
-  return `${base.getUTCFullYear()}-${padDate(base.getUTCMonth() + 1)}-${padDate(base.getUTCDate())}`;
 }
 
 function dateForWeekdayInWeek(weekMonday, dayOfWeek) {

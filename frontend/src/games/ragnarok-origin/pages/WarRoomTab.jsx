@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Radio, Timer, Users, Volume2 } from 'lucide-react';
 import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { apiFetch } from '../../../services/apiClient';
 import { RAID_PHASE_LABELS } from '@guildname/shared/raidCycle';
-import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 
 const PHASE_LABELS = {
   1: RAID_PHASE_LABELS[1],
@@ -32,14 +31,27 @@ export default function WarRoomTab({ user }) {
   const [warRooms, setWarRooms] = useState([]);
   const [automation, setAutomation] = useState(null);
   const [liveVoiceUids, setLiveVoiceUids] = useState([]);
+  const etagRef = useRef('');
 
   const loadInit = useCallback(async ({ quiet = false } = {}) => {
     try {
       if (!quiet) setLoading(true);
-      const res = await apiFetch('/api/war-room/init');
+      const res = await apiFetch('/api/war-room/init', {
+        headers: etagRef.current ? { 'If-None-Match': `"${etagRef.current}"` } : {},
+      });
+      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
+      if (nextTag) etagRef.current = nextTag;
+      if (res.status === 304) {
+        setError('');
+        return;
+      }
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Failed to load War Room.');
+        return;
+      }
+      if (data.unchanged) {
+        setError('');
         return;
       }
       setError('');
@@ -66,26 +78,22 @@ export default function WarRoomTab({ user }) {
   }, [loadInit, user]);
 
   useEffect(() => {
-    return pollWhileVisible(() => loadInit({ quiet: true }), 5000);
-  }, [loadInit]);
-
-  useEffect(() => {
     if (!session) return undefined;
-    const pollVoice = async () => {
-      const refs = session.selectedWarRoomIds?.length
-        ? session.selectedWarRoomIds
-        : session.selectedWarRooms;
-      if (!refs?.length) return;
+    const refs = session.selectedWarRoomIds?.length
+      ? session.selectedWarRoomIds
+      : session.selectedWarRooms;
+    if (!refs?.length) return undefined;
+    let cancelled = false;
+    (async () => {
       try {
         const res = await apiFetch(`/api/live-raid/voice-presence?channels=${encodeURIComponent(refs.join(','))}`);
         const data = await res.json();
-        if (data.success && data.presentUids) setLiveVoiceUids(data.presentUids);
+        if (!cancelled && data.success && data.presentUids) setLiveVoiceUids(data.presentUids);
       } catch {
         /* keep last known */
       }
-    };
-    pollVoice();
-    return pollWhileVisible(pollVoice, 10000);
+    })();
+    return () => { cancelled = true; };
   }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
   const persistLiveGrids = async (grids) => {

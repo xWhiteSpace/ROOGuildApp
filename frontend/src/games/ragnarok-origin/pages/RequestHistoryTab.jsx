@@ -26,6 +26,9 @@ export default function RequestHistoryTab({ user }) {
   const isOfficer = user?.isOfficer === true;
   const [loading, setLoading] = useState(true);
   const [historyData, setHistoryData] = useState([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [clearPreviewCount, setClearPreviewCount] = useState(0);
   const [currentUserName, setCurrentUserName] = useState('');
   const [configItems, setConfigItems] = useState([]); // Dynamic setting collection matrix
   const [authError, setAuthError] = useState(false);
@@ -54,9 +57,9 @@ export default function RequestHistoryTab({ user }) {
   const [sortKey, setSortKey] = useState('date'); // 'date', 'member', 'item', or 'priority'
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
 
-  const fetchGlobalHistoryLog = async () => {
+  const fetchGlobalHistoryLog = async ({ quiet = false } = {}) => {
     try {
-      setLoading(true);
+      if (!quiet) setLoading(true);
       setAuthError(false);
 
       const savedUserSession = localStorage.getItem('guild_raid_session');
@@ -70,7 +73,16 @@ export default function RequestHistoryTab({ user }) {
         }
       }
 
-      const res = await apiFetch('/api/requests/request-history', { method: 'GET' });
+      const params = new URLSearchParams({
+        page: String(historyPage),
+        limit: String(rowLimit),
+        sort: sortKey,
+        dir: sortDirection,
+      });
+      if (viewFilter === 'mine') params.set('mine', '1');
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      if (outcomeFilter !== 'all') params.set('status', outcomeFilter);
+      const res = await apiFetch(`/api/requests/request-history?${params.toString()}`, { method: 'GET' });
 
       if (res.status === 401) {
         setAuthError(true);
@@ -81,10 +93,11 @@ export default function RequestHistoryTab({ user }) {
       const data = await res.json();
       if (data.success) {
         setHistoryData(data.history || []);
+        setHistoryTotal(parseInt(data.total, 10) || 0);
 
         // Query dynamic item mapping tables to link relational styling indexes inline
         try {
-          const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
+          const configRes = await apiFetch('/api/requests/settings/get?fields=items', { method: 'GET' });
           const configData = await configRes.json();
           if (configData.success && configData.config?.items) {
             setConfigItems(configData.config.items);
@@ -101,8 +114,34 @@ export default function RequestHistoryTab({ user }) {
   };
 
   useEffect(() => {
-    fetchGlobalHistoryLog();
-  }, []);
+    fetchGlobalHistoryLog({ quiet: historyData.length > 0 });
+  }, [historyPage, rowLimit, viewFilter, searchQuery, outcomeFilter, sortKey, sortDirection]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchDraft), 300);
+    return () => clearTimeout(timer);
+  }, [searchDraft]);
+
+  useEffect(() => {
+    if (!isOfficer || !clearRangeStart || !clearRangeEnd) {
+      setClearPreviewCount(0);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams({
+        preview: '1',
+        startDate: clearRangeStart,
+        endDate: clearRangeEnd,
+      });
+      const res = await apiFetch(`/api/requests/request-history?${params.toString()}`, { method: 'GET' });
+      const data = await res.json();
+      if (!cancelled && data.success) setClearPreviewCount(parseInt(data.total, 10) || 0);
+    })().catch(() => {
+      if (!cancelled) setClearPreviewCount(0);
+    });
+    return () => { cancelled = true; };
+  }, [isOfficer, clearRangeStart, clearRangeEnd]);
 
   const handleSortToggle = (targetKey) => {
     if (sortKey === targetKey) {
@@ -216,79 +255,29 @@ export default function RequestHistoryTab({ user }) {
     };
   };
 
-  // 📋 Apply Filtering Matrix Logic
-  const filteredRecords = historyData.filter(row => {
-    if (viewFilter === 'mine') {
-      const isMatch = row.userId === currentUserId;
-      if (!isMatch) return false;
-    }
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      const matchesMember = (row.member || '').toLowerCase().includes(query);
-      const matchesItem = (row.item || '').toLowerCase().includes(query);
-      if (!matchesMember && !matchesItem) return false;
-    }
-    if (outcomeFilter !== 'all' && (row.selectionStatus || '').toLowerCase() !== outcomeFilter.toLowerCase()) {
-      return false;
-    }
-    return true;
-  });
-
-  // 📊 Apply Interactive Multi-Column Sorting Engine (Propagates straight into CSV exports too!)
-  const sortedRecords = [...filteredRecords].sort((a, b) => {
-    let comparison = 0;
-
-    switch (sortKey) {
-      case 'date': {
-        // Safe string chronological timestamp grouping
-        const dateA = new Date(a.date || 0);
-        const dateB = new Date(b.date || 0);
-        comparison = dateA - dateB;
-        break;
-      }
-      case 'member': {
-        comparison = (a.member || '').localeCompare(b.member || '');
-        break;
-      }
-      case 'item': {
-        comparison = (a.item || '').localeCompare(b.item || '');
-        break;
-      }
-      case 'priority': {
-        comparison = (parseInt(a.priority, 10) || 0) - (parseInt(b.priority, 10) || 0);
-        break;
-      }
-      default:
-        break;
-    }
-
-    return sortDirection === 'asc' ? comparison : comparison * -1;
-  });
-
-  const historyTotalPages = Math.ceil(sortedRecords.length / rowLimit) || 1;
-
-  // 🔎 LIVE CLEAR-HISTORY PREVIEW: Counts how many already-loaded rows fall inside the
-  // selected range, so officers see the exact impact before anything is deleted.
-  const clearPreviewCount = (() => {
-    if (!clearRangeStart || !clearRangeEnd) return 0;
-    const rangeStart = new Date(clearRangeStart);
-    const rangeEnd = new Date(`${clearRangeEnd}T23:59:59.999`);
-    if (isNaN(rangeStart) || isNaN(rangeEnd) || rangeStart > rangeEnd) return 0;
-    return historyData.filter(row => {
-      const rowDate = new Date(row.date || '');
-      return !isNaN(rowDate) && rowDate >= rangeStart && rowDate <= rangeEnd;
-    }).length;
-  })();
+  const sortedRecords = historyData;
+  const historyTotalPages = Math.ceil(historyTotal / rowLimit) || 1;
 
   /**
    * 📥 BROWSER-NATIVE CSV EXPORT MODULE
    */
-  const handleDownloadCSVExport = () => {
-    if (sortedRecords.length === 0) return;
+  const handleDownloadCSVExport = async () => {
+    const params = new URLSearchParams({
+      export: '1',
+      sort: sortKey,
+      dir: sortDirection,
+    });
+    if (viewFilter === 'mine') params.set('mine', '1');
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
+    if (outcomeFilter !== 'all') params.set('status', outcomeFilter);
+    const res = await apiFetch(`/api/requests/request-history?${params.toString()}`, { method: 'GET' });
+    const data = await res.json();
+    const exportRows = data.success ? (data.history || []) : [];
+    if (exportRows.length === 0) return;
 
     const csvHeaders = ["Timestamp", "Member", "Item", "Qty", "ApplicationStatus", "SelectionStatus", "LiveStatus", "Priority", "EventDate"];
     
-    const csvRows = sortedRecords.map(row => [
+    const csvRows = exportRows.map(row => [
       `"${row.date}"`,
       `"${row.member}"`,
       `"${row.item}"`,
@@ -341,7 +330,7 @@ export default function RequestHistoryTab({ user }) {
           <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Request History Ledger</h1>
           <div className="text-[11px] font-mono text-slate-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
             <span>USER: <strong className="text-indigo-400 font-sans font-semibold">{currentUserName || 'Unassigned'}</strong></span>
-            <span>TOTAL ROWS: <strong className="text-slate-300">{sortedRecords.length} ROWS</strong></span>
+            <span>TOTAL ROWS: <strong className="text-slate-300">{historyTotal} ROWS</strong></span>
           </div>
         </div>
 
@@ -376,8 +365,8 @@ export default function RequestHistoryTab({ user }) {
           <input 
             type="text"
             placeholder="Filter by keyword..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
             className="w-full h-9 bg-slate-950 border border-slate-800 rounded-xl px-3 text-xs text-slate-200 placeholder-slate-650 outline-none focus:border-slate-700 transition shadow-inner font-sans"
           />
         </div>
@@ -467,7 +456,7 @@ export default function RequestHistoryTab({ user }) {
                   </td>
                 </tr>
               ) : (
-                sortedRecords.slice((historyPage - 1) * rowLimit, historyPage * rowLimit).map((row) => {
+                sortedRecords.map((row) => {
                   const selStatus = (row.selectionStatus || '').toLowerCase();
                   const appStatus = (row.applicationStatus || '').toLowerCase();
                   const isSelected = selStatus === 'selected';
@@ -567,7 +556,7 @@ export default function RequestHistoryTab({ user }) {
             <button
               type="button"
               onClick={handleDownloadCSVExport}
-              disabled={sortedRecords.length === 0}
+              disabled={historyTotal === 0}
               className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition py-2 px-4 shadow cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
             >
               <IconDownload /> Export to CSV

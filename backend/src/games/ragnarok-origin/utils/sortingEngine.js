@@ -1,12 +1,13 @@
 // backend/src/utils/sortingEngine.js
 
+export const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+
 /**
  * Decodes high-precision millisecond timestamps directly from a Firebase Push ID
  */
-function extractTimeFromId(id, timezone = "Asia/Manila") {
+export function extractTimeFromId(id, timezone = "Asia/Manila") {
   try {
     if (!id || id.length < 8) return '';
-    const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
     let ms = 0;
     for (let i = 0; i < 8; i++) {
       const idx = PUSH_CHARS.indexOf(id.charAt(i));
@@ -19,6 +20,17 @@ function extractTimeFromId(id, timezone = "Asia/Manila") {
   } catch (e) {
     return '';
   }
+}
+
+/** Lexicographic lower-bound push ID at `ms` (pairs with extractTimeFromId). */
+export function pushIdAt(ms) {
+  let time = Math.max(0, Math.floor(Number(ms) || 0));
+  let id = '';
+  for (let i = 0; i < 8; i++) {
+    id = PUSH_CHARS.charAt(time % 64) + id;
+    time = Math.floor(time / 64);
+  }
+  return `${id}------------`;
 }
 
 /** Flatten a web_requests snapshot/map and keep the row id (object key). */

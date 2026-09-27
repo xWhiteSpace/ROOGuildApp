@@ -35,15 +35,8 @@ export async function replaceArchiveInGameStatus(db, sessionId, statusMap) {
 }
 
 export async function findLatestArchiveForEvent(db, eventDate, eventKey) {
-  const snap = await db.ref('attendance/session_archive').once('value');
-  if (!snap.exists()) return null;
-  const archives = snap.val() || {};
-  const matches = Object.values(archives).filter((s) => (
-    s && String(s.eventDate || '') === String(eventDate || '') && String(s.eventKey || '') === String(eventKey || '')
-  ));
-  if (!matches.length) return null;
-  matches.sort((a, b) => (Number(b.endedAt) || 0) - (Number(a.endedAt) || 0));
-  return matches[0];
+  const { findArchiveForEvent } = await import('../../../db/database.js');
+  return findArchiveForEvent(eventDate, eventKey);
 }
 
 export function pendingOcrKey(eventDate, eventKey) {

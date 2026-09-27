@@ -41,7 +41,6 @@ import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
-import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -101,6 +100,7 @@ export default function LiveRaidTab({ user }) {
   const [monitoringStartTime, setMonitoringStartTime] = useState('');
   const [monitoringEndTime, setMonitoringEndTime] = useState('');
   const [monitoringPollInterval, setMonitoringPollInterval] = useState(15);
+  const commitmentsEtagRef = useRef('');
   const monitoringStartTimeRef = useRef('');
   const monitoringEndTimeRef = useRef('');
   const monitoringPollIntervalRef = useRef(15);
@@ -311,14 +311,13 @@ export default function LiveRaidTab({ user }) {
   const loadMasterSetupData = async () => {
     try {
       const headers = getRequestHeaders();
-      const initRes = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers, credentials: 'include' });
+      const initRes = await fetch(`${backendUrl}/api/attendance/members?view=card`, { method: 'GET', headers, credentials: 'include' });
       const initData = await initRes.json();
       if (initData.success) {
         setMembers(initData.members || {});
-        setCommitments(initData.commitments || {});
       }
 
-      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get`, { method: 'GET', headers, credentials: 'include' });
+      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs,events,warRooms,liveRaidMaxWarRooms,timezone`, { method: 'GET', headers, credentials: 'include' });
       const settingsData = await settingsRes.json();
       if (settingsData.success && settingsData.config) {
         setJobsCatalog(settingsData.config.jobs || {});
@@ -328,13 +327,13 @@ export default function LiveRaidTab({ user }) {
         if (settingsData.config.timezone) setGuildTimezone(settingsData.config.timezone);
       }
 
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions`, { method: 'GET', headers, credentials: 'include' });
+      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
       const compsData = await compsRes.json();
       if (compsData.success) {
         setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
       }
 
-      const histRes = await apiFetch('/api/live-raid/history/all', { method: 'GET' });
+      const histRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
       const histData = await histRes.json();
       if (histData.success) {
         setHistorySessions(histData.sessions || {});
@@ -370,8 +369,14 @@ export default function LiveRaidTab({ user }) {
 
   const loadCommitments = async () => {
     try {
-      const res = await apiFetch('/api/attendance/commitments', { method: 'GET' });
+      const res = await apiFetch('/api/attendance/commitments', {
+        method: 'GET',
+        headers: commitmentsEtagRef.current ? { 'If-None-Match': `"${commitmentsEtagRef.current}"` } : {},
+      });
       const data = await res.json();
+      const nextTag = String(res.headers.get('ETag') || data.etag || '').replace(/^W\//, '').replaceAll('"', '');
+      if (nextTag) commitmentsEtagRef.current = nextTag;
+      if (data.unchanged) return;
       if (data.success) setCommitments(data.commitments || {});
     } catch (err) {
       console.error('Failed to load commitments:', err);
@@ -445,34 +450,15 @@ export default function LiveRaidTab({ user }) {
     fetchActiveLiveSession(true);
   }, [user]);
 
-  // Periodic Polling synchronization (Real-time collaboration)
   useEffect(() => {
     if (!session) return undefined;
-
-    const stopLive = pollWhileVisible(() => {
-      fetchActiveLiveSession(false);
-    }, 4000);
-
-    const stopVoice = pollWhileVisible(() => {
-      fetchVoicePresenceList(session);
-    }, 10000);
-
     fetchVoicePresenceList(session);
-
-    return () => {
-      stopLive();
-      stopVoice();
-    };
   }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
 
   useEffect(() => {
     if (session !== null) return undefined;
     loadPublishedCompositions();
     loadCommitments();
-    return pollWhileVisible(() => {
-      loadPublishedCompositions();
-      loadCommitments();
-    }, 5000);
   }, [session]);
 
   const publishedList = useMemo(() => {

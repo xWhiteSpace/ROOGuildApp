@@ -1,6 +1,8 @@
 // backend/src/api/attendance.routes.js
 import { Router } from 'express';
-import { getTenantStore } from '../db/database.js';
+import { getTenantStore, listCommitmentKeysForEventId, loadCommitmentsForWeek, sqlFingerprint } from '../db/database.js';
+import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
+import { DEFAULT_TZ, getWeekMonday } from '../utils/guildTime.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
 import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
@@ -198,50 +200,12 @@ router.post('/begin-raid', async (req, res) => {
     sessionPayload.userTallies = {};
 
     await db.ref('attendance/active_session').set(sessionPayload);
+    if (global.attendanceIntervalTicker) {
+      clearInterval(global.attendanceIntervalTicker);
+      global.attendanceIntervalTicker = undefined;
+    }
 
-    const pollIntervalMs = 15 * 60 * 1000; // 15-minute floor to avoid Discord REST pressure
-
-    // Initialize the low-overhead synchronous connection-state polling routine
-    if (global.attendanceIntervalTicker) clearInterval(global.attendanceIntervalTicker);
-    
-    global.attendanceIntervalTicker = setInterval(async () => {
-      try {
-        if (isDiscordCircuitOpen()) return;
-
-        const activeSnap = await db.ref('attendance/active_session').once('value');
-        if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
-          return clearInterval(global.attendanceIntervalTicker);
-        }
-
-        const currentSession = activeSnap.val();
-        const nextTotalPulses = (currentSession.totalPulses || 0) + 1;
-        const updatedTallies = currentSession.userTallies || {};
-
-        const whitelistedRooms = [
-          discordChannel('DISCORD_WARROOM_ID_1'),
-          discordChannel('DISCORD_WARROOM_ID_2'),
-          discordChannel('DISCORD_WARROOM_ID_3'),
-          discordChannel('DISCORD_WARROOM_ID_4'),
-          discordChannel('DISCORD_WARROOM_ID_5')
-        ].filter(Boolean);
-
-        const { fetchVoiceChannelPresentUids } = await import('../games/ragnarok-origin/utils/warRoomResolver.js');
-        const presentUserIds = await fetchVoiceChannelPresentUids(discordClient, whitelistedRooms);
-
-        presentUserIds.forEach(uid => {
-          updatedTallies[uid] = (updatedTallies[uid] || 0) + 1;
-        });
-
-        await db.ref('attendance/active_session').update({
-          checksPresent: nextTotalPulses,
-          userTallies: updatedTallies
-        });
-      } catch (loopErr) {
-        console.error("⚠️ Presence polling ticker exception caught:", loopTargetMin.message);
-      }
-    }, pollIntervalMs);
-
-    return res.json({ success: true, message: 'Live Raid active. Polling initialized.' });
+    return res.json({ success: true, message: 'Live Raid active.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -514,11 +478,26 @@ router.get('/commitments', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
+    const tenantId = getCurrentTenantId();
     const db = getTenantStore();
-    const snap = await db.ref('attendance/commitments').once('value');
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const timezone = configSnap.exists() ? (configSnap.val()?.timezone || DEFAULT_TZ) : DEFAULT_TZ;
+    const weekMonday = req.query.weekMonday || getWeekMonday(timezone);
+    const incoming = normalizeEtag(req.headers['if-none-match']);
+    let fp = '';
+    if (tenantId) {
+      fp = await sqlFingerprint(tenantId, { commitments: true, commitmentWeekMonday: weekMonday });
+      if (incoming && fp && fp === incoming) {
+        return sendNotModified(res, fp);
+      }
+    }
+    const commitments = await loadCommitmentsForWeek(weekMonday);
+    if (fp) setEtag(res, fp);
     return res.json({
       success: true,
-      commitments: snap.exists() ? snap.val() : {},
+      etag: fp,
+      weekMonday,
+      commitments,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -637,18 +616,13 @@ router.delete('/special-events/:id', async (req, res) => {
     await db.ref(`scheduler/special_events/${id}`).remove();
     
     // 2. Perform a targeted cleanup on commitments matching this event ID
-    const commitmentsSnap = await db.ref('attendance/commitments').once('value');
-    if (commitmentsSnap.exists()) {
-      const commitments = commitmentsSnap.val();
+    const matchingKeys = await listCommitmentKeysForEventId(id);
+    if (matchingKeys.length > 0) {
       const updates = {};
-      Object.keys(commitments).forEach(key => {
-        if (key.endsWith(`_${id}`)) {
-          updates[`attendance/commitments/${key}`] = null;
-        }
+      matchingKeys.forEach((key) => {
+        updates[`attendance/commitments/${key}`] = null;
       });
-      if (Object.keys(updates).length > 0) {
-        await db.ref().update(updates);
-      }
+      await db.ref().update(updates);
     }
 
     return res.json({ success: true, message: 'Special event and localized sign-ups purged successfully.' });
@@ -701,6 +675,22 @@ router.get('/compositions', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
     const db = getTenantStore();
+    const requestedId = String(req.query.id || '').trim();
+    const listOnly = String(req.query.fields || '') === 'list' && !requestedId;
+
+    if (requestedId) {
+      const snap = await db.ref(`attendance/compositions/${requestedId}`).once('value');
+      if (!snap.exists()) {
+        return res.json({ success: true, compositions: {} });
+      }
+      const normalized = normalizeComposition(snap.val(), requestedId);
+      const persistable = compositionForPersist(normalized);
+      if (normalized._migratedFromLegacy) {
+        await db.ref(`attendance/compositions/${requestedId}`).set(persistable);
+      }
+      return res.json({ success: true, compositions: { [requestedId]: persistable } });
+    }
+
     const snap = await db.ref('attendance/compositions').once('value');
     const rawMap = snap.exists() ? snap.val() : {};
     const compositions = {};
@@ -709,8 +699,8 @@ router.get('/compositions', async (req, res) => {
     Object.entries(rawMap).forEach(([configId, raw]) => {
       const normalized = normalizeComposition(raw, configId);
       const persistable = compositionForPersist(normalized);
-      compositions[configId] = persistable;
-      if (normalized._migratedFromLegacy) {
+      compositions[configId] = listOnly ? { id: configId, title: persistable.title || '' } : persistable;
+      if (!listOnly && normalized._migratedFromLegacy) {
         migrationWrites[`attendance/compositions/${configId}`] = persistable;
       }
     });
@@ -1209,6 +1199,32 @@ router.put('/peak-hours/me', async (req, res) => {
   }
 });
 
+// GET /api/attendance/members -> full roster, or ?view=card for sparkline/name pages
+router.get('/members', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const snap = await db.ref('auction/members').once('value');
+    const raw = snap.exists() ? snap.val() : {};
+    if (String(req.query.view || '') === 'card') {
+      const members = {};
+      Object.entries(raw).forEach(([uid, m]) => {
+        members[uid] = {
+          uid,
+          displayName: m?.displayName || '',
+          jobCode: m?.jobCode || '',
+          isRaidRoster: m?.isRaidRoster === true,
+        };
+      });
+      return res.json({ success: true, members });
+    }
+    return res.json({ success: true, members: raw });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/attendance/members/:uid/profile
 router.get('/members/:uid/profile', async (req, res) => {
   const user = resolveUserIdentity(req);
@@ -1484,7 +1500,12 @@ router.get('/published', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
     const { listPublished } = await import('../games/ragnarok-origin/services/publishedComposition.js');
-    const { published, anchor } = await listPublished(getTenantStore());
+    const { getRaidCycleStatus } = await import('../games/ragnarok-origin/raidTimeWindow.js');
+    const extraIds = String(req.query.ids || '').split(',').map((id) => id.trim()).filter(Boolean);
+    const cycle = getRaidCycleStatus();
+    const { published, anchor } = await listPublished(getTenantStore(), {
+      ids: [cycle.publishedId, ...extraIds],
+    });
     return res.json({ success: true, published, anchor });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

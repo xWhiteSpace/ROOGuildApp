@@ -27,7 +27,6 @@ if (resolvedProxyUrl) {
   const proxyAgent = new ProxyAgent({ uri: resolvedProxyUrl });
   setGlobalDispatcher(proxyAgent);
 } else {
-  console.log('[DISCORD BOT] Prefer IPv4 for Discord REST + gateway (avoids silent IPv6 hangs on Render).');
   setGlobalDispatcher(discordDispatcher);
 }
 
@@ -66,10 +65,6 @@ async function preflightDiscordGateway(token) {
       signal: AbortSignal.timeout(10_000),
     });
     const snippet = (await res.text().catch(() => '')).slice(0, 240).replace(/\s+/g, ' ');
-    console.log(
-      `[DISCORD BOT] Gateway REST preflight: HTTP ${res.status} in ${Date.now() - started}ms` +
-      (res.ok ? '' : ` body=${snippet}`)
-    );
     if (res.status === 401 || res.status === 403) {
       console.error('[DISCORD BOT] Token rejected by Discord REST. Re-copy DISCORD_BOT_TOKEN on Render.');
       return { blocked: false, status: res.status };
@@ -88,6 +83,11 @@ async function preflightDiscordGateway(token) {
         'Do not redeploy or restart — each probe extends the ban. HTTP can stay up; buttons will not ACK until this clears.'
       );
       return { blocked: true, status: 429 };
+    }
+    if (!res.ok) {
+      console.error(
+        `[DISCORD BOT] Gateway REST preflight: HTTP ${res.status} in ${Date.now() - started}ms body=${snippet}`
+      );
     }
     return { blocked: false, status: res.status };
   } catch (err) {
@@ -108,15 +108,6 @@ export async function initializeDiscordBot() {
   await hydrateDiscordCircuit();
   await preflightDiscordGateway(token);
 
-  const bootStatus = getDiscordRateLimitStatus();
-  console.log(
-    `[DISCORD BOT] Boot diagnostics: tokenLength=${token.length} circuitOpen=${bootStatus.circuitOpen} ` +
-    `circuitUntil=${bootStatus.circuitUntilHuman || 'none'} remaining=${bootStatus.circuitRemainingHuman}`
-  );
-  console.log(
-    '[DISCORD BOT] Render "service is live" only means HTTP port 10000 is open — wait for "successfully deployed as" before the bot can ACK buttons.'
-  );
-
   discordClient.on('error', (err) => {
     console.error(`🛑 [DISCORD BOT] client error: ${err.message}`);
   });
@@ -134,12 +125,6 @@ export async function initializeDiscordBot() {
       `🛑 [DISCORD BOT] shard ${shardId} disconnected code=${event?.code ?? 'n/a'} reason=${event?.reason || 'none'}`
     );
   });
-  discordClient.on('debug', (info) => {
-    if (/Provided token/i.test(info)) return;
-    if (/\[WS|Heartbeat|Identif|Ready|Session|429|Rate|Invalid|Connect|Destroy|Resume|Gateway/i.test(info)) {
-      console.log(`[DISCORD BOT] ${info}`);
-    }
-  });
 
   let gatewayReadyBound = false;
   const onGatewayReady = () => {
@@ -152,7 +137,6 @@ export async function initializeDiscordBot() {
     forEachOnboardedTenant(async (tenant) => {
       try {
         await clearGuildCommands(tenant.id);
-        console.log(`[SLASH] Cleared guild commands for ${tenant.id}`);
       } catch (err) {
         console.warn(`[SLASH] Could not clear commands for ${tenant.id}:`, err.message);
       }
@@ -271,6 +255,8 @@ async function withGuildTenant(guildId, fn) {
             await maybeAnnounceEvents();
             const { maybeAnnounceRaidEvents } = await import('./raidEventAnnounce.js');
             await maybeAnnounceRaidEvents();
+            const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
+            await refreshGvgReadinessBoard();
           }
           const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
           await attendanceDecision.closeExpiredDeadlines();
@@ -279,8 +265,6 @@ async function withGuildTenant(guildId, fn) {
           await liveRaid.maybeAutoEndLiveRaid();
           const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
           await maybeRunWarRoomAutomation();
-          const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
-          await refreshGvgReadinessBoard();
           const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
           await maybeAutoCommitAuction();
         });
@@ -288,9 +272,8 @@ async function withGuildTenant(guildId, fn) {
 
       if (skipFirstDiscordTick) {
         skipFirstDiscordTick = false;
-        console.log('⏭️ [SCHEDULER]: Skipping Discord announcers on the first tick after ready.');
       } else if (circuitOpen) {
-        console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers.');
+        console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers and readiness edits.');
       }
     }, 60000);
   };
@@ -338,17 +321,13 @@ async function withGuildTenant(guildId, fn) {
       console.error(
         '🛑 [DISCORD BOT]: Gateway still not ready after 25s. ' +
         `isReady=false wsStatus=${wsStatus ?? 'n/a'} user=${discordClient.user?.tag || 'none'}. ` +
-        'HTTP can be live while the bot is offline. Token and privileged intents are OK if boot diagnostics showed tokenLength~72. ' +
+        'HTTP can be live while the bot is offline. ' +
         'This hang is Discord TCP/WebSocket from this host (often Render IP blocked).'
       );
     }, 25000);
 
     try {
-      console.log('⚡ [DISCORD BOT]: Initiating secure gateway handshake stream...');
       await discordClient.login(token);
-      console.log(
-        `[DISCORD BOT] login() settled. isReady=${discordClient.isReady()} user=${discordClient.user?.tag || 'none'}`
-      );
       if (!discordClient.isReady()) {
         scheduleRetry(15 * 60 * 1000, 'login() settled but client is not ready.');
       }

@@ -53,7 +53,7 @@ export default function RaidComposeTab({ user }) {
   const loadWorkspace = async () => {
     try {
       setLoading(true);
-      const configRes = await apiFetch('/api/requests/settings/get');
+      const configRes = await apiFetch('/api/requests/settings/get?fields=events,timezone');
       const configData = await configRes.json();
       if (configData.success && configData.config) {
         setEventsCatalog(configData.config.events || {});

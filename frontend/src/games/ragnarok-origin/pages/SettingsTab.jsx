@@ -225,7 +225,7 @@ export default function SettingsTab({ user, onSessionUser }) {
 
   useEffect(() => {
     if (isLocked) return undefined;
-    apiFetch('/api/attendance/compositions')
+    apiFetch('/api/attendance/compositions?fields=list')
       .then((r) => r.json())
       .then((data) => {
         if (data.success) setRaidCompositions(data.compositions || {});

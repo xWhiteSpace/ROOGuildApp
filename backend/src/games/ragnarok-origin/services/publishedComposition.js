@@ -2,7 +2,7 @@
  * Published (sent) Raid Compose snapshots + Set Active anchor.
  * Party / Attendance Discord cards read the anchor; Live Raid starts from a snapshot.
  */
-import { getTenantStore } from '../../../db/database.js';
+import { getTenantStore, loadPublishedByIds } from '../../../db/database.js';
 import { buildLiveGridsFromComposition } from '@guildname/shared/compositionTabs';
 
 export const PUBLISHED_PATH = 'attendance/published';
@@ -34,16 +34,14 @@ export async function resolveAnchoredComposition(dbArg) {
   return { id, ...snap.val() };
 }
 
-export async function listPublished(dbArg) {
+export async function listPublished(dbArg, { ids } = {}) {
   const db = dbArg || getTenantStore();
-  const [listSnap, anchorSnap] = await Promise.all([
-    db.ref(PUBLISHED_PATH).once('value'),
-    db.ref(ANCHOR_PATH).once('value'),
-  ]);
-  return {
-    published: listSnap.exists() ? listSnap.val() : {},
-    anchor: anchorSnap.exists() ? anchorSnap.val() : null,
-  };
+  const anchorSnap = await db.ref(ANCHOR_PATH).once('value');
+  const anchor = anchorSnap.exists() ? anchorSnap.val() : null;
+  const requested = Array.isArray(ids) ? ids : [];
+  const keys = [...new Set([anchor, ...requested].map((key) => String(key || '').trim()).filter(Boolean))];
+  const published = keys.length ? await loadPublishedByIds(keys) : {};
+  return { published, anchor };
 }
 
 /**

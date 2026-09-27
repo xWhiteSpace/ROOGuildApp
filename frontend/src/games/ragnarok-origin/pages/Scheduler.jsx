@@ -21,7 +21,6 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiFetch, getBackendUrl } from '../../../services/apiClient';
-import { pollWhileVisible } from '../../../utils/pollWhileVisible';
 import {
   formatGuildDate,
   getWeekMonday,
@@ -34,6 +33,7 @@ const backendUrl = getBackendUrl();
 
 export default function Scheduler({ user }) {
   const calendarRef = useRef(null);
+  const commitmentsEtagRef = useRef('');
   const [loading, setLoading] = useState(true);
   const [eventsCatalog, setEventsCatalog] = useState({});
   const [commitments, setCommitments] = useState({});
@@ -80,7 +80,7 @@ export default function Scheduler({ user }) {
   const loadSchedulerEcosystem = async () => {
     try {
       setLoading(true);
-      const configRes = await apiFetch('/api/requests/settings/get', { method: 'GET' });
+      const configRes = await apiFetch('/api/requests/settings/get?fields=events,specialEventCategories,timezone', { method: 'GET' });
       const configData = await configRes.json();
       let nextTz = timezone;
       if (configData.success && configData.config?.events) setEventsCatalog(configData.config.events);
@@ -110,8 +110,16 @@ export default function Scheduler({ user }) {
 
   const fetchCommitmentsFromApi = async () => {
     try {
-      const res = await apiFetch('/api/attendance/commitments', { method: 'GET' });
+      const weekQs = weekMonday ? `?weekMonday=${encodeURIComponent(weekMonday)}` : '';
+      const res = await apiFetch(`/api/attendance/commitments${weekQs}`, {
+        method: 'GET',
+        headers: commitmentsEtagRef.current ? { 'If-None-Match': `"${commitmentsEtagRef.current}"` } : {},
+      });
+      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
+      if (nextTag) commitmentsEtagRef.current = nextTag;
+      if (res.status === 304) return;
       const data = await res.json();
+      if (data.unchanged) return;
       if (data.success && data.commitments) {
         setCommitments(data.commitments);
       }
@@ -145,8 +153,6 @@ export default function Scheduler({ user }) {
   useEffect(() => {
     loadSchedulerEcosystem();
     fetchCommitmentsFromApi();
-
-    return pollWhileVisible(fetchCommitmentsFromApi, 4000);
   }, [user]);
 
   // Re-ensure when timezone changes after first load
@@ -159,6 +165,13 @@ export default function Scheduler({ user }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timezone]);
+
+  useEffect(() => {
+    if (!weekMonday) return;
+    commitmentsEtagRef.current = '';
+    fetchCommitmentsFromApi();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekMonday]);
 
   const handleRefreshWeek = async () => {
     try {

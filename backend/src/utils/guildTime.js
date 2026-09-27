@@ -113,6 +113,28 @@ export function enumerateWeekDates(weekMonday) {
 }
 
 /**
+ * Walk YYYY-MM-DD by whole calendar days (UTC noon anchors, same as enumerateWeekDates).
+ */
+export function addDaysToDateStr(dateStr, days) {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const base = new Date(`${dateStr}T12:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + Number(days || 0));
+  return `${base.getUTCFullYear()}-${pad(base.getUTCMonth() + 1)}-${pad(base.getUTCDate())}`;
+}
+
+/**
+ * Inclusive week start + exclusive next-Monday bound for composite keys (`YYYY-MM-DD_eventId`).
+ */
+export function weekKeyBounds(weekMonday) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(weekMonday || ''))) return null;
+  return {
+    start: weekMonday,
+    endExclusive: addDaysToDateStr(weekMonday, 7),
+    dates: enumerateWeekDates(weekMonday).map((d) => d.dateStr),
+  };
+}
+
+/**
  * Next N occurrences of a target weekday in guild TZ (including today if match).
  * @param {number} targetDayOfWeek 0=Sun..6=Sat
  * @param {string} [timezone]
