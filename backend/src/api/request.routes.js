@@ -401,17 +401,21 @@ router.post('/announce-allocate', async (req, res) => {
 
     const session = sessionSnap.val() || {};
     const lobby = await buildRequestLobby(user.id, user.displayName || user.username);
+    const { buildAllocateBidRows } = await import('@guildname/shared/allocatePreview');
     const {
-      foldUniqueExclusiveAllocate,
       buildAllocateOpenAnnounceChunks,
       sendGenRoomMessage,
     } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
 
-    const { selectedUserIds, notSelectedUserIds } = foldUniqueExclusiveAllocate(
-      session.categoryAllocations,
-      lobby.rankingsByItem
-    );
-    const chunks = buildAllocateOpenAnnounceChunks({ selectedUserIds, notSelectedUserIds });
+    const { selectedRows, notSelectedRows } = buildAllocateBidRows({
+      items: lobby.items,
+      lootSummary: session.lootSummary,
+      categoryAllocations: session.categoryAllocations,
+      rankingsByItem: lobby.rankingsByItem,
+      requestsByItemDetails: lobby.requestsByItemDetails,
+      members: lobby.members,
+    });
+    const chunks = buildAllocateOpenAnnounceChunks({ selectedRows, notSelectedRows });
     const mentionOptions = { allowedMentions: { parse: ['everyone', 'users'] } };
     for (const chunk of chunks) {
       await sendGenRoomMessage(chunk, mentionOptions);

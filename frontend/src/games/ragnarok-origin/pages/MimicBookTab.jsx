@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useContext } from 'react';
 import { MimicBookContext } from '../../../App';
 import { apiFetch } from '../../../services/apiClient';
+import { buildAllocateBidRows } from '@guildname/shared/allocatePreview';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -937,42 +938,6 @@ const [rawMembers, setRawMembers] = useState({});
   const canCopy = Boolean(searchQuery.trim()) && copyableRows.length > 0;
   const canExport = namedLedgerRows(buildLedgerRows({ applySearch: false })).length > 0;
 
-  const foldUniqueExclusiveAllocate = (categoryAllocations = {}, rankingsMap = {}) => {
-    const selectedUserIds = [];
-    const selectedSet = new Set();
-    Object.values(categoryAllocations || {}).forEach((cat) => {
-      const raw = cat?.selected;
-      const boxes = Array.isArray(raw) ? raw : Object.values(raw || {});
-      boxes.forEach((uid) => {
-        if (!uid) return;
-        const key = String(uid);
-        if (selectedSet.has(key)) return;
-        selectedSet.add(key);
-        selectedUserIds.push(key);
-      });
-    });
-    const notSelectedUserIds = [];
-    const seenNotSelected = new Set();
-    Object.values(rankingsMap || {}).forEach((list) => {
-      (Array.isArray(list) ? list : []).forEach((uid) => {
-        if (!uid) return;
-        const key = String(uid);
-        if (selectedSet.has(key) || seenNotSelected.has(key)) return;
-        seenNotSelected.add(key);
-        notSelectedUserIds.push(key);
-      });
-    });
-    return { selectedUserIds, notSelectedUserIds };
-  };
-
-  const lobbyDetailsForUid = (uid) => {
-    for (const item of items) {
-      const details = requestsByItemDetails[item.id]?.[uid];
-      if (details) return details;
-    }
-    return {};
-  };
-
   const allocatePreviewSummaryRows = allocatePreview
     ? lootRows.map((row) => {
         const qty = ((row.endPage - row.startPage) * qtyPerPage) + (row.endPos - row.startPos) + 1;
@@ -989,29 +954,16 @@ const [rawMembers, setRawMembers] = useState({});
       })
     : [];
 
-  const allocatePreviewLists = allocatePreview
-    ? foldUniqueExclusiveAllocate(allocatePreview.categoryAllocations, rankingsByItem)
-    : { selectedUserIds: [], notSelectedUserIds: [] };
-
-  const allocatePreviewSelectedRows = allocatePreviewLists.selectedUserIds.map((uid) => {
-    const details = lobbyDetailsForUid(uid);
-    return {
-      key: uid,
-      name: resolveDisplayName(uid) || details.name || uid,
-      requestedQty: details.quantity || 1,
-      priority: details.priority ?? 0,
-    };
-  });
-
-  const allocatePreviewNotSelectedRows = allocatePreviewLists.notSelectedUserIds.map((uid) => {
-    const details = lobbyDetailsForUid(uid);
-    return {
-      key: uid,
-      name: resolveDisplayName(uid) || details.name || uid,
-      requestedQty: details.quantity || 1,
-      priority: details.priority ?? 0,
-    };
-  });
+  const { selectedRows: allocatePreviewSelectedRows, notSelectedRows: allocatePreviewNotSelectedRows } = allocatePreview
+    ? buildAllocateBidRows({
+        items,
+        lootSummary: allocatePreview.lootSummary,
+        categoryAllocations: allocatePreview.categoryAllocations,
+        rankingsByItem,
+        requestsByItemDetails,
+        members: rawMembers,
+      })
+    : { selectedRows: [], notSelectedRows: [] };
   const pageSlotsToRender = Array.from({ length: qtyPerPage }, (_, i) => {
     return generatedSlots.find(s => s.page === bookCurrentPage && s.slot === (i + 1)) || null;
   });
@@ -1925,21 +1877,23 @@ const [rawMembers, setRawMembers] = useState({});
                     <table className="w-full text-left border-collapse text-xs font-mono">
                       <thead>
                         <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
+                          <th className="p-2.5 text-center">#</th>
+                          <th className="p-2.5">Item</th>
                           <th className="p-2.5">Member</th>
-                          <th className="p-2.5 text-center">Requested</th>
                           <th className="p-2.5 text-center">Priority</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-900 text-slate-300">
                         {allocatePreviewSelectedRows.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests selected.</td>
+                            <td colSpan={4} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests selected.</td>
                           </tr>
                         ) : (
                           allocatePreviewSelectedRows.map((row) => (
                             <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
+                              <td className="p-2.5 text-center text-slate-500 font-bold">#{row.rankLabel}</td>
+                              <td className="p-2.5 font-sans font-semibold text-slate-200">{row.itemName}</td>
                               <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
-                              <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
                               <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
                             </tr>
                           ))
@@ -1957,21 +1911,23 @@ const [rawMembers, setRawMembers] = useState({});
                     <table className="w-full text-left border-collapse text-xs font-mono">
                       <thead>
                         <tr className="bg-slate-900/40 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-900 text-[9px] select-none">
+                          <th className="p-2.5 text-center">#</th>
+                          <th className="p-2.5">Item</th>
                           <th className="p-2.5">Member</th>
-                          <th className="p-2.5 text-center">Requested</th>
                           <th className="p-2.5 text-center">Priority</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-900 text-slate-300">
                         {allocatePreviewNotSelectedRows.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests left out.</td>
+                            <td colSpan={4} className="p-4 text-center text-slate-600 italic font-sans text-xs">No bid requests left out.</td>
                           </tr>
                         ) : (
                           allocatePreviewNotSelectedRows.map((row) => (
                             <tr key={row.key} className="hover:bg-slate-900/10 transition-colors">
+                              <td className="p-2.5 text-center text-slate-500 font-bold">#{row.rankLabel}</td>
+                              <td className="p-2.5 font-sans font-semibold text-slate-200">{row.itemName}</td>
                               <td className="p-2.5 font-sans font-semibold text-slate-200">{row.name}</td>
-                              <td className="p-2.5 text-center text-slate-300 font-bold">{row.requestedQty}</td>
                               <td className="p-2.5 text-center text-amber-500 font-bold">{row.priority}</td>
                             </tr>
                           ))

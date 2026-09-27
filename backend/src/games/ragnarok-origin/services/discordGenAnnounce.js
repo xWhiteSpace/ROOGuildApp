@@ -54,46 +54,16 @@ function isDiscordSnowflake(uid) {
   return /^\d{5,22}$/.test(String(uid || '').trim());
 }
 
-/** Union of filled session slots vs lobby rankings. Presentation fold only. */
-export function foldUniqueExclusiveAllocate(categoryAllocations = {}, rankingsByItem = {}) {
-  const selectedUserIds = [];
-  const selectedSet = new Set();
-
-  Object.values(categoryAllocations || {}).forEach((cat) => {
-    const raw = cat?.selected;
-    const boxes = Array.isArray(raw) ? raw : Object.values(raw || {});
-    boxes.forEach((uid) => {
-      if (!uid) return;
-      const key = String(uid);
-      if (selectedSet.has(key)) return;
-      selectedSet.add(key);
-      selectedUserIds.push(key);
-    });
-  });
-
-  const notSelectedUserIds = [];
-  const seenNotSelected = new Set();
-  Object.values(rankingsByItem || {}).forEach((list) => {
-    (Array.isArray(list) ? list : []).forEach((uid) => {
-      if (!uid) return;
-      const key = String(uid);
-      if (selectedSet.has(key) || seenNotSelected.has(key)) return;
-      seenNotSelected.add(key);
-      notSelectedUserIds.push(key);
-    });
-  });
-
-  return { selectedUserIds, notSelectedUserIds };
+function formatAllocateBidLine(row) {
+  const rank = row.rankLabel || '—';
+  const item = row.itemName || row.itemId || 'Item';
+  const member = isDiscordSnowflake(row.uid) ? `<@${row.uid}>` : (row.name || row.uid);
+  return `#${rank}  **${item}**  ${member}  Prio ${row.priority ?? 0}`;
 }
 
-export function formatMentionColumns(userIds, columns = 3) {
-  const tags = (userIds || []).filter(isDiscordSnowflake).map((uid) => `<@${uid}>`);
-  if (tags.length === 0) return '_None_';
-  const lines = [];
-  for (let i = 0; i < tags.length; i += columns) {
-    lines.push(tags.slice(i, i + columns).join('    '));
-  }
-  return lines.join('\n');
+function formatAllocateBidBlock(rows) {
+  if (!rows?.length) return '_None_';
+  return rows.map(formatAllocateBidLine).join('\n');
 }
 
 export function chunkDiscordMessages(text, limit = DISCORD_MESSAGE_LIMIT) {
@@ -111,21 +81,19 @@ export function chunkDiscordMessages(text, limit = DISCORD_MESSAGE_LIMIT) {
   return chunks;
 }
 
-export function buildAllocateOpenAnnounce({ selectedUserIds, notSelectedUserIds }) {
-  const selectedBlock = formatMentionColumns(selectedUserIds);
-  const notSelectedBlock = formatMentionColumns(notSelectedUserIds);
+export function buildAllocateOpenAnnounce({ selectedRows, notSelectedRows }) {
   return [
     '@everyone',
     'The Live Auction is now Open. The members whos request are selected are as follows:',
-    selectedBlock,
+    formatAllocateBidBlock(selectedRows),
     '',
     'For members who were not selected by the system, dont worry, as your priority on the next Auction has increased.',
-    notSelectedBlock,
+    formatAllocateBidBlock(notSelectedRows),
   ].join('\n');
 }
 
-export function buildAllocateOpenAnnounceChunks({ selectedUserIds, notSelectedUserIds }) {
-  return chunkDiscordMessages(buildAllocateOpenAnnounce({ selectedUserIds, notSelectedUserIds }));
+export function buildAllocateOpenAnnounceChunks({ selectedRows, notSelectedRows }) {
+  return chunkDiscordMessages(buildAllocateOpenAnnounce({ selectedRows, notSelectedRows }));
 }
 
 export async function sendGenRoomMessage(content, options = {}) {

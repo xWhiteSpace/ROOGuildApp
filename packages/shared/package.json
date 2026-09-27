@@ -6,7 +6,8 @@
     "./compositionTabs": "./compositionTabs.js",
     "./raidCycle": "./raidCycle.js",
     "./attendanceStatus": "./attendanceStatus.js",
-    "./inGameAlias": "./inGameAlias.js"
+    "./inGameAlias": "./inGameAlias.js",
+    "./allocatePreview": "./allocatePreview.js"
   },
   "private": true
 }
