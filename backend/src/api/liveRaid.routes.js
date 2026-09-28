@@ -333,20 +333,37 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   return { armed: true, reason: 'scheduled' };
 }
 
+/** 'unknown' until the first read. 'absent' skips further reads. 'active' keeps the end watch. */
+let liveSessionWatch = 'unknown';
+
+export function getLiveSessionWatch() {
+  return liveSessionWatch;
+}
+
+export function noteLiveSessionStarted() {
+  liveSessionWatch = 'active';
+}
+
+export function noteLiveSessionCleared() {
+  liveSessionWatch = 'absent';
+}
+
 /**
  * Restart-safe backstop for auto-ending a Live Raid at its End Time.
- * Independent of the in-memory ticker: if an Active session's monitoring window
- * has elapsed, archive it just like the manual "End Raid" control. Safe to call
- * repeatedly (idempotent via the status === 'Active' guard).
+ * Reads once after boot. If no Active session exists, later ticks do not query
+ * until this process starts one. While one exists, keep watching until it ends.
  */
 export async function maybeAutoEndLiveRaid() {
   try {
+    if (liveSessionWatch === 'absent') return;
     const db = getTenantStore();
     const snap = await db.ref('attendance/live_session').once('value');
-    if (!snap.exists()) return;
-
+    if (!snap.exists() || snap.val()?.status !== 'Active') {
+      liveSessionWatch = 'absent';
+      return;
+    }
+    liveSessionWatch = 'active';
     const s = snap.val();
-    if (s.status !== 'Active') return;
     if (!s.monitoringEndsAt || Date.now() < Number(s.monitoringEndsAt)) return;
 
     console.log('[live-raid] Auto-end backstop: monitoring End Time reached — archiving session.');
@@ -428,6 +445,7 @@ export async function createLiveRaidFromPublished({
   const db = getTenantStore();
   const activeSnap = await db.ref('attendance/live_session').once('value');
   if (activeSnap.exists()) {
+    if (activeSnap.val()?.status === 'Active') noteLiveSessionStarted();
     return { ok: false, error: 'An active Live Raid session is already running.' };
   }
   if (!publishedId || !selectedWarRoomIds?.length) {
@@ -496,6 +514,7 @@ export async function createLiveRaidFromPublished({
   };
 
   await db.ref('attendance/live_session').set(sessionPayload);
+  noteLiveSessionStarted();
 
   if (parsedMon.monitoring) {
     armMonitoringSchedule(
@@ -620,6 +639,7 @@ async function endLiveRaidSessionInternal(s) {
   atomicUpdates['attendance/live_session'] = null;
   if (pendingClearPath) atomicUpdates[pendingClearPath] = null;
   await db.ref().update(atomicUpdates);
+  noteLiveSessionCleared();
 }
 
 // Endpoints
@@ -854,6 +874,7 @@ router.post('/cancel', async (req, res) => {
     }
 
     await db.ref('attendance/live_session').set(null);
+    noteLiveSessionCleared();
     return res.json({ success: true, message: 'Live Raid session terminated and cleared without archiving.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

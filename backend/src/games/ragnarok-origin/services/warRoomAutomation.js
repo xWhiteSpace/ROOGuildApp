@@ -12,10 +12,27 @@ import {
   setPublishedAnchor,
   writePublishedSnapshot,
 } from './publishedComposition.js';
-import { createLiveRaidFromPublished } from '../../../api/liveRaid.routes.js';
+import {
+  createLiveRaidFromPublished,
+  getLiveSessionWatch,
+  noteLiveSessionCleared,
+  noteLiveSessionStarted,
+} from '../../../api/liveRaid.routes.js';
 
 const STATUS_PATH = 'attendance/war_room_status';
 const lastWrittenStatus = new Map();
+const lastPublishKey = new Map();
+const lastLiveStartKey = new Map();
+
+function cyclePublishKey(cycle) {
+  return [
+    cycle.currentPhase,
+    cycle.activeEventId || '',
+    cycle.publishedId || '',
+    cycle.configId || '',
+    cycle.warDate || '',
+  ].join('|');
+}
 
 function statusSignature(patch) {
   return JSON.stringify({
@@ -76,7 +93,7 @@ async function ensurePublishedForCycle(db, cycle) {
   const presentIds = collectPublishedConfigIds(published);
   const alreadySynced = presentIds.length === 1 && presentIds[0] === targetConfigId;
   if (alreadySynced) {
-    await setPublishedAnchor({ db, id: publishedId, active: true });
+    await setPublishedAnchor({ db, id: publishedId, active: true, alreadyVerified: true });
     return { ok: true, id: publishedId };
   }
 
@@ -109,8 +126,19 @@ async function ensurePublishedForCycle(db, cycle) {
     }
   }
 
-  await setPublishedAnchor({ db, id: publishedId, active: true });
+  await setPublishedAnchor({ db, id: publishedId, active: true, alreadyVerified: true });
   return { ok: true, id: publishedId };
+}
+
+async function resolveLiveExists(db) {
+  const watch = getLiveSessionWatch();
+  if (watch === 'active') return true;
+  if (watch === 'absent') return false;
+  const liveSnap = await db.ref('attendance/live_session').once('value');
+  const active = liveSnap.exists() && liveSnap.val()?.status === 'Active';
+  if (active) noteLiveSessionStarted();
+  else noteLiveSessionCleared();
+  return active;
 }
 
 export async function maybeRunWarRoomAutomation() {
@@ -118,33 +146,36 @@ export async function maybeRunWarRoomAutomation() {
   const cycle = getRaidCycleStatus();
   if (!cycle || cycle.needsSetup || cycle.isForceLocked || !cycle.activeEventId) return;
 
+  const tenantId = getCurrentTenantId() || '_';
+  const publishKey = cyclePublishKey(cycle);
   let liveExists = false;
   if (cycle.currentPhase === 3) {
-    const liveSnap = await db.ref('attendance/live_session').once('value');
-    liveExists = liveSnap.exists();
+    liveExists = await resolveLiveExists(db);
   }
 
   if (cycle.currentPhase >= 1 && cycle.currentPhase <= 3) {
     const shouldSyncPublished = cycle.currentPhase <= 2 || !liveExists;
-    if (shouldSyncPublished) {
+    if (shouldSyncPublished && lastPublishKey.get(tenantId) !== publishKey) {
       const ensured = await ensurePublishedForCycle(db, cycle);
       if (!ensured.ok) {
         await writeStatus(db, { lastError: ensured.error, lastErrorAt: Date.now(), publishedId: cycle.publishedId });
         console.error('[war-room] publish/set-active failed:', ensured.error);
       } else {
+        lastPublishKey.set(tenantId, publishKey);
         await writeStatus(db, { lastError: null, publishedId: cycle.publishedId, eventId: cycle.activeEventId });
+        try {
+          const { ensureGvgReadinessBoardIfMissing } = await import('./discordAttendanceCards.js');
+          await ensureGvgReadinessBoardIfMissing();
+        } catch (err) {
+          console.error('[war-room] GVG Readiness board sync failed:', err.message);
+        }
       }
-    }
-    try {
-      const { ensureGvgReadinessBoardIfMissing } = await import('./discordAttendanceCards.js');
-      await ensureGvgReadinessBoardIfMissing();
-    } catch (err) {
-      console.error('[war-room] GVG Readiness board sync failed:', err.message);
     }
   }
 
   if (cycle.currentPhase !== 3) return;
   if (liveExists) return;
+  if (lastLiveStartKey.get(tenantId) === publishKey) return;
 
   const warRoomIds = cycle.warRoomIds || [];
   if (warRoomIds.length === 0) {
@@ -160,6 +191,7 @@ export async function maybeRunWarRoomAutomation() {
     return;
   }
 
+  lastLiveStartKey.set(tenantId, publishKey);
   const created = await createLiveRaidFromPublished({
     publishedId: cycle.publishedId,
     selectedWarRoomIds: warRoomIds,
@@ -170,6 +202,7 @@ export async function maybeRunWarRoomAutomation() {
   });
 
   if (!created.ok) {
+    if (getLiveSessionWatch() === 'active') return;
     await writeStatus(db, { lastError: created.error, lastErrorAt: Date.now() });
     console.error('[war-room] auto-start live raid failed:', created.error);
     return;

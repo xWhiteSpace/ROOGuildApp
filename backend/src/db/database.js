@@ -714,6 +714,39 @@ async function loadDoc(tenantId, docPath) {
   return rows[0].data;
 }
 
+function jsonKeyPath(keyPath) {
+  return JSON.stringify(keyPath);
+}
+
+const JSON_KEY_ARRAY = `ARRAY(SELECT jsonb_array_elements_text($3::jsonb))`;
+
+async function loadDocKey(tenantId, docPath, keyPath) {
+  const { rows } = await query(
+    `SELECT data #> ${JSON_KEY_ARRAY} AS data FROM json_docs WHERE tenant_id = $1 AND path = $2`,
+    [tenantId, docPath, jsonKeyPath(keyPath)]
+  );
+  if (!rows[0] || rows[0].data == null) return null;
+  return rows[0].data;
+}
+
+async function upsertDocKey(tenantId, docPath, keyPath, value) {
+  const payload = JSON.stringify(value ?? null);
+  await query(
+    `INSERT INTO json_docs (tenant_id, path, data)
+     VALUES ($1, $2, jsonb_set('{}'::jsonb, ${JSON_KEY_ARRAY}, $4::jsonb, true))
+     ON CONFLICT (tenant_id, path) DO UPDATE
+     SET data = jsonb_set(COALESCE(json_docs.data, '{}'::jsonb), ${JSON_KEY_ARRAY}, $4::jsonb, true)`,
+    [tenantId, docPath, jsonKeyPath(keyPath), payload]
+  );
+}
+
+async function deleteDocKey(tenantId, docPath, keyPath) {
+  await query(
+    `UPDATE json_docs SET data = data #- ${JSON_KEY_ARRAY} WHERE tenant_id = $1 AND path = $2`,
+    [tenantId, docPath, jsonKeyPath(keyPath)]
+  );
+}
+
 async function saveDoc(tenantId, docPath, data) {
   if (data === null || data === undefined || (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0 && docPath.includes('/'))) {
     if (data === null || data === undefined) {
@@ -766,12 +799,10 @@ async function readPath(tenantId, path) {
   }
 
   const docPath = docRootFor(parts);
-  const doc = await loadDoc(tenantId, docPath);
-  if (doc === undefined) return null;
   const rest = parts.slice(pathParts(docPath).length);
-  if (!rest.length) return doc;
-  const nested = getNested(doc, rest);
-  return nested === undefined ? null : nested;
+  if (rest.length) return await loadDocKey(tenantId, docPath, rest);
+  const doc = await loadDoc(tenantId, docPath);
+  return doc === undefined ? null : doc;
 }
 
 async function writePath(tenantId, path, value) {
@@ -859,10 +890,11 @@ async function writePath(tenantId, path, value) {
     await saveDoc(tenantId, docPath, value);
     return;
   }
-  const current = (await loadDoc(tenantId, docPath));
-  const base = current === undefined ? {} : current;
-  const next = setNested(base, rest, value);
-  await saveDoc(tenantId, docPath, next);
+  if (value === null || value === undefined) {
+    await deleteDocKey(tenantId, docPath, rest);
+    return;
+  }
+  await upsertDocKey(tenantId, docPath, rest, value);
 }
 
 async function updateAtPath(tenantId, path, patch) {

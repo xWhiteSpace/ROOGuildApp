@@ -1,4 +1,5 @@
 import { getPool, query } from './pool.js';
+import { invalidateOnboardedTenants } from './tenantContext.js';
 import { BILLING_ADVISORY_LOCK, billingEnv } from '../config/billingEnv.js';
 
 export const PERMANENT_BILLING_SOURCES = new Set(['invite', 'grandfathered']);
@@ -60,6 +61,7 @@ export async function activateTenantBilling(client, tenantId, fields) {
     graceUntil = null,
     cancelAtPeriodEnd = false,
   } = fields || {};
+  invalidateOnboardedTenants();
   await client.query(
     `UPDATE tenants SET
        subscription_status = $2,
@@ -117,6 +119,7 @@ export async function revertAutomaticFoundingSeatsOnce() {
     `SELECT data FROM platform_state WHERE key = 'billing_auto_grandfather_reverted_v1'`
   );
   if (rows[0]?.data?.done) return 0;
+  invalidateOnboardedTenants();
   const updated = await query(
     `UPDATE tenants
      SET subscription_status = 'inactive',

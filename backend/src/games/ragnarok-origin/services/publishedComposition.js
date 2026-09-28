@@ -243,16 +243,20 @@ export async function savePublishedGrids({ db, id, grids }) {
   return { ok: true, id: key, payload: { id: key, ...snap.val(), ...patch } };
 }
 
-export async function setPublishedAnchor({ db, id, active }) {
+export async function setPublishedAnchor({ db, id, active, alreadyVerified = false }) {
   const database = db || getTenantStore();
   const key = String(id || '');
   if (!key) return { ok: false, error: 'Composition id is required.' };
 
   if (active) {
-    const snap = await database.ref(`${PUBLISHED_PATH}/${key}`).once('value');
-    if (!snap.exists()) {
-      return { ok: false, error: 'Published composition not found.' };
+    if (!alreadyVerified) {
+      const snap = await database.ref(`${PUBLISHED_PATH}/${key}`).once('value');
+      if (!snap.exists()) {
+        return { ok: false, error: 'Published composition not found.' };
+      }
     }
+    const anchorSnap = await database.ref(ANCHOR_PATH).once('value');
+    if (anchorSnap.val() === key) return { ok: true, id: key, unchanged: true };
     await database.ref(ANCHOR_PATH).set(key);
     return { ok: true, id: key };
   }

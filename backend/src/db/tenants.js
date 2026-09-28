@@ -1,5 +1,17 @@
 import { query } from './pool.js';
-import { getCurrentTenantId, runWithTenant, setCachedConfig, setCachedChannels } from './tenantContext.js';
+import {
+  getCachedChannels,
+  getCachedConfig,
+  getCachedOnboardedTenants,
+  getCurrentTenantId,
+  hasCachedChannels,
+  hasCachedConfig,
+  invalidateOnboardedTenants,
+  runWithTenant,
+  setCachedChannels,
+  setCachedConfig,
+  setCachedOnboardedTenants,
+} from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { parseEnabledGames } from '../games/catalog.js';
 import { tenantHasAccess } from './billing.js';
@@ -64,6 +76,7 @@ export async function createTenant({
   discordChannels = {},
 }) {
   const tenantId = String(id);
+  invalidateOnboardedTenants();
   await query(
     `INSERT INTO tenants (id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, enabled_games)
      VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb)
@@ -102,6 +115,7 @@ export async function claimTenantOwner(tenantId, discordUserId) {
 }
 
 export async function markTenantOnboarded(id, { displayName, discordChannels, configuration } = {}) {
+  invalidateOnboardedTenants();
   const tenantId = String(id);
   if (displayName) {
     await query('UPDATE tenants SET display_name = $2, onboarded = TRUE WHERE id = $1', [tenantId, displayName]);
@@ -195,11 +209,22 @@ export async function setTenantDisplayName(tenantId, displayName) {
 }
 
 export async function forEachOnboardedTenant(fn) {
-  const tenants = await listOnboardedTenants();
+  let tenants = getCachedOnboardedTenants();
+  if (!tenants) {
+    tenants = await listOnboardedTenants();
+    setCachedOnboardedTenants(tenants);
+  }
   for (const tenant of tenants) {
     if (!tenantHasAccess(tenant)) continue;
     try {
-      const { configuration, discordChannels } = await loadTenantSettings(tenant.id);
+      let configuration;
+      let discordChannels;
+      if (hasCachedConfig(tenant.id) && hasCachedChannels(tenant.id)) {
+        configuration = getCachedConfig(tenant.id);
+        discordChannels = getCachedChannels(tenant.id);
+      } else {
+        ({ configuration, discordChannels } = await loadTenantSettings(tenant.id));
+      }
       setCachedConfig(tenant.id, configuration);
       setCachedChannels(tenant.id, mergeChannelFallback(discordChannels));
       await runWithTenant(tenant.id, () => fn(tenant));

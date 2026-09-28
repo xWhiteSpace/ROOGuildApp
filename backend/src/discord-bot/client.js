@@ -239,9 +239,9 @@ async function withGuildTenant(guildId, fn) {
       });
     });
 
-    // 📢 Automated Modular Announcement Scheduler Ticker (Evaluated every 60 seconds)
-    // First tick skips Discord announcers so identify + first announce do not stack.
-    // Discord-facing jobs also skip while the 429 circuit is open.
+    // Clock for work that is actually due. First tick skips Discord announcers so
+    // identify + first announce do not stack. Announcers also skip while the 429 circuit is open.
+    // GvG board refresh, RSVP deadline close, and auction auto-commit are not on this clock.
     let skipFirstDiscordTick = true;
     setInterval(() => {
       const circuitOpen = isDiscordCircuitOpen();
@@ -255,25 +255,20 @@ async function withGuildTenant(guildId, fn) {
             await maybeAnnounceEvents();
             const { maybeAnnounceRaidEvents } = await import('./raidEventAnnounce.js');
             await maybeAnnounceRaidEvents();
-            const { refreshGvgReadinessBoard } = await import('../games/ragnarok-origin/services/discordAttendanceCards.js');
-            await refreshGvgReadinessBoard();
           }
           const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
-          await attendanceDecision.closeExpiredDeadlines();
           await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
           const liveRaid = await import('../api/liveRaid.routes.js');
           await liveRaid.maybeAutoEndLiveRaid();
           const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
           await maybeRunWarRoomAutomation();
-          const { maybeAutoCommitAuction } = await import('./autoCommitAuction.js');
-          await maybeAutoCommitAuction();
         });
       }).catch((err) => console.error('⚠️ Tenant scheduler warning:', err.message));
 
       if (skipFirstDiscordTick) {
         skipFirstDiscordTick = false;
       } else if (circuitOpen) {
-        console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers and readiness edits.');
+        console.log('⏭️ [SCHEDULER]: Discord circuit open — skipping announcers.');
       }
     }, 60000);
   };
