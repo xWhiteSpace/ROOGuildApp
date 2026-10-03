@@ -362,9 +362,11 @@ export default function MasterListTab({ user }) {
   const isDirty = JSON.stringify(dbMembers) !== JSON.stringify(stagedMembers);
   const stagingRowsCount = Math.min(ROSTER_CAP, Math.max(100, activeRaidRosterList.length + 5));
   const activeSlide = ROSTER_SLIDES[slideIndex];
-  const carouselTitle = activeSlide.id === 'roster'
-    ? `True Guild Roster (${activeRaidRosterList.length} Active / Cap ${ROSTER_CAP})`
-    : activeSlide.title;
+  const rosterTitle = `True Guild Roster (${activeRaidRosterList.length} Active / Cap ${ROSTER_CAP})`;
+  const carouselTitle = activeSlide.id === 'roster' ? rosterTitle : activeSlide.title;
+  // Size the slot from the widest label so the chevrons stay put when the view changes.
+  const rosterTitleSizer = `True Guild Roster (${Math.max(activeRaidRosterList.length, ROSTER_CAP)} Active / Cap ${ROSTER_CAP})`;
+  const slideLabels = ROSTER_SLIDES.map((slide) => (slide.id === 'roster' ? rosterTitleSizer : slide.title));
 
   if (loading) {
     return <div className="p-6 text-xs font-mono uppercase text-slate-500 animate-pulse">Syncing Split-State Datasets...</div>;
@@ -375,7 +377,7 @@ export default function MasterListTab({ user }) {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-3 select-none">
         <div className="hidden lg:block" />
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex w-max max-w-full items-center justify-center gap-3">
             <button
               type="button"
               onClick={goPrevSlide}
@@ -384,9 +386,20 @@ export default function MasterListTab({ user }) {
             >
               <IconChevronLeft />
             </button>
-            <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider text-center whitespace-nowrap px-2">
-              {carouselTitle}
-            </h2>
+            <div className="grid min-w-0 place-items-center overflow-hidden">
+              {slideLabels.map((label) => (
+                <span
+                  key={label}
+                  aria-hidden="true"
+                  className="col-start-1 row-start-1 invisible whitespace-nowrap px-2 text-xs font-bold uppercase tracking-wider"
+                >
+                  {label}
+                </span>
+              ))}
+              <h2 className="col-start-1 row-start-1 max-w-full truncate px-2 text-center text-xs font-bold uppercase tracking-wider text-slate-300">
+                {carouselTitle}
+              </h2>
+            </div>
             <button
               type="button"
               onClick={goNextSlide}
