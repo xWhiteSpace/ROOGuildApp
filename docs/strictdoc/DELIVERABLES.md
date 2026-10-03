@@ -48,6 +48,8 @@ It is a historical Firebase RTDB SRS. Policy quarantine (`poison-srs-firebase-re
 | 7 | [`tools/tol.sdoc`](tools/tol.sdoc) | Tool catalog present vs greenfield | **11** (`TOL-ROO-001`..`011`); tip `TOL-ROO-012` |
 | 8 | [`strictdoc.toml`](strictdoc.toml) | Minimal StrictDoc project config | include `*.sdoc` |
 | 9 | [`MANIFEST.json`](MANIFEST.json) | Machine-readable file list + counts | generated_at ISO |
+| 10 | [`trace/neighborhood.html`](trace/neighborhood.html) | 3D neighborhood knowledge graph | open in browser |
+| 11 | [`trace/interfaces.sqlite`](trace/interfaces.sqlite) | Interface traceability database | open in DB Browser for SQLite |
 
 ---
 
