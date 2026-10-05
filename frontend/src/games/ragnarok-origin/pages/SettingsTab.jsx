@@ -1,6 +1,7 @@
 // frontend/src/pages/SettingsTab.jsx
 import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateSettings, useCompositionsList, useDiscordRoles, useSettingsAdmin } from '../../../query/hooks';
 import { productTitle } from '../../../brand';
 import { defaultRaidSubtree, findOverlappingRaidCyclePair, phaseAnnouncementEnabled } from '@guildname/shared/raidCycle';
 
@@ -59,6 +60,7 @@ const EMPTY_DISCORD_CHANNELS = {
   attendanceId: '',
   warAnnounceChannelId: '',
   raidScreenshotChannelId: '',
+  onboardingChannelId: '',
   warRooms: {
     DISCORD_WARROOM_ID_1: '',
     DISCORD_WARROOM_ID_2: '',
@@ -76,18 +78,43 @@ const EMPTY_WAR_ROOMS = {
   room_005: { name: 'War room 5', envKey: 'DISCORD_WARROOM_ID_5' },
 };
 
+const DISCORD_DEPLOY_BTN_CLASS =
+  'w-full sm:w-24 h-9 shrink-0 inline-flex items-center justify-center px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap';
+
+function DiscordDeployButton({ onClick, disabled, busy }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={DISCORD_DEPLOY_BTN_CLASS}>
+      {busy ? 'Sending…' : 'Send'}
+    </button>
+  );
+}
+
+function DiscordCardRow({ title, description, onClick, disabled, busy }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium text-slate-200">{title}</div>
+        {description ? (
+          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{description}</p>
+        ) : null}
+      </div>
+      <DiscordDeployButton onClick={onClick} disabled={disabled} busy={busy} />
+    </div>
+  );
+}
+
 export default function SettingsTab({ user, onSessionUser }) {
-  const [isLocked, setIsLocked] = useState(true);
+  const settingsAdminQuery = useSettingsAdmin();
+  const [isLocked, setIsLocked] = useState(() => !settingsAdminQuery.data || settingsAdminQuery.data.publicOnly);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [deployingCard, setDeployingCard] = useState(false);
-  const [deployCardMsg, setDeployCardMsg] = useState(null);
   const [deployingAttendanceCard, setDeployingAttendanceCard] = useState(false);
-  const [deployAttendanceMsg, setDeployAttendanceMsg] = useState(null);
   const [deployingPartyCard, setDeployingPartyCard] = useState(false);
-  const [deployPartyMsg, setDeployPartyMsg] = useState(null);
   const [deployingOcrCard, setDeployingOcrCard] = useState(false);
-  const [deployOcrMsg, setDeployOcrMsg] = useState(null);
+  const [deployingOnboardingCard, setDeployingOnboardingCard] = useState(false);
+  const [discordCardMsg, setDiscordCardMsg] = useState(null);
+  const discordCardMsgTimerRef = useRef(null);
   const [discordChannels, setDiscordChannels] = useState(EMPTY_DISCORD_CHANNELS);
   
   const [config, setConfig] = useState({
@@ -128,7 +155,16 @@ export default function SettingsTab({ user, onSessionUser }) {
   const [activeAlarmPopoverId, setActiveAlarmPopoverId] = useState(null);
   const [logoBusy, setLogoBusy] = useState(false);
   const logoInputRef = useRef(null);
+  const unlockAttemptedRef = useRef(false);
   const [raidCompositions, setRaidCompositions] = useState({});
+  let guildId = '';
+  try {
+    guildId = JSON.parse(localStorage.getItem('guild_raid_session') || '{}').currentTenantId || '';
+  } catch {
+    guildId = '';
+  }
+  const rolesQuery = useDiscordRoles(guildId, { enabled: !isLocked && Boolean(guildId) });
+  const compsQuery = useCompositionsList({ enabled: !isLocked });
 
   const applySessionUser = (next) => {
     if (!next) return;
@@ -136,103 +172,92 @@ export default function SettingsTab({ user, onSessionUser }) {
     onSessionUser?.(next);
   };
 
+  const applyAdminPayload = (data) => {
+    const nextConfig = data?.config || {};
+    setConfig({
+      ...nextConfig,
+      guildDisplayName: nextConfig.guildDisplayName || '',
+      guildLogoUrl: nextConfig.guildLogoUrl || '',
+      helpEmbedUrl: nextConfig.helpEmbedUrl || '',
+      raidHelpEmbedUrl: nextConfig.raidHelpEmbedUrl || '',
+      adminRoles: Array.isArray(nextConfig.adminRoles) ? nextConfig.adminRoles : [],
+      roles: nextConfig.roles || {},
+      liveRaidMaxConfigs: nextConfig.liveRaidMaxConfigs ?? 5,
+      liveRaidMaxWarRooms: nextConfig.liveRaidMaxWarRooms ?? 2,
+      defaultLeaveCredits: nextConfig.defaultLeaveCredits ?? 3,
+      warRooms: nextConfig.warRooms && Object.keys(nextConfig.warRooms).length
+        ? nextConfig.warRooms
+        : { ...EMPTY_WAR_ROOMS },
+    });
+    if (data?.discordChannels) {
+      setDiscordChannels({
+        ...EMPTY_DISCORD_CHANNELS,
+        ...data.discordChannels,
+        warRooms: {
+          ...EMPTY_DISCORD_CHANNELS.warRooms,
+          ...(data.discordChannels.warRooms || {}),
+        },
+      });
+    }
+    setIsLocked(false);
+  };
+
   const loadGlobalConfigurationTree = async (retried = false) => {
     try {
-      const res = await apiFetch('/api/requests/settings/get', { method: 'GET' });
-      const data = await res.json();
-      if (data.success) {
-        if (data.publicOnly) {
-          if (retried) {
-            setIsLocked(true);
-            return;
-          }
-          const unlockRes = await apiFetch('/api/requests/settings/unlock', {
-            method: 'POST',
-            body: JSON.stringify({}),
-          });
-          const unlockData = await unlockRes.json().catch(() => ({}));
-          if (unlockData.success) {
-            if (unlockData.user) {
-              applySessionUser(unlockData.user);
-            }
-            return loadGlobalConfigurationTree(true);
-          }
+      const result = await settingsAdminQuery.refetch();
+      const data = result.data;
+      if (!data) return;
+      if (data.publicOnly) {
+        if (retried) {
           setIsLocked(true);
-          if (unlockData.error) setErrorMsg(unlockData.error);
           return;
         }
-        setConfig({
-          ...data.config,
-          guildDisplayName: data.config.guildDisplayName || '',
-          guildLogoUrl: data.config.guildLogoUrl || '',
-          helpEmbedUrl: data.config.helpEmbedUrl || '',
-          raidHelpEmbedUrl: data.config.raidHelpEmbedUrl || '',
-          adminRoles: Array.isArray(data.config.adminRoles) ? data.config.adminRoles : [],
-          roles: data.config.roles || {},
-          liveRaidMaxConfigs: data.config.liveRaidMaxConfigs ?? 5,
-          liveRaidMaxWarRooms: data.config.liveRaidMaxWarRooms ?? 2,
-          defaultLeaveCredits: data.config.defaultLeaveCredits ?? 3,
-          warRooms: data.config.warRooms && Object.keys(data.config.warRooms).length
-            ? data.config.warRooms
-            : { ...EMPTY_WAR_ROOMS },
-        });
-        if (data.discordChannels) {
-          setDiscordChannels({
-            ...EMPTY_DISCORD_CHANNELS,
-            ...data.discordChannels,
-            warRooms: {
-              ...EMPTY_DISCORD_CHANNELS.warRooms,
-              ...(data.discordChannels.warRooms || {}),
-            },
-          });
-        }
-        setIsLocked(false);
         const unlockRes = await apiFetch('/api/requests/settings/unlock', {
           method: 'POST',
           body: JSON.stringify({}),
         });
         const unlockData = await unlockRes.json().catch(() => ({}));
-        if (unlockData.user) {
-          applySessionUser(unlockData.user);
+        if (unlockData.success) {
+          if (unlockData.user) applySessionUser(unlockData.user);
+          await invalidateSettings();
+          return loadGlobalConfigurationTree(true);
         }
+        setIsLocked(true);
+        if (unlockData.error) setErrorMsg(unlockData.error);
+        return;
       }
+      applyAdminPayload(data);
     } catch (err) {
       console.error("Error loading settings from server routing layer:", err);
     }
   };
 
   useEffect(() => {
-    loadGlobalConfigurationTree();
-  }, []);
-
-  useEffect(() => {
-    if (isLocked) return undefined;
-    let guildId = '';
-    try {
-      guildId = JSON.parse(localStorage.getItem('guild_raid_session') || '{}').currentTenantId || '';
-    } catch {
-      guildId = '';
+    const data = settingsAdminQuery.data;
+    if (!data) return;
+    if (data.publicOnly) {
+      if (unlockAttemptedRef.current) {
+        setIsLocked(true);
+        return;
+      }
+      unlockAttemptedRef.current = true;
+      loadGlobalConfigurationTree();
+      return;
     }
-    if (!guildId) return undefined;
-    apiFetch(`/api/tenants/discord-roles?guildId=${encodeURIComponent(guildId)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setDiscordRoles(data.roles || []);
-      })
-      .catch(() => {});
-    return undefined;
-  }, [isLocked]);
+    applyAdminPayload(data);
+  }, [settingsAdminQuery.data]);
 
   useEffect(() => {
-    if (isLocked) return undefined;
-    apiFetch('/api/attendance/compositions?fields=list')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setRaidCompositions(data.compositions || {});
-      })
-      .catch(() => {});
-    return undefined;
-  }, [isLocked]);
+    if (rolesQuery.data) setDiscordRoles(rolesQuery.data);
+  }, [rolesQuery.data]);
+
+  useEffect(() => {
+    if (compsQuery.data) setRaidCompositions(compsQuery.data);
+  }, [compsQuery.data]);
+
+  useEffect(() => () => {
+    if (discordCardMsgTimerRef.current) clearTimeout(discordCardMsgTimerRef.current);
+  }, []);
 
   const handleVerifyPassphrase = async () => {
     try {
@@ -280,64 +305,75 @@ export default function SettingsTab({ user, onSessionUser }) {
     return text;
   };
 
+  const flashDiscordCardMsg = (msg) => {
+    setDiscordCardMsg(msg);
+    if (discordCardMsgTimerRef.current) clearTimeout(discordCardMsgTimerRef.current);
+    discordCardMsgTimerRef.current = setTimeout(() => setDiscordCardMsg(null), 8000);
+  };
+
   // Posts the Request Card (item cart + live claim) into DISCORD_AUCREQ_CHANNEL_ID.
   const handleDeployAuctionCard = async () => {
     if (deployingCard) return;
     setDeployingCard(true);
-    setDeployCardMsg(null);
     try {
       const text = await postDeployRoute('/api/deploy-auction-card');
-      setDeployCardMsg({ ok: true, text: text || 'Request Card deployed to Discord.' });
+      flashDiscordCardMsg({ ok: true, text: text || 'Request Card deployed to Discord.' });
     } catch (err) {
-      setDeployCardMsg({ ok: false, text: err.message || 'Request failed' });
+      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingCard(false);
-      setTimeout(() => setDeployCardMsg(null), 8000);
     }
   };
 
   const handleDeployAttendanceCard = async () => {
     if (deployingAttendanceCard) return;
     setDeployingAttendanceCard(true);
-    setDeployAttendanceMsg(null);
     try {
       const text = await postDeployRoute('/api/deploy-attendance-card');
-      setDeployAttendanceMsg({ ok: true, text: text || 'Attendance card deployed to Discord.' });
+      flashDiscordCardMsg({ ok: true, text: text || 'Attendance card deployed to Discord.' });
     } catch (err) {
-      setDeployAttendanceMsg({ ok: false, text: err.message || 'Request failed' });
+      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingAttendanceCard(false);
-      setTimeout(() => setDeployAttendanceMsg(null), 12000);
     }
   };
 
   const handleDeployPartyCard = async () => {
     if (deployingPartyCard) return;
     setDeployingPartyCard(true);
-    setDeployPartyMsg(null);
     try {
       const text = await postDeployRoute('/api/deploy-party-card');
-      setDeployPartyMsg({ ok: true, text: text || 'Party card deployed to Discord.' });
+      flashDiscordCardMsg({ ok: true, text: text || 'Party card deployed to Discord.' });
     } catch (err) {
-      setDeployPartyMsg({ ok: false, text: err.message || 'Request failed' });
+      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingPartyCard(false);
-      setTimeout(() => setDeployPartyMsg(null), 12000);
     }
   };
 
   const handleDeployOcrCard = async () => {
     if (deployingOcrCard) return;
     setDeployingOcrCard(true);
-    setDeployOcrMsg(null);
     try {
       const text = await postDeployRoute('/api/deploy-ocr-card');
-      setDeployOcrMsg({ ok: true, text: text || 'Party OCR card deployed to Discord.' });
+      flashDiscordCardMsg({ ok: true, text: text || 'Party OCR card deployed to Discord.' });
     } catch (err) {
-      setDeployOcrMsg({ ok: false, text: err.message || 'Request failed' });
+      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingOcrCard(false);
-      setTimeout(() => setDeployOcrMsg(null), 12000);
+    }
+  };
+
+  const handleDeployOnboardingCard = async () => {
+    if (deployingOnboardingCard) return;
+    setDeployingOnboardingCard(true);
+    try {
+      const text = await postDeployRoute('/api/deploy-onboarding-card');
+      flashDiscordCardMsg({ ok: true, text: text || 'Onboarding hub deployed to Discord.' });
+    } catch (err) {
+      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
+    } finally {
+      setDeployingOnboardingCard(false);
     }
   };
 
@@ -538,6 +574,7 @@ export default function SettingsTab({ user, onSessionUser }) {
       if (data.success) {
         setSuccessMsg('Game settings saved.');
         document.title = productTitle(config.guildDisplayName || user?.tenantName);
+        await invalidateSettings();
         loadGlobalConfigurationTree();
       } else {
         setErrorMsg(data.error || 'Failed to update dynamic configuration matrix.');
@@ -738,90 +775,46 @@ export default function SettingsTab({ user, onSessionUser }) {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  Request Card → auction request channel
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDeployAuctionCard}
-                  disabled={deployingCard}
-                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deployingCard ? 'Sending…' : 'Send Request Card'}
-                </button>
-              </div>
-              {deployCardMsg && (
-                <p className={`text-[10px] font-mono font-semibold ${deployCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployCardMsg.text}</p>
-              )}
-              <p className="text-[10px] text-slate-500">
-                One public Request Card: Open Request (item cart, submit, drop) and Open Live Claim (vacant slots). Both open a private panel.
-              </p>
+            <div className="divide-y divide-slate-800/80">
+              <DiscordCardRow
+                title="Request Card"
+                description="Request loot items during Bid Open, Claim or Take Extra Slots during Live Auction. Open Request — Apply for Requests, Cancel Bid Requests. Open Live Dashboard — Claim or Take Extra slots. Use Drop down to take extra slots."
+                onClick={handleDeployAuctionCard}
+                disabled={deployingCard}
+                busy={deployingCard}
+              />
+              <DiscordCardRow
+                title="GVG Readiness"
+                description="War-announce board with deadline bar, Master List, and Available / Unavailable. My status, Change class, and Change Alias stay private."
+                onClick={handleDeployAttendanceCard}
+                disabled={deployingAttendanceCard}
+                busy={deployingAttendanceCard}
+              />
+              <DiscordCardRow
+                title="Party card"
+                description="War-announce party viewer for the active raid."
+                onClick={handleDeployPartyCard}
+                disabled={deployingPartyCard}
+                busy={deployingPartyCard}
+              />
+              <DiscordCardRow
+                title="Party OCR"
+                description="Officers scan Team Party screenshots here, or upload on VALHALLA (Raid → GVG Attendance). Review, O/X, and Commit swords happen on the website. After Commit, images may post to the Raid Screenshot channel."
+                onClick={handleDeployOcrCard}
+                disabled={deployingOcrCard}
+                busy={deployingOcrCard}
+              />
+              <DiscordCardRow
+                title="Onboarding"
+                description="Welcome hub: Auction, GvG, General Chat, and Website open a private explainer with a jump to the mapped channel or site."
+                onClick={handleDeployOnboardingCard}
+                disabled={deployingOnboardingCard}
+                busy={deployingOnboardingCard}
+              />
             </div>
-
-            <div className="space-y-2 border-t border-slate-800/80 pt-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  GVG Readiness dashboard → war-announce channel
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDeployAttendanceCard}
-                  disabled={deployingAttendanceCard}
-                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deployingAttendanceCard ? 'Sending…' : 'Send dashboard'}
-                </button>
-              </div>
-              {deployAttendanceMsg && (
-                <p className={`text-[10px] font-mono font-semibold ${deployAttendanceMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployAttendanceMsg.text}</p>
-              )}
-              <p className="text-[10px] text-slate-500">
-                Posts a persistent GVG Readiness board (deadline bar, MasterList, Available / Unavailable). My status, Change class, and Change Alias stay private.
-              </p>
-            </div>
-
-            <div className="space-y-2 border-t border-slate-800/80 pt-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  Party card → war-announce channel
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDeployPartyCard}
-                  disabled={deployingPartyCard}
-                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deployingPartyCard ? 'Sending…' : 'Send party'}
-                </button>
-              </div>
-              {deployPartyMsg && (
-                <p className={`text-[10px] font-mono font-semibold ${deployPartyMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployPartyMsg.text}</p>
-              )}
-            </div>
-
-            <div className="space-y-2 border-t border-slate-800/80 pt-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <span className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950 text-xs text-slate-400">
-                  Party OCR card → war-announce channel
-                </span>
-                <button
-                  type="button"
-                  onClick={handleDeployOcrCard}
-                  disabled={deployingOcrCard}
-                  className="shrink-0 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deployingOcrCard ? 'Sending…' : 'Send OCR'}
-                </button>
-              </div>
-              {deployOcrMsg && (
-                <p className={`text-[10px] font-mono font-semibold ${deployOcrMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{deployOcrMsg.text}</p>
-              )}
-              <p className="text-[10px] text-slate-500">
-                Officers scan Team Party screenshots on a public Party OCR card in this channel, or upload on VALHALLA (Raid → GVG Attendance). Review, O/X, and Commit swords happen on the website. After Commit, images may post to the Raid Screenshot channel.
-              </p>
-            </div>
+            {discordCardMsg && (
+              <p className={`text-[10px] font-mono font-semibold ${discordCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{discordCardMsg.text}</p>
+            )}
           </div>
 
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3">
@@ -834,6 +827,7 @@ export default function SettingsTab({ user, onSessionUser }) {
               ['attendanceId', 'Weekly attendance thread parent (one text channel)'],
               ['warAnnounceChannelId', 'War announce (one text channel for cards)'],
               ['raidScreenshotChannelId', 'Raid Screenshot (gallery after OCR Commit)'],
+              ['onboardingChannelId', 'Onboarding hub card'],
             ].map(([key, label]) => (
               <label key={key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
                 {label}

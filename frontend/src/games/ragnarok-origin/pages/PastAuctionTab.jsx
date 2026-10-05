@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { apiFetch } from '../../../services/apiClient';
+import { useState } from 'react';
+import { usePastAuctionDates, usePastAuctionNight, useSettings } from '../../../query/hooks';
 
 const IconSearch = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
 const IconChevron = ({ expanded }) => (
@@ -9,64 +9,26 @@ const IconChevron = ({ expanded }) => (
 );
 
 export default function PastAuctionTab() {
-  const [loadingDates, setLoadingDates] = useState(true);
-  const [loadingNight, setLoadingNight] = useState(false);
-  const [availableDates, setAvailableDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
-  const [pastAuctionsData, setPastAuctionsData] = useState([]);
   const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [configItems, setConfigItems] = useState([]);
+  const datesQuery = usePastAuctionDates();
+  const nightQuery = usePastAuctionNight(selectedDate);
+  const itemsQuery = useSettings('items');
+  const availableDates = datesQuery.data || [];
+  const pastAuctionsData = nightQuery.data || [];
+  const configItems = itemsQuery.data?.items || [];
+  const loadingDates = datesQuery.isLoading && !datesQuery.data;
+  const loadingNight = nightQuery.isFetching && !nightQuery.data;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoadingDates(true);
-        const res = await apiFetch('/api/requests/past-auctions', { method: 'GET' });
-        const data = await res.json();
-        if (!cancelled && data.success) setAvailableDates(data.dates || []);
-      } catch (err) {
-        console.error('Failed to load past auction dates:', err);
-      } finally {
-        if (!cancelled) setLoadingDates(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const loadNight = async (date) => {
+  const loadNight = (date) => {
     if (!date) {
       setSelectedDate('');
-      setPastAuctionsData([]);
       setActiveGroupKey(null);
       return;
     }
-    try {
-      setLoadingNight(true);
-      setSelectedDate(date);
-      setActiveGroupKey(null);
-      const res = await apiFetch(`/api/requests/past-auctions?date=${encodeURIComponent(date)}`, { method: 'GET' });
-      const data = await res.json();
-      if (data.success) {
-        setPastAuctionsData(data.history || []);
-        if (configItems.length === 0) {
-          try {
-            const configRes = await apiFetch('/api/requests/settings/get?fields=items', { method: 'GET' });
-            const configData = await configRes.json();
-            if (configData.success && configData.config?.items) {
-              setConfigItems(configData.config.items);
-            }
-          } catch (err) {
-            console.error('Failed to map live configuration styles:', err);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to extract past auction records:', err);
-    } finally {
-      setLoadingNight(false);
-    }
+    setSelectedDate(date);
+    setActiveGroupKey(null);
   };
 
   const handleDownloadPastAuctionsCSV = () => {

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateMembers, invalidateSettings, setMembersCaches, upsertMemberCaches, useMembers, useSettings } from '../../../query/hooks';
 import RosterInsightsPanels from '../components/RosterInsightsPanels';
 
 const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z" /></svg>;
@@ -58,7 +59,7 @@ function handlePoolCardDragStart(e, uid) {
 }
 
 export default function MasterListTab({ user }) {
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [dbMembers, setDbMembers] = useState({});
   const [stagedMembers, setStagedMembers] = useState({});
   const [jobsCatalog, setJobsCatalog] = useState({});
@@ -82,41 +83,50 @@ export default function MasterListTab({ user }) {
   const [editingNameUid, setEditingNameUid] = useState(null);
   const [slideIndex, setSlideIndex] = useState(0);
 
+  const membersQuery = useMembers('list');
+  const settingsQuery = useSettings('jobs,roles');
+
   const loadRosterDirectory = async (showLoader = true) => {
     try {
-      if (showLoader) setLoading(true);
-
-      const res = await apiFetch('/api/attendance/members', { method: 'GET' });
-      const data = await res.json();
-      if (data.success) {
-        const members = data.members || {};
-        setDbMembers(members);
-        setStagedMembers(JSON.parse(JSON.stringify(members)));
-        setSelectedUids((prev) => {
-          const next = new Set();
-          prev.forEach((uid) => {
-            if (members[uid] && members[uid].isRaidRoster !== true) next.add(uid);
-          });
-          return next;
+      if (showLoader) setRefreshing(true);
+      await Promise.all([invalidateMembers(), invalidateSettings()]);
+      const [membersRes, settingsRes] = await Promise.all([
+        membersQuery.refetch(),
+        settingsQuery.refetch(),
+      ]);
+      const members = membersRes.data || {};
+      setDbMembers(members);
+      setStagedMembers(JSON.parse(JSON.stringify(members)));
+      setSelectedUids((prev) => {
+        const next = new Set();
+        prev.forEach((uid) => {
+          if (members[uid] && members[uid].isRaidRoster !== true) next.add(uid);
         });
-        
-        const configRes = await apiFetch('/api/requests/settings/get?fields=jobs,roles', { method: 'GET' });
-        const configData = await configRes.json();
-        if (configData.success) {
-          setJobsCatalog(configData.config?.jobs || {});
-          setRolesCatalog(configData.config?.roles || {});
-        }
-      }
+        return next;
+      });
+      setJobsCatalog(settingsRes.data?.jobs || {});
+      setRolesCatalog(settingsRes.data?.roles || {});
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadRosterDirectory();
-  }, [user]);
+    if (membersQuery.data) {
+      setDbMembers(membersQuery.data);
+      setStagedMembers(JSON.parse(JSON.stringify(membersQuery.data)));
+    }
+    if (settingsQuery.data) {
+      setJobsCatalog(settingsQuery.data.jobs || {});
+      setRolesCatalog(settingsQuery.data.roles || {});
+    }
+  }, [membersQuery.data, settingsQuery.data]);
+
+  const loading = refreshing
+    || (membersQuery.isLoading && !membersQuery.data)
+    || (settingsQuery.isLoading && !settingsQuery.data);
 
   const goPrevSlide = () => setSlideIndex((i) => (i - 1 + ROSTER_SLIDES.length) % ROSTER_SLIDES.length);
   const goNextSlide = () => setSlideIndex((i) => (i + 1) % ROSTER_SLIDES.length);
@@ -182,7 +192,8 @@ export default function MasterListTab({ user }) {
       const data = await res.json();
       if (data.success) {
         alert('💾 SUCCESS: Master list parameters synchronized completely.');
-        await loadRosterDirectory(false);
+        setMembersCaches(stagedMembers);
+        setDbMembers(JSON.parse(JSON.stringify(stagedMembers)));
       } else {
         alert(data.error || 'Failed to sync roster updates.');
       }
@@ -203,9 +214,20 @@ export default function MasterListTab({ user }) {
       });
       const data = await res.json();
       if (data.success) {
+        const uid = data.id;
+        const member = data.member || {
+          ...dummyDraft,
+          displayName: dummyDraft.displayName.trim(),
+          isDummy: true,
+          isRaidRoster: false,
+        };
+        if (uid) {
+          upsertMemberCaches(uid, member);
+          setDbMembers((prev) => ({ ...prev, [uid]: member }));
+          setStagedMembers((prev) => ({ ...prev, [uid]: member }));
+        }
         setShowCreateDummy(false);
         setDummyDraft(emptyDummyDraft);
-        await loadRosterDirectory(false);
       } else {
         alert(data.error || 'Failed to create dummy member.');
       }

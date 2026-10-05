@@ -1323,7 +1323,7 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077)
+TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077, REQ-ROO-190, REQ-ROO-197 .. REQ-ROO-200)
 
 [REQUIREMENT]
 UID: REQ-ROO-062
@@ -1393,14 +1393,14 @@ UID: REQ-ROO-065
 STATUS: Active
 TITLE: REQ-ROO-065: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `req
 STATEMENT: >>>
-Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, auction claim panel ids — bypass general-room gate.
+Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, `onboard:`, auction claim panel ids — bypass general-room gate.
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, auction claim panel ids — bypass general-room gate.
+acceptance_criteria: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, `onboard:`, auction claim panel ids — bypass general-room gate.
 source_draft: D-REQ-065
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -1660,6 +1660,101 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-020
+
+[REQUIREMENT]
+UID: REQ-ROO-197
+STATUS: Active
+TITLE: REQ-ROO-197: Tenant discord_channels may include optional onboardingChannelId; empty stays empty
+STATEMENT: >>>
+Tenant `discord_channels` may include optional `onboardingChannelId`. Empty stays empty. `process.env` does not fill it. Missing this field does not fail RO setup completeness.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Tenant `discord_channels` may include optional `onboardingChannelId`. Empty stays empty. `process.env` does not fill it. Missing this field does not fail RO setup completeness.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-043
+
+[REQUIREMENT]
+UID: REQ-ROO-198
+STATUS: Active
+TITLE: REQ-ROO-198: Officer GET /api/deploy-onboarding-card posts the Onboarding hub
+STATEMENT: >>>
+Officer `GET /api/deploy-onboarding-card` posts the public Onboarding hub to the mapped onboarding channel. Unmapped → 400; bot offline or Discord circuit open → 503; channel locate miss → 404; not officer → 403. Same action also on `GET /api/attendance/deploy-onboarding-card`.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Officer `GET /api/deploy-onboarding-card` posts the public Onboarding hub to the mapped onboarding channel. Unmapped → 400; bot offline or Discord circuit open → 503; channel locate miss → 404; not officer → 403. Same action also on `GET /api/attendance/deploy-onboarding-card`.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-043
+
+[REQUIREMENT]
+UID: REQ-ROO-199
+STATUS: Active
+TITLE: REQ-ROO-199: Onboarding hub buttons open ephemeral topic cards with purpose and location
+STATEMENT: >>>
+Hub buttons `Auction`, `GvG`, `General Chat`, `Website` open a private ephemeral topic card with purpose text and a location (channel mention + jump URL, or website URL). `Back` returns to the hub layout on that same ephemeral. Unmapped destinations still explain purpose and do not emit a jump or `#invalid` mention.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: Hub buttons `Auction`, `GvG`, `General Chat`, `Website` open a private ephemeral topic card with purpose text and a location (channel mention + jump URL, or website URL). `Back` returns to the hub layout on that same ephemeral. Unmapped destinations still explain purpose and do not emit a jump or `#invalid` mention.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-043
+
+[REQUIREMENT]
+UID: REQ-ROO-190
+STATUS: Active
+TITLE: REQ-ROO-190: Phase-1 GEN get-ready line names the war date and jumps to GvG when mapped
+STATEMENT: >>>
+A due GvG Preparation announcement minute posts to GEN: Get ready for the next GVG on **{Mon DD, YYYY}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you. When `warAnnounceChannelId` is mapped, the same message appends ` Jump in at <#id>.` When unmapped, that jump clause is omitted. The line has no event title and no war start time.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: A due GvG Preparation announcement minute posts to GEN: Get ready for the next GVG on **{Mon DD, YYYY}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you. When `warAnnounceChannelId` is mapped, the same message appends ` Jump in at <#id>.` When unmapped, that jump clause is omitted. The line has no event title and no war start time.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-200
+STATUS: Active
+TITLE: REQ-ROO-200: GVG Readiness card rematerializes once when GvG Preparation starts
+STATEMENT: >>>
+When the raid cycle enters GvG Preparation and war-room publish succeeds, the public GVG Readiness card on war-announce rematerializes for that cycle’s war. If the stored pointer already has this cycle’s eventKey, skip — no roster dump and no Discord edit. Phases 2–3 still post the card only if missing. RSVP clicks and officer Send still refresh. The 60s ticker does not refresh the board every minute.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: must
+type: system
+constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
+acceptance_criteria: When the raid cycle enters GvG Preparation and war-room publish succeeds, the public GVG Readiness card on war-announce rematerializes for that cycle’s war. If the stored pointer already has this cycle’s eventKey, skip — no roster dump and no Discord edit. Phases 2–3 still post the card only if missing. RSVP clicks and officer Send still refresh. The 60s ticker does not refresh the board every minute.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
 
 [[/SECTION]]
 
@@ -3075,16 +3170,16 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-144
 STATUS: Active
-TITLE: REQ-ROO-144: Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+TITLE: REQ-ROO-144: Pulse ticker and boot resume auto-archive when monitoringEndsAt is reached.
 STATEMENT: >>>
-Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+Voice pulse ticker and boot resume auto-archive the live raid when monitoringEndsAt is reached.
 <<<
 COMMENT: >>>
 domain: Live Raid/Voice
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Ticker/`maybeAutoEndLiveRaid` auto-archives when monitoringEndsAt reached.
+acceptance_criteria: Voice pulse ticker and boot resume auto-archive the live raid when monitoringEndsAt is reached.
 source_draft: D-REQ-144
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07

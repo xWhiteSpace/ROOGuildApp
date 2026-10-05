@@ -3,9 +3,9 @@
  * HTTP `/api/requests/*` and the Discord Request Card both call these so the
  * `auction/web_requests` ledger stays a single source of truth.
  */
-import { getTenantStore, loadAuctionRequests } from '../../../db/database.js';
+import { getTenantStore, loadAuctionRequests, loadMembersByIds } from '../../../db/database.js';
 import { clampLookbackDays } from '../defaults.js';
-import { getGateStatusDetails } from '../timeWindow.js';
+import { getGateStatusDetails, readTenantConfiguration } from '../timeWindow.js';
 import { compileLeaderboard, requestsFromSnapshot } from '../utils/sortingEngine.js';
 import { formatGuildDate } from '../../../utils/guildTime.js';
 import { lookbackStartDay, resolveSessionDate, scorePriority } from './requestLedger.js';
@@ -69,24 +69,11 @@ function resolveItemId(reqRow, itemsList) {
   return found?.id || null;
 }
 
-/**
- * Lobby payload consumed by GET /api/requests/init and the Discord Request Card.
- */
-export async function buildRequestLobby(userId, displayName) {
-  const playerDisplayName = displayName || '';
-  const db = getTenantStore();
-  const configSnap = await db.ref('settings/configuration').once('value');
-  const dynamicConfig = configSnap.exists() ? configSnap.val() : {};
+function activeItemsForGate(dynamicConfig, timeGateStatus) {
   const itemsList = dynamicConfig.items || [];
-  const timezone = dynamicConfig.timezone || 'Asia/Manila';
-  const targetSessionDate = resolveSessionDate(dynamicConfig, timezone);
-  const isForceLocked = dynamicConfig.isForceLocked === true;
-
-  const timeGateStatus = getGateStatusDetails();
-  const activeEvent = dynamicConfig.events?.[timeGateStatus.activeEventId];
-  const activeLoots = activeEvent?.loots || {};
+  const activeLoots = dynamicConfig.events?.[timeGateStatus.activeEventId]?.loots || {};
   const activeItemsList = [];
-  itemsList.forEach(masterItem => {
+  itemsList.forEach((masterItem) => {
     if (activeLoots[masterItem.id] !== undefined) {
       activeItemsList.push({
         id: masterItem.id,
@@ -97,62 +84,32 @@ export async function buildRequestLobby(userId, displayName) {
       });
     }
   });
+  return activeItemsList;
+}
 
-  const { pendingRows: firebaseRequests, ledgerRows: historyRows, lookbackDays, today } = await loadBoardScoreContext(dynamicConfig);
-
+function liveCountsForUser(pendingRows, userId, itemsList) {
   const liveCounts = {};
-  const rankingsByItem = {};
-  const requestsByItemDetails = {};
-
-  itemsList.forEach(item => {
-    liveCounts[item.id] = 0;
-    rankingsByItem[item.id] = [];
-    requestsByItemDetails[item.id] = {};
+  itemsList.forEach((item) => { liveCounts[item.id] = 0; });
+  pendingRows.forEach((reqRow) => {
+    if (reqRow.userId !== userId) return;
+    const selStatus = (reqRow.selectionStatus || 'pending').toLowerCase();
+    const appStatus = (reqRow.applicationStatus || '').toLowerCase();
+    const targetItemId = resolveItemId(reqRow, itemsList);
+    if (selStatus !== 'pending' || !targetItemId || liveCounts[targetItemId] === undefined) return;
+    if (appStatus === 'requested') liveCounts[targetItemId] += reqRow.quantity;
+    if (appStatus === 'canceled') liveCounts[targetItemId] -= reqRow.quantity;
   });
+  Object.keys(liveCounts).forEach((k) => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
+  return liveCounts;
+}
 
-  firebaseRequests.forEach(reqRow => {
-    if (reqRow.userId === userId) {
-      const selStatus = (reqRow.selectionStatus || 'pending').toLowerCase();
-      const appStatus = (reqRow.applicationStatus || '').toLowerCase();
-      const targetItemId = resolveItemId(reqRow, itemsList);
-
-      if (selStatus === 'pending' && targetItemId && liveCounts[targetItemId] !== undefined) {
-        if (appStatus === 'requested') liveCounts[targetItemId] += reqRow.quantity;
-        if (appStatus === 'canceled') liveCounts[targetItemId] -= reqRow.quantity;
-      }
-    }
-  });
-
-  Object.keys(liveCounts).forEach(k => { if (liveCounts[k] < 0) liveCounts[k] = 0; });
-
-  const membersListSnap = await db.ref('auction/members').once('value');
-  const fullRosterArray = [];
-  const membersByName = {};
-  if (membersListSnap.exists()) {
-    Object.entries(membersListSnap.val()).forEach(([uid, m]) => {
-      const displayName = m?.displayName || '';
-      membersByName[uid] = { displayName };
-      if (displayName) fullRosterArray.push(displayName);
-    });
-  }
-
-  const membersData = membersListSnap.exists() ? membersListSnap.val() : {};
-  const computedLists = compileLeaderboard(firebaseRequests, itemsList, membersData, {
-    ledgerRows: historyRows,
-    lookbackDays,
-    today,
-  });
-
-  Object.assign(rankingsByItem, computedLists.rankingsByItem);
-  Object.assign(requestsByItemDetails, computedLists.requestsByItemDetails);
-
+function gateLobbyFields(dynamicConfig, timeGateStatus, displayName) {
+  const timezone = dynamicConfig.timezone || 'Asia/Manila';
   return {
-    displayName: playerDisplayName,
-    date: targetSessionDate,
-    items: activeItemsList,
-    liveCounts,
+    displayName: displayName || '',
+    date: resolveSessionDate(dynamicConfig, timezone),
     isGateOpen: timeGateStatus.isGateOpen,
-    isForceLocked,
+    isForceLocked: dynamicConfig.isForceLocked === true,
     currentSessionLabel: timeGateStatus.currentSessionLabel,
     nextStatusChangeMessage: timeGateStatus.nextStatusChangeMessage,
     currentPhase: timeGateStatus.currentPhase,
@@ -161,11 +118,105 @@ export async function buildRequestLobby(userId, displayName) {
     eventName: timeGateStatus.activeEventTitle || 'Raid Session',
     helpEmbedUrl: timeGateStatus.helpEmbedUrl || '',
     announcementMinutes: timeGateStatus.announcementMinutes || { phase1: [], phase2: null, phase3: null },
-    events: dynamicConfig.events || {},
-    rankingsByItem,
-    requestsByItemDetails,
-    fullRoster: fullRosterArray.sort(),
-    members: membersByName,
+  };
+}
+
+/**
+ * Slim lobby: gate + my counts + active items. No boards, members, or events tree.
+ * GET /api/requests/init and the Discord Request Card both use this.
+ */
+export async function buildRequestLobby(userId, displayName) {
+  const db = getTenantStore();
+  const dynamicConfig = await readTenantConfiguration(db);
+  const timeGateStatus = getGateStatusDetails();
+  const activeItemsList = activeItemsForGate(dynamicConfig, timeGateStatus);
+  const pendingMap = await loadAuctionRequests({ status: 'Pending', userId });
+  return {
+    ...gateLobbyFields(dynamicConfig, timeGateStatus, displayName),
+    items: activeItemsList,
+    liveCounts: liveCountsForUser(requestsFromSnapshot(pendingMap), userId, dynamicConfig.items || []),
+  };
+}
+
+/** UIDs that appear on an item board (pending + lookback). Used so the queue never loads the whole roster. */
+export function collectQueueMemberUids(pendingRows, ledgerRows) {
+  const uids = new Set();
+  for (const row of [...(pendingRows || []), ...(ledgerRows || [])]) {
+    const uid = String(row?.userId || '').trim();
+    if (uid) uids.add(uid);
+  }
+  return [...uids];
+}
+
+/** One item's queue for the Request dropdown and Mimic item filter. */
+export async function buildRequestQueue(itemId) {
+  const key = String(itemId || '').trim();
+  if (!key) {
+    throw new RequestDeckError('itemId is required.', 400);
+  }
+  const db = getTenantStore();
+  const dynamicConfig = await readTenantConfiguration(db);
+  const itemsList = dynamicConfig.items || [];
+  const item = itemsList.find((row) => row.id === key);
+  if (!item) {
+    return { itemId: key, rankings: [], details: {}, members: {} };
+  }
+  const timezone = dynamicConfig.timezone || 'Asia/Manila';
+  const lookbackDays = clampLookbackDays(dynamicConfig.priorityLookbackDays);
+  const today = formatGuildDate(new Date(), timezone);
+  const [pendingMap, historyMap] = await Promise.all([
+    loadAuctionRequests({ status: 'Pending', itemId: key, itemName: item.name }),
+    loadAuctionRequests({
+      sinceCalendarDay: lookbackStartDay(today, lookbackDays),
+      itemId: key,
+      itemName: item.name,
+    }),
+  ]);
+  const pendingRows = requestsFromSnapshot(pendingMap);
+  const ledgerRows = requestsFromSnapshot(historyMap);
+  const membersData = await loadMembersByIds(collectQueueMemberUids(pendingRows, ledgerRows));
+  const computed = compileLeaderboard(
+    pendingRows,
+    [item],
+    membersData,
+    {
+      ledgerRows,
+      lookbackDays,
+      today,
+    },
+  );
+  const rankings = computed.rankingsByItem[key] || [];
+  const details = computed.requestsByItemDetails[key] || {};
+  const members = {};
+  rankings.forEach((uid) => {
+    members[uid] = { displayName: membersData[uid]?.displayName || details[uid]?.name || '' };
+  });
+  return { itemId: key, rankings, details, members };
+}
+
+/** Full board for officer announce-allocate. Not used on page open. */
+export async function buildRequestBoard() {
+  const db = getTenantStore();
+  const dynamicConfig = await readTenantConfiguration(db);
+  const timeGateStatus = getGateStatusDetails();
+  const activeItemsList = activeItemsForGate(dynamicConfig, timeGateStatus);
+  const { pendingRows, ledgerRows, lookbackDays, today } = await loadBoardScoreContext(dynamicConfig);
+  const membersSnap = await db.ref('auction/members').once('value');
+  const membersData = membersSnap.exists() ? membersSnap.val() : {};
+  const members = {};
+  Object.entries(membersData).forEach(([uid, row]) => {
+    members[uid] = { displayName: row?.displayName || '' };
+  });
+  const computed = compileLeaderboard(pendingRows, dynamicConfig.items || [], membersData, {
+    ledgerRows,
+    lookbackDays,
+    today,
+  });
+  return {
+    items: activeItemsList,
+    rankingsByItem: computed.rankingsByItem,
+    requestsByItemDetails: computed.requestsByItemDetails,
+    members,
   };
 }
 

@@ -345,7 +345,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels (USR-ROO-017 .. USR-ROO-020)
+TITLE: Discord bot/Channels (USR-ROO-017 .. USR-ROO-020, USR-ROO-043)
 
 [REQUIREMENT]
 UID: USR-ROO-017
@@ -421,6 +421,24 @@ why: Ratelimit debug without secrets; cached nicknames with roster fallback.
 spoken_constraints: 2 min TTL
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[REQUIREMENT]
+UID: USR-ROO-043
+STATUS: Active
+TITLE: Discord onboarding hub for newcomers
+STATEMENT: >>>
+Guild members need: Discord onboarding hub for newcomers. One public card that explains Auction, GvG, General Chat, and the website, then points at the mapped channel or site.
+<<<
+RATIONALE: >>>
+Newcomers do not know where Request/claim, war-announce, GEN, or VALHALLA live.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+who: Guild members
+why: One public card that explains Auction, GvG, General Chat, and the website, then points at the mapped channel or site.
+spoken_constraints: dedicated onboarding channel; ephemeral topic cards
+ssot_status: published
 <<<
 
 [[/SECTION]]

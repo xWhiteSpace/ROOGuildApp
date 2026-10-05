@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { Radio, Timer, Users, Volume2 } from 'lucide-react';
 import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { apiFetch } from '../../../services/apiClient';
 import { RAID_PHASE_LABELS } from '@guildname/shared/raidCycle';
+import { queryClient } from '../../../query/client';
+import { queryKeys, useMembers, useVoicePresence, useWarRoomInit } from '../../../query/hooks';
 
 const PHASE_LABELS = {
   1: RAID_PHASE_LABELS[1],
@@ -20,81 +21,26 @@ function phaseDotClass(currentPhase, n) {
 
 export default function WarRoomTab({ user }) {
   const isOfficer = user?.isOfficer === true;
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [cycle, setCycle] = useState(null);
-  const [published, setPublished] = useState(null);
-  const [session, setSession] = useState(null);
-  const [members, setMembers] = useState({});
-  const [jobs, setJobs] = useState({});
-  const [commitments, setCommitments] = useState({});
-  const [warRooms, setWarRooms] = useState([]);
-  const [automation, setAutomation] = useState(null);
-  const [liveVoiceUids, setLiveVoiceUids] = useState([]);
-  const etagRef = useRef('');
-
-  const loadInit = useCallback(async ({ quiet = false } = {}) => {
-    try {
-      if (!quiet) setLoading(true);
-      const res = await apiFetch('/api/war-room/init', {
-        headers: etagRef.current ? { 'If-None-Match': `"${etagRef.current}"` } : {},
-      });
-      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
-      if (nextTag) etagRef.current = nextTag;
-      if (res.status === 304) {
-        setError('');
-        return;
-      }
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.error || 'Failed to load War Room.');
-        return;
-      }
-      if (data.unchanged) {
-        setError('');
-        return;
-      }
-      setError('');
-      setCycle(data.cycle || null);
-      setPublished(data.published || null);
-      setSession(data.session || null);
-      setMembers(data.members || {});
-      setJobs(data.jobs || {});
-      setCommitments(data.commitments || {});
-      setWarRooms(data.warRooms || []);
-      setAutomation(data.automation || null);
-      if (Array.isArray(data.session?.lastVoicePoll?.presentUids)) {
-        setLiveVoiceUids(data.session.lastVoicePoll.presentUids);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to load War Room.');
-    } finally {
-      if (!quiet) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadInit();
-  }, [loadInit, user]);
-
-  useEffect(() => {
-    if (!session) return undefined;
-    const refs = session.selectedWarRoomIds?.length
-      ? session.selectedWarRoomIds
-      : session.selectedWarRooms;
-    if (!refs?.length) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await apiFetch(`/api/live-raid/voice-presence?channels=${encodeURIComponent(refs.join(','))}`);
-        const data = await res.json();
-        if (!cancelled && data.success && data.presentUids) setLiveVoiceUids(data.presentUids);
-      } catch {
-        /* keep last known */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [session?.selectedWarRoomIds, session?.selectedWarRooms]);
+  const initQuery = useWarRoomInit();
+  const membersQuery = useMembers('card');
+  const data = initQuery.data;
+  const loading = (initQuery.isLoading && !data) || (membersQuery.isLoading && !membersQuery.data);
+  const error = initQuery.error?.message || '';
+  const cycle = data?.cycle || null;
+  const published = data?.published || null;
+  const session = data?.session || null;
+  const members = membersQuery.data || {};
+  const jobs = data?.jobs || {};
+  const commitments = data?.commitments || {};
+  const warRooms = data?.warRooms || [];
+  const automation = data?.automation || null;
+  const voiceRefs = session?.selectedWarRoomIds?.length
+    ? session.selectedWarRoomIds
+    : session?.selectedWarRooms;
+  const voiceQuery = useVoicePresence(voiceRefs);
+  const liveVoiceUids = voiceQuery.data
+    || data?.session?.lastVoicePoll?.presentUids
+    || [];
 
   const persistLiveGrids = async (grids) => {
     const res = await apiFetch('/api/live-raid/update', {
@@ -103,7 +49,9 @@ export default function WarRoomTab({ user }) {
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Failed to save live party.');
-    setSession((prev) => (prev ? { ...prev, grids } : prev));
+    queryClient.setQueryData(queryKeys.warRoomInit(), (prev) => (
+      prev ? { ...prev, session: prev.session ? { ...prev.session, grids } : prev.session } : prev
+    ));
   };
 
   const gridSource = session?.grids
@@ -257,7 +205,7 @@ export default function WarRoomTab({ user }) {
           readOnly={!canEdit}
           liveVoiceUids={session ? liveVoiceUids : []}
           persistFn={session ? persistLiveGrids : null}
-          onPublishedChange={(next) => setPublished(next)}
+          onPublishedChange={(next) => queryClient.setQueryData(queryKeys.warRoomInit(), (prev) => (prev ? { ...prev, published: next } : prev))}
           topRow={renderTopRow}
         />
       ) : (

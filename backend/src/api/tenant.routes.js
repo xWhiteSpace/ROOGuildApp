@@ -236,6 +236,7 @@ router.post('/onboard', async (req, res) => {
     attendanceId: '',
     warAnnounceChannelId: '',
     raidScreenshotChannelId: '',
+    onboardingChannelId: '',
     warRooms: {},
   };
 
@@ -455,6 +456,7 @@ router.post('/game-setup', async (req, res) => {
     attendanceId: incoming.attendanceId || '',
     warAnnounceChannelId: incoming.warAnnounceChannelId || '',
     raidScreenshotChannelId: incoming.raidScreenshotChannelId || '',
+    onboardingChannelId: incoming.onboardingChannelId || '',
     warRooms: {
       DISCORD_WARROOM_ID_1: incoming.warRooms?.DISCORD_WARROOM_ID_1 || '',
       DISCORD_WARROOM_ID_2: incoming.warRooms?.DISCORD_WARROOM_ID_2 || '',

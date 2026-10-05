@@ -9,5 +9,10 @@ export function valhallaEnv() {
     sessionSecret: process.env.SESSION_SECRET || 'guild_secret_pass',
     port: Number(process.env.PORT) || 5001,
     localHttp,
+    cookie: {
+      httpOnly: true,
+      secure: !localHttp,
+      sameSite: localHttp ? 'lax' : 'none',
+    },
   };
 }

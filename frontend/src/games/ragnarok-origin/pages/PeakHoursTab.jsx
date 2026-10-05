@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidatePeakHours, usePeakHours } from '../../../query/hooks';
 
 const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -34,48 +35,27 @@ function cellClass(count, max) {
 }
 
 export default function PeakHoursTab({ user }) {
-  const [loading, setLoading] = useState(true);
+  const peakQuery = usePeakHours();
+  const data = peakQuery.data;
+  const loading = peakQuery.isLoading && !data;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [timezone, setTimezone] = useState('Asia/Manila');
-  const [mine, setMine] = useState(null);
   const [hours, setHours] = useState(emptyHours);
-  const [heatmap, setHeatmap] = useState([]);
-  const [peak, setPeak] = useState(null);
-  const [filled, setFilled] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [missing, setMissing] = useState([]);
   const paintRef = useRef(null);
-
-  const load = async ({ quiet = false } = {}) => {
-    try {
-      if (!quiet) setLoading(true);
-      setError('');
-      const res = await apiFetch('/api/attendance/peak-hours', { method: 'GET' });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Could not load Peak Hours.');
-        return;
-      }
-      setTimezone(data.timezone || 'Asia/Manila');
-      setMine(data.mine || null);
-      setHours(hoursFromMine(data.mine || null));
-      setHeatmap(Array.isArray(data.heatmap) ? data.heatmap : []);
-      setPeak(data.peak || null);
-      setFilled(data.filled || 0);
-      setTotal(data.total || 0);
-      setMissing(Array.isArray(data.missing) ? data.missing : []);
-    } catch (err) {
-      setError(err.message || 'Could not load Peak Hours.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const mine = data?.mine || null;
+  const timezone = data?.timezone || 'Asia/Manila';
+  const heatmap = Array.isArray(data?.heatmap) ? data.heatmap : [];
+  const peak = data?.peak || null;
+  const filled = data?.filled || 0;
+  const total = data?.total || 0;
+  const missing = Array.isArray(data?.missing) ? data.missing : [];
 
   useEffect(() => {
-    load();
-  }, [user?.id]);
+    if (!data) return;
+    setHours(hoursFromMine(data.mine || null));
+    setError('');
+  }, [data]);
 
   useEffect(() => {
     const stopPaint = () => { paintRef.current = null; };
@@ -141,9 +121,8 @@ export default function PeakHoursTab({ user }) {
         setError(data.error || 'Could not save Peak Hours.');
         return;
       }
-      setMine(data.mine || null);
       setSuccess('Peak Hours saved.');
-      await load({ quiet: true });
+      await invalidatePeakHours();
     } catch (err) {
       setError(err.message || 'Could not save Peak Hours.');
     } finally {
@@ -168,9 +147,9 @@ export default function PeakHoursTab({ user }) {
         </p>
       </div>
 
-      {error && (
+      {(error || peakQuery.error) && (
         <div className="bg-rose-950/30 border border-rose-500/30 text-rose-400 text-xs p-3.5 rounded-xl font-semibold">
-          {error}
+          {error || peakQuery.error?.message}
         </div>
       )}
       {success && (

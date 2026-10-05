@@ -151,9 +151,160 @@ async function loadCollectionFiltered(tenantId, spec, field, value) {
   return rowsToMap(rows);
 }
 
+function memberCardProjectionSql() {
+  return `jsonb_build_object(
+    'uid', discord_id,
+    'displayName', COALESCE(data->>'displayName', ''),
+    'jobCode', COALESCE(data->>'jobCode', ''),
+    'isRaidRoster', COALESCE((data->>'isRaidRoster')::boolean, false)
+  )`;
+}
+
+function memberListProjectionSql() {
+  return `jsonb_build_object(
+    'displayName', COALESCE(data->>'displayName', ''),
+    'jobCode', COALESCE(data->>'jobCode', ''),
+    'roleCode', COALESCE(data->>'roleCode', ''),
+    'groupTag', COALESCE(data->>'groupTag', ''),
+    'joinedAt', COALESCE(data->>'joinedAt', ''),
+    'isRaidRoster', COALESCE((data->>'isRaidRoster')::boolean, false),
+    'isDummy', COALESCE((data->>'isDummy')::boolean, false),
+    'leaveCreditsRemaining', CASE
+      WHEN jsonb_typeof(data->'leaveCreditsRemaining') = 'number' THEN data->'leaveCreditsRemaining'
+      ELSE 'null'::jsonb
+    END
+  )`;
+}
+
+/** Project roster columns in SQL. Never SELECT data (playSchedule stays in the table). */
+export async function loadMembersProjected(view = 'list', tenantId) {
+  const id = requireTenant(tenantId);
+  const projection = view === 'card' ? memberCardProjectionSql() : memberListProjectionSql();
+  const { rows } = await query(
+    `SELECT discord_id AS id, ${projection} AS data FROM members WHERE tenant_id = $1`,
+    [id]
+  );
+  const out = {};
+  for (const row of rows) out[row.id] = row.data;
+  return out;
+}
+
+/** Load only the named member rows. Used by one-item request queues. */
+export async function loadMembersByIds(ids, tenantId) {
+  const id = requireTenant(tenantId);
+  const keys = [...new Set((ids || []).map((uid) => String(uid || '').trim()).filter(Boolean))];
+  if (!keys.length) return {};
+  const { rows } = await query(
+    `SELECT discord_id AS id, data FROM members WHERE tenant_id = $1 AND discord_id = ANY($2::text[])`,
+    [id, keys]
+  );
+  const out = {};
+  for (const row of rows) out[row.id] = row.data;
+  return out;
+}
+
+/** True when any raid-roster member is missing an integer leaveCreditsRemaining. */
+export async function raidRosterMissingLeaveCredits(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT EXISTS (
+       SELECT 1 FROM members
+       WHERE tenant_id = $1
+         AND COALESCE((data->>'isRaidRoster')::boolean, false) = true
+         AND (data->>'status') IS DISTINCT FROM 'Ghost'
+         AND jsonb_typeof(data->'leaveCreditsRemaining') IS DISTINCT FROM 'number'
+     ) AS missing`,
+    [id]
+  );
+  return Boolean(rows[0]?.missing);
+}
+
+const LIVE_SESSION_PATH = 'attendance/live_session';
+
+/** Tiny live_session keys for the voice pulse. Does not return grids. */
+export async function loadLiveSessionPulseMeta(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT jsonb_build_object(
+       'status', data->>'status',
+       'monitoringEndsAt', data->'monitoringEndsAt',
+       'monitoringStartsAt', data->'monitoringStartsAt',
+       'pollIntervalMinutes', data->'pollIntervalMinutes',
+       'selectedWarRooms', COALESCE(data->'selectedWarRooms', '[]'::jsonb),
+       'selectedWarRoomIds', COALESCE(data->'selectedWarRoomIds', '[]'::jsonb),
+       'lastVoicePoll', data->'lastVoicePoll'
+     ) AS data
+     FROM json_docs
+     WHERE tenant_id = $1 AND path = $2`,
+    [id, LIVE_SESSION_PATH]
+  );
+  return rows[0]?.data || null;
+}
+
+/**
+ * Increment voice tallies and patch lastVoicePoll without reading grids.
+ * userTallies for currently present UIDs go up by 1; other keys stay.
+ */
+export async function incrementLiveSessionPulse({ presentUids, entered, left, channelCount } = {}, tenantId) {
+  const id = requireTenant(tenantId);
+  const present = [...new Set((presentUids || []).map((uid) => String(uid || '').trim()).filter(Boolean))];
+  const lastVoicePoll = {
+    timestamp: Date.now(),
+    presentUids: present,
+    entered: (entered || []).map(String),
+    left: (left || []).map(String),
+    channelCount: Number(channelCount) || 0,
+  };
+  const { rows } = await query(
+    `UPDATE json_docs
+     SET data = jsonb_set(
+       jsonb_set(
+         jsonb_set(
+           COALESCE(data, '{}'::jsonb),
+           '{totalPulses}',
+           to_jsonb(COALESCE((data->>'totalPulses')::int, 0) + 1)
+         ),
+         '{lastVoicePoll}',
+         $3::jsonb
+       ),
+       '{userTallies}',
+       (
+         SELECT COALESCE(jsonb_object_agg(key, to_jsonb(val)), '{}'::jsonb)
+         FROM (
+           SELECT key,
+             COALESCE((json_docs.data->'userTallies'->>key)::int, 0)
+               + CASE WHEN key = ANY($2::text[]) THEN 1 ELSE 0 END AS val
+           FROM (
+             SELECT DISTINCT key FROM (
+               SELECT jsonb_object_keys(COALESCE(json_docs.data->'userTallies', '{}'::jsonb)) AS key
+               UNION
+               SELECT unnest($2::text[]) AS key
+             ) keys
+             WHERE key <> ''
+           ) k
+         ) tallied
+       )
+     )
+     WHERE tenant_id = $1 AND path = $4 AND COALESCE(data->>'status', '') = 'Active'
+     RETURNING
+       COALESCE((data->>'totalPulses')::int, 0) AS total_pulses,
+       COALESCE(data->'userTallies', '{}'::jsonb) AS user_tallies`,
+    [id, present, JSON.stringify(lastVoicePoll), LIVE_SESSION_PATH]
+  );
+  const row = rows[0];
+  if (!row) return { totalPulses: 0, userTallies: {}, lastVoicePoll };
+  return {
+    totalPulses: Number(row.total_pulses) || 0,
+    userTallies: row.user_tallies || {},
+    lastVoicePoll,
+  };
+}
+
 export async function loadAuctionRequests({
   status,
   userId,
+  itemId,
+  itemName,
   sinceDays,
   sinceCalendarDay,
   sinceId,
@@ -170,6 +321,19 @@ export async function loadAuctionRequests({
   if (userId != null && userId !== '') {
     clauses.push(`data->>'userId' = $${i++}`);
     params.push(String(userId));
+  }
+  const itemKey = itemId != null && itemId !== '' ? String(itemId) : '';
+  const itemLabel = itemName != null && itemName !== '' ? String(itemName) : '';
+  if (itemKey && itemLabel) {
+    clauses.push(`(data->>'itemId' = $${i} OR data->>'item' = $${i + 1})`);
+    params.push(itemKey, itemLabel);
+    i += 2;
+  } else if (itemKey) {
+    clauses.push(`data->>'itemId' = $${i++}`);
+    params.push(itemKey);
+  } else if (itemLabel) {
+    clauses.push(`data->>'item' = $${i++}`);
+    params.push(itemLabel);
   }
   let calendarStart = sinceCalendarDay ? String(sinceCalendarDay) : '';
   if (!calendarStart && sinceDays != null && !sinceId) {
@@ -508,6 +672,80 @@ function sessionArchiveTrend(row, sessionId) {
   };
 }
 
+const ARCHIVE_INDEX_PATH = 'attendance/session_archive_index';
+const ARCHIVE_INDEX_MAX = 50;
+const ARCHIVE_KEYS_SQL = `ARRAY(SELECT jsonb_array_elements_text($2::jsonb))`;
+const ARCHIVE_TREND_OBJECT = `jsonb_build_object(
+  'id', COALESCE(blob->>'id', k),
+  'eventTitle', COALESCE(blob->>'eventTitle', ''),
+  'eventDate', COALESCE(blob->>'eventDate', ''),
+  'eventKey', COALESCE(blob->>'eventKey', ''),
+  'endedAt', COALESCE((NULLIF(blob->>'endedAt', ''))::bigint, 0),
+  'endedEarly', COALESCE((blob->>'endedEarly')::boolean, false),
+  'committedBy', COALESCE(blob->>'committedBy', ''),
+  'totalPulses', COALESCE((NULLIF(blob->>'totalPulses', ''))::int, 0),
+  'expectedPulses', COALESCE((NULLIF(blob->>'expectedPulses', ''))::int, 0),
+  'userTallies', COALESCE(blob->'userTallies', '{}'::jsonb),
+  'commitments', COALESCE(blob->'commitments', '{}'::jsonb),
+  'inGameStatus', COALESCE(blob->'inGameStatus', '{}'::jsonb)
+)`;
+
+export async function touchSessionArchiveIndex({ id, endedAt, remove = false } = {}, tenantId) {
+  const storeId = requireTenant(tenantId);
+  const key = String(id || '').trim();
+  if (!key) return;
+  const current = await loadDoc(storeId, ARCHIVE_INDEX_PATH);
+  let entries = Array.isArray(current?.entries) ? current.entries.filter((row) => row && row.id !== key) : [];
+  if (!remove) {
+    entries.unshift({ id: key, endedAt: Number(endedAt) || 0 });
+  }
+  entries.sort((a, b) => (Number(b.endedAt) || 0) - (Number(a.endedAt) || 0));
+  entries = entries.slice(0, ARCHIVE_INDEX_MAX);
+  await saveDoc(storeId, ARCHIVE_INDEX_PATH, { entries });
+}
+
+async function readArchiveIndexEntries(tenantId) {
+  const current = await loadDoc(tenantId, ARCHIVE_INDEX_PATH);
+  const entries = Array.isArray(current?.entries) ? current.entries : [];
+  return entries
+    .filter((row) => row && row.id)
+    .sort((a, b) => (Number(b.endedAt) || 0) - (Number(a.endedAt) || 0));
+}
+
+async function rebuildArchiveIndex(tenantId, limit) {
+  const { rows } = await query(
+    `SELECT e.key AS id, COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) AS ended_at
+     FROM json_docs d
+     CROSS JOIN LATERAL jsonb_each(d.data) e
+     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
+     ORDER BY 2 DESC
+     LIMIT $2`,
+    [tenantId, limit]
+  );
+  const entries = rows.map((row) => ({ id: row.id, endedAt: Number(row.ended_at) || 0 }));
+  await saveDoc(tenantId, ARCHIVE_INDEX_PATH, { entries });
+  return entries;
+}
+
+async function loadArchiveSessionsByIds(tenantId, ids, full) {
+  const keys = [...new Set((ids || []).map((key) => String(key || '').trim()).filter(Boolean))];
+  if (!keys.length) return {};
+  const { rows } = await query(
+    full
+      ? `SELECT k AS id, d.data -> k AS data
+         FROM json_docs d
+         CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
+         WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'`
+      : `SELECT k AS id, ${ARCHIVE_TREND_OBJECT} AS data
+         FROM json_docs d
+         CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
+         CROSS JOIN LATERAL (SELECT d.data -> k AS blob) sliced
+         WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive' AND d.data -> k IS NOT NULL`,
+    [tenantId, JSON.stringify(keys)]
+  );
+  return rowsToMap(rows) || {};
+}
+
 export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } = {}, tenantId) {
   const id = requireTenant(tenantId);
   const full = fields === 'full';
@@ -521,17 +759,13 @@ export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } 
     if (data == null) return {};
     return { [sessionId]: full ? data : sessionArchiveTrend(data, sessionId) };
   }
-  const n = Math.min(50, Math.max(1, parseInt(limit, 10) || 12));
-  const { rows } = await query(
-    `SELECT e.key AS id, e.value AS data
-     FROM json_docs d
-     CROSS JOIN LATERAL jsonb_each(d.data) e
-     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
-     ORDER BY COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) DESC
-     LIMIT $2`,
-    [id, n]
-  );
-  const mapped = rowsToMap(rows) || {};
+  const n = Math.min(ARCHIVE_INDEX_MAX, Math.max(1, parseInt(limit, 10) || 12));
+  let entries = await readArchiveIndexEntries(id);
+  if (!entries.length) {
+    entries = await rebuildArchiveIndex(id, ARCHIVE_INDEX_MAX);
+  }
+  const ids = entries.slice(0, n).map((row) => row.id);
+  const mapped = await loadArchiveSessionsByIds(id, ids, full);
   if (full) return mapped;
   const slim = {};
   for (const [key, row] of Object.entries(mapped)) {
@@ -582,6 +816,38 @@ export async function sqlFingerprint(tenantId, {
        CASE WHEN $5 THEN COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), '') ELSE '' END
      )) AS fp`,
     [id, members, commitments, paths.length > 0, config, paths, bounds?.start || null, bounds?.endExclusive || null]
+  );
+  return String(rows[0]?.fp || '');
+}
+
+export async function lobbyFingerprint(tenantId, userId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT md5(concat(
+       COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), ''),
+       COALESCE((SELECT md5(string_agg(auction_requests.id || data::text, chr(30) ORDER BY auction_requests.id))
+         FROM auction_requests
+         WHERE tenant_id = $1 AND data->>'userId' = $2 AND data->>'selectionStatus' = 'Pending'), '')
+     )) AS fp`,
+    [id, String(userId || '')]
+  );
+  return String(rows[0]?.fp || '');
+}
+
+export async function queueFingerprint(tenantId, itemId, itemName) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(
+    `SELECT md5(concat(
+       COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), ''),
+       COALESCE((SELECT md5(string_agg(auction_requests.id || data::text, chr(30) ORDER BY auction_requests.id))
+         FROM auction_requests
+         WHERE tenant_id = $1
+           AND (
+             ($2::text <> '' AND data->>'itemId' = $2)
+             OR ($3::text <> '' AND data->>'item' = $3)
+           )), '')
+     )) AS fp`,
+    [id, String(itemId || ''), String(itemName || '')]
   );
   return String(rows[0]?.fp || '');
 }

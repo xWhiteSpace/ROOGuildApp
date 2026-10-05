@@ -8,6 +8,10 @@ import { handleAttendanceCardInteraction, attendanceCardWantsEphemeralAck, atten
 import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
 import { handlePartyCardInteraction } from '../games/ragnarok-origin/services/partyViewer.js';
 import { handlePartyOcrInteraction } from '../games/ragnarok-origin/services/discordPartyOcr.js';
+import {
+  classifyOnboardingAck,
+  handleOnboardingCardInteraction,
+} from '../games/ragnarok-origin/services/discordOnboardingCard.js';
 import { runScheduleBatch } from '../games/ragnarok-origin/services/scheduleService.js';
 import { clearGuildCommands } from './deployGuild.js';
 
@@ -199,6 +203,16 @@ async function withGuildTenant(guildId, fn) {
           return await handleRequestDeckInteraction(interaction);
         }
 
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId?.startsWith('onboard:')) {
+          const decision = classifyOnboardingAck(interaction);
+          if (decision.ack === 'deferReply') {
+            await interaction.deferReply({ ephemeral: true });
+          } else if (decision.ack === 'deferUpdate') {
+            await interaction.deferUpdate();
+          }
+          return await handleOnboardingCardInteraction(interaction);
+        }
+
         // ⚔️ Live Auction panel lives in its own auction-request channel — route by
         // customId so it bypasses the general-room gate (self-service loot claiming).
         if (
@@ -258,8 +272,6 @@ async function withGuildTenant(guildId, fn) {
           }
           const attendanceDecision = await import('../games/ragnarok-origin/services/attendanceDecision.js');
           await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
-          const liveRaid = await import('../api/liveRaid.routes.js');
-          await liveRaid.maybeAutoEndLiveRaid();
           const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
           await maybeRunWarRoomAutomation();
         });

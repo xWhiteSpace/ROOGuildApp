@@ -20,7 +20,18 @@ import {
   Sword,
   RefreshCw
 } from 'lucide-react';
-import { apiFetch, getBackendUrl } from '../../../services/apiClient';
+import { apiFetch } from '../../../services/apiClient';
+import {
+  invalidateAttendanceMe,
+  invalidateCommitments,
+  invalidateSpecialEvents,
+  refreshWeekInstances,
+  useAttendanceMe,
+  useCommitments,
+  useSettings,
+  useSpecialEvents,
+  useWeekInstances,
+} from '../../../query/hooks';
 import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import {
   formatGuildDate,
@@ -35,22 +46,27 @@ function schedulePhase3(ev) {
   return ev?.phases?.[3];
 }
 
-const backendUrl = getBackendUrl();
-
 export default function Scheduler({ user }) {
   const calendarRef = useRef(null);
-  const commitmentsEtagRef = useRef('');
-  const [loading, setLoading] = useState(true);
-  const [eventsCatalog, setEventsCatalog] = useState({});
-  const [commitments, setCommitments] = useState({});
-  const [specialEvents, setSpecialEvents] = useState({});
-  const [weekInstances, setWeekInstances] = useState({});
-  const [weekMonday, setWeekMonday] = useState('');
-  const [timezone, setTimezone] = useState(DEFAULT_TZ);
+  const settingsQuery = useSettings('events,specialEventCategories,timezone');
+  const specialQuery = useSpecialEvents();
+  const meQuery = useAttendanceMe();
+  const timezone = settingsQuery.data?.timezone || DEFAULT_TZ;
+  const weekMonday = getWeekMonday(timezone);
+  const weekQuery = useWeekInstances(weekMonday);
+  const commitQuery = useCommitments(weekQuery.data?.weekMonday || weekMonday);
+  const eventsCatalog = settingsQuery.data?.events || {};
+  const specialEvents = specialQuery.data || {};
+  const weekInstances = weekQuery.data?.instances || {};
+  const leaveCreditsFromServer = meQuery.data?.leaveCreditsRemaining;
+  const [leaveCreditsRemaining, setLeaveCreditsRemaining] = useState(null);
+  const [commitments, setCommitments] = useState(() => commitQuery.data || {});
   const [specialCategoriesList, setSpecialCategoriesList] = useState(['Raid', 'Meeting', 'PVP', 'Casual']);
   const [selectedDayContext, setSelectedDayContext] = useState(null);
   const [refreshingWeek, setRefreshingWeek] = useState(false);
-  const [leaveCreditsRemaining, setLeaveCreditsRemaining] = useState(null);
+  const loading = (settingsQuery.isLoading && !settingsQuery.data)
+    || (specialQuery.isLoading && !specialQuery.data)
+    || (weekQuery.isLoading && !weekQuery.data);
   
   // Modal Multi-Day States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -67,71 +83,24 @@ export default function Scheduler({ user }) {
   const [formDaysOfWeek, setFormDaysOfWeek] = useState([]);
   const [formAllDay, setFormAllDay] = useState(false);
 
-  const ensureCurrentWeek = async (force = false, tzOverride) => {
-    const tz = tzOverride || timezone;
-    const monday = getWeekMonday(tz);
-    const res = await apiFetch('/api/attendance/ensure-week', {
-      method: 'POST',
-      body: JSON.stringify({ weekMonday: monday, force }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setWeekMonday(data.weekMonday);
-      setWeekInstances(data.instances || {});
-      if (data.timezone) setTimezone(data.timezone);
-    }
-    return data;
+  const ensureCurrentWeek = async (force = false) => {
+    if (force) return refreshWeekInstances(weekMonday);
+    return weekQuery.refetch();
   };
 
   const loadSchedulerEcosystem = async () => {
-    try {
-      setLoading(true);
-      const configRes = await apiFetch('/api/requests/settings/get?fields=events,specialEventCategories,timezone', { method: 'GET' });
-      const configData = await configRes.json();
-      let nextTz = timezone;
-      if (configData.success && configData.config?.events) setEventsCatalog(configData.config.events);
-      if (configData.success && configData.config?.specialEventCategories) {
-        setSpecialCategoriesList(configData.config.specialEventCategories);
-      }
-      if (configData.success && configData.config?.timezone) {
-        nextTz = configData.config.timezone;
-        setTimezone(nextTz);
-      }
-
-      const specialRes = await apiFetch('/api/attendance/special-events', { method: 'GET' });
-      const specialData = await specialRes.json();
-      if (specialData.success) setSpecialEvents(specialData.specialEvents || {});
-
-      await ensureCurrentWeek(false, nextTz);
-
-      const meRes = await apiFetch('/api/attendance/me', { method: 'GET' });
-      const meData = await meRes.json();
-      if (meData.success) setLeaveCreditsRemaining(meData.leaveCreditsRemaining);
-    } catch (err) {
-      console.error("Scheduler load failure:", err);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([
+      settingsQuery.refetch(),
+      specialQuery.refetch(),
+      meQuery.refetch(),
+      weekQuery.refetch(),
+    ]);
   };
 
   const fetchCommitmentsFromApi = async () => {
-    try {
-      const weekQs = weekMonday ? `?weekMonday=${encodeURIComponent(weekMonday)}` : '';
-      const res = await apiFetch(`/api/attendance/commitments${weekQs}`, {
-        method: 'GET',
-        headers: commitmentsEtagRef.current ? { 'If-None-Match': `"${commitmentsEtagRef.current}"` } : {},
-      });
-      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
-      if (nextTag) commitmentsEtagRef.current = nextTag;
-      if (res.status === 304) return;
-      const data = await res.json();
-      if (data.unchanged) return;
-      if (data.success && data.commitments) {
-        setCommitments(data.commitments);
-      }
-    } catch (err) {
-      console.error('Commitments poll failed:', err);
-    }
+    await invalidateCommitments();
+    const next = await commitQuery.refetch();
+    if (next.data) setCommitments(next.data);
   };
 
   /** Resolve RSVP status for a user under a composite key (string/number snowflake safe). */
@@ -157,27 +126,18 @@ export default function Scheduler({ user }) {
   };
 
   useEffect(() => {
-    loadSchedulerEcosystem();
-    fetchCommitmentsFromApi();
-  }, [user]);
-
-  // Re-ensure when timezone changes after first load
-  useEffect(() => {
-    if (!loading && timezone) {
-      const monday = getWeekMonday(timezone);
-      if (monday !== weekMonday) {
-        ensureCurrentWeek(false);
-      }
+    if (settingsQuery.data?.specialEventCategories) {
+      setSpecialCategoriesList(settingsQuery.data.specialEventCategories);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timezone]);
+  }, [settingsQuery.data?.specialEventCategories]);
 
   useEffect(() => {
-    if (!weekMonday) return;
-    commitmentsEtagRef.current = '';
-    fetchCommitmentsFromApi();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekMonday]);
+    if (leaveCreditsFromServer != null) setLeaveCreditsRemaining(leaveCreditsFromServer);
+  }, [leaveCreditsFromServer]);
+
+  useEffect(() => {
+    if (commitQuery.data) setCommitments(commitQuery.data);
+  }, [commitQuery.data]);
 
   const handleRefreshWeek = async () => {
     try {
@@ -323,6 +283,7 @@ export default function Scheduler({ user }) {
         setFormAllDay(false);
         setEditEventId(null);
         setSelectedDayContext(null);
+        await invalidateSpecialEvents();
         await loadSchedulerEcosystem();
         await ensureCurrentWeek(true);
       } else {
@@ -343,6 +304,7 @@ export default function Scheduler({ user }) {
       const data = await res.json();
       if (data.success) {
         setSelectedDayContext(null);
+        await invalidateSpecialEvents();
         await loadSchedulerEcosystem();
         await ensureCurrentWeek(true);
       } else {
@@ -388,6 +350,7 @@ export default function Scheduler({ user }) {
       }
       if (Number.isInteger(data.leaveCreditsRemaining)) {
         setLeaveCreditsRemaining(data.leaveCreditsRemaining);
+        await invalidateAttendanceMe();
       }
       await fetchCommitmentsFromApi();
     } catch (err) {
@@ -567,6 +530,7 @@ export default function Scheduler({ user }) {
                 const data = await res.json();
                 if (!data.success) dropInfo.revert();
                 else {
+                  await invalidateSpecialEvents();
                   await loadSchedulerEcosystem();
                   await ensureCurrentWeek(true);
                 }

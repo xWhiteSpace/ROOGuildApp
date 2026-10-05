@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useContext } from 'react';
 import { MimicBookContext } from '../../../App';
 import { apiFetch } from '../../../services/apiClient';
 import { buildAllocateBidRows } from '@guildname/shared/allocatePreview';
+import { fetchRequestQueue, invalidateMembers, invalidateRequestLobby, useActiveSession, useRequestInit, useRequestQueue, useSettings } from '../../../query/hooks';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -51,7 +52,7 @@ export default function MimicBookTab({ user }) {
   } = useContext(MimicBookContext);
   const [lootHistoryDates, setLootHistoryDates] = useState([]);
   const [selectedLootDate, setSelectedLootDate] = useState('');
-  const sessionEtagRef = useRef('');
+  const sessionQuery = useActiveSession();
 
   const popoverAnchorRef = useRef(null);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
@@ -65,6 +66,9 @@ export default function MimicBookTab({ user }) {
   }, [user, isOfficer]);
 
 const [rawMembers, setRawMembers] = useState({});
+  const initQuery = useRequestInit();
+  const eventsQuery = useSettings('events');
+  const queueQuery = useRequestQueue(activeMatrixFilter);
 
   // Builds an internal lowercase lookup map for dragging text name assignments safely
   const nameToUidMap = {};
@@ -144,31 +148,51 @@ const [rawMembers, setRawMembers] = useState({});
     setLiveGapsWarning(missingBlocks.length > 0 ? `⚠️ GAP WARNING: Unallocated grid sequence boxes skipped at: ${missingBlocks.join(', ')}` : '');
   }, [lootRows, qtyPerPage]);
 
+  const applyQueuePayload = (payload) => {
+    if (!payload?.itemId) return;
+    setRankingsByItem((prev) => ({ ...prev, [payload.itemId]: payload.rankings || [] }));
+    setRequestsByItemDetails((prev) => ({ ...prev, [payload.itemId]: payload.details || {} }));
+    if (payload.members) {
+      setRawMembers((prev) => ({ ...prev, ...payload.members }));
+    }
+  };
+
+  const ensureQueuesForItems = async (itemIds) => {
+    const unique = [...new Set((itemIds || []).filter(Boolean))];
+    const rows = await Promise.all(unique.map((id) => fetchRequestQueue(id)));
+    rows.forEach(applyQueuePayload);
+    return rows;
+  };
+
   const loadTrueRequestPool = async () => {
     try {
       setLoadingPool(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const customHeaders = { 'Content-Type': 'application/json' };
-      if (savedUserSession) {
-        customHeaders['x-user-profile'] = encodeURIComponent(savedUserSession);
-      }
-      const res = await fetch(`${backendUrl}/api/requests/init`, { method: 'GET', headers: customHeaders, credentials: 'include' });
-      const data = await res.json();
-      if (data.success) {
+      await invalidateRequestLobby();
+      const [initRes, eventsRes] = await Promise.all([
+        initQuery.refetch(),
+        eventsQuery.refetch(),
+      ]);
+      const data = initRes.data;
+      if (data?.success) {
         setItems(data.items || []);
-        setRankingsByItem(data.rankingsByItem || {});
-        setRequestsByItemDetails(data.requestsByItemDetails || {});
-        setMasterGuildRoster(data.fullRoster || []);
-        setRawMembers(data.members || {});
-        // 🛡️ Payload Alignment Pass: Cache dynamic custom event titles natively to unlock modular dropdown loops
-      if (data.events) {
-        setAvailableEvents(data.events);
-        setCommitEvent(data.eventName || "No Active Target Event Scheduled");
+        if (data.eventName) setCommitEvent(data.eventName);
       }
+      if (eventsRes.data) {
+        setAvailableEvents(eventsRes.data.events || {});
+        if (!data?.eventName) {
+          const first = Object.values(eventsRes.data.events || {})[0];
+          if (first?.title) setCommitEvent(first.title);
+        }
+      }
+      const selectedId = activeMatrixFilter || data?.items?.[0]?.id;
+      if (selectedId) {
+        const queue = await fetchRequestQueue(selectedId);
+        applyQueuePayload(queue);
       }
     } catch (err) {
       console.error("Failed to fetch current request pool:", err);
     } finally {
+      setLoadingPool(false);
       setSyncingRoster(false);
     }
   };
@@ -193,7 +217,18 @@ const [rawMembers, setRawMembers] = useState({});
       const data = await res.json();
       if (data.success) {
         alert(`SUCCESS: Realtime Roster sync complete!`);
-        loadTrueRequestPool(); 
+        await invalidateMembers();
+        const rosterRes = await apiFetch('/api/attendance/members?view=card');
+        const rosterData = await rosterRes.json();
+        if (rosterData.success) {
+          const names = Object.values(rosterData.members || {})
+            .map((row) => row?.displayName)
+            .filter(Boolean)
+            .sort();
+          setMasterGuildRoster(names);
+          setRawMembers((prev) => ({ ...prev, ...(rosterData.members || {}) }));
+        }
+        loadTrueRequestPool();
       }
     } catch (err) {
       console.error(err);
@@ -239,46 +274,21 @@ const [rawMembers, setRawMembers] = useState({});
     }
   };
 
-  const fetchActiveSessionFromBackend = async (isInitialMount = false) => {
-    if (isUserDraggingRef.current) return; 
-    try {
-    // 🛡️ CIRCUIT BREAKER: Mute background poll snapshots if user performed a local write within 4 seconds
-      if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
-
-      const res = await apiFetch('/api/requests/active-session', {
-        method: 'GET',
-        headers: sessionEtagRef.current ? { 'If-None-Match': `"${sessionEtagRef.current}"` } : {},
-      });
-      const nextTag = String(res.headers.get('ETag') || '').replace(/^W\//, '').replaceAll('"', '');
-      if (nextTag) sessionEtagRef.current = nextTag;
-      if (res.status === 304) return;
-    const data = await res.json();
-    if (data.success && data.session) {
-      const s = data.session;
-
-      // 🔒 OPTIMISTIC FENCE: Stale background frames are dropped, but initial mounts bypass checking to restore database variables authoritatively
-        if (!isInitialMount && s.version !== undefined && s.version <= clientVersionRef.current) return;
-        clientVersionRef.current = s.version || 0;
-
-      if (s.activeStep !== undefined) {
-        setActiveStep(s.activeStep);
-      }
-      if (s.lootRows) setLootRows(s.lootRows);
-      if (s.lootSummary) setLootSummary(s.lootSummary);
-      if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
-      if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
-      if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
-      if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
-      if (s.sidebarTab) setSidebarTab(s.sidebarTab);
-      if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
-      if (s.autoCommitArmed !== undefined) setAutoCommitArmed(s.autoCommitArmed);
-    } else if (isInitialMount) {
-        // Defensive Initialization Guard: Network dropouts or temporary auth latency must never destructively wipe progress fields back to zero
-        console.warn("⚠️ [INITIAL SYNC PENDING]: Handshake latency detected; waiting for subsequent background poller stream to clear the gate.");
-      }
-    } catch (err) {
-      if (isInitialMount) console.error(err);
-    }
+  const applyActiveSession = (s, isInitialMount = false) => {
+    if (!s || isUserDraggingRef.current) return;
+    if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
+    if (!isInitialMount && s.version !== undefined && s.version <= clientVersionRef.current) return;
+    clientVersionRef.current = s.version || 0;
+    if (s.activeStep !== undefined) setActiveStep(s.activeStep);
+    if (s.lootRows) setLootRows(s.lootRows);
+    if (s.lootSummary) setLootSummary(s.lootSummary);
+    if (s.categoryAllocations) setCategoryAllocations(s.categoryAllocations);
+    if (s.initialWinnersByItem) setInitialWinnersByItem(s.initialWinnersByItem);
+    if (s.generatedSlots) setGeneratedSlots(s.generatedSlots);
+    if (s.activeMatrixFilter) setActiveMatrixFilter(s.activeMatrixFilter);
+    if (s.sidebarTab) setSidebarTab(s.sidebarTab);
+    if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
+    if (s.autoCommitArmed !== undefined) setAutoCommitArmed(s.autoCommitArmed);
   };
 
   const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {
@@ -374,9 +384,25 @@ const [rawMembers, setRawMembers] = useState({});
   };
 
   useEffect(() => {
-    loadTrueRequestPool();
-    fetchActiveSessionFromBackend(true);
-  }, [user]);
+    if (sessionQuery.data) applyActiveSession(sessionQuery.data, true);
+  }, [sessionQuery.data]);
+
+  useEffect(() => {
+    if (!initQuery.data?.success) return;
+    setItems(initQuery.data.items || []);
+    if (initQuery.data.eventName) setCommitEvent(initQuery.data.eventName);
+    if (!initQuery.isLoading) setLoadingPool(false);
+  }, [initQuery.data, initQuery.isLoading]);
+
+  useEffect(() => {
+    if (!eventsQuery.data?.events) return;
+    setAvailableEvents(eventsQuery.data.events);
+    setCommitEvent((prev) => prev || Object.values(eventsQuery.data.events)[0]?.title || '');
+  }, [eventsQuery.data]);
+
+  useEffect(() => {
+    if (queueQuery.data?.itemId) applyQueuePayload(queueQuery.data);
+  }, [queueQuery.data]);
 
   const handleAddLootRow = () => {
     if (!isAdminMode || !isOfficer || items.length === 0) return;
@@ -510,7 +536,7 @@ const [rawMembers, setRawMembers] = useState({});
   };
 
   // Safety checks shield database engine loop from crashing if async records haven't loaded
-  const handleCheckAndRegisterLoot = () => {
+  const handleCheckAndRegisterLoot = async () => {
     if (!isAdminMode || !isOfficer || items.length === 0) return;
     setValidationError('');
     
@@ -520,6 +546,14 @@ const [rawMembers, setRawMembers] = useState({});
 
     const selectedEventObj = Object.values(availableEvents).find(ev => ev.title === commitEvent) || Object.values(availableEvents)[0];
     const activeLoots = selectedEventObj?.loots || {};
+    const queued = await ensureQueuesForItems(lootRows.map((row) => row.itemType));
+    const liveRankings = { ...rankingsByItem };
+    const liveDetails = { ...requestsByItemDetails };
+    queued.forEach((payload) => {
+      if (!payload?.itemId) return;
+      liveRankings[payload.itemId] = payload.rankings || [];
+      liveDetails[payload.itemId] = payload.details || {};
+    });
 
     items.forEach(item => {
       calculatedSummary[item.id] = { qty: 0, limit: activeLoots[item.id] || 1, seats: 0 };
@@ -565,8 +599,8 @@ const [rawMembers, setRawMembers] = useState({});
       if (!item) return;
       item.seats = Math.floor(item.qty / item.limit); 
       
-      const priorityApplicants = (rankingsByItem && rankingsByItem[key]) ? rankingsByItem[key] : [];
-      const detailsMap = (requestsByItemDetails && requestsByItemDetails[key]) ? requestsByItemDetails[key] : {};
+      const priorityApplicants = liveRankings[key] || [];
+      const detailsMap = liveDetails[key] || {};
       const flatStaticBoxArray = Array(item.qty).fill("");
       let globalBoxCursor = 0;
 

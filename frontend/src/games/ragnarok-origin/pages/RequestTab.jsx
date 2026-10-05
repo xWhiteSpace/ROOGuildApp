@@ -1,6 +1,7 @@
 // frontend/src/pages/RequestTab.jsx
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateRequestLobby, useRequestInit, useRequestQueue } from '../../../query/hooks';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconLock = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
@@ -16,77 +17,44 @@ const IconTarget = () => <svg className="w-3.5 h-3.5" fill="none" stroke="curren
 const IconMoneyBag = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5c-.5-1 0-2 1-3h4c1 1 1.5 2 1 3M7 5h10l2.5 5.5A7 7 0 0112 21a7 7 0 01-7.5-10.5L7 5z"/><path d="M12 10v6M10 13.5c0 1 .8 1.5 2 1.5s2-.5 2-1.5-.8-1.5-2-1.5-2-.5-2-1.5.8-1.5 2-1.5 2 .5 2 1.5"/></svg>;
 
 export default function RequestTab({ user }) {
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState({ name: '', date: '', eventId: '', eventName: '' });
-  const [items, setItems] = useState([]);
-  const [liveCounts, setLiveCounts] = useState({});
   const [localSelections, setLocalSelections] = useState({});
-  const [authError, setAuthError] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-
-  // ⏳ Time-lock & Request List Integration Hooks
-  const [isGateOpen, setIsGateOpen] = useState(true);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [currentPhase, setCurrentPhase] = useState(1);
-  const [rankingsByItem, setRankingsByItem] = useState({});
-  const [phaseIntervals, setPhaseIntervals] = useState({ phase1: '', phase2: '', phase3: '' });
   const [activeListTab, setActiveListTab] = useState('');
 
-  const [members, setMembers] = useState({});
-
-const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
+  const initQuery = useRequestInit();
+  const data = initQuery.data;
+  const items = data?.items || [];
+  const liveCounts = data?.liveCounts || {};
+  const userData = {
+    name: data?.displayName || '',
+    date: data?.date || '',
+    eventId: data?.eventId || 'Unconfigured',
+    eventName: data?.eventName || 'No Active Target Event Scheduled',
+  };
+  const isGateOpen = data?.isGateOpen !== false;
+  const statusMessage = data?.nextStatusChangeMessage || '';
+  const currentPhase = data?.currentPhase ?? 1;
+  const phaseIntervals = data?.phaseIntervals || { phase1: '', phase2: '', phase3: '' };
+  const authError = initQuery.error && /401|Session identity/i.test(initQuery.error.message);
+  const loading = initQuery.isLoading && !data;
+  const queueQuery = useRequestQueue(activeListTab);
+  const currentRosterList = queueQuery.data?.rankings || [];
+  const members = queueQuery.data?.members || {};
+  const requestsByItemDetails = { [activeListTab]: queueQuery.data?.details || {} };
 
   const initLobbyDashboard = async () => {
-    try {
-      setLoading(true);
-      setAuthError(false);
-
-      const res = await apiFetch('/api/requests/init', { method: 'GET' });
-
-      if (res.status === 401) {
-        setAuthError(true);
-        setLoading(false);
-        return;
-      }
-      const data = await res.json();
-      if (data.success) {
-        setItems(data.items);
-        setLiveCounts(data.liveCounts || {});
-        // ✅ VERIFIED UNCHANGED: The data contract matches the modular backend payload perfectly.
-        // It consumes the server's calculated state fields with zero local timezone calculations.
-        setUserData({ 
-          name: data.displayName, 
-          date: data.date, 
-          eventId: data.eventId || "Unconfigured", 
-          eventName: data.eventName || "No Active Target Event Scheduled" 
-        });
-        
-        if (data.isGateOpen !== undefined) setIsGateOpen(data.isGateOpen);
-        if (data.nextStatusChangeMessage) setStatusMessage(data.nextStatusChangeMessage);
-        if (data.currentPhase !== undefined) setCurrentPhase(data.currentPhase);
-        if (data.rankingsByItem) setRankingsByItem(data.rankingsByItem);
-        if (data.phaseIntervals) setPhaseIntervals(data.phaseIntervals);
-
-        if (data.members) setMembers(data.members);
-        if (data.requestsByItemDetails) setRequestsByItemDetails(data.requestsByItemDetails);
-
-        // Dynamically initialize selection baskets and tabs based on database IDs
-        const blankInputs = {};
-        data.items.forEach(item => { blankInputs[item.id] = 0; });
-        setLocalSelections(blankInputs);
-
-        }
-    } catch (err) {
-      console.error("Connection link offline:", err);
-    } finally {
-      setLoading(false);
-    }
+    await invalidateRequestLobby();
+    await initQuery.refetch();
+    if (activeListTab) await queueQuery.refetch();
   };
 
   useEffect(() => {
-    initLobbyDashboard();
-  }, [user]);
+    if (!items.length) return;
+    const blankInputs = {};
+    items.forEach((item) => { blankInputs[item.id] = 0; });
+    setLocalSelections(blankInputs);
+  }, [items]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -184,7 +152,6 @@ const [requestsByItemDetails, setRequestsByItemDetails] = useState({});
 
   const activeCancelableItems = items.filter(item => (liveCounts[item.id] || 0) > 0);
   const totalStagedInCart = Object.values(localSelections).reduce((sum, val) => sum + val, 0);
-  const currentRosterList = rankingsByItem[activeListTab] || [];
 
   return (
     <div className="mx-auto max-w-6xl p-6 text-white pb-32 relative">

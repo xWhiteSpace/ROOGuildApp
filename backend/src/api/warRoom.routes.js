@@ -17,7 +17,6 @@ const router = Router();
 const WAR_ROOM_DOC_PATHS = [
   'attendance/live_session',
   'attendance/war_room_status',
-  'attendance/compositions',
   'attendance/published',
   'attendance/published_anchor',
 ];
@@ -41,7 +40,7 @@ router.get('/init', async (req, res) => {
     let fp = '';
     if (tenantId) {
       const boardFp = await sqlFingerprint(tenantId, {
-        members: true,
+        members: false,
         commitments: true,
         config: true,
         docPaths: WAR_ROOM_DOC_PATHS,
@@ -53,22 +52,18 @@ router.get('/init', async (req, res) => {
       }
     }
 
-    const [membersSnap, commitments, liveSnap, statusSnap, compositionsSnap, publishedBundle] = await Promise.all([
-      db.ref('auction/members').once('value'),
+    const [commitments, liveSnap, statusSnap, publishedBundle] = await Promise.all([
       loadCommitmentsForWeek(weekMonday),
       db.ref('attendance/live_session').once('value'),
       db.ref('attendance/war_room_status').once('value'),
-      db.ref('attendance/compositions').once('value'),
       listPublished(db, { ids: [cycle.publishedId] }),
     ]);
-    const compositions = compositionsSnap.exists() ? compositionsSnap.val() : {};
     const { published, anchor } = publishedBundle;
     const publishedRecord = cycle.publishedId && published?.[cycle.publishedId]
       ? { id: cycle.publishedId, ...published[cycle.publishedId] }
       : null;
 
     const configTitle = publishedRecord?.configTitle
-      || compositions[cycle.configId]?.title
       || cycle.configId
       || '';
 
@@ -91,7 +86,6 @@ router.get('/init', async (req, res) => {
       published: publishedRecord,
       anchor: anchor || null,
       session: liveSnap.exists() ? liveSnap.val() : null,
-      members: membersSnap.exists() ? membersSnap.val() : {},
       jobs: config.jobs || {},
       commitments,
       warRooms: selectedRooms,

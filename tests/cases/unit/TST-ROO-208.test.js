@@ -1,0 +1,37 @@
+import { describe, expect, it } from 'vitest';
+import {
+  migrateAppliesNamedTables,
+  tenantScopedTablesKeyTenantId,
+  platformStateKeyedByKeyOnly,
+  tenantsIdIsGuildPk,
+  schemaAppliedViaMigrate,
+} from '../../patterns/schema_migrate.js';
+
+describe('TST-ROO-208 PostgresSchemaOwnershipIsMigrateApplied owns the named tables via migrate without booting the process', () => {
+  it('migrate applies the named tables', async () => {
+    const r = await migrateAppliesNamedTables();
+    expect(r.applied).toBe(true);
+    expect(r.missing).toEqual([]);
+  });
+
+  it('a tenant-scoped operational table keys tenant_id', () => {
+    const r = tenantScopedTablesKeyTenantId();
+    expect(r.allOk).toBe(true);
+  });
+
+  it('platform_state is keyed by key only', () => {
+    const r = platformStateKeyedByKeyOnly();
+    expect(r.keyPk).toBe(true);
+    expect(r.hasTenantCol).toBe(false);
+  });
+
+  it('tenants.id is the Discord guild id', () => {
+    const r = tenantsIdIsGuildPk();
+    expect(r.idTextPk).toBe(true);
+  });
+
+  it('schema ownership is applied by migrate on boot', async () => {
+    const r = await schemaAppliedViaMigrate();
+    expect(r.migrateSentSchemaFile).toBe(true);
+  });
+});

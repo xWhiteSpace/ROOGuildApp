@@ -23,6 +23,8 @@ import {
   COMMITMENT_NO_CONFIRM,
   normalizeCommitmentStatus,
 } from '@guildname/shared/attendanceStatus';
+import { apiFetch } from '../../../services/apiClient';
+import { invalidateRaidHistory, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
@@ -42,10 +44,13 @@ function CalendarRsvpIcon({ status, size = 15 }) {
 
 export default function AttendanceHistoryTab({ user }) {
   const isOfficer = user?.isOfficer === true;
-  const [loading, setLoading] = useState(true);
+  const membersQuery = useMembers('card');
+  const historyQuery = useRaidHistory(12);
+  const settingsQuery = useSettings('jobs');
+  const loading = (membersQuery.isLoading && !membersQuery.data) || (historyQuery.isLoading && !historyQuery.data);
+  const members = membersQuery.data || {};
   const [sessions, setSessions] = useState({});
-  const [members, setMembers] = useState({});
-  const [jobsCatalog, setJobsCatalog] = useState({});
+  const jobsCatalog = settingsQuery.data?.jobs || {};
   
   const [activeTabMode, setActiveTabMode] = useState('events'); // 'events' or 'trends'
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,37 +66,14 @@ export default function AttendanceHistoryTab({ user }) {
     return headers;
   };
 
+  useEffect(() => {
+    if (historyQuery.data) setSessions(historyQuery.data);
+  }, [historyQuery.data]);
+
   const loadHistoryData = async () => {
-    try {
-      setLoading(true);
-      const headers = getRequestHeaders();
-
-      const initRes = await fetch(`${backendUrl}/api/attendance/members?view=card`, { method: 'GET', headers, credentials: 'include' });
-      const initData = await initRes.json();
-      if (initData.success) {
-        setMembers(initData.members || {});
-      }
-
-      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs`, { method: 'GET', headers, credentials: 'include' });
-      const settingsData = await settingsRes.json();
-      if (settingsData.success && settingsData.config) {
-        setJobsCatalog(settingsData.config.jobs || {});
-      }
-
-      const res = await fetch(`${backendUrl}/api/live-raid/history/all?limit=12`, {
-        method: 'GET',
-        headers,
-        credentials: 'include'
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSessions(data.sessions || {});
-      }
-    } catch (err) {
-      console.error("Error loading attendance history logs:", err);
-    } finally {
-      setLoading(false);
-    }
+    await invalidateRaidHistory();
+    const next = await historyQuery.refetch();
+    if (next.data) setSessions(next.data);
   };
 
   const handleDeleteSession = async (e, sessionId) => {
@@ -113,6 +95,7 @@ export default function AttendanceHistoryTab({ user }) {
           return next;
         });
         if (selectedSessionId === sessionId) setSelectedSessionId(null);
+        await invalidateRaidHistory();
       } else {
         alert(`Failed to delete: ${data.error}`);
       }
@@ -178,10 +161,6 @@ export default function AttendanceHistoryTab({ user }) {
       alert(`Error: ${err.message}`);
     }
   };
-
-  useEffect(() => {
-    loadHistoryData();
-  }, [user]);
 
   // --- VIEW A: RAID LOG HISTORY (BY EVENT/DATE) ---
   const sortedSessionsList = useMemo(() => {

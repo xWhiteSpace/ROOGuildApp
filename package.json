@@ -2,6 +2,7 @@
   "name": "guildname",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "workspaces": [
     "frontend",
     "backend",
@@ -9,10 +10,15 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",
-    "install:all": "npm install --workspaces"
+    "install:all": "npm install --workspaces",
+    "test": "node tests/support/runVitest.js",
+    "test:e2e": "node tests/support/runPlaywright.js",
+    "test:debug": "node tests/support/debugV.js"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^8.2.2",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.21",

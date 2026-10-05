@@ -15,3 +15,6 @@ backend/ragnarokdynasty-4afa9f4eaa31.json
 backend/src/db/importRtdb.js
 auctionrooc-default-rtdb-export*.json
 *rtdb-export*.json
+tests/results/raw/
+playwright-report/
+test-results/

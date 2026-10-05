@@ -3,6 +3,7 @@ import { Megaphone, Send } from 'lucide-react';
 import { isRaidEnabled } from '@guildname/shared/raidCycle';
 import { upcomingDatesForWeekday, DEFAULT_TZ } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidatePublished, usePublished, useSettings } from '../../../query/hooks';
 
 function eventPhase3(ev) {
   if (isRaidEnabled(ev)) return ev.raid.phases[3];
@@ -43,10 +44,13 @@ function normalizeTimeValue(raw) {
 
 export default function RaidComposeTab({ user }) {
   const isOfficer = user?.isOfficer === true;
-  const [loading, setLoading] = useState(true);
-  const [eventsCatalog, setEventsCatalog] = useState({});
-  const [guildTimezone, setGuildTimezone] = useState(DEFAULT_TZ);
-  const [published, setPublished] = useState({});
+  const settingsQuery = useSettings('events,timezone');
+  const publishedQuery = usePublished();
+  const eventsCatalog = settingsQuery.data?.events || {};
+  const guildTimezone = settingsQuery.data?.timezone || DEFAULT_TZ;
+  const [published, setPublished] = useState(() => publishedQuery.data?.published || {});
+  const loading = (settingsQuery.isLoading && !settingsQuery.data)
+    || (publishedQuery.isLoading && !publishedQuery.data);
 
   const [selectedEventKey, setSelectedEventKey] = useState('');
   const [selectedEventDate, setSelectedEventDate] = useState('');
@@ -56,28 +60,9 @@ export default function RaidComposeTab({ user }) {
   const [lastSentId, setLastSentId] = useState('');
   const [statusMsg, setStatusMsg] = useState(null);
 
-  const loadWorkspace = async () => {
-    try {
-      setLoading(true);
-      const configRes = await apiFetch('/api/requests/settings/get?fields=events,timezone');
-      const configData = await configRes.json();
-      if (configData.success && configData.config) {
-        setEventsCatalog(configData.config.events || {});
-        if (configData.config.timezone) setGuildTimezone(configData.config.timezone);
-      }
-      const pubRes = await apiFetch('/api/attendance/published', { method: 'GET' });
-      const pubData = await pubRes.json();
-      if (pubData.success) {
-        setPublished(pubData.published || {});
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { loadWorkspace(); }, [user]);
+  useEffect(() => {
+    if (publishedQuery.data?.published) setPublished(publishedQuery.data.published);
+  }, [publishedQuery.data]);
 
   const computedEventDates = useMemo(() => {
     if (!selectedEventKey || !eventsCatalog[selectedEventKey]) return [];
@@ -135,6 +120,7 @@ export default function RaidComposeTab({ user }) {
       const id = data.published?.id || matchingPublishedId;
       setLastSentId(id);
       setPublished((prev) => ({ ...prev, [id]: data.published }));
+      await invalidatePublished();
       setStatusMsg({ ok: true, text: 'Sent to Live Raid → Active Compositions.' });
     } catch (err) {
       alert(err.message);

@@ -7,6 +7,7 @@ import MimicBookTab from './games/ragnarok-origin/pages/MimicBookTab';
 import RequestHistoryTab from './games/ragnarok-origin/pages/RequestHistoryTab';
 import PastAuctionTab from './games/ragnarok-origin/pages/PastAuctionTab';
 import LandingPage from './pages/LandingPage';
+import DebugPage from './pages/DebugPage';
 import SettingsTab from './games/ragnarok-origin/pages/SettingsTab';
 import { logoutUser } from './services/authService';
 import MasterListTab from './games/ragnarok-origin/pages/MasterListTab';
@@ -222,8 +223,10 @@ export default function App() {
     if (nextUser) localStorage.setItem(SESSION_KEY, JSON.stringify(nextUser));
   };
 
-  // Landing is public — don't block it behind session sync
-  if (authLoading && window.location.pathname !== '/landing') {
+  // Landing and local /debug are public — don't block them behind session sync
+  const bootPath = window.location.pathname;
+  const bootDebug = import.meta.env.DEV && bootPath === '/debug';
+  if (authLoading && bootPath !== '/landing' && !bootDebug) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-white font-mono text-xs uppercase tracking-widest animate-pulse">
         Synchronizing Security Workspace Modules...
@@ -275,6 +278,11 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
 
   if (pathname === '/login') {
     return <Navigate to={`/landing${search}`} replace />;
+  }
+
+  if (pathname === '/debug') {
+    if (import.meta.env.DEV) return <DebugPage />;
+    return <Navigate to="/landing" replace />;
   }
 
   if (!authUser && (standalone.has(pathname) || pathname.startsWith('/workspace'))) {

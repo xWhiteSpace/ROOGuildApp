@@ -1,7 +1,13 @@
 // backend/src/api/liveRaid.routes.js
 import { Router } from 'express';
-import { getTenantStore, loadSessionArchive } from '../db/database.js';
-import { getCurrentTenantId, runWithTenant } from '../db/tenantContext.js';
+import {
+  getTenantStore,
+  incrementLiveSessionPulse,
+  loadLiveSessionPulseMeta,
+  loadSessionArchive,
+  touchSessionArchiveIndex,
+} from '../db/database.js';
+import { getCachedConfig, getCurrentTenantId, runWithTenant } from '../db/tenantContext.js';
 import { discordClient } from '../discord-bot/client.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import {
@@ -64,8 +70,67 @@ function getPhase3EndTimestamp(eventDate, timezone, phase3) {
 }
 
 async function loadWarRoomsCatalog(db) {
+  const cached = getCachedConfig();
+  if (cached?.warRooms) return cached.warRooms;
   const configSnap = await db.ref('settings/configuration').once('value');
   return configSnap.exists() ? (configSnap.val().warRooms || {}) : {};
+}
+
+/** In-process pulse snapshot: last VC set + tiny session keys. Grids stay in Postgres. */
+const pulseMemory = {
+  lastPresent: [],
+  lastPollTs: 0,
+  monitoringEndsAt: null,
+  selectedWarRooms: [],
+  selectedWarRoomIds: [],
+  status: null,
+};
+
+function rememberPulseContext(sessionLike = {}) {
+  if (sessionLike.status != null) pulseMemory.status = sessionLike.status;
+  if (sessionLike.monitoringEndsAt != null) pulseMemory.monitoringEndsAt = sessionLike.monitoringEndsAt;
+  if (Array.isArray(sessionLike.selectedWarRooms)) pulseMemory.selectedWarRooms = sessionLike.selectedWarRooms;
+  if (Array.isArray(sessionLike.selectedWarRoomIds)) pulseMemory.selectedWarRoomIds = sessionLike.selectedWarRoomIds;
+  if (Array.isArray(sessionLike.lastVoicePoll?.presentUids) && pulseMemory.lastPresent.length === 0) {
+    pulseMemory.lastPresent = sessionLike.lastVoicePoll.presentUids.map(String);
+  }
+  if (sessionLike.lastVoicePoll?.timestamp) pulseMemory.lastPollTs = sessionLike.lastVoicePoll.timestamp;
+}
+
+function clearPulseMemory() {
+  pulseMemory.lastPresent = [];
+  pulseMemory.lastPollTs = 0;
+  pulseMemory.monitoringEndsAt = null;
+  pulseMemory.selectedWarRooms = [];
+  pulseMemory.selectedWarRoomIds = [];
+  pulseMemory.status = null;
+}
+
+function diffPresentUids(previous, current) {
+  const prev = new Set((previous || []).map(String));
+  const next = [...new Set((current || []).map(String))];
+  return {
+    present: next,
+    entered: next.filter((uid) => !prev.has(uid)),
+    left: [...prev].filter((uid) => !next.includes(uid)),
+  };
+}
+
+async function ensurePulseMeta() {
+  if (
+    pulseMemory.status === 'Active'
+    && (pulseMemory.selectedWarRooms.length || pulseMemory.selectedWarRoomIds.length)
+  ) {
+    return {
+      status: pulseMemory.status,
+      monitoringEndsAt: pulseMemory.monitoringEndsAt,
+      selectedWarRooms: pulseMemory.selectedWarRooms,
+      selectedWarRoomIds: pulseMemory.selectedWarRoomIds,
+    };
+  }
+  const meta = await loadLiveSessionPulseMeta();
+  if (meta) rememberPulseContext(meta);
+  return meta;
 }
 
 async function normalizeLiveSessionWarRooms(db, session) {
@@ -123,6 +188,7 @@ async function pollLiveSessionVoicePresence(session) {
 
 /**
  * One voice-presence pulse: increment totalPulses and tally everyone currently in VC.
+ * Does not SELECT live_session grids. Archive is the one full-session read.
  */
 async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
   if (isDiscordCircuitOpen()) {
@@ -130,19 +196,18 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
     return { stop: false, skipped: true };
   }
 
-  const db = getTenantStore();
-  const activeSnap = await db.ref('attendance/live_session').once('value');
-  if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
+  const meta = await ensurePulseMeta();
+  if (!meta || meta.status !== 'Active') {
     return { stop: true, reason: 'inactive' };
   }
 
-  let s = activeSnap.val();
-  const endTs = monitoringEndsAt || s.monitoringEndsAt;
+  const endTs = monitoringEndsAt || meta.monitoringEndsAt || pulseMemory.monitoringEndsAt;
   if (endTs && Date.now() >= endTs) {
     console.log("⏰ Monitoring window ended. Auto-ending the Live Raid and archiving session.");
-    // Auto-end: finalize + archive the raid exactly like the manual "End Raid"
-    // control so officers never leave a session hanging open past its End Time.
-    if (s.status === 'Active') {
+    const db = getTenantStore();
+    const activeSnap = await db.ref('attendance/live_session').once('value');
+    const s = activeSnap.exists() ? activeSnap.val() : null;
+    if (s?.status === 'Active') {
       await endLiveRaidSessionInternal(s).catch((err) => {
         console.error('[live-raid] auto-end on window close failed:', err.message);
       });
@@ -150,20 +215,16 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
     return { stop: true, reason: 'ended' };
   }
 
-  // Keep war room channel snowflakes in sync with Settings/DB before scanning VC
-  s = await normalizeLiveSessionWarRooms(db, s);
-
   const now = Date.now();
-  // Dedupe guard: ignore re-entry within half an interval (no hardcoded minute values)
   const minGapMs = Math.max(3000, Math.floor(pollIntervalMs / 2));
-  if (s.lastVoicePoll?.timestamp && (now - s.lastVoicePoll.timestamp) < minGapMs) {
+  if (pulseMemory.lastPollTs && (now - pulseMemory.lastPollTs) < minGapMs) {
     return { stop: false, skipped: true };
   }
 
-  const { totalPulses: nextTotalPulses, presentUserIds } = await applyPulseTally(db, s);
+  const { totalPulses: nextTotalPulses, presentUserIds } = await applyPulseTally();
 
   console.log(
-    `[live-raid] pulse #${nextTotalPulses} — present=${presentUserIds.length} channels=${(s.selectedWarRooms || []).length}`,
+    `[live-raid] pulse #${nextTotalPulses} — present=${presentUserIds.length} channels=${(pulseMemory.selectedWarRooms || []).length}`,
     presentUserIds
   );
   return { stop: false, pulse: nextTotalPulses, present: presentUserIds.length };
@@ -174,26 +235,24 @@ async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
  * totalPulses, tally present members, and persist. Shared by the interval ticker
  * and the final capture pulse fired when an officer ends monitoring early.
  */
-async function applyPulseTally(db, s) {
-  const presentUserIds = await pollLiveSessionVoicePresence(s);
-  const nextTotalPulses = (s.totalPulses || 0) + 1;
-  const updatedTallies = { ...(s.userTallies || {}) };
-
-  presentUserIds.forEach(uid => {
-    updatedTallies[uid] = (updatedTallies[uid] || 0) + 1;
+async function applyPulseTally(sessionHint = {}) {
+  rememberPulseContext(sessionHint);
+  const presentUserIds = await pollLiveSessionVoicePresence({
+    selectedWarRooms: pulseMemory.selectedWarRooms,
+    selectedWarRoomIds: pulseMemory.selectedWarRoomIds,
   });
-
-  await db.ref('attendance/live_session').update({
-    totalPulses: nextTotalPulses,
-    userTallies: updatedTallies,
-    lastVoicePoll: {
-      timestamp: Date.now(),
-      presentUids: presentUserIds,
-      channelCount: (s.selectedWarRooms || []).length,
-    },
+  const { entered, left, present } = diffPresentUids(pulseMemory.lastPresent, presentUserIds);
+  const channelCount = (pulseMemory.selectedWarRooms || []).length
+    || (pulseMemory.selectedWarRoomIds || []).length;
+  const { totalPulses, userTallies, lastVoicePoll } = await incrementLiveSessionPulse({
+    presentUids: present,
+    entered,
+    left,
+    channelCount,
   });
-
-  return { totalPulses: nextTotalPulses, userTallies: updatedTallies, presentUserIds };
+  pulseMemory.lastPresent = present;
+  pulseMemory.lastPollTs = lastVoicePoll.timestamp;
+  return { totalPulses, userTallies, presentUserIds: present, lastVoicePoll };
 }
 
 /**
@@ -214,7 +273,7 @@ async function captureFinalMonitoringPulse(db, s) {
 
   try {
     const normalized = await normalizeLiveSessionWarRooms(db, s);
-    const { totalPulses, userTallies } = await applyPulseTally(db, normalized);
+    const { totalPulses, userTallies } = await applyPulseTally(normalized);
     console.log(`[live-raid] final capture pulse on early end — total=${totalPulses}`);
     return { ...normalized, totalPulses, userTallies };
   } catch (err) {
@@ -281,6 +340,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   const safeIntervalMins = Math.max(15, Number(intervalMins) || 15);
   const pollIntervalMs = safeIntervalMins * 60 * 1000;
   const now = Date.now();
+  pulseMemory.monitoringEndsAt = endsAt;
 
   if (now >= endsAt) {
     console.log(`⏹  Monitoring window already ended (now=${now}, endsAt=${endsAt}) — not starting ticker.`);
@@ -333,7 +393,7 @@ function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
   return { armed: true, reason: 'scheduled' };
 }
 
-/** 'unknown' until the first read. 'absent' skips further reads. 'active' keeps the end watch. */
+/** 'unknown' until the first read. 'absent' skips further reads. 'active' means a session is live. */
 let liveSessionWatch = 'unknown';
 
 export function getLiveSessionWatch() {
@@ -346,31 +406,7 @@ export function noteLiveSessionStarted() {
 
 export function noteLiveSessionCleared() {
   liveSessionWatch = 'absent';
-}
-
-/**
- * Restart-safe backstop for auto-ending a Live Raid at its End Time.
- * Reads once after boot. If no Active session exists, later ticks do not query
- * until this process starts one. While one exists, keep watching until it ends.
- */
-export async function maybeAutoEndLiveRaid() {
-  try {
-    if (liveSessionWatch === 'absent') return;
-    const db = getTenantStore();
-    const snap = await db.ref('attendance/live_session').once('value');
-    if (!snap.exists() || snap.val()?.status !== 'Active') {
-      liveSessionWatch = 'absent';
-      return;
-    }
-    liveSessionWatch = 'active';
-    const s = snap.val();
-    if (!s.monitoringEndsAt || Date.now() < Number(s.monitoringEndsAt)) return;
-
-    console.log('[live-raid] Auto-end backstop: monitoring End Time reached — archiving session.');
-    await endLiveRaidSessionInternal(s);
-  } catch (err) {
-    console.error('[live-raid] maybeAutoEndLiveRaid failed:', err.message);
-  }
+  clearPulseMemory();
 }
 
 /**
@@ -379,25 +415,28 @@ export async function maybeAutoEndLiveRaid() {
  */
 export async function resumeLiveRaidMonitoringIfNeeded() {
   try {
-    const db = getTenantStore();
-    const snap = await db.ref('attendance/live_session').once('value');
-    if (!snap.exists() || snap.val().status !== 'Active') return;
+    const meta = await loadLiveSessionPulseMeta();
+    if (!meta || meta.status !== 'Active') return;
+    rememberPulseContext(meta);
 
-    const s = snap.val();
-    if (!s.monitoringStartsAt || !s.monitoringEndsAt || !s.pollIntervalMinutes) {
+    if (!meta.monitoringStartsAt || !meta.monitoringEndsAt || !meta.pollIntervalMinutes) {
       console.log('[live-raid] Active session found but no monitoring schedule — nothing to resume.');
       return;
     }
-    if (Date.now() > s.monitoringEndsAt) {
+    if (Date.now() > Number(meta.monitoringEndsAt)) {
       console.log('[live-raid] Active session monitoring window already ended while offline — auto-ending + archiving now.');
-      await endLiveRaidSessionInternal(s).catch((err) => {
-        console.error('[live-raid] auto-end on boot failed:', err.message);
-      });
+      const db = getTenantStore();
+      const snap = await db.ref('attendance/live_session').once('value');
+      if (snap.exists()) {
+        await endLiveRaidSessionInternal(snap.val()).catch((err) => {
+          console.error('[live-raid] auto-end on boot failed:', err.message);
+        });
+      }
       return;
     }
 
     console.log('[live-raid] Resuming monitoring ticker from active live_session…');
-    armMonitoringSchedule(s.monitoringStartsAt, s.monitoringEndsAt, s.pollIntervalMinutes);
+    armMonitoringSchedule(meta.monitoringStartsAt, meta.monitoringEndsAt, meta.pollIntervalMinutes);
   } catch (err) {
     console.error('[live-raid] Failed to resume monitoring:', err.message);
   }
@@ -514,6 +553,7 @@ export async function createLiveRaidFromPublished({
   };
 
   await db.ref('attendance/live_session').set(sessionPayload);
+  rememberPulseContext(sessionPayload);
   noteLiveSessionStarted();
 
   if (parsedMon.monitoring) {
@@ -639,6 +679,7 @@ async function endLiveRaidSessionInternal(s) {
   atomicUpdates['attendance/live_session'] = null;
   if (pendingClearPath) atomicUpdates[pendingClearPath] = null;
   await db.ref().update(atomicUpdates);
+  await touchSessionArchiveIndex({ id: sessionHistoryId, endedAt: now });
   noteLiveSessionCleared();
 }
 
@@ -892,6 +933,7 @@ router.delete('/history/:sessionId', async (req, res) => {
   try {
     const db = getTenantStore();
     await db.ref(`attendance/session_archive/${sessionId}`).remove();
+    await touchSessionArchiveIndex({ id: sessionId, remove: true });
     return res.json({ success: true, message: `Session ${sessionId} deleted.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -993,6 +1035,7 @@ router.post('/set-monitoring-time', async (req, res) => {
     // Read-back confirmation (proves the write landed in this DB)
     const verifySnap = await db.ref('attendance/live_session').once('value');
     const verified = verifySnap.val() || {};
+    rememberPulseContext(verified);
     console.log('[live-raid] monitoring written to attendance/live_session:', {
       monitoringStartsAt: verified.monitoringStartsAt,
       monitoringEndsAt: verified.monitoringEndsAt,

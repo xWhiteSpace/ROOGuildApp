@@ -1,6 +1,6 @@
 // backend/src/api/attendance.routes.js
 import { Router } from 'express';
-import { getTenantStore, listCommitmentKeysForEventId, loadCommitmentsForWeek, sqlFingerprint } from '../db/database.js';
+import { getTenantStore, listCommitmentKeysForEventId, loadCommitmentsForWeek, loadMembersProjected, sqlFingerprint, touchSessionArchiveIndex } from '../db/database.js';
 import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
 import { DEFAULT_TZ, getWeekMonday } from '../utils/guildTime.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
@@ -268,6 +268,7 @@ router.post('/end-raid', async (req, res) => {
     atomicUpdates['attendance/active_session'] = null;
 
     await db.ref().update(atomicUpdates);
+    await touchSessionArchiveIndex({ id: sessionHistoryId, endedAt: Date.now() });
     return res.json({ success: true, message: 'Raid session successfully finalized and archived to the database.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -395,6 +396,27 @@ router.get('/deploy-ocr-card', async (req, res) => {
       : /locate the war-announce/i.test(msg) ? 404
       : 500;
     return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// GET /api/attendance/deploy-onboarding-card
+router.get('/deploy-onboarding-card', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const { deployPublicOnboardingCard } = await import('../games/ragnarok-origin/services/discordOnboardingCard.js');
+    const result = await deployPublicOnboardingCard();
+    return res.json({ success: true, result });
+  } catch (err) {
+    const msg = err.message || 'Failed to deploy onboarding card.';
+    const { onboardingDeployHttpStatus } = await import('../games/ragnarok-origin/services/discordOnboardingCard.js');
+    return res.status(onboardingDeployHttpStatus(err)).json({ success: false, error: msg });
   }
 });
 
@@ -1199,27 +1221,19 @@ router.put('/peak-hours/me', async (req, res) => {
   }
 });
 
-// GET /api/attendance/members -> full roster, or ?view=card for sparkline/name pages
+// GET /api/attendance/members -> raw jsonb, or ?view=list|card SQL projections (no playSchedule)
 router.get('/members', async (req, res) => {
   const user = resolveUserIdentity(req);
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
   try {
-    const db = getTenantStore();
-    const snap = await db.ref('auction/members').once('value');
-    const raw = snap.exists() ? snap.val() : {};
-    if (String(req.query.view || '') === 'card') {
-      const members = {};
-      Object.entries(raw).forEach(([uid, m]) => {
-        members[uid] = {
-          uid,
-          displayName: m?.displayName || '',
-          jobCode: m?.jobCode || '',
-          isRaidRoster: m?.isRaidRoster === true,
-        };
-      });
+    const view = String(req.query.view || '').trim();
+    if (view === 'card' || view === 'list') {
+      const members = await loadMembersProjected(view);
       return res.json({ success: true, members });
     }
-    return res.json({ success: true, members: raw });
+    const db = getTenantStore();
+    const snap = await db.ref('auction/members').once('value');
+    return res.json({ success: true, members: snap.exists() ? snap.val() : {} });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

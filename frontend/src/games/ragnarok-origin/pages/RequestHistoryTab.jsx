@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateRequestHistory, useRequestHistory, useSettings } from '../../../query/hooks';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconSearch = () => <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
@@ -24,27 +25,21 @@ const IconSortArrows = ({ active, direction }) => {
 export default function RequestHistoryTab({ user }) {
   const navigate = useNavigate();
   const isOfficer = user?.isOfficer === true;
-  const [loading, setLoading] = useState(true);
-  const [historyData, setHistoryData] = useState([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
   const [searchDraft, setSearchDraft] = useState('');
   const [clearPreviewCount, setClearPreviewCount] = useState(0);
-  const [currentUserName, setCurrentUserName] = useState('');
-  const [configItems, setConfigItems] = useState([]); // Dynamic setting collection matrix
-  const [authError, setAuthError] = useState(false);
+  const currentUserName = user?.displayName || user?.username || '';
+  const currentUserId = user?.id || '';
   const [resettingKey, setResettingKey] = useState(null); // 🛡️ Tracks in-flight officer priority reset requests
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [clearRangeStart, setClearRangeStart] = useState('');
   const [clearRangeEnd, setClearRangeEnd] = useState('');
   const [clearingHistory, setClearingHistory] = useState(false);
 
-  const [currentUserId, setCurrentUserId] = useState('');
-  
   // --- 🔍 ADVANCED FILTER, SEARCH, AND SORT STATES ---
   const [viewFilter, setViewFilter] = useState('all'); // 'all' or 'mine'
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
-  const [rowLimit, setRowLimit] = useState(20); // 📊 Dynamic capacity limit selector (20, 60, 100)
+  const [rowLimit, setRowLimit] = useState(60);
   
   const [historyPage, setHistoryPage] = useState(1); // 🧭 Current navigation page track
 
@@ -57,65 +52,21 @@ export default function RequestHistoryTab({ user }) {
   const [sortKey, setSortKey] = useState('date'); // 'date', 'member', 'item', or 'priority'
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
 
-  const fetchGlobalHistoryLog = async ({ quiet = false } = {}) => {
-    try {
-      if (!quiet) setLoading(true);
-      setAuthError(false);
-
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      if (savedUserSession) {
-        try {
-          const parsedUser = JSON.parse(savedUserSession);
-          setCurrentUserName(parsedUser.displayName || parsedUser.username || '');
-          setCurrentUserId(parsedUser.id || '');
-        } catch (e) {
-          console.error("Failed to extract cached session criteria:", e.message);
-        }
-      }
-
-      const params = new URLSearchParams({
-        page: String(historyPage),
-        limit: String(rowLimit),
-        sort: sortKey,
-        dir: sortDirection,
-      });
-      if (viewFilter === 'mine') params.set('mine', '1');
-      if (searchQuery.trim()) params.set('q', searchQuery.trim());
-      if (outcomeFilter !== 'all') params.set('status', outcomeFilter);
-      const res = await apiFetch(`/api/requests/request-history?${params.toString()}`, { method: 'GET' });
-
-      if (res.status === 401) {
-        setAuthError(true);
-        setLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      if (data.success) {
-        setHistoryData(data.history || []);
-        setHistoryTotal(parseInt(data.total, 10) || 0);
-
-        // Query dynamic item mapping tables to link relational styling indexes inline
-        try {
-          const configRes = await apiFetch('/api/requests/settings/get?fields=items', { method: 'GET' });
-          const configData = await configRes.json();
-          if (configData.success && configData.config?.items) {
-            setConfigItems(configData.config.items);
-          }
-        } catch (err) {
-          console.error("Failed to map live configuration styles:", err);
-        }
-      }
-    } catch (err) {
-      console.error("Connection link offline:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchGlobalHistoryLog({ quiet: historyData.length > 0 });
-  }, [historyPage, rowLimit, viewFilter, searchQuery, outcomeFilter, sortKey, sortDirection]);
+  const itemsQuery = useSettings('items');
+  const historyQuery = useRequestHistory({
+    page: historyPage,
+    limit: rowLimit,
+    sort: sortKey,
+    dir: sortDirection,
+    mine: viewFilter === 'mine',
+    q: searchQuery.trim(),
+    status: outcomeFilter,
+  });
+  const historyData = historyQuery.data?.history || [];
+  const historyTotal = parseInt(historyQuery.data?.total, 10) || 0;
+  const configItems = itemsQuery.data?.items || [];
+  const authError = historyQuery.error && /401|Session identity/i.test(historyQuery.error.message);
+  const loading = historyQuery.isLoading && !historyQuery.data;
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchDraft), 300);
@@ -176,7 +127,7 @@ export default function RequestHistoryTab({ user }) {
       });
       const data = await res.json();
       if (data.success) {
-        await fetchGlobalHistoryLog();
+        await invalidateRequestHistory();
       } else {
         alert(data.error || 'Failed to reset priority.');
       }
@@ -207,7 +158,7 @@ export default function RequestHistoryTab({ user }) {
         setIsClearModalOpen(false);
         setClearRangeStart('');
         setClearRangeEnd('');
-        await fetchGlobalHistoryLog();
+        await invalidateRequestHistory();
         alert(`${data.deletedCount} record(s) permanently deleted.`);
       } else {
         alert(data.error || 'Failed to clear history.');

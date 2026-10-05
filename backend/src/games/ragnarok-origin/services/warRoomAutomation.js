@@ -5,6 +5,8 @@
 import { getTenantStore } from '../../../db/database.js';
 import { getCurrentTenantId } from '../../../db/tenantContext.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
+import { buildCompositeKey } from '../../../utils/guildTime.js';
+import { gvgReadinessSyncMode } from './gvgReadinessSync.js';
 import {
   addConfigToPublished,
   configIdFromGridKey,
@@ -164,8 +166,29 @@ export async function maybeRunWarRoomAutomation() {
         lastPublishKey.set(tenantId, publishKey);
         await writeStatus(db, { lastError: null, publishedId: cycle.publishedId, eventId: cycle.activeEventId });
         try {
-          const { ensureGvgReadinessBoardIfMissing } = await import('./discordAttendanceCards.js');
-          await ensureGvgReadinessBoardIfMissing();
+          let storedEventKey = '';
+          let messageId = '';
+          if (Number(cycle.currentPhase) === 1) {
+            const storedSnap = await db.ref('attendance/gvg_readiness_card').once('value');
+            const stored = storedSnap.exists() ? storedSnap.val() : {};
+            storedEventKey = stored?.eventKey || '';
+            messageId = stored?.messageId || '';
+          }
+          const mode = gvgReadinessSyncMode({
+            currentPhase: cycle.currentPhase,
+            storedEventKey,
+            cycleEventKey: buildCompositeKey(cycle.warDate || '', cycle.activeEventId || ''),
+            messageId,
+          });
+          if (mode === 'skip') {
+            /* pointer already this cycle — no roster dump, no Discord */
+          } else if (mode === 'rematerialize') {
+            const { ensureGvgReadinessBoard } = await import('./discordAttendanceCards.js');
+            await ensureGvgReadinessBoard({ forcePost: false });
+          } else {
+            const { ensureGvgReadinessBoardIfMissing } = await import('./discordAttendanceCards.js');
+            await ensureGvgReadinessBoardIfMissing();
+          }
         } catch (err) {
           console.error('[war-room] GVG Readiness board sync failed:', err.message);
         }

@@ -17,6 +17,11 @@ function warAnnounceCta() {
   return warId ? ` Confirm yours at <#${warId}>.` : '';
 }
 
+function warAnnounceJumpClause() {
+  const warId = (discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID') || '').trim();
+  return warId ? ` Jump in at <#${warId}>.` : '';
+}
+
 /** Readiness-board date style: Sep 23, 2026 */
 export function formatAnnounceDate(dateStr) {
   if (!dateStr) return '—';
@@ -28,7 +33,7 @@ export function formatAnnounceDate(dateStr) {
 
 export function buildAttendanceRaidAnnounce({ eventDate }) {
   const date = formatAnnounceDate(eventDate);
-  return `Get ready for the next GVG on **${date}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you.`;
+  return `Get ready for the next GVG on **${date}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you.${warAnnounceJumpClause()}`;
 }
 
 export function buildRsvpAnnounceLine({ displayName, available, eventTitle, eventDate }) {

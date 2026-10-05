@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DiscordSignInButton from '../components/DiscordSignInButton';
 import { oauthBridgeUserMessage } from '../utils/oauthErrorMessage';
 import { PRODUCT_NAME } from '../brand';
@@ -80,6 +81,14 @@ export default function LandingPage() {
       <div className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 text-center">
         <h1 className="sr-only">{PRODUCT_NAME}</h1>
         <ValhallaLockup size="lg" />
+        {import.meta.env.DEV && (
+          <Link
+            to="/debug"
+            className="font-mono text-xs uppercase tracking-[0.2em] text-indigo-300 hover:text-indigo-200"
+          >
+            [Debug]
+          </Link>
+        )}
         <p className="mx-auto max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
           One Discord server is one private {PRODUCT_NAME} workspace. Members open a guild that is already here.
           Officers with Manage Server add their server, invite the bot, and pick a game.

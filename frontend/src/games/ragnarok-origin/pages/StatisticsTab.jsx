@@ -1,6 +1,7 @@
 // frontend/src/pages/StatisticsTab.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateSettings, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
 import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
 import AttendanceTrendChart from '../components/AttendanceTrendChart';
 
@@ -12,42 +13,21 @@ const DEFAULT_EXPECTED_RATE = 80;
 const MAX_TREND_SESSIONS = 12;
 
 export default function StatisticsTab({ user }) {
-  const [loading, setLoading] = useState(true);
-  const [members, setMembers] = useState({});
-  const [sessions, setSessions] = useState({});
+  const membersQuery = useMembers('card');
+  const historyQuery = useRaidHistory(12);
+  const settingsQuery = useSettings('expectedAttendanceRate');
+  const loading = (membersQuery.isLoading && !membersQuery.data) || (historyQuery.isLoading && !historyQuery.data);
+  const members = membersQuery.data || {};
+  const sessions = historyQuery.data || {};
   const [expectedRate, setExpectedRate] = useState(DEFAULT_EXPECTED_RATE);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
 
-  const loadAnalyticsMetrics = async () => {
-    try {
-      setLoading(true);
-      const initRes = await apiFetch('/api/attendance/members?view=card', { method: 'GET' });
-      const initData = await initRes.json();
-      if (initData.success) {
-        setMembers(initData.members || {});
-        const configRes = await apiFetch('/api/requests/settings/get?fields=expectedAttendanceRate', { method: 'GET' });
-        const configData = await configRes.json();
-        if (configData.success && configData.config?.expectedAttendanceRate != null) {
-          setExpectedRate(parseInt(configData.config.expectedAttendanceRate, 10) || DEFAULT_EXPECTED_RATE);
-        }
-      }
-
-      const historyRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
-      const historyData = await historyRes.json();
-      if (historyData.success) {
-        setSessions(historyData.sessions || {});
-      }
-    } catch (err) {
-      console.error('Error building dashboard graph metrics:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadAnalyticsMetrics();
-  }, [user]);
+    if (settingsQuery.data?.expectedAttendanceRate != null) {
+      setExpectedRate(parseInt(settingsQuery.data.expectedAttendanceRate, 10) || DEFAULT_EXPECTED_RATE);
+    }
+  }, [settingsQuery.data]);
 
   const handleUpdateExpectedRate = async (val) => {
     const clamped = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
@@ -57,6 +37,7 @@ export default function StatisticsTab({ user }) {
         method: 'POST',
         body: JSON.stringify({ expectedAttendanceRate: clamped }),
       });
+      await invalidateSettings();
     } catch (err) {
       console.error('Failed to commit expected attendance rate:', err);
     }

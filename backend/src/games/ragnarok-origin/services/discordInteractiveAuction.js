@@ -85,9 +85,9 @@ export async function sendPublicAuctionCard(channel) {
   const embed = new EmbedBuilder()
     .setTitle('Request Card')
     .setDescription(
-      'Request loot items during **Bid Open**, or claim vacant slots during **Live Auction**.\n\n' +
-      '**Open Request** — stage quantities, submit, or drop a saved request (private).\n' +
-      '**Open Live Claim** — claim remaining vacant item slots during the live auction (private).'
+      'Request loot items during **Bid Open**, Claim or Take Extra Slots during **Live Auction**.\n\n' +
+      '**Open Request** — Apply for Requests, Cancel Bid Requests\n' +
+      '**Open Live Dashboard** — Claim or Take Extra slots. Use Drop down to take extra slots.'
     )
     .setColor('#4f46e5');
 
@@ -98,7 +98,7 @@ export async function sendPublicAuctionCard(channel) {
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('open_auction_panel')
-      .setLabel('Open Live Claim')
+      .setLabel('Open Live Dashboard')
       .setStyle(ButtonStyle.Secondary)
   );
 

@@ -1,6 +1,6 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
-import { getTenantStore, listAuctionHistory, listLootHistoryDates, listLootHistoryForDate, listPastAuctionDates, listPastAuctionsForDate, loadAuctionRequests, countLootHistoryBattles, loadPastAuctionsForMember } from '../db/database.js';
+import { getTenantStore, listAuctionHistory, listLootHistoryDates, listLootHistoryForDate, listPastAuctionDates, listPastAuctionsForDate, loadAuctionRequests, countLootHistoryBattles, loadPastAuctionsForMember, lobbyFingerprint, queueFingerprint } from '../db/database.js';
 import { pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
 import { getGateStatusDetails, readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 import { findOverlappingRaidCyclePair } from '@guildname/shared/raidCycle';
@@ -16,7 +16,7 @@ import { isDiscordCircuitOpen, getDiscordRateLimitStatus, logDiscordHttpFailure 
 import { WORKSPACE_CONFIG_KEYS } from '../config/workspaceDefaults.js';
 import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
 import { asItemsList, buildMemberAuctionStats } from '../utils/memberAuctionStats.js';
-import { buildRequestLobby, submitSelections, cancelPending, RequestDeckError } from '../games/ragnarok-origin/services/requestDeck.js';
+import { buildRequestLobby, buildRequestQueue, buildRequestBoard, submitSelections, cancelPending, RequestDeckError } from '../games/ragnarok-origin/services/requestDeck.js';
 import { formatGuildDate } from '../utils/guildTime.js';
 import { resolveSessionDate, toIsoDate } from '../games/ragnarok-origin/services/requestLedger.js';
 
@@ -402,7 +402,7 @@ router.post('/announce-allocate', async (req, res) => {
     }
 
     const session = sessionSnap.val() || {};
-    const lobby = await buildRequestLobby(user.id, user.displayName || user.username);
+    const lobby = await buildRequestBoard();
     const { buildAllocateBidRows } = await import('@guildname/shared/allocatePreview');
     const {
       buildAllocateOpenAnnounceChunks,
@@ -442,10 +442,51 @@ router.get('/init', async (req, res) => {
   if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
 
   try {
+    const tenantId = getCurrentTenantId();
+    const gate = getGateStatusDetails();
+    let fp = '';
+    if (tenantId) {
+      const boardFp = await lobbyFingerprint(tenantId, user.id);
+      fp = [boardFp, gate.currentPhase || 0, gate.isGateOpen ? 1 : 0, gate.activeEventId || ''].join(':');
+      if (normalizeEtag(req.headers['if-none-match']) === fp) {
+        return sendNotModified(res, fp);
+      }
+    }
     const payload = await buildRequestLobby(user.id, user.displayName || user.username);
-    return res.json({ success: true, ...payload });
+    if (fp) setEtag(res, fp);
+    return res.json({ success: true, etag: fp, ...payload });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/requests/queue?itemId=
+ */
+router.get('/queue', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+
+  try {
+    const itemId = String(req.query.itemId || '').trim();
+    if (!itemId) return res.status(400).json({ success: false, error: 'itemId is required' });
+    const tenantId = getCurrentTenantId();
+    const db = getTenantStore();
+    const config = await readTenantConfiguration(db);
+    const itemName = (config.items || []).find((row) => row.id === itemId)?.name || '';
+    let fp = '';
+    if (tenantId) {
+      fp = await queueFingerprint(tenantId, itemId, itemName);
+      if (normalizeEtag(req.headers['if-none-match']) === fp) {
+        return sendNotModified(res, fp);
+      }
+    }
+    const payload = await buildRequestQueue(itemId);
+    if (fp) setEtag(res, fp);
+    return res.json({ success: true, etag: fp, ...payload });
+  } catch (error) {
+    const status = error instanceof RequestDeckError ? error.status : 500;
+    return res.status(status).json({ success: false, error: error.message });
   }
 });
 
@@ -971,7 +1012,7 @@ router.get('/request-history', async (req, res) => {
       }
     }
     const page = exportAll ? 1 : (parseInt(req.query.page, 10) || 1);
-    const limit = exportAll ? 10000 : (parseInt(req.query.limit, 10) || 20);
+    const limit = exportAll ? 10000 : (parseInt(req.query.limit, 10) || 60);
     const result = await listAuctionHistory({
       userId: mine ? user.id : undefined,
       status: req.query.status && req.query.status !== 'all' ? req.query.status : undefined,

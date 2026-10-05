@@ -2,7 +2,7 @@
  * Attendance RSVP SSOT: leave credits, deadline lock, next-event targeting,
  * deadline closer, and monthly leave-credit refresh.
  */
-import { getTenantStore, loadInstancesForWeek } from '../../../db/database.js';
+import { getTenantStore, loadInstancesForWeek, raidRosterMissingLeaveCredits } from '../../../db/database.js';
 import { getCachedConfig } from '../../../db/tenantContext.js';
 import { writeCommitment, ensureWeekInstances, resolveGuildTimezone, loadRosterMembers } from './scheduleService.js';
 import {
@@ -414,12 +414,14 @@ export async function maybeRefreshMonthlyLeaveCredits({ now = new Date() } = {})
 }
 
 export async function seedMissingLeaveCredits() {
+  const missing = await raidRosterMissingLeaveCredits().catch(() => true);
+  if (!missing) return { seeded: 0, skipped: true };
+
   const db = getTenantStore();
-  const [configSnap, membersSnap] = await Promise.all([
-    db.ref('settings/configuration').once('value'),
-    db.ref('auction/members').once('value'),
-  ]);
-  const defaultCredits = getDefaultLeaveCredits(configSnap.exists() ? configSnap.val() : {});
+  const cached = getCachedConfig();
+  const config = cached || ((await db.ref('settings/configuration').once('value')).val() || {});
+  const membersSnap = await db.ref('auction/members').once('value');
+  const defaultCredits = getDefaultLeaveCredits(config);
   const members = membersSnap.exists() ? membersSnap.val() : {};
   const updates = {};
   Object.entries(members).forEach(([uid, m]) => {

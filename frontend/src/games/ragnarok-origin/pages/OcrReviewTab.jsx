@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
+import { invalidateOcrReviews, useOcrReview, useOcrReviewEvents, useOcrReviews } from '../../../query/hooks';
 import {
   cacheReviewShots,
   clearCachedReviewShots,
@@ -152,14 +153,16 @@ export default function OcrReviewTab({ user }) {
   const fileRef = useRef(null);
   const savedSession = readOcrUiSession();
   const pendingUpload = getPendingUpload();
-  const [loading, setLoading] = useState(true);
+  const listQuery = useOcrReviews({ enabled: isOfficer && !reviewId });
+  const eventsQuery = useOcrReviewEvents({ enabled: isOfficer && !reviewId });
+  const oneQuery = useOcrReview(reviewId, { enabled: isOfficer && Boolean(reviewId) });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [reviews, setReviews] = useState([]);
-  const [events, setEvents] = useState([]);
+  const [reviews, setReviews] = useState(() => listQuery.data || []);
+  const [events, setEvents] = useState(() => eventsQuery.data || []);
   const [eventKey, setEventKey] = useState(pendingUpload.eventKey || '');
-  const [review, setReview] = useState(null);
-  const [roster, setRoster] = useState([]);
+  const [review, setReview] = useState(() => oneQuery.data?.review || null);
+  const [roster, setRoster] = useState(() => oneQuery.data?.roster || []);
   const [search, setSearch] = useState(() => (savedSession.reviewId === reviewId ? savedSession.search : '') || '');
   const [sortKey, setSortKey] = useState(() => {
     const key = savedSession.reviewId === reviewId ? savedSession.sortKey : '';
@@ -190,74 +193,48 @@ export default function OcrReviewTab({ user }) {
   const persistPresentRef = useRef(async () => {});
   const imageMenuRef = useRef(null);
   const imageButtonRef = useRef(null);
+  const loading = reviewId
+    ? oneQuery.isLoading && !oneQuery.data
+    : (listQuery.isLoading && !listQuery.data) || (eventsQuery.isLoading && !eventsQuery.data);
 
   useEffect(() => {
     rosterRef.current = roster;
   }, [roster]);
 
-  const loadList = useCallback(async () => {
-    const [reviewRes, eventRes] = await Promise.all([
-      apiFetch('/api/ocr-reviews'),
-      apiFetch('/api/ocr-reviews/events'),
-    ]);
-    const reviewData = await reviewRes.json();
-    const eventData = await eventRes.json();
-    if (!reviewData.success) throw new Error(reviewData.error || 'Failed to load OCR reviews.');
-    if (!eventData.success) throw new Error(eventData.error || 'Failed to load events.');
-    setReviews(reviewData.reviews || []);
-    const nextEvents = eventData.events || [];
-    setEvents(nextEvents);
-    setEventKey((current) => current || nextEvents[0]?.key || '');
-    setReview(null);
-    setRoster([]);
-  }, []);
-
-  const loadOne = useCallback(async (id) => {
-    const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(id)}`);
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Failed to load review.');
-    setReview(data.review || null);
-    const nextRoster = data.roster || [];
-    rosterRef.current = nextRoster;
-    setRoster(nextRoster);
-  }, []);
+  useEffect(() => {
+    if (reviewId || !listQuery.data) return;
+    setReviews(listQuery.data);
+  }, [listQuery.data, reviewId]);
 
   useEffect(() => {
-    if (!isOfficer) {
-      setLoading(false);
-      setError('Officer access required.');
-      return undefined;
+    if (!eventsQuery.data) return;
+    setEvents(eventsQuery.data);
+    setEventKey((current) => current || eventsQuery.data[0]?.key || '');
+  }, [eventsQuery.data]);
+
+  useEffect(() => {
+    if (!oneQuery.data) return;
+    setReview(oneQuery.data.review || null);
+    const nextRoster = oneQuery.data.roster || [];
+    rosterRef.current = nextRoster;
+    setRoster(nextRoster);
+  }, [oneQuery.data]);
+
+  useEffect(() => {
+    const err = reviewId ? oneQuery.error : (listQuery.error || eventsQuery.error);
+    if (!err) return;
+    setError(err.message || 'Failed to load.');
+    if (reviewId) {
+      setReview(null);
+      setRoster([]);
+      writeOcrUiSession({ stayOnList: true, reviewId: null });
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setError('');
-        setNotice('');
-        if (reviewId) {
-          await loadOne(reviewId);
-        } else {
-          const saved = readOcrUiSession();
-          if (!saved.stayOnList && saved.reviewId) return;
-          await loadList();
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || 'Failed to load.');
-          setReview(null);
-          setRoster([]);
-          if (reviewId) writeOcrUiSession({ stayOnList: true, reviewId: null });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      clearTimeout(persistTimer.current);
-      if (reviewId) persistPresentRef.current().catch(() => {});
-    };
-  }, [isOfficer, reviewId, loadList, loadOne]);
+  }, [reviewId, oneQuery.error, listQuery.error, eventsQuery.error]);
+
+  useEffect(() => () => {
+    clearTimeout(persistTimer.current);
+    if (reviewId) persistPresentRef.current().catch(() => {});
+  }, [reviewId]);
 
   useEffect(() => {
     if (!isOfficer || reviewId) return undefined;
@@ -428,6 +405,7 @@ export default function OcrReviewTab({ user }) {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Commit failed.');
+      await invalidateOcrReviews();
       clearCachedReviewShots(reviewId);
       writeOcrUiSession({ stayOnList: true, reviewId: null });
       navigate('/attendance/ocr-review', {
@@ -448,6 +426,7 @@ export default function OcrReviewTab({ user }) {
       const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}/cancel`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Cancel failed.');
+      await invalidateOcrReviews();
       clearCachedReviewShots(reviewId);
       writeOcrUiSession({ stayOnList: true, reviewId: null });
       navigate('/attendance/ocr-review');
@@ -466,6 +445,7 @@ export default function OcrReviewTab({ user }) {
       const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(id)}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Delete failed.');
+      await invalidateOcrReviews();
       clearCachedReviewShots(id);
       setReviews((prev) => prev.filter((row) => row.id !== id));
       if (!fromList || id === reviewId) {
@@ -530,6 +510,7 @@ export default function OcrReviewTab({ user }) {
       const res = await apiFetch('/api/ocr-reviews/scan', { method: 'POST', body });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Scan failed.');
+      await invalidateOcrReviews();
       if (fileRef.current) fileRef.current.value = '';
       setSelectedFiles([]);
       clearPendingUpload();

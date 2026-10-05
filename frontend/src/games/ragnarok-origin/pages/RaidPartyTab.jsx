@@ -29,10 +29,9 @@ import RosterSidebar from '../components/RosterSidebar';
 import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { formatGuildDate, DEFAULT_TZ } from '../../../utils/guildTime';
-import { apiFetch } from '../../../services/apiClient';
+import { invalidateCompositions, useCommitments, useComposition, useCompositionsList, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
 import {
   normalizeComposition,
-  normalizeCompositionsMap,
   hydrateMatrixFromAllocation,
   buildBlankGridMatrix,
   buildAssignedLocationsAcrossTabs,
@@ -47,17 +46,25 @@ export default function RaidPartyTab({ user }) {
   const isOfficer = user?.isOfficer === true;
 
   // --- Real-time Core Database States ---
-  const [loading, setLoading] = useState(true);
-  const [compositions, setCompositions] = useState({});
-  const [members, setMembers] = useState({});
-  const [jobsCatalog, setJobsCatalog] = useState({});
-  const [commitments, setCommitments] = useState({});
+  const membersQuery = useMembers('list');
+  const settingsQuery = useSettings('jobs,timezone');
+  const historyQuery = useRaidHistory(12);
+  const commitmentsQuery = useCommitments();
+  const listQuery = useCompositionsList();
+  const members = membersQuery.data || {};
+  const jobsCatalog = settingsQuery.data?.jobs || {};
+  const historySessions = historyQuery.data || {};
+  const commitments = commitmentsQuery.data || {};
   const [guildTimezone, setGuildTimezone] = useState(DEFAULT_TZ);
-  const [historySessions, setHistorySessions] = useState({});
 
   // --- Workspace Planning States ---
   const [selectedConfigId, setSelectedConfigId] = useState('');
   const [simulationDate, setSimulationDate] = useState(() => formatGuildDate(new Date(), DEFAULT_TZ));
+  const detailQuery = useComposition(selectedConfigId);
+  const compositions = useMemo(
+    () => ({ ...(listQuery.data || {}), ...(detailQuery.data || {}) }),
+    [listQuery.data, detailQuery.data],
+  );
 
   // --- Local Staging Mirror States ---
   const [localTitle, setLocalTitle] = useState('');
@@ -88,6 +95,13 @@ export default function RaidPartyTab({ user }) {
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
 
+  useEffect(() => {
+    const timezone = settingsQuery.data?.timezone;
+    if (!timezone) return;
+    setGuildTimezone(timezone);
+    setSimulationDate((prev) => prev || formatGuildDate(new Date(), timezone));
+  }, [settingsQuery.data?.timezone]);
+
   const centerColSpanClass = useMemo(() => {
     if (leftPanelCollapsed && rightPanelCollapsed) return 'col-span-12 xl:col-span-10';
     if (leftPanelCollapsed) return 'col-span-12 xl:col-span-8';
@@ -95,87 +109,9 @@ export default function RaidPartyTab({ user }) {
     return 'col-span-12 xl:col-span-7';
   }, [leftPanelCollapsed, rightPanelCollapsed]);
 
-  // --- 1. Unified Backend API Sync Pipeline ---
-  const loadRaidPartyWorkspace = async () => {
-    try {
-      setLoading(true);
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const initRes = await fetch(`${backendUrl}/api/attendance/members`, { method: 'GET', headers, credentials: 'include' });
-      const initData = await initRes.json();
-      if (initData.success) {
-        setMembers(initData.members || {});
-      }
-      const commitRes = await fetch(`${backendUrl}/api/attendance/commitments`, { method: 'GET', headers, credentials: 'include' });
-      const commitData = await commitRes.json();
-      if (commitData.success) {
-        setCommitments(commitData.commitments || {});
-      }
-
-      const configRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs,timezone`, { method: 'GET', headers, credentials: 'include' });
-      const configData = await configRes.json();
-      if (configData.success && configData.config) {
-        if (configData.config.jobs) setJobsCatalog(configData.config.jobs);
-        if (configData.config.timezone) {
-          setGuildTimezone(configData.config.timezone);
-          setSimulationDate((prev) => prev || formatGuildDate(new Date(), configData.config.timezone));
-        }
-      }
-
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
-      const compsData = await compsRes.json();
-      if (compsData.success) {
-        const list = compsData.compositions || {};
-        setCompositions(list);
-        const firstKey = selectedConfigId || Object.keys(list)[0] || '';
-        if (firstKey && !selectedConfigId) setSelectedConfigId(firstKey);
-        if (firstKey) {
-          const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(firstKey)}`, { method: 'GET', headers, credentials: 'include' });
-          const detailData = await detailRes.json();
-          if (detailData.success) {
-            setCompositions((prev) => ({ ...prev, ...normalizeCompositionsMap(detailData.compositions || {}) }));
-          }
-        }
-      }
-
-      const histRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
-      const histData = await histRes.json();
-      if (histData.success) {
-        setHistorySessions(histData.sessions || {});
-      }
-    } catch (err) {
-      console.error("Workspace load error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const refreshCompositionsOnly = async () => {
-    try {
-      const savedUserSession = localStorage.getItem('guild_raid_session');
-      const headers = { 'Content-Type': 'application/json' };
-      if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
-      const compsData = await compsRes.json();
-      if (compsData.success) {
-        const list = compsData.compositions || {};
-        const keepId = selectedConfigId;
-        let next = { ...list };
-        if (keepId) {
-          const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(keepId)}`, { method: 'GET', headers, credentials: 'include' });
-          const detailData = await detailRes.json();
-          if (detailData.success) {
-            next = { ...next, ...normalizeCompositionsMap(detailData.compositions || {}) };
-          }
-        }
-        setCompositions(next);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    await invalidateCompositions();
+    await Promise.all([listQuery.refetch(), detailQuery.refetch()]);
   };
 
   const handleCopyRosterImage = async () => {
@@ -211,10 +147,11 @@ export default function RaidPartyTab({ user }) {
     }
   };
 
-  // Cache continuous real-time calendar values for matching grid dot lookups
   useEffect(() => {
-    loadRaidPartyWorkspace();
-  }, [user]);
+    if (selectedConfigId) return;
+    const firstKey = Object.keys(listQuery.data || {})[0] || '';
+    if (firstKey) setSelectedConfigId(firstKey);
+  }, [listQuery.data, selectedConfigId]);
 
   // --- 2. Load Selected Config Into Local Mirror Cache ---
   const [prevConfigId, setPrevConfigId] = useState('');
@@ -244,32 +181,6 @@ export default function RaidPartyTab({ user }) {
     };
   };
   
-  useEffect(() => {
-    if (!selectedConfigId) return undefined;
-    const current = compositions[selectedConfigId];
-    if (current?.tabs) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const savedUserSession = localStorage.getItem('guild_raid_session');
-        const headers = { 'Content-Type': 'application/json' };
-        if (savedUserSession) headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-        const detailRes = await fetch(`${backendUrl}/api/attendance/compositions?id=${encodeURIComponent(selectedConfigId)}`, {
-          method: 'GET',
-          headers,
-          credentials: 'include',
-        });
-        const detailData = await detailRes.json();
-        if (!cancelled && detailData.success) {
-          setCompositions((prev) => ({ ...prev, ...normalizeCompositionsMap(detailData.compositions || {}) }));
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedConfigId, compositions]);
-
   useEffect(() => {
     if (selectedConfigId && compositions[selectedConfigId]) {
       const activeConfig = normalizeComposition(compositions[selectedConfigId], selectedConfigId);
@@ -467,7 +378,6 @@ export default function RaidPartyTab({ user }) {
         const detailData = await detailRes.json();
         sourceRaw = detailData.success ? detailData.compositions?.[targetId] : null;
         if (!sourceRaw) return;
-        setCompositions((prev) => ({ ...prev, [targetId]: normalizeComposition(sourceRaw, targetId) }));
       }
       const sourceConfig = normalizeComposition(sourceRaw, targetId);
       const blacklistedLeaveUids = new Set(categorizedRosterPools.leave.map(u => u.uid));

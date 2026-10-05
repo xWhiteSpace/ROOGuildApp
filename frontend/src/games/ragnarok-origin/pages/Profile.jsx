@@ -1,8 +1,10 @@
 // frontend/src/pages/Profile.jsx
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Minus, Plus, Search, User } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
+import { queryClient } from '../../../query/client';
+import { invalidateMembers, queryKeys, useMemberAuctionStats, useMembers, useProfile, useRaidHistory } from '../../../query/hooks';
 import MemberTrendSparkline, { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 
 const EMPTY_AUCTION_STATS = { recordedBattles: 0, totalItemsAcquired: 0, items: [] };
@@ -36,94 +38,22 @@ export default function Profile({ user }) {
   const isOfficer = user?.isOfficer === true;
   const targetUid = routeUid || user?.id;
 
-  const [loading, setLoading] = useState(true);
-  const [member, setMember] = useState(null);
-  const [jobsCatalog, setJobsCatalog] = useState({});
-  const [rolesCatalog, setRolesCatalog] = useState({});
-  const [sessions, setSessions] = useState({});
-  const [error, setError] = useState('');
-  const [adjusting, setAdjusting] = useState(false);
-  const [auctionStats, setAuctionStats] = useState(EMPTY_AUCTION_STATS);
-  const [rosterMembers, setRosterMembers] = useState({});
-  const [memberSearch, setMemberSearch] = useState('');
-
   const canView = !!targetUid && (String(targetUid) === String(user?.id) || isOfficer);
-
-  const loadProfile = async () => {
-    if (!targetUid || !canView) {
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      setError('');
-      setAuctionStats(EMPTY_AUCTION_STATS);
-      const isSelf = !routeUid || String(routeUid) === String(user?.id);
-      const profilePath = isSelf
-        ? '/api/attendance/profile'
-        : `/api/attendance/profile?uid=${encodeURIComponent(String(targetUid))}`;
-      const res = await apiFetch(profilePath);
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Failed to load profile.');
-        setMember(null);
-        return;
-      }
-      setMember(data.member);
-      setJobsCatalog(data.config?.jobs || {});
-      setRolesCatalog(data.config?.roles || {});
-
-      try {
-        const [histRes, statsRes] = await Promise.all([
-          apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' }),
-          apiFetch(`/api/requests/member-auction-stats?uid=${encodeURIComponent(String(targetUid))}`),
-        ]);
-        const histData = await histRes.json();
-        if (histData.success) setSessions(histData.sessions || {});
-        const statsData = await statsRes.json();
-        if (statsRes.ok && statsData.success) {
-          setAuctionStats({
-            recordedBattles: parseInt(statsData.recordedBattles, 10) || 0,
-            totalItemsAcquired: parseInt(statsData.totalItemsAcquired, 10) || 0,
-            items: Array.isArray(statsData.items) ? statsData.items : [],
-          });
-        } else {
-          setAuctionStats(EMPTY_AUCTION_STATS);
-        }
-      } catch (histErr) {
-        console.error('Profile history load failed:', histErr);
-        setAuctionStats(EMPTY_AUCTION_STATS);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to load profile.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProfile();
-  }, [targetUid, user?.id]);
-
-  useEffect(() => {
-    if (!isOfficer) {
-      setRosterMembers({});
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const initRes = await apiFetch('/api/attendance/members?view=card', { method: 'GET' });
-        const initData = await initRes.json();
-        if (!cancelled && initData.success) {
-          setRosterMembers(initData.members || {});
-        }
-      } catch (err) {
-        console.error('Officer profile roster load failed:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isOfficer]);
+  const isSelf = !routeUid || String(routeUid) === String(user?.id);
+  const profileQuery = useProfile(targetUid, { isSelf, enabled: canView });
+  const statsQuery = useMemberAuctionStats(targetUid, { enabled: canView });
+  const historyQuery = useRaidHistory(12);
+  const rosterQuery = useMembers('card', { enabled: isOfficer });
+  const sessions = historyQuery.data || {};
+  const rosterMembers = isOfficer ? (rosterQuery.data || {}) : {};
+  const member = profileQuery.data?.member || null;
+  const jobsCatalog = profileQuery.data?.config?.jobs || {};
+  const rolesCatalog = profileQuery.data?.config?.roles || {};
+  const auctionStats = statsQuery.data || EMPTY_AUCTION_STATS;
+  const loading = profileQuery.isLoading && !profileQuery.data;
+  const error = profileQuery.error?.message || '';
+  const [adjusting, setAdjusting] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
 
   const memberSearchResults = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
@@ -162,7 +92,10 @@ export default function Profile({ user }) {
       });
       const data = await res.json();
       if (data.success) {
-        setMember((prev) => ({ ...prev, leaveCreditsRemaining: data.leaveCreditsRemaining }));
+        queryClient.setQueryData(queryKeys.profile(targetUid), (prev) => (
+          prev ? { ...prev, member: { ...prev.member, leaveCreditsRemaining: data.leaveCreditsRemaining } } : prev
+        ));
+        await invalidateMembers();
       } else {
         alert(data.error || 'Failed to adjust leave credits.');
       }

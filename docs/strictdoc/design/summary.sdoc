@@ -33,14 +33,14 @@ TITLE: FNC — Functional specs
 STATEMENT: >>>
 Published count: 173
 ID span: FNC-ROO-001 .. FNC-ROO-173
-Next tip: FNC-ROO-174
+Next tip: FNC-ROO-202
 
 Domain map:
 - Platform/Auth: count=6; range=FNC-ROO-001 .. FNC-ROO-006
 - Tenant/Workspace: count=9; range=FNC-ROO-007 .. FNC-ROO-015
 - Games catalog: count=8; range=FNC-ROO-016 .. FNC-ROO-023
 - Billing/Capacity: count=13; range=FNC-ROO-024 .. FNC-ROO-036
-- Discord bot/Channels: count=16; range=FNC-ROO-037 .. FNC-ROO-052
+- Discord bot/Channels: count=21; range=FNC-ROO-037 .. FNC-ROO-052, FNC-ROO-191, FNC-ROO-198 .. FNC-ROO-201
 - Auction/Requests: count=23; range=FNC-ROO-053 .. FNC-ROO-075
 - Attendance/Roster: count=14; range=FNC-ROO-076 .. FNC-ROO-089
 - Scheduler/RSVP: count=12; range=FNC-ROO-090 .. FNC-ROO-101
@@ -61,14 +61,14 @@ TITLE: API — Interfaces
 STATEMENT: >>>
 Published count: 114
 ID span: API-ROO-001 .. API-ROO-114
-Next tip: API-ROO-115
+Next tip: API-ROO-120
 
 Domain map:
 - Platform/Auth: count=5; range=API-ROO-001 .. API-ROO-005
 - Tenant/Workspace: count=9; range=API-ROO-006 .. API-ROO-014
 - Games catalog: count=3; range=API-ROO-015 .. API-ROO-017
 - Billing/Capacity: count=6; range=API-ROO-018 .. API-ROO-023
-- Discord bot/Channels: count=7; range=API-ROO-024 .. API-ROO-030
+- Discord bot/Channels: count=9; range=API-ROO-024 .. API-ROO-030, API-ROO-118 .. API-ROO-119
 - Auction/Requests: count=17; range=API-ROO-031 .. API-ROO-047
 - Attendance/Roster: count=12; range=API-ROO-048 .. API-ROO-059
 - Scheduler/RSVP: count=9; range=API-ROO-060 .. API-ROO-068
@@ -114,14 +114,14 @@ TITLE: INT — Integration seams
 STATEMENT: >>>
 Published count: 114
 ID span: INT-ROO-001 .. INT-ROO-114
-Next tip: INT-ROO-115
+Next tip: INT-ROO-118
 
 Domain map:
 - Platform/Auth: count=5; range=INT-ROO-001 .. INT-ROO-005
 - Tenant/Workspace: count=9; range=INT-ROO-006 .. INT-ROO-014
 - Games catalog: count=3; range=INT-ROO-015 .. INT-ROO-017
 - Billing/Capacity: count=6; range=INT-ROO-018 .. INT-ROO-023
-- Discord bot/Channels: count=7; range=INT-ROO-024 .. INT-ROO-030
+- Discord bot/Channels: count=10; range=INT-ROO-024 .. INT-ROO-030, INT-ROO-115 .. INT-ROO-117
 - Auction/Requests: count=17; range=INT-ROO-031 .. INT-ROO-047
 - Attendance/Roster: count=12; range=INT-ROO-048 .. INT-ROO-059
 - Scheduler/RSVP: count=9; range=INT-ROO-060 .. INT-ROO-068
@@ -140,14 +140,14 @@ TITLE: UNT — Units
 STATEMENT: >>>
 Published count: 183
 ID span: UNT-ROO-001 .. UNT-ROO-183
-Next tip: UNT-ROO-184
+Next tip: UNT-ROO-214
 
 Domain map:
 - Platform/Auth: count=17; range=UNT-ROO-001 .. UNT-ROO-017
 - Tenant/Workspace: count=9; range=UNT-ROO-018 .. UNT-ROO-026
 - Games catalog: count=9; range=UNT-ROO-027 .. UNT-ROO-035
 - Billing/Capacity: count=12; range=UNT-ROO-036 .. UNT-ROO-047
-- Discord bot/Channels: count=16; range=UNT-ROO-048 .. UNT-ROO-063
+- Discord bot/Channels: count=23; range=UNT-ROO-048 .. UNT-ROO-063, UNT-ROO-201, UNT-ROO-208 .. UNT-ROO-213
 - Auction/Requests: count=22; range=UNT-ROO-064 .. UNT-ROO-085
 - Attendance/Roster: count=14; range=UNT-ROO-086 .. UNT-ROO-099
 - Scheduler/RSVP: count=12; range=UNT-ROO-100 .. UNT-ROO-111
@@ -166,8 +166,8 @@ TITLE: Cross-kind tip snapshot
 
 [TEXT]
 STATEMENT: >>>
-Tips (next free): FNC=FNC-ROO-174, API=API-ROO-115, CMP=CMP-ROO-029, INT=INT-ROO-115, UNT=UNT-ROO-184, TOL=TOL-ROO-012, TST=TST-ROO-066
-Note: Frontend shell UNT batch closed Phase 2 left-side (UNT tip 184).
+Tips (next free): FNC=FNC-ROO-202, API=API-ROO-120, CMP=CMP-ROO-029, INT=INT-ROO-118, UNT=UNT-ROO-214, TOL=TOL-ROO-012, TST=TST-ROO-249
+Note: GVG readiness rematerialize published FNC-191 / FNC-201 / INT-117 / UNT-201 / UNT-213. Discord onboarding hub published FNC-198..200 / API-118..119 / INT-115..116 / UNT-208..212. Catch-up TST verifies already used FNC-174..197.
 <<<
 
 [[/SECTION]]

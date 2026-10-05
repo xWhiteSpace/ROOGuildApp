@@ -1,0 +1,206 @@
+[DOCUMENT]
+TITLE: Discord onboarding hub — left-side design
+UID: DOC-ROO-DESIGN-ONBOARDING
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: FNC — Functional specs
+
+[REQUIREMENT]
+UID: FNC-ROO-198
+STATUS: Active
+TITLE: OnboardingChannelMapField stores optional onboardingChannelId without env fill
+STATEMENT: >>>
+`onboardingChannelId` is a first-class JSON field. `mergeChannelFallback` always emits it (empty string default). `discordChannel('DISCORD_ONBOARDING_CHANNEL_ID')` resolves that field. Tenant onboard empty map, `POST /api/tenants/game-setup`, and Settings save copy the field instead of dropping it. `isRagnarokSetupComplete` does not require it.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-197
+
+[REQUIREMENT]
+UID: FNC-ROO-199
+STATUS: Active
+TITLE: OfficerDeployOnboardingHub upserts one public hub with four topic buttons
+STATEMENT: >>>
+Officer deploy: when the bot is ready and the circuit is closed, fetch the mapped onboarding channel and upsert one public hub message (edit-or-replace pointer so re-Send does not stack). Hub embed title `Onboarding`; body welcomes the adventurer; four buttons `Auction` `GvG` `General Chat` `Website` with customIds `onboard:auction|gvg|general|website`.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-198
+
+[REQUIREMENT]
+UID: FNC-ROO-200
+STATUS: Active
+TITLE: OnboardingTopicEphemeral explains purpose and jumps to mapped location
+STATEMENT: >>>
+Member interaction: first click from the public hub is an ephemeral reply. Later clicks on that private message edit in place. Auction → Request / Live Dashboard at `aucreqChannelId`. GvG → war-announce RSVP / alias / job / party at `warAnnounceChannelId`. General Chat → GEN pings at `genroomId`. Website → VALHALLA dashboard at frontend origin. `onboard:back` restores the hub layout (still ephemeral). Mapped Discord destinations include `<#channelId>` plus a Link button `https://discord.com/channels/{guildId}/{channelId}`. Website uses a Link button to the frontend origin. Unmapped: purpose sentence plus `This channel is not mapped yet. Ask an officer to paste the ID in Settings.` No Link button.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-199
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: API — Interfaces
+
+[REQUIREMENT]
+UID: API-ROO-118
+STATUS: Active
+TITLE: GET /api/deploy-onboarding-card officer deploy contract
+STATEMENT: >>>
+`GET /api/deploy-onboarding-card`. Auth: session + current tenant + officer. Success: 200 text that the hub was posted to the onboarding channel. 400 unmapped `onboardingChannelId`. 503 bot not ready or Discord circuit open. 404 mapped id cannot be fetched. 401 unauthenticated; 403 not officer; 409 no tenant.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-198
+
+[REQUIREMENT]
+UID: API-ROO-119
+STATUS: Active
+TITLE: GET /api/attendance/deploy-onboarding-card is the same deploy action
+STATEMENT: >>>
+`GET /api/attendance/deploy-onboarding-card` is the same deploy action as API-ROO-118. Must not diverge from the root deploy behavior.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-198
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: INT — Integration seams
+
+[REQUIREMENT]
+UID: INT-ROO-115
+STATUS: Active
+TITLE: Settings Send upserts the onboarding hub via Discord REST
+STATEMENT: >>>
+Settings Send → `GET /api/deploy-onboarding-card` → `discordChannel('DISCORD_ONBOARDING_CHANNEL_ID')` → Discord `channels.fetch` + message upsert. Pointer stored as `{ channelId, messageId }` so the second Send edits the same hub.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-198
+
+[REQUIREMENT]
+UID: INT-ROO-116
+STATUS: Active
+TITLE: Gateway onboard prefix opens ephemeral topic cards
+STATEMENT: >>>
+Discord gateway `interactionCreate` (`onboard:*`) → tenant cache via `withGuildTenant` → ephemeral `editReply` using current `discord_channels` + `FRONTEND_URL`. No Firebase write on member click.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-199
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: UNT — Units
+
+[REQUIREMENT]
+UID: UNT-ROO-208
+STATUS: Active
+TITLE: OnboardingChannelResolver reads tenant JSON and never process.env
+STATEMENT: >>>
+Function: `mergeChannelFallback` + `discordChannel('DISCORD_ONBOARDING_CHANNEL_ID')`. Inputs: current tenant `discord_channels` JSON (field present, empty, or missing). Output: a string channel id. Stored `onboardingChannelId` is returned; empty or missing returns empty string; `process.env.DISCORD_ONBOARDING_CHANNEL_ID` is never read. `isRagnarokSetupComplete` stays false when only `onboardingChannelId` is set; stays true when aucreq, auction, or warAnnounce is set and onboarding is empty. Not this unit: HTTP deploy, Discord fetch, payload text, Settings inputs.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-198
+
+[REQUIREMENT]
+UID: UNT-ROO-209
+STATUS: Active
+TITLE: BuildOnboardingHubPayload emits four onboard customIds
+STATEMENT: >>>
+Function: `buildHubPayload()`. Inputs: none. Output: `{ embeds, components }` for a public Discord message. Embed title `Onboarding`; one action row with four buttons labeled Auction, GvG, General Chat, Website; customIds `onboard:auction`, `onboard:gvg`, `onboard:general`, `onboard:website`; no Link buttons on the hub. Not this unit: sending/editing the Discord message, pointer write, topic copy, ACK.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-199
+
+[REQUIREMENT]
+UID: UNT-ROO-210
+STATUS: Active
+TITLE: BuildOnboardingTopicPayload explains purpose and location
+STATEMENT: >>>
+Function: `buildTopicPayload(topic, channels, { guildId, frontendUrl })`. Inputs: topic in auction/gvg/general/website; tenant channel map; guild snowflake; frontend origin string. Output: `{ embeds, components }` for an ephemeral message. Auction names Request / Live Dashboard at aucreqChannelId. GvG names RSVP / alias / job / party at warAnnounceChannelId. General names GEN pings at genroomId. Website names the VALHALLA dashboard; Link URL is frontendUrl. Mapped Discord topic contains `<#channelId>` and a Link button `https://discord.com/channels/{guildId}/{channelId}` plus Back `onboard:back`. Unmapped Discord topic has purpose text plus `This channel is not mapped yet. Ask an officer to paste the ID in Settings.`; no `<#`; no Link; Back still present. Empty frontendUrl on website: purpose text, no Link, Back still present. Not this unit: ACK, editReply, deploy HTTP, channel resolver, hub buttons.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-200
+
+[REQUIREMENT]
+UID: UNT-ROO-211
+STATUS: Active
+TITLE: ClassifyOnboardingAck chooses deferReply vs deferUpdate
+STATEMENT: >>>
+Function: `classifyOnboardingAck(interaction)`. Inputs: customId; whether the source message is already ephemeral. Output: `{ ack: 'deferReply' | 'deferUpdate' | 'noop', view: 'hub' | 'topic' | 'none', topic?: 'auction'|'gvg'|'general'|'website' }`. Public `onboard:auction|gvg|general|website` → deferReply + that topic. Already-ephemeral same ids → deferUpdate + that topic. `onboard:back` → deferUpdate + hub. Unknown `onboard:*` → noop / none. Not this unit: Discord REST, payload bytes, officer checks, channel map.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-200
+
+[REQUIREMENT]
+UID: UNT-ROO-212
+STATUS: Active
+TITLE: DeployOnboardingCardGate returns 400/503/404/403 or posts once
+STATEMENT: >>>
+Function: deploy gate used by API-ROO-118. Inputs: authenticated officer + current tenant; mapped onboardingChannelId; bot ready flag; circuit-open flag; channel-fetch result. Output: status + whether send/upsert is called. 400 and no post when unmapped; 503 and no post when bot offline or circuit open; 404 and no post on locate miss; 403 and no post when not officer; success calls send/upsert once against the tenant JSON onboarding id (not process.env). Not this unit: JSON vs text envelope on the attendance alias; hub payload bytes; pointer persistence.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-199
+
+[[/SECTION]]

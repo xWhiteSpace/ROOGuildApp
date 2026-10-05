@@ -243,6 +243,7 @@ export function mergeChannelFallback(fromDb) {
     attendanceId: fromDb?.attendanceId || '',
     warAnnounceChannelId: fromDb?.warAnnounceChannelId || '',
     raidScreenshotChannelId: fromDb?.raidScreenshotChannelId || '',
+    onboardingChannelId: fromDb?.onboardingChannelId || '',
     warRooms: { ...(fromDb?.warRooms || {}) },
   };
 }

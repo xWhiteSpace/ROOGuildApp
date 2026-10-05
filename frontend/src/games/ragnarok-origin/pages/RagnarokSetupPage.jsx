@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../../services/apiClient';
+import { useTenantWorkspace } from '../../../query/hooks';
 
 const emptyRooms = {
   DISCORD_WARROOM_ID_1: '',
@@ -21,27 +22,26 @@ export default function RagnarokSetupPage({ onSessionUser }) {
     attendanceId: '',
     warAnnounceChannelId: '',
     raidScreenshotChannelId: '',
+    onboardingChannelId: '',
     warRooms: { ...emptyRooms },
   });
 
+  const workspaceQuery = useTenantWorkspace();
+
   useEffect(() => {
-    apiFetch('/api/tenants/workspace', { method: 'GET' })
-      .then((r) => r.json())
-      .then((data) => {
-        const channels = data.workspace?.discordChannels;
-        if (!channels) return;
-        setForm({
-          auctionChannelId: channels.auctionChannelId || '',
-          aucreqChannelId: channels.aucreqChannelId || '',
-          genroomId: channels.genroomId || '',
-          attendanceId: channels.attendanceId || '',
-          warAnnounceChannelId: channels.warAnnounceChannelId || '',
-          raidScreenshotChannelId: channels.raidScreenshotChannelId || '',
-          warRooms: { ...emptyRooms, ...(channels.warRooms || {}) },
-        });
-      })
-      .catch(() => {});
-  }, []);
+    const channels = workspaceQuery.data?.workspace?.discordChannels;
+    if (!channels) return;
+    setForm({
+      auctionChannelId: channels.auctionChannelId || '',
+      aucreqChannelId: channels.aucreqChannelId || '',
+      genroomId: channels.genroomId || '',
+      attendanceId: channels.attendanceId || '',
+      warAnnounceChannelId: channels.warAnnounceChannelId || '',
+      raidScreenshotChannelId: channels.raidScreenshotChannelId || '',
+      onboardingChannelId: channels.onboardingChannelId || '',
+      warRooms: { ...emptyRooms, ...(channels.warRooms || {}) },
+    });
+  }, [workspaceQuery.data]);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -95,6 +95,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
         {field('Weekly attendance thread parent (one text channel)', 'attendanceId', '')}
         {field('War-announce (one text channel for cards)', 'warAnnounceChannelId', '')}
         {field('Raid Screenshot (gallery after OCR Commit)', 'raidScreenshotChannelId', '')}
+        {field('Onboarding hub card channel ID', 'onboardingChannelId', '')}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Object.keys(emptyRooms).map((key, idx) => (
             <label key={key} className="block text-xs text-slate-400">

@@ -1,0 +1,96 @@
+[DOCUMENT]
+TITLE: GVG Readiness rematerialize — left-side design
+UID: DOC-ROO-DESIGN-GVG-READINESS
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: FNC — Functional specs
+
+[REQUIREMENT]
+UID: FNC-ROO-191
+STATUS: Active
+TITLE: Phase1GetReadyLine appends a war-announce jump when mapped
+STATEMENT: >>>
+`buildAttendanceRaidAnnounce({ eventDate })` returns the GEN get-ready sentence for `eventDate` formatted Mon DD, YYYY, with no event title and no war start time. When `discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID')` is a mapped id, the sentence appends ` Jump in at <#id>.` When unmapped, that clause is omitted. The same builder is used by the phase-1 scheduler and officer announce-attendance.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-190
+
+[REQUIREMENT]
+UID: FNC-ROO-201
+STATUS: Active
+TITLE: PrepStartReadinessSync rematerializes the war-announce card once per cycle
+STATEMENT: >>>
+After a successful war-room publish, `gvgReadinessSyncMode` chooses the board action. Phase 1 with a stored `messageId` whose `eventKey` already equals `buildCompositeKey(warDate, activeEventId)` is skip (no `ensureGvgReadinessBoard`, no roster dump). Phase 1 otherwise rematerializes via `ensureGvgReadinessBoard` (edit-or-post the stored war-announce message). Phases 2–3 call `ensureGvgReadinessBoardIfMissing`. Idle 60s ticks with an unchanged `lastPublishKey` do not call either board function.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-200
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: INT — Integration seams
+
+[REQUIREMENT]
+UID: INT-ROO-117
+STATUS: Active
+TITLE: War-room tick reads the readiness pointer only on phase-1 publish
+STATEMENT: >>>
+`maybeRunWarRoomAutomation` after a successful publish: when `currentPhase === 1`, read `attendance/gvg_readiness_card` (`eventKey`, `messageId` only) then dispatch `gvgReadinessSyncMode`. Rematerialize or IfMissing is a dynamic import of `discordAttendanceCards.js`. Phase 2–3 do not take that extra pointer read before IfMissing. No second interval. No `refreshGvgReadinessBoard` on this clock.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-200
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: UNT — Units
+
+[REQUIREMENT]
+UID: UNT-ROO-201
+STATUS: Active
+TITLE: BuildAttendanceRaidAnnounce formats the get-ready sentence and optional jump
+STATEMENT: >>>
+Function: `buildAttendanceRaidAnnounce({ eventDate })`. Inputs: eventDate string; current tenant `warAnnounceChannelId` via `discordChannel`. Output: GEN text. Date is Mon DD, YYYY. Body is Get ready for the next GVG on **{date}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you. Mapped id appends ` Jump in at <#id>.` Unmapped omits that clause. Output does not include event title or war start time. Not this unit: `sendGenRoomMessage`, scheduler minute matching, phase 2/3 war-announce copy.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-191
+
+[REQUIREMENT]
+UID: UNT-ROO-213
+STATUS: Active
+TITLE: GvgReadinessSyncMode chooses rematerialize, ifMissing, or skip
+STATEMENT: >>>
+Function: `gvgReadinessSyncMode({ currentPhase, storedEventKey, cycleEventKey, messageId })`. Inputs: raid phase number; stored pointer eventKey and messageId; cycle composite key. Output: `'rematerialize' | 'ifMissing' | 'skip'`. Phase 1 + messageId + storedEventKey === cycleEventKey → skip. Phase 1 otherwise → rematerialize. Phase 2 or 3 → ifMissing. Any other phase → skip. Not this unit: Discord fetch/edit, roster load, `lastPublishKey`, war-room publish.
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: FNC-ROO-201
+
+[[/SECTION]]

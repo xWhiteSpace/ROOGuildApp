@@ -41,12 +41,26 @@ import { buildMemberTrendTimeline } from '../components/MemberTrendSparkline';
 import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
+import {
+  useCommitments,
+  useCompositionsList,
+  useMembers,
+  usePublished,
+  useRaidHistory,
+  useSettings,
+} from '../../../query/hooks';
 import { normalizeCompositionsMap, isSlotCoordKey } from '@guildname/shared/compositionTabs';
 
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
 
 export default function LiveRaidTab({ user }) {
   const isOfficer = user?.isOfficer === true;
+  const membersQuery = useMembers('card');
+  const settingsQuery = useSettings('jobs,events,warRooms,liveRaidMaxWarRooms,timezone');
+  const listQuery = useCompositionsList();
+  const historyQuery = useRaidHistory(12);
+  const publishedQuery = usePublished();
+  const commitmentsQuery = useCommitments();
 
   // --- Real-time Core Database States ---
   const [loading, setLoading] = useState(true);
@@ -100,7 +114,6 @@ export default function LiveRaidTab({ user }) {
   const [monitoringStartTime, setMonitoringStartTime] = useState('');
   const [monitoringEndTime, setMonitoringEndTime] = useState('');
   const [monitoringPollInterval, setMonitoringPollInterval] = useState(15);
-  const commitmentsEtagRef = useRef('');
   const monitoringStartTimeRef = useRef('');
   const monitoringEndTimeRef = useRef('');
   const monitoringPollIntervalRef = useRef(15);
@@ -307,80 +320,24 @@ export default function LiveRaidTab({ user }) {
     return 'col-span-12 xl:col-span-9';
   }, [rightPanelCollapsed]);
 
-  // Load Setup Master lists
-  const loadMasterSetupData = async () => {
-    try {
-      const headers = getRequestHeaders();
-      const initRes = await fetch(`${backendUrl}/api/attendance/members?view=card`, { method: 'GET', headers, credentials: 'include' });
-      const initData = await initRes.json();
-      if (initData.success) {
-        setMembers(initData.members || {});
-      }
-
-      const settingsRes = await fetch(`${backendUrl}/api/requests/settings/get?fields=jobs,events,warRooms,liveRaidMaxWarRooms,timezone`, { method: 'GET', headers, credentials: 'include' });
-      const settingsData = await settingsRes.json();
-      if (settingsData.success && settingsData.config) {
-        setJobsCatalog(settingsData.config.jobs || {});
-        setEventsCatalog(settingsData.config.events || {});
-        setWarRoomsCatalog(settingsData.config.warRooms || {});
-        setMaxWarRoomsLimit(settingsData.config.liveRaidMaxWarRooms || 2);
-        if (settingsData.config.timezone) setGuildTimezone(settingsData.config.timezone);
-      }
-
-      const compsRes = await fetch(`${backendUrl}/api/attendance/compositions?fields=list`, { method: 'GET', headers, credentials: 'include' });
-      const compsData = await compsRes.json();
-      if (compsData.success) {
-        setCompositions(normalizeCompositionsMap(compsData.compositions || {}));
-      }
-
-      const histRes = await apiFetch('/api/live-raid/history/all?limit=12', { method: 'GET' });
-      const histData = await histRes.json();
-      if (histData.success) {
-        setHistorySessions(histData.sessions || {});
-      }
-
-      await loadPublishedCompositions();
-    } catch (err) {
-      console.error("Error loading master setup lists:", err);
-    }
-  };
-
   const loadPublishedCompositions = async () => {
-    try {
-      const res = await apiFetch('/api/attendance/published', { method: 'GET' });
-      const data = await res.json();
-      if (data.success) {
-        const incoming = data.published || {};
-        setPublishedCompositions((prev) => {
-          const next = { ...incoming };
-          Object.entries(prev).forEach(([id, rec]) => {
-            const incomingTs = Number(incoming[id]?.lastUpdated || incoming[id]?.sentAt || 0);
-            const localTs = Number(rec?.lastUpdated || rec?.sentAt || 0);
-            if (localTs > incomingTs) next[id] = rec;
-          });
-          return next;
-        });
-        setPublishedAnchor(data.anchor || null);
-      }
-    } catch (err) {
-      console.error('Failed to load published compositions:', err);
-    }
+    const next = await publishedQuery.refetch();
+    const incoming = next.data?.published || {};
+    setPublishedCompositions((prev) => {
+      const merged = { ...incoming };
+      Object.entries(prev).forEach(([id, rec]) => {
+        const incomingTs = Number(incoming[id]?.lastUpdated || incoming[id]?.sentAt || 0);
+        const localTs = Number(rec?.lastUpdated || rec?.sentAt || 0);
+        if (localTs > incomingTs) merged[id] = rec;
+      });
+      return merged;
+    });
+    if (next.data?.anchor !== undefined) setPublishedAnchor(next.data.anchor || null);
   };
 
   const loadCommitments = async () => {
-    try {
-      const res = await apiFetch('/api/attendance/commitments', {
-        method: 'GET',
-        headers: commitmentsEtagRef.current ? { 'If-None-Match': `"${commitmentsEtagRef.current}"` } : {},
-      });
-      const data = await res.json();
-      const nextTag = String(res.headers.get('ETag') || data.etag || '').replace(/^W\//, '').replaceAll('"', '');
-      if (nextTag) commitmentsEtagRef.current = nextTag;
-      if (data.unchanged) return;
-      if (data.success) setCommitments(data.commitments || {});
-    } catch (err) {
-      console.error('Failed to load commitments:', err);
-    }
+    const next = await commitmentsQuery.refetch();
+    if (next.data) setCommitments(next.data);
   };
 
   // Poll Active Live Session lifecycle
@@ -444,9 +401,49 @@ export default function LiveRaidTab({ user }) {
     }
   };
 
+  useEffect(() => {
+    if (membersQuery.data) setMembers(membersQuery.data);
+  }, [membersQuery.data]);
+
+  useEffect(() => {
+    const config = settingsQuery.data;
+    if (!config) return;
+    setJobsCatalog(config.jobs || {});
+    setEventsCatalog(config.events || {});
+    setWarRoomsCatalog(config.warRooms || {});
+    setMaxWarRoomsLimit(config.liveRaidMaxWarRooms || 2);
+    if (config.timezone) setGuildTimezone(config.timezone);
+  }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (listQuery.data) setCompositions(normalizeCompositionsMap(listQuery.data));
+  }, [listQuery.data]);
+
+  useEffect(() => {
+    if (historyQuery.data) setHistorySessions(historyQuery.data);
+  }, [historyQuery.data]);
+
+  useEffect(() => {
+    const incoming = publishedQuery.data?.published;
+    if (!incoming) return;
+    setPublishedCompositions((prev) => {
+      const merged = { ...incoming };
+      Object.entries(prev).forEach(([id, rec]) => {
+        const incomingTs = Number(incoming[id]?.lastUpdated || incoming[id]?.sentAt || 0);
+        const localTs = Number(rec?.lastUpdated || rec?.sentAt || 0);
+        if (localTs > incomingTs) merged[id] = rec;
+      });
+      return merged;
+    });
+    if (publishedQuery.data?.anchor !== undefined) setPublishedAnchor(publishedQuery.data.anchor || null);
+  }, [publishedQuery.data]);
+
+  useEffect(() => {
+    if (commitmentsQuery.data) setCommitments(commitmentsQuery.data);
+  }, [commitmentsQuery.data]);
+
   // Lifecycle Initialization
   useEffect(() => {
-    loadMasterSetupData();
     fetchActiveLiveSession(true);
   }, [user]);
 
