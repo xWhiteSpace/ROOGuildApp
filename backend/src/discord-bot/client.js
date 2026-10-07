@@ -2,7 +2,7 @@ import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { handleAuctionInteraction } from '../games/ragnarok-origin/services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import { handleRequestDeckInteraction } from '../games/ragnarok-origin/services/discordRequestDeck.js';
-import { getTenant, loadTenantSettings, forEachOnboardedTenant, mergeChannelFallback } from '../db/tenants.js';
+import { getTenant, loadTenantSettings, forEachOnboardedTenant, forEachEnabledGameTenant, mergeChannelFallback } from '../db/tenants.js';
 import { runWithTenant, setCachedConfig, setCachedChannels } from '../db/tenantContext.js';
 import { handleAttendanceCardInteraction, attendanceCardWantsEphemeralAck, attendanceCardSkipsGatewayAck } from '../games/ragnarok-origin/services/discordAttendanceCards.js';
 import { syncJobIconEmojis } from '../games/ragnarok-origin/services/discordJobEmojis.js';
@@ -14,6 +14,7 @@ import {
 } from '../games/ragnarok-origin/services/discordOnboardingCard.js';
 import { runScheduleBatch } from '../games/ragnarok-origin/services/scheduleService.js';
 import { clearGuildCommands } from './deployGuild.js';
+import { RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
 
 import { discordEnv } from '../config/discordEnv.js';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
@@ -259,7 +260,7 @@ async function withGuildTenant(guildId, fn) {
     let skipFirstDiscordTick = true;
     setInterval(() => {
       const circuitOpen = isDiscordCircuitOpen();
-      forEachOnboardedTenant(async () => {
+      forEachEnabledGameTenant(RAGNAROK_ORIGIN_ID, async () => {
         await runScheduleBatch(async () => {
           if (skipFirstDiscordTick) {
             return;

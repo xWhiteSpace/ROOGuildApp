@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from '../../backend/src/games/catalog.js';
+import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID, RAGNAROK_3_ID } from '../../backend/src/games/catalog.js';
 import { patterns } from './registry.js';
 import { withEnv } from './envSandbox.js';
 
@@ -58,6 +58,13 @@ export function agMountWithoutAgGameRequired() {
   return runGameGate(ADVENTURER_GUILD_ID, {
     tenantId: 't1',
     enabledGames: [RAGNAROK_ORIGIN_ID],
+  });
+}
+
+export function r3MountWithoutR3GameRequired() {
+  return runGameGate(RAGNAROK_3_ID, {
+    tenantId: 't1',
+    enabledGames: [RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID],
   });
 }
 

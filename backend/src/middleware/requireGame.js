@@ -1,6 +1,6 @@
 import { getTenant } from '../db/tenants.js';
 import { parseEnabledGames } from '../games/catalog.js';
-import { getCurrentTenantId } from '../db/tenantContext.js';
+import { getCurrentTenantId, runWithGame } from '../db/tenantContext.js';
 
 export function requireGame(gameId) {
   return async (req, res, next) => {
@@ -19,7 +19,8 @@ export function requireGame(gameId) {
           gameId,
         });
       }
-      return next();
+      req.gameId = String(gameId);
+      return runWithGame(gameId, () => next());
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }

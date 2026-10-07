@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import { patterns } from './registry.js';
 import { withEnv } from './envSandbox.js';
 import { dispatch } from '../support/dispatch.js';
-import { setupPathForGame, RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from '../../backend/src/games/catalog.js';
+import { setupPathForGame, RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID, RAGNAROK_3_ID } from '../../backend/src/games/catalog.js';
 
 patterns.enable_known_game = 'used';
 patterns.setup_path_for_game = 'used';
@@ -130,6 +130,10 @@ export function setupPathForRo() {
 
 export function setupPathForAg() {
   return setupPathForGame(ADVENTURER_GUILD_ID);
+}
+
+export function setupPathForR3() {
+  return setupPathForGame(RAGNAROK_3_ID);
 }
 
 export async function enableInactiveSeatPaymentRequired() {

@@ -404,6 +404,10 @@ export async function handleAuctionInteraction(interaction) {
         throw new Error('COLLISION_DETECTED');
       }
 
+      if (finalRosterName) {
+        await db.ref(`auction/members/${interaction.user.id}`).update({ displayName: finalRosterName });
+      }
+
       const updatedConfigSnap = preClaimConfigSnap;
       const localSessionCacheSnap = await db.ref('auction/active_session').once('value');
       const membersSnap = await db.ref('auction/members').once('value');

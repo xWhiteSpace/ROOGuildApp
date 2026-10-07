@@ -1,7 +1,7 @@
 import { parseEnabledGames, RAGNAROK_ORIGIN_ID } from './catalog.js';
 import { contributeRagnarokOriginSchedule } from './ragnarok-origin/scheduleContributor.js';
 
-const CONTRIBUTORS = {
+export const CONTRIBUTORS = {
   [RAGNAROK_ORIGIN_ID]: contributeRagnarokOriginSchedule,
 };
 

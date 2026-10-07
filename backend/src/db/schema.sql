@@ -37,17 +37,19 @@ CREATE TABLE IF NOT EXISTS tenant_settings (
 
 CREATE TABLE IF NOT EXISTS members (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   discord_id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, discord_id)
+  PRIMARY KEY (tenant_id, game_id, discord_id)
 );
 CREATE INDEX IF NOT EXISTS members_tenant_idx ON members (tenant_id);
 
 CREATE TABLE IF NOT EXISTS auction_requests (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, game_id, id)
 );
 CREATE INDEX IF NOT EXISTS auction_requests_tenant_idx ON auction_requests (tenant_id);
 CREATE INDEX IF NOT EXISTS auction_requests_status_idx
@@ -55,47 +57,53 @@ CREATE INDEX IF NOT EXISTS auction_requests_status_idx
 
 CREATE TABLE IF NOT EXISTS past_auction_awards (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, game_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS loot_history (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, game_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS attendance_commitments (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   event_key TEXT NOT NULL,
   member_id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, event_key, member_id)
+  PRIMARY KEY (tenant_id, game_id, event_key, member_id)
 );
 CREATE INDEX IF NOT EXISTS attendance_commitments_tenant_idx ON attendance_commitments (tenant_id);
 
 CREATE TABLE IF NOT EXISTS schedule_instances (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, game_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS special_events (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   id TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, id)
+  PRIMARY KEY (tenant_id, game_id, id)
 );
 
 -- Nested party grids, live raid, auction session, announce markers, etc.
 CREATE TABLE IF NOT EXISTS json_docs (
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL DEFAULT 'ragnarok-origin',
   path TEXT NOT NULL,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  PRIMARY KEY (tenant_id, path)
+  PRIMARY KEY (tenant_id, game_id, path)
 );
 
 -- Bot-wide state (Discord IP circuit). Not per-guild.
@@ -117,3 +125,87 @@ WHERE t.id = s.tenant_id
     OR COALESCE(s.discord_channels->>'warAnnounceChannelId', '') <> ''
   )
   AND (t.enabled_games IS NULL OR t.enabled_games = '[]'::jsonb);
+
+-- Per-game operational rows. Workspace / Discord channels stay tenant-only.
+CREATE TABLE IF NOT EXISTS game_settings (
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  game_id TEXT NOT NULL,
+  configuration JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (tenant_id, game_id)
+);
+
+ALTER TABLE members ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE auction_requests ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE past_auction_awards ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE loot_history ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE attendance_commitments ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE schedule_instances ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE special_events ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+ALTER TABLE json_docs ADD COLUMN IF NOT EXISTS game_id TEXT NOT NULL DEFAULT 'ragnarok-origin';
+
+UPDATE json_docs
+SET game_id = 'adventurer-guild'
+WHERE path LIKE 'adventurer-guild/%'
+  AND game_id = 'ragnarok-origin';
+
+-- Origin catalogs used to live on tenant_settings.configuration. Copy them into
+-- game_settings for ragnarok-origin, then leave only workspace keys on the tenant row.
+-- Fill an empty Origin game_settings row; never clobber a catalog officers already saved.
+INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
+SELECT tenant_id,
+       'ragnarok-origin',
+       configuration - 'guildDisplayName' - 'timezone' - 'adminRoles' - 'guildLogoUrl',
+       NOW()
+FROM tenant_settings
+WHERE (configuration - 'guildDisplayName' - 'timezone' - 'adminRoles' - 'guildLogoUrl') <> '{}'::jsonb
+ON CONFLICT (tenant_id, game_id) DO UPDATE
+SET configuration = EXCLUDED.configuration,
+    updated_at = NOW()
+WHERE COALESCE(game_settings.configuration, '{}'::jsonb) = '{}'::jsonb;
+
+UPDATE tenant_settings
+SET configuration = jsonb_strip_nulls(jsonb_build_object(
+  'guildDisplayName', configuration->'guildDisplayName',
+  'timezone', configuration->'timezone',
+  'adminRoles', configuration->'adminRoles',
+  'guildLogoUrl', configuration->'guildLogoUrl'
+)),
+    updated_at = NOW()
+WHERE (configuration - 'guildDisplayName' - 'timezone' - 'adminRoles' - 'guildLogoUrl') <> '{}'::jsonb;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'members_pkey_game') THEN
+    ALTER TABLE members DROP CONSTRAINT IF EXISTS members_pkey;
+    ALTER TABLE members ADD CONSTRAINT members_pkey_game PRIMARY KEY (tenant_id, game_id, discord_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'auction_requests_pkey_game') THEN
+    ALTER TABLE auction_requests DROP CONSTRAINT IF EXISTS auction_requests_pkey;
+    ALTER TABLE auction_requests ADD CONSTRAINT auction_requests_pkey_game PRIMARY KEY (tenant_id, game_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'past_auction_awards_pkey_game') THEN
+    ALTER TABLE past_auction_awards DROP CONSTRAINT IF EXISTS past_auction_awards_pkey;
+    ALTER TABLE past_auction_awards ADD CONSTRAINT past_auction_awards_pkey_game PRIMARY KEY (tenant_id, game_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'loot_history_pkey_game') THEN
+    ALTER TABLE loot_history DROP CONSTRAINT IF EXISTS loot_history_pkey;
+    ALTER TABLE loot_history ADD CONSTRAINT loot_history_pkey_game PRIMARY KEY (tenant_id, game_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'attendance_commitments_pkey_game') THEN
+    ALTER TABLE attendance_commitments DROP CONSTRAINT IF EXISTS attendance_commitments_pkey;
+    ALTER TABLE attendance_commitments ADD CONSTRAINT attendance_commitments_pkey_game PRIMARY KEY (tenant_id, game_id, event_key, member_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'schedule_instances_pkey_game') THEN
+    ALTER TABLE schedule_instances DROP CONSTRAINT IF EXISTS schedule_instances_pkey;
+    ALTER TABLE schedule_instances ADD CONSTRAINT schedule_instances_pkey_game PRIMARY KEY (tenant_id, game_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'special_events_pkey_game') THEN
+    ALTER TABLE special_events DROP CONSTRAINT IF EXISTS special_events_pkey;
+    ALTER TABLE special_events ADD CONSTRAINT special_events_pkey_game PRIMARY KEY (tenant_id, game_id, id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'json_docs_pkey_game') THEN
+    ALTER TABLE json_docs DROP CONSTRAINT IF EXISTS json_docs_pkey;
+    ALTER TABLE json_docs ADD CONSTRAINT json_docs_pkey_game PRIMARY KEY (tenant_id, game_id, path);
+  END IF;
+END $$;

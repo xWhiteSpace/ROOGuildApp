@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   migrateAppliesNamedTables,
+  originGameSettingsBackfillCopiesThenStrips,
   tenantScopedTablesKeyTenantId,
   platformStateKeyedByKeyOnly,
   tenantsIdIsGuildPk,
@@ -33,5 +34,12 @@ describe('TST-ROO-208 PostgresSchemaOwnershipIsMigrateApplied owns the named tab
   it('schema ownership is applied by migrate on boot', async () => {
     const r = await schemaAppliedViaMigrate();
     expect(r.migrateSentSchemaFile).toBe(true);
+  });
+
+  it('Origin catalogs copy into game_settings then leave workspace keys on tenant_settings', () => {
+    const r = originGameSettingsBackfillCopiesThenStrips();
+    expect(r.copiesOrigin).toBe(true);
+    expect(r.fillsEmptyOnly).toBe(true);
+    expect(r.stripsLeftoverGameKeys).toBe(true);
   });
 });

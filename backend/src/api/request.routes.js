@@ -1,6 +1,6 @@
 // backend/src/api/request.routes.js
 import { Router } from 'express';
-import { getTenantStore, listAuctionHistory, listLootHistoryDates, listLootHistoryForDate, listPastAuctionDates, listPastAuctionsForDate, loadAuctionRequests, countLootHistoryBattles, loadPastAuctionsForMember, lobbyFingerprint, queueFingerprint } from '../db/database.js';
+import { getTenantStore, listAuctionHistory, listLootHistoryDates, listLootHistoryForDate, listPastAuctionDates, listPastAuctionsForDate, loadAuctionRequests, loadMembersByIds, countLootHistoryBattles, loadPastAuctionsForMember, lobbyFingerprint, queueFingerprint } from '../db/database.js';
 import { pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
 import { getGateStatusDetails, readTenantConfiguration } from '../games/ragnarok-origin/timeWindow.js';
 import { findOverlappingRaidCyclePair } from '@guildname/shared/raidCycle';
@@ -52,6 +52,38 @@ function parseSettingsFields(raw) {
 }
 
 const router = Router();
+
+/** Numeric Discord ids currently occupying Mimic Book slots. Empty strings are skipped. */
+export function collectOccupantUids(categoryAllocations) {
+  const uids = new Set();
+  for (const node of Object.values(categoryAllocations || {})) {
+    const selected = Array.isArray(node?.selected) ? node.selected : Object.values(node?.selected || {});
+    for (const value of selected) {
+      const uid = String(value || '').trim();
+      if (/^\d+$/.test(uid)) uids.add(uid);
+    }
+  }
+  return [...uids];
+}
+
+async function occupantMembersMap(categoryAllocations) {
+  const ids = collectOccupantUids(categoryAllocations);
+  if (!ids.length) return {};
+  const rows = await loadMembersByIds(ids);
+  const members = {};
+  for (const uid of ids) {
+    const displayName = String(rows[uid]?.displayName || '').trim();
+    if (displayName) members[uid] = { displayName };
+  }
+  return members;
+}
+
+function resolveWinnerDisplayName(name, userId, membersData) {
+  const rosterName = String(membersData[userId]?.displayName || '').trim();
+  const raw = String(name || '').trim();
+  if (/^\d+$/.test(raw)) return rosterName || raw || 'Unknown Member';
+  return raw || rosterName || 'Unknown Member';
+}
 
 // 💡 SEED MATRIX BOUNDARIES (Only utilized to safely configure blank database tracks automatically)
 const DEFAULT_SESSION_STRUCTURE = {
@@ -303,7 +335,7 @@ router.get('/active-session', async (req, res) => {
       await db.ref('auction/active_session').set(freshReset);
       const resetTag = `s:${freshReset.version || 0}:${freshReset.lastUpdated || 0}`;
       setEtag(res, resetTag);
-      return res.json({ success: true, session: freshReset });
+      return res.json({ success: true, session: { ...freshReset, members: {} } });
     }
 
     if (currentSessionData.categoryAllocations) {
@@ -328,8 +360,9 @@ router.get('/active-session', async (req, res) => {
     if (normalizeEtag(req.headers['if-none-match']) === sessionTag) {
       return sendNotModified(res, sessionTag);
     }
+    const members = await occupantMembersMap(currentSessionData.categoryAllocations);
     setEtag(res, sessionTag);
-    return res.json({ success: true, session: currentSessionData });
+    return res.json({ success: true, session: { ...currentSessionData, members } });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -754,7 +787,7 @@ export async function performCommitSession({ event, date, allocations, summary }
       for (const winner of selected) {
         const { userId, name, slots } = winner;
         const keyList = getKeysForUid(userId);
-        const resolvedName = name || membersData[userId]?.displayName || 'Unknown Member';
+        const resolvedName = resolveWinnerDisplayName(name, userId, membersData);
 
         if (keyList.length > 0) {
           const primaryWinnerKey = keyList[keyList.length - 1];

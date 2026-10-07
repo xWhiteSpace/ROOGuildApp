@@ -3,9 +3,10 @@ import './config/loadEnv.js';
 import { initializeEnv } from './config/env.js';
 import { valhallaEnv } from './config/valhallaEnv.js';
 import { migrate } from './db/migrate.js';
-import { forEachOnboardedTenant } from './db/tenants.js';
+import { forEachEnabledGameTenant } from './db/tenants.js';
 import { initializeDiscordBot } from './discord-bot/client.js';
 import { resolveOAuthExchangeUrl } from './utils/discordRateLimit.js';
+import { RAGNAROK_ORIGIN_ID } from './games/catalog.js';
 import { createApp } from './createApp.js';
 
 initializeEnv();
@@ -23,7 +24,7 @@ const app = createApp();
 app.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`);
 
-  forEachOnboardedTenant(async () => {
+  forEachEnabledGameTenant(RAGNAROK_ORIGIN_ID, async () => {
     const { seedMissingLeaveCredits } = await import('./games/ragnarok-origin/services/attendanceDecision.js');
     await seedMissingLeaveCredits();
     const { resumeLiveRaidMonitoringIfNeeded } = await import('./api/liveRaid.routes.js');

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   absentAndNotSelectedAndSupersede,
   commitConflictNoPartial,
+  forcedAddSnowflakeNameResolvesFromRoster,
   forcedAddWinnerWithoutPending,
   httpAndAutoShareWriter,
   missingAllocationsRefused,
@@ -84,5 +85,15 @@ describe('TST-ROO-071 PerformCommitSession atomically writes history, flips stat
     const { httpUses, writerName } = await httpAndAutoShareWriter();
     expect(httpUses).toBe(true);
     expect(writerName).toBe('performCommitSession');
+  });
+
+  it('ForcedAdd member name is the roster display name when the client name is a snowflake', async () => {
+    const { forced, award } = await forcedAddSnowflakeNameResolvesFromRoster();
+    expect(forced).toMatchObject({
+      applicationStatus: 'ForcedAdd',
+      selectionStatus: 'Selected',
+      member: 'Cara',
+    });
+    expect(award.mem).toBe('Cara');
   });
 });

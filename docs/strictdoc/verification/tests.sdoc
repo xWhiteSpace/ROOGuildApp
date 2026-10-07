@@ -1277,19 +1277,20 @@ TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065 (20 plans)
 [REQUIREMENT]
 UID: TST-ROO-046
 STATUS: Active
-TITLE: GamesWhitelist accepts only adventurer-guild and ragnarok-origin
+TITLE: GamesWhitelist accepts adventurer-guild, ragnarok-origin, and ragnarok-3
 STATEMENT: >>>
-Plan: GamesWhitelist accepts only adventurer-guild and ragnarok-origin
+Plan: GamesWhitelist accepts adventurer-guild, ragnarok-origin, and ragnarok-3
 level: unit
-verifies: REQ-ROO-039, FNC-ROO-016, UNT-ROO-027, CMP-ROO-007
+verifies: REQ-ROO-039, REQ-R3-001, FNC-ROO-016, UNT-ROO-027, CMP-ROO-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
-patterns: known_game_ids, parse_enabled_games_filter
+patterns: known_game_ids, parse_enabled_games_filter, r3_path_catalog
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - KNOWN_GAME_IDS is exactly adventurer-guild and ragnarok-origin: expected=Whitelist equals the two catalog ids only
+  - KNOWN_GAME_IDS includes adventurer-guild, ragnarok-origin, and ragnarok-3: expected=Whitelist equals the three catalog ids
   - isKnownGame rejects unknown id: expected=Unknown gameId → false / validation refuse
   - parseEnabledGames drops unknown stored ids: expected=Stored junk filtered; only known ids remain
+  - R3 has no setupPath and gameIdForPath matches /games/ragnarok-3 first: expected=setupPathForGame(R3) → /games/ragnarok-3; Origin root paths still Origin
 <<<
 COMMENT: >>>
 domain: Games catalog
@@ -1936,6 +1937,7 @@ cases:
   - Missing session is null, not an error: expected=session null; no error
   - Session older than 24h is reset from catalog: expected=stored active_session replaced with the default structure seeded from configured items/active loots and a fresh lastUpdated; that reset session is returned
   - Session not older than 24h is returned and not reset: expected=returned session is the stored session (not a catalog reset), with defensive defaults for allocations/qtyPerPage as needed
+  - Occupied snowflakes return occupant display names only: expected=session.members has only occupied uids with displayName; empty slots add nobody; stored active_session has no members map
 <<<
 COMMENT: >>>
 domain: Auction/Requests
@@ -1998,6 +2000,7 @@ cases:
   - Non-officer does not commit: expected=403; active_session not cleared; no history writes
   - Missing allocations do not commit: expected=400; active_session not cleared; no history writes
   - HTTP commit and auto-commit share this writer only: expected=both call perform_commit_session; no second commit writer
+  - ForcedAdd member name is the roster display name when the client name is a snowflake: expected=ForcedAdd member and past_auction mem are the roster displayName, not the snowflake
 <<<
 COMMENT: >>>
 domain: Auction/Requests
@@ -2381,7 +2384,7 @@ patterns: claim_panel, gate_open, claim_limit
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - Open gate and rostered member update the session claim: expected=auction/active_session slot claim updated
+  - Open gate and rostered member update the session claim: expected=auction/active_session slot claim updated with the snowflake; that member's displayName upserted from Discord
   - Closed live-claim gate does not change the session: expected=no active_session mutation
   - Member missing from the roster does not claim: expected=roster-disconnect reply; active_session unchanged
   - Collision or per-item limit does not write the conflicting claim: expected=claim collision/limit error; conflicting claim not stored
@@ -7219,5 +7222,163 @@ HONESTY: published plan only; not executed; no EVD.
 RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-200
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Ragnarok 3 — TST-R3-001 .. TST-R3-005
+
+[REQUIREMENT]
+UID: TST-R3-001
+STATUS: Active
+TITLE: RequireGameGate returns 403 game_required for Ragnarok 3 mounts
+STATEMENT: >>>
+Plan: RequireGameGate returns 403 game_required for Ragnarok 3 mounts
+level: unit
+verifies: REQ-R3-005, REQ-ROO-046
+requires_tol: TOL-ROO-006
+patterns: require_game_gate, r3_game_required, unit_require_game_mount_tree
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - R3 middleware without ragnarok-3 → 403 game_required: expected=code game_required, gameId ragnarok-3
+  - R3 API tree without ragnarok-3 → 403 game_required: expected=/api/ragnarok-3/health 403 game_required
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-005
+
+[REQUIREMENT]
+UID: TST-R3-002
+STATUS: Active
+TITLE: Dual roster allows the same discord_id on Origin and R3
+STATEMENT: >>>
+Plan: Dual roster allows the same discord_id on Origin and R3
+level: unit
+verifies: REQ-R3-002, REQ-R3-003
+requires_tol: TOL-ROO-006
+patterns: r3_dual_roster
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - two members rows for the same discord_id with distinct game_id: expected=INSERT members twice with ragnarok-origin then ragnarok-3
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-003
+
+[REQUIREMENT]
+UID: TST-R3-003
+STATUS: Active
+TITLE: R3 settings save does not mutate Origin game_settings or workspace
+STATEMENT: >>>
+Plan: R3 settings save does not mutate Origin game_settings or workspace
+level: unit
+verifies: REQ-R3-004
+requires_tol: TOL-ROO-006
+patterns: r3_settings_split
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - writes game_settings for ragnarok-3 only and omits workspace keys: expected=no tenant_settings write; no Origin game_settings write
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-004
+
+[REQUIREMENT]
+UID: TST-R3-004
+STATUS: Active
+TITLE: Operational rows are stamped with game_id and Origin backfill exists
+STATEMENT: >>>
+Plan: Operational rows are stamped with game_id and Origin backfill exists
+level: unit
+verifies: REQ-R3-002, REQ-ROO-158, REQ-ROO-160, REQ-ROO-161
+requires_tol: TOL-ROO-006
+patterns: r3_game_id_stamp, schema_migrate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - schema adds game_settings, game_id PKs, Origin backfill, and AG json_docs stamp: expected=schema.sql contains backfill and PK rebuild
+  - R3 json_docs writes stamp game_id ragnarok-3 on Origin-shaped paths: expected=INSERT json_docs game_id ragnarok-3 path attendance/compositions
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-002
+
+[REQUIREMENT]
+UID: TST-R3-005
+STATUS: Active
+TITLE: R3 calendar does not leak into scheduleContributors
+STATEMENT: >>>
+Plan: R3 calendar does not leak into scheduleContributors
+level: unit
+verifies: REQ-R3-006, REQ-R3-007
+requires_tol: TOL-ROO-006
+patterns: r3_no_schedule_contributor, r3_path_catalog
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - no ragnarok-3 contributor is registered: expected=CONTRIBUTORS has no ragnarok-3 key
+  - leftover Origin root paths still resolve to Origin: expected=gameIdForPath(/attendance/masterlist) → ragnarok-origin
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-007
+
+[REQUIREMENT]
+UID: TST-R3-006
+STATUS: Active
+TITLE: R3 API tree without ragnarok-3 returns 403 game_required
+STATEMENT: >>>
+Plan: R3 API tree without ragnarok-3 returns 403 game_required
+level: unit
+verifies: REQ-R3-005
+requires_tol: TOL-ROO-006
+patterns: unit_require_game_mount_tree, r3_game_required
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - R3 API tree without ragnarok-3 → 403 game_required: expected=/api/ragnarok-3/health 403 game_required
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+notes: verifies = planned lineage only; published ≠ proven. evidence_status=none. execution_status=blocked_on_tooling.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-R3-005
 
 [[/SECTION]]

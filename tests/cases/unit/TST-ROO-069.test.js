@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   freshSessionReturnedNotReset,
   missingSessionIsNull,
+  occupiedSessionReturnsOccupantMembers,
   staleSessionResetsFromCatalog,
 } from '../../patterns/active_session.js';
 
@@ -31,5 +32,17 @@ describe('TST-ROO-069 MimicActiveSessionReader returns null, a fresh session, or
     expect(res.body.session.version).toBe(7);
     expect(res.body.session.qtyPerPage).toBe(4);
     expect(stored.marker).toBe('keep-me');
+  });
+
+  it('Occupied snowflakes return occupant display names only', async () => {
+    const { res, stored } = await occupiedSessionReturnsOccupantMembers();
+    expect(res.status).toBe(200);
+    expect(res.body.session.members).toEqual({
+      '111': { displayName: 'Ada' },
+      '222': { displayName: 'Ben' },
+    });
+    expect(res.body.session.members['999']).toBeUndefined();
+    expect(stored.members).toBeUndefined();
+    expect(stored.categoryAllocations.puppet.selected).toEqual(['111', '', '222']);
   });
 });

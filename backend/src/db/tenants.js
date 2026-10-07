@@ -7,14 +7,17 @@ import {
   hasCachedChannels,
   hasCachedConfig,
   invalidateOnboardedTenants,
+  runWithGame,
   runWithTenant,
   setCachedChannels,
   setCachedConfig,
   setCachedOnboardedTenants,
 } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
-import { parseEnabledGames } from '../games/catalog.js';
+import { parseEnabledGames, RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
 import { tenantHasAccess } from './billing.js';
+import { mergeGameConfiguration, omitWorkspaceConfig, pickWorkspaceConfig } from '../config/gameConfiguration.js';
+import { WORKSPACE_DEFAULTS } from '../config/workspaceDefaults.js';
 
 const TENANT_COLUMNS = `id, display_name, owner_discord_id, plan, is_platform_owner, onboarded, created_at, logo_url, enabled_games,
   stripe_customer_id, stripe_subscription_id, subscription_status, current_period_end, billing_source, grace_until, cancel_at_period_end`;
@@ -86,6 +89,9 @@ export async function createTenant({
        onboarded = tenants.onboarded OR EXCLUDED.onboarded`,
     [tenantId, displayName, ownerDiscordId, plan, isPlatformOwner, onboarded]
   );
+  const incoming = configuration || DEFAULT_CONFIGURATION;
+  const workspace = { ...WORKSPACE_DEFAULTS, ...pickWorkspaceConfig(incoming) };
+  const game = omitWorkspaceConfig(incoming);
   await query(
     `INSERT INTO tenant_settings (tenant_id, configuration, discord_channels)
      VALUES ($1, $2::jsonb, $3::jsonb)
@@ -96,9 +102,18 @@ export async function createTenant({
          ELSE tenant_settings.discord_channels
        END,
        updated_at = NOW()`,
-    [tenantId, JSON.stringify(configuration || DEFAULT_CONFIGURATION), JSON.stringify(discordChannels || {})]
+    [tenantId, JSON.stringify(workspace), JSON.stringify(discordChannels || {})]
   );
-  setCachedConfig(tenantId, configuration || DEFAULT_CONFIGURATION);
+  if (Object.keys(game).length) {
+    await query(
+      `INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
+       VALUES ($1, $2, $3::jsonb, NOW())
+       ON CONFLICT (tenant_id, game_id) DO NOTHING`,
+      [tenantId, RAGNAROK_ORIGIN_ID, JSON.stringify(game)]
+    );
+  }
+  const merged = mergeGameConfiguration(workspace, game, RAGNAROK_ORIGIN_ID);
+  setCachedConfig(tenantId, merged, RAGNAROK_ORIGIN_ID);
   setCachedChannels(tenantId, discordChannels || {});
   return getTenant(tenantId);
 }
@@ -129,7 +144,7 @@ export async function markTenantOnboarded(id, { displayName, discordChannels, co
     sets.push(`discord_channels = $${params.length}::jsonb`);
   }
   if (configuration) {
-    params.push(JSON.stringify(configuration));
+    params.push(JSON.stringify({ ...WORKSPACE_DEFAULTS, ...pickWorkspaceConfig(configuration) }));
     sets.push(`configuration = $${params.length}::jsonb`);
   }
   if (sets.length) {
@@ -142,21 +157,47 @@ export async function markTenantOnboarded(id, { displayName, discordChannels, co
     );
     await query(`UPDATE tenant_settings SET ${sets.join(', ')} WHERE tenant_id = $1`, params);
   }
-  if (configuration) setCachedConfig(tenantId, configuration);
+  if (configuration) {
+    const game = omitWorkspaceConfig(configuration);
+    if (Object.keys(game).length) {
+      await query(
+        `INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
+         VALUES ($1, $2, $3::jsonb, NOW())
+         ON CONFLICT (tenant_id, game_id) DO UPDATE SET configuration = EXCLUDED.configuration, updated_at = NOW()`,
+        [tenantId, RAGNAROK_ORIGIN_ID, JSON.stringify(game)]
+      );
+    }
+    setCachedConfig(tenantId, mergeGameConfiguration(
+      pickWorkspaceConfig(configuration),
+      omitWorkspaceConfig(configuration),
+      RAGNAROK_ORIGIN_ID,
+    ), RAGNAROK_ORIGIN_ID);
+  }
   if (discordChannels) setCachedChannels(tenantId, discordChannels);
 }
 
 export async function loadTenantSettings(tenantId) {
-  if (!tenantId) return { configuration: { ...DEFAULT_CONFIGURATION }, discordChannels: {} };
-  const { rows } = await query(
-    'SELECT configuration, discord_channels FROM tenant_settings WHERE tenant_id = $1',
-    [String(tenantId)]
-  );
-  const configuration = rows[0]?.configuration
-    ? { ...DEFAULT_CONFIGURATION, ...rows[0].configuration }
-    : { ...DEFAULT_CONFIGURATION };
-  const discordChannels = rows[0]?.discord_channels || {};
-  setCachedConfig(tenantId, configuration);
+  if (!tenantId) {
+    return { configuration: { ...DEFAULT_CONFIGURATION }, discordChannels: {} };
+  }
+  const [wsRes, gameRes] = await Promise.all([
+    query(
+      'SELECT configuration, discord_channels FROM tenant_settings WHERE tenant_id = $1',
+      [String(tenantId)]
+    ),
+    query(
+      'SELECT configuration FROM game_settings WHERE tenant_id = $1 AND game_id = $2',
+      [String(tenantId), RAGNAROK_ORIGIN_ID]
+    ),
+  ]);
+  const stored = wsRes.rows[0]?.configuration || {};
+  const workspace = pickWorkspaceConfig(stored);
+  const leftover = omitWorkspaceConfig(stored);
+  const gameRow = gameRes.rows[0]?.configuration;
+  const game = gameRow && Object.keys(gameRow).length ? gameRow : leftover;
+  const configuration = mergeGameConfiguration(workspace, game, RAGNAROK_ORIGIN_ID);
+  const discordChannels = wsRes.rows[0]?.discord_channels || {};
+  setCachedConfig(tenantId, configuration, RAGNAROK_ORIGIN_ID);
   setCachedChannels(tenantId, discordChannels);
   return { configuration, discordChannels };
 }
@@ -225,13 +266,22 @@ export async function forEachOnboardedTenant(fn) {
       } else {
         ({ configuration, discordChannels } = await loadTenantSettings(tenant.id));
       }
-      setCachedConfig(tenant.id, configuration);
+      setCachedConfig(tenant.id, configuration, RAGNAROK_ORIGIN_ID);
       setCachedChannels(tenant.id, mergeChannelFallback(discordChannels));
       await runWithTenant(tenant.id, () => fn(tenant));
     } catch (err) {
       console.error(`⚠️ Tenant job failed for ${tenant.id}:`, err.message);
     }
   }
+}
+
+export async function forEachEnabledGameTenant(gameId, fn) {
+  const wanted = String(gameId || '');
+  await forEachOnboardedTenant(async (tenant) => {
+    const enabled = parseEnabledGames(tenant.enabled_games);
+    if (!enabled.includes(wanted)) return;
+    await runWithGame(wanted, () => fn(tenant));
+  });
 }
 
 export function mergeChannelFallback(fromDb) {

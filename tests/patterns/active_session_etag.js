@@ -45,6 +45,12 @@ vi.mock('../../backend/src/db/database.js', async (importOriginal) => {
     ...actual,
     getTenantStore: () => storeHolder.store,
     loadAuctionRequests: async () => ({}),
+    loadMembersByIds: async (ids) => {
+      const members = storeHolder.store?.members?.() || {};
+      const out = {};
+      for (const id of ids || []) if (members[id]) out[id] = members[id];
+      return out;
+    },
   };
 });
 

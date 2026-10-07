@@ -289,6 +289,7 @@ const [rawMembers, setRawMembers] = useState({});
     if (s.sidebarTab) setSidebarTab(s.sidebarTab);
     if (s.isDiscordGateOpen !== undefined) setIsDiscordGateOpen(s.isDiscordGateOpen);
     if (s.autoCommitArmed !== undefined) setAutoCommitArmed(s.autoCommitArmed);
+    if (s.members) setRawMembers((prev) => ({ ...prev, ...s.members }));
   };
 
   const pushActiveSessionToBackend = async (updatedWorkspaceSnapshot) => {

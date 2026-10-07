@@ -835,16 +835,16 @@ TITLE: Games catalog (REQ-ROO-039 .. REQ-ROO-048)
 [REQUIREMENT]
 UID: REQ-ROO-039
 STATUS: Active
-TITLE: REQ-ROO-039: Known games: `adventurer-guild`, `ragnarok-origin` only.
+TITLE: REQ-ROO-039: Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
 STATEMENT: >>>
-Known games: `adventurer-guild`, `ragnarok-origin` only.
+Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
 <<<
 COMMENT: >>>
 domain: Games catalog
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Known games: `adventurer-guild`, `ragnarok-origin` only.
+acceptance_criteria: Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
 source_draft: D-REQ-039
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -3481,14 +3481,14 @@ UID: REQ-ROO-158
 STATUS: Active
 TITLE: REQ-ROO-158: Every operational row is stamped with `tenant_id`; tenant middleware runs handle
 STATEMENT: >>>
-Every operational row is stamped with `tenant_id`; tenant middleware runs handlers inside `runWithTenant`.
+Every operational row is stamped with `tenant_id`; game-scoped operational rows are also stamped with `game_id`. Tenant middleware runs handlers inside `runWithTenant`; `requireGame` sets ALS `gameId`.
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Every operational row is stamped with `tenant_id`; tenant middleware runs handlers inside `runWithTenant`.
+acceptance_criteria: Every operational row is stamped with `tenant_id`; game-scoped operational rows are also stamped with `game_id`. Tenant middleware runs handlers inside `runWithTenant`; `requireGame` sets ALS `gameId`.
 source_draft: D-REQ-158
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -3523,14 +3523,14 @@ UID: REQ-ROO-160
 STATUS: Active
 TITLE: REQ-ROO-160: Postgres tables: tenants, invite_codes, tenant_settings, members, auction_reques
 STATEMENT: >>>
-Postgres tables: tenants, invite_codes, tenant_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+Postgres tables: tenants, invite_codes, tenant_settings, game_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Postgres tables: tenants, invite_codes, tenant_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+acceptance_criteria: Postgres tables: tenants, invite_codes, tenant_settings, game_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
 source_draft: D-REQ-160
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -3544,14 +3544,14 @@ UID: REQ-ROO-161
 STATUS: Active
 TITLE: REQ-ROO-161: Flexible trees (compositions, live_session, auction session, highlights, etc.) p
 STATEMENT: >>>
-Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id,path)` Firebase-compatible store API.
+Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id, game_id, path)` Firebase-compatible store API.
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id,path)` Firebase-compatible store API.
+acceptance_criteria: Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id, game_id, path)` Firebase-compatible store API.
 source_draft: D-REQ-161
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -3795,5 +3795,154 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-042
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Ragnarok 3 (REQ-R3-001 .. REQ-R3-008)
+
+[REQUIREMENT]
+UID: REQ-R3-001
+STATUS: Active
+TITLE: REQ-R3-001: `ragnarok-3` is a known Game Stack pack enabled independently on the same Discord tenant.
+STATEMENT: >>>
+`ragnarok-3` is a known Game Stack pack. Officers enable it on the same Discord tenant as Origin or Adventurer Guild. Enable/disable hides access and keeps stored R3 rows.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: `ragnarok-3` is a known Game Stack pack. Officers enable it on the same Discord tenant as Origin or Adventurer Guild. Enable/disable hides access and keeps stored R3 rows.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-R3-002
+STATUS: Active
+TITLE: REQ-R3-002: Game-scoped operational rows are `(tenant_id, game_id, …)`; R3 writes `game_id=ragnarok-3`.
+STATEMENT: >>>
+Members, auction tables, commitments, schedule rows, json_docs, and `game_settings` are keyed by `(tenant_id, game_id, …)`. Ragnarok 3 reads and writes only `game_id=ragnarok-3`. Workspace keys stay on `tenant_settings`.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: Members, auction tables, commitments, schedule rows, json_docs, and `game_settings` are keyed by `(tenant_id, game_id, …)`. Ragnarok 3 reads and writes only `game_id=ragnarok-3`. Workspace keys stay on `tenant_settings`.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-039
+
+[REQUIREMENT]
+UID: REQ-R3-003
+STATUS: Active
+TITLE: REQ-R3-003: The same `discord_id` may have Origin and R3 `members` rows.
+STATEMENT: >>>
+A Discord user can have two `members` rows on one tenant: one with `game_id=ragnarok-origin` and one with `game_id=ragnarok-3`.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: A Discord user can have two `members` rows on one tenant: one with `game_id=ragnarok-origin` and one with `game_id=ragnarok-3`.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-R3-004
+STATUS: Active
+TITLE: REQ-R3-004: R3 Game Settings live in `game_settings` for `ragnarok-3` and must not mutate Origin.
+STATEMENT: >>>
+R3 settings save writes `game_settings(tenant_id, ragnarok-3)` only. It must not mutate Origin `game_settings` or workspace-only keys on `tenant_settings`.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: R3 settings save writes `game_settings(tenant_id, ragnarok-3)` only. It must not mutate Origin `game_settings` or workspace-only keys on `tenant_settings`.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-R3-005
+STATUS: Active
+TITLE: REQ-R3-005: `/api/ragnarok-3` requires `requireGame(ragnarok-3)`; Origin APIs cannot read R3 json_docs.
+STATEMENT: >>>
+Mounted `/api/ragnarok-3` requires `requireGame('ragnarok-3')` else 403 `game_required`. Origin mounts set `gameId=ragnarok-origin` and cannot see R3-stamped json_docs or members.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: Mounted `/api/ragnarok-3` requires `requireGame('ragnarok-3')` else 403 `game_required`. Origin mounts set `gameId=ragnarok-origin` and cannot see R3-stamped json_docs or members.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-012
+
+[REQUIREMENT]
+UID: REQ-R3-006
+STATUS: Active
+TITLE: REQ-R3-006: R3 SPA lives under `/games/ragnarok-3` with no setupPath; `gameIdForPath` matches R3 first.
+STATEMENT: >>>
+R3 has `pathPrefix` `/games/ragnarok-3`, `settingsPath` `/games/ragnarok-3/settings`, and no `setupPath`. `gameIdForPath` returns `ragnarok-3` for those routes and must not fall through to Origin.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: R3 has `pathPrefix` `/games/ragnarok-3`, `settingsPath` `/games/ragnarok-3/settings`, and no `setupPath`. `gameIdForPath` returns `ragnarok-3` for those routes and must not fall through to Origin.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-R3-007
+STATUS: Active
+TITLE: REQ-R3-007: R3 calendar is R3-only and is not registered in scheduleContributors.
+STATEMENT: >>>
+R3 week instances, special events, and commitments use game-stamped schedule tables. R3 must not register a schedule contributor that would leak into Adventurer Guild events.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: R3 week instances, special events, and commitments use game-stamped schedule tables. R3 must not register a schedule contributor that would leak into Adventurer Guild events.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
+
+[REQUIREMENT]
+UID: REQ-R3-008
+STATUS: Active
+TITLE: REQ-R3-008: R3 v1 is web-only: no Discord channel map, voice presence, or Origin war automation.
+STATEMENT: >>>
+Ragnarok 3 v1 does not write `discord_channels` auction/war maps, does not poll Discord voice, and does not run Origin war-room automation or Discord deploy cards.
+<<<
+COMMENT: >>>
+domain: Ragnarok 3
+priority: must
+type: system
+acceptance_criteria: Ragnarok 3 v1 does not write `discord_channels` auction/war maps, does not poll Discord voice, and does not run Origin war-room automation or Discord deploy cards.
+ssot_status: published
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-011
 
 [[/SECTION]]

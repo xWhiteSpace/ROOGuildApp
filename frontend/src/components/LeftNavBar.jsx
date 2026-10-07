@@ -161,7 +161,10 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
     if (!game || helpGuides.length === 0) return undefined;
     const fetchHelpUrl = async () => {
       try {
-        const res = await apiFetch('/api/requests/settings/help', { method: 'GET' });
+        const res = await apiFetch(
+          game?.id === 'ragnarok-3' ? '/api/ragnarok-3/settings/help' : '/api/requests/settings/help',
+          { method: 'GET' }
+        );
         const data = await res.json();
         if (data.success) {
           setAuctionHelpUrl(data.helpEmbedUrl || '');

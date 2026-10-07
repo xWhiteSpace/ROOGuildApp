@@ -7,7 +7,7 @@ import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { gameSetupMap, isKnownGame, parseEnabledGames, RAGNAROK_ORIGIN_ID, setupPathForGame } from '../games/catalog.js';
 import { botInviteUrl, clearGuildCommands } from '../discord-bot/deployGuild.js';
 import { discordClient } from '../discord-bot/client.js';
-import { runWithTenant } from '../db/tenantContext.js';
+import { runWithGame, runWithTenant } from '../db/tenantContext.js';
 import { getTenantStore } from '../db/database.js';
 import { deleteGuildLogo, LOGO_MAX_BYTES, resolveGuildLogoUrl, uploadGuildLogo } from '../services/guildLogo.js';
 import { discordGuildsForRequest } from '../db/oauthGuilds.js';
@@ -119,11 +119,14 @@ async function buildSessionUser(req, tenantId, baseUser) {
   };
 
   await runWithTenant(tenantId, async () => {
-    const db = getTenantStore();
-    await db.ref(`auction/members/${user.id}`).update({
-      displayName: user.displayName,
-      ...(roleNames.length ? { roles: roleNames } : {}),
-      syncedAt: new Date().toLocaleDateString('en-US', { timeZone: configuration.timezone || 'Asia/Manila' }),
+    if (!enabledGames.includes(RAGNAROK_ORIGIN_ID)) return;
+    await runWithGame(RAGNAROK_ORIGIN_ID, async () => {
+      const db = getTenantStore();
+      await db.ref(`auction/members/${user.id}`).update({
+        displayName: user.displayName,
+        ...(roleNames.length ? { roles: roleNames } : {}),
+        syncedAt: new Date().toLocaleDateString('en-US', { timeZone: configuration.timezone || 'Asia/Manila' }),
+      });
     });
   });
 

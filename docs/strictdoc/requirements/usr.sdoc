@@ -228,15 +228,15 @@ UID: USR-ROO-011
 STATUS: Active
 TITLE: Known games and enable/disable
 STATEMENT: >>>
-Officers need: Known games and enable/disable. Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+Officers need: Known games and enable/disable. Enable/disable adventurer-guild, ragnarok-origin, and ragnarok-3 without deleting data.
 <<<
 RATIONALE: >>>
-Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+Enable/disable adventurer-guild, ragnarok-origin, and ragnarok-3 without deleting data.
 <<<
 COMMENT: >>>
 domain: Games catalog
 who: Officers
-why: Enable/disable adventurer-guild and ragnarok-origin without deleting data.
+why: Enable/disable adventurer-guild, ragnarok-origin, and ragnarok-3 without deleting data.
 spoken_constraints: active subscription to enable
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07

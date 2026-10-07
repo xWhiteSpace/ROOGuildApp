@@ -68,7 +68,7 @@ function seed({ members = true, session } = {}) {
   storeHolder.store = createMemoryTenantStore({
     settings: { configuration: CONFIG },
     auction: {
-      members: members ? { '111': { displayName: 'Ada', status: 'Active' } } : {},
+      members: members ? { '111': { displayName: 'Stale', status: 'Active' } } : {},
       web_requests: {},
       active_session: session || baseSession(),
     },
@@ -101,7 +101,13 @@ export async function openGateClaimUpdatesSession() {
     const { interaction, replies } = makeInteraction({ customId: 'claim_slot_btn_0_item_puppet' });
     await runWithTenant(TENANT_ID, () => handleAuctionInteraction(interaction));
     const after = storeHolder.store.activeSession();
-    return { before, after, replies, claimed: after?.categoryAllocations?.puppet?.selected?.[0] };
+    return {
+      before,
+      after,
+      replies,
+      claimed: after?.categoryAllocations?.puppet?.selected?.[0],
+      members: storeHolder.store.members(),
+    };
   });
 }
 

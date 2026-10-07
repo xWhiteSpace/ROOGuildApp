@@ -320,7 +320,12 @@ export const patterns = {
   "onboarding_hub_payload": "unused",
   "onboarding_topic_payload": "unused",
   "onboarding_ack": "unused",
-  "deploy_onboarding_card": "unused",
+  "r3_game_required": "unused",
+  "r3_dual_roster": "unused",
+  "r3_settings_split": "unused",
+  "r3_game_id_stamp": "unused",
+  "r3_path_catalog": "unused",
+  "r3_no_schedule_contributor": "unused",
 };
 
 export function patternStatus(name) {

@@ -1,0 +1,1043 @@
+// backend/src/api/liveRaid.routes.js
+import { Router } from 'express';
+import {
+  getTenantStore,
+  incrementLiveSessionPulse,
+  loadLiveSessionPulseMeta,
+  loadSessionArchive,
+  touchSessionArchiveIndex,
+} from '../db/database.js';
+import { getCachedConfig, getCurrentTenantId, runWithTenant } from '../db/tenantContext.js';
+import { discordClient } from '../discord-bot/client.js';
+import { resolveUserIdentity } from '../auth/identity.js';
+import {
+  resolveWarRoomChannelIds,
+  inferWarRoomRelationalIds,
+  fetchVoiceChannelPresentUids
+} from '../games/ragnarok-3/utils/warRoomResolver.js';
+import { isDiscordCircuitOpen, getDiscordRateLimitStatus } from '../utils/discordRateLimit.js';
+import {
+  findCrossTabDuplicates,
+  isSlotCoordKey,
+} from '@guildname/shared/compositionTabs';
+import { isArchivedRsvp, normalizeCommitmentStatus } from '@guildname/shared/attendanceStatus';
+import { checkOfficer } from '../auth/officer.js';
+import { buildCompositeKey } from '../utils/guildTime.js';
+import { consumePendingInGameStatus, setInGameStatusFlag } from '../games/ragnarok-3/services/inGameStatus.js';
+
+const router = Router();
+
+async function verifyDiscordOfficerRole(req, allowedRoles = []) {
+  const { user, ok } = await checkOfficer(req, { adminRoles: allowedRoles });
+  return Boolean(user && ok);
+}
+
+// Timezone End Timestamp Parser
+function getPhase3EndTimestamp(eventDate, timezone, phase3) {
+  const [year, month, day] = eventDate.split('-').map(Number);
+  const [hours, minutes] = (phase3.timeEnd || "22:15").split(':').map(Number);
+  
+  let dayOffset = 0;
+  const dayStart = parseInt(phase3.dayStart, 10) || 0;
+  const dayEnd = parseInt(phase3.dayEnd, 10) || 0;
+  if (dayEnd > dayStart) {
+    dayOffset = dayEnd - dayStart;
+  } else if (dayEnd < dayStart) {
+    dayOffset = (dayEnd + 7) - dayStart;
+  }
+
+  // Establish target wall-clock parameters directly as an immutable UTC baseline frame
+  const wallClockUtc = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+  
+  // Calculate the true timezone offset variance using native local string parsers
+  let offsetMs = 0;
+  try {
+    const formatProxy = new Date(wallClockUtc.getTime());
+    const tzString = formatProxy.toLocaleString("en-US", { timeZone: timezone });
+    const tzParsed = new Date(tzString);
+    offsetMs = tzParsed.getTime() - formatProxy.getTime();
+  } catch (err) {
+    console.error("Deterministic timezone structural offset parsing exception caught:", err);
+  }
+
+  // Shifting backwards via absolute numeric millisecond integers fixes runtime host drift completely
+  let targetMs = wallClockUtc.getTime() - offsetMs;
+
+  if (dayOffset > 0) {
+    targetMs += dayOffset * 24 * 60 * 60 * 1000;
+  }
+  return targetMs;
+}
+
+async function loadWarRoomsCatalog(db) {
+  const cached = getCachedConfig();
+  if (cached?.warRooms) return cached.warRooms;
+  const configSnap = await db.ref('settings/configuration').once('value');
+  return configSnap.exists() ? (configSnap.val().warRooms || {}) : {};
+}
+
+/** In-process pulse snapshot: last VC set + tiny session keys. Grids stay in Postgres. */
+const pulseMemory = {
+  lastPresent: [],
+  lastPollTs: 0,
+  monitoringEndsAt: null,
+  selectedWarRooms: [],
+  selectedWarRoomIds: [],
+  status: null,
+};
+
+function rememberPulseContext(sessionLike = {}) {
+  if (sessionLike.status != null) pulseMemory.status = sessionLike.status;
+  if (sessionLike.monitoringEndsAt != null) pulseMemory.monitoringEndsAt = sessionLike.monitoringEndsAt;
+  if (Array.isArray(sessionLike.selectedWarRooms)) pulseMemory.selectedWarRooms = sessionLike.selectedWarRooms;
+  if (Array.isArray(sessionLike.selectedWarRoomIds)) pulseMemory.selectedWarRoomIds = sessionLike.selectedWarRoomIds;
+  if (Array.isArray(sessionLike.lastVoicePoll?.presentUids) && pulseMemory.lastPresent.length === 0) {
+    pulseMemory.lastPresent = sessionLike.lastVoicePoll.presentUids.map(String);
+  }
+  if (sessionLike.lastVoicePoll?.timestamp) pulseMemory.lastPollTs = sessionLike.lastVoicePoll.timestamp;
+}
+
+function clearPulseMemory() {
+  pulseMemory.lastPresent = [];
+  pulseMemory.lastPollTs = 0;
+  pulseMemory.monitoringEndsAt = null;
+  pulseMemory.selectedWarRooms = [];
+  pulseMemory.selectedWarRoomIds = [];
+  pulseMemory.status = null;
+}
+
+function diffPresentUids(previous, current) {
+  const prev = new Set((previous || []).map(String));
+  const next = [...new Set((current || []).map(String))];
+  return {
+    present: next,
+    entered: next.filter((uid) => !prev.has(uid)),
+    left: [...prev].filter((uid) => !next.includes(uid)),
+  };
+}
+
+async function ensurePulseMeta() {
+  if (
+    pulseMemory.status === 'Active'
+    && (pulseMemory.selectedWarRooms.length || pulseMemory.selectedWarRoomIds.length)
+  ) {
+    return {
+      status: pulseMemory.status,
+      monitoringEndsAt: pulseMemory.monitoringEndsAt,
+      selectedWarRooms: pulseMemory.selectedWarRooms,
+      selectedWarRoomIds: pulseMemory.selectedWarRoomIds,
+    };
+  }
+  const meta = await loadLiveSessionPulseMeta();
+  if (meta) rememberPulseContext(meta);
+  return meta;
+}
+
+async function normalizeLiveSessionWarRooms(db, session) {
+  if (!session) return session;
+
+  const warRooms = await loadWarRoomsCatalog(db);
+  const sourceIdentifiers = [
+    ...(session.selectedWarRoomIds || []),
+    ...(session.selectedWarRooms || [])
+  ];
+
+  const resolvedChannelIds = resolveWarRoomChannelIds(sourceIdentifiers, warRooms);
+  if (resolvedChannelIds.length === 0) return session;
+
+  const hasLegacyWarRoomRefs = (session.selectedWarRooms || []).some(
+    (id) => !/^\d{17,20}$/.test(String(id))
+  );
+
+  const normalizedSession = {
+    ...session,
+    selectedWarRooms: resolvedChannelIds,
+    selectedWarRoomIds: session.selectedWarRoomIds?.length
+      ? session.selectedWarRoomIds
+      : inferWarRoomRelationalIds(session.selectedWarRooms || [], warRooms)
+  };
+
+  if (hasLegacyWarRoomRefs || !session.selectedWarRoomIds?.length) {
+    await db.ref('attendance/live_session').update({
+      selectedWarRooms: normalizedSession.selectedWarRooms,
+      selectedWarRoomIds: normalizedSession.selectedWarRoomIds
+    });
+  }
+
+  return normalizedSession;
+}
+
+async function pollLiveSessionVoicePresence(_session) {
+  return [];
+}
+
+/**
+ * One voice-presence pulse: increment totalPulses and tally everyone currently in VC.
+ * Does not SELECT live_session grids. Archive is the one full-session read.
+ */
+async function runPulseOnce(pollIntervalMs, monitoringEndsAt) {
+  if (isDiscordCircuitOpen()) {
+    console.log('⏭️ [live-raid] Discord circuit open — skipping voice pulse.');
+    return { stop: false, skipped: true };
+  }
+
+  const meta = await ensurePulseMeta();
+  if (!meta || meta.status !== 'Active') {
+    return { stop: true, reason: 'inactive' };
+  }
+
+  const endTs = monitoringEndsAt || meta.monitoringEndsAt || pulseMemory.monitoringEndsAt;
+  if (endTs && Date.now() >= endTs) {
+    console.log("⏰ Monitoring window ended. Auto-ending the Live Raid and archiving session.");
+    const db = getTenantStore();
+    const activeSnap = await db.ref('attendance/live_session').once('value');
+    const s = activeSnap.exists() ? activeSnap.val() : null;
+    if (s?.status === 'Active') {
+      await endLiveRaidSessionInternal(s).catch((err) => {
+        console.error('[live-raid] auto-end on window close failed:', err.message);
+      });
+    }
+    return { stop: true, reason: 'ended' };
+  }
+
+  const now = Date.now();
+  const minGapMs = Math.max(3000, Math.floor(pollIntervalMs / 2));
+  if (pulseMemory.lastPollTs && (now - pulseMemory.lastPollTs) < minGapMs) {
+    return { stop: false, skipped: true };
+  }
+
+  const { totalPulses: nextTotalPulses, presentUserIds } = await applyPulseTally();
+
+  console.log(
+    `[live-raid] pulse #${nextTotalPulses} — present=${presentUserIds.length} channels=${(pulseMemory.selectedWarRooms || []).length}`,
+    presentUserIds
+  );
+  return { stop: false, pulse: nextTotalPulses, present: presentUserIds.length };
+}
+
+/**
+ * Scan VC presence for the given (already war-room-normalized) session, increment
+ * totalPulses, tally present members, and persist. Shared by the interval ticker
+ * and the final capture pulse fired when an officer ends monitoring early.
+ */
+async function applyPulseTally(sessionHint = {}) {
+  rememberPulseContext(sessionHint);
+  const presentUserIds = await pollLiveSessionVoicePresence({
+    selectedWarRooms: pulseMemory.selectedWarRooms,
+    selectedWarRoomIds: pulseMemory.selectedWarRoomIds,
+  });
+  const { entered, left, present } = diffPresentUids(pulseMemory.lastPresent, presentUserIds);
+  const channelCount = (pulseMemory.selectedWarRooms || []).length
+    || (pulseMemory.selectedWarRoomIds || []).length;
+  const { totalPulses, userTallies, lastVoicePoll } = await incrementLiveSessionPulse({
+    presentUids: present,
+    entered,
+    left,
+    channelCount,
+  });
+  pulseMemory.lastPresent = present;
+  pulseMemory.lastPollTs = lastVoicePoll.timestamp;
+  return { totalPulses, userTallies, presentUserIds: present, lastVoicePoll };
+}
+
+/**
+ * Record one closing pulse when an officer ends the raid before the scheduled
+ * monitoring end. Skipped if monitoring never started, or if a pulse was just
+ * taken (dedupe guard) to avoid double-counting the same window.
+ */
+async function captureFinalMonitoringPulse(db, s) {
+  const now = Date.now();
+  const monStart = Number(s.monitoringStartsAt) || 0;
+  if (!monStart || now < monStart) return s; // monitoring never started
+
+  const pollIntervalMs = Math.max(15, Number(s.pollIntervalMinutes) || 15) * 60 * 1000;
+  const minGapMs = Math.max(3000, Math.floor(pollIntervalMs / 2));
+  if (s.lastVoicePoll?.timestamp && (now - s.lastVoicePoll.timestamp) < minGapMs) {
+    return s; // a pulse was just recorded — don't double count
+  }
+
+  try {
+    const normalized = await normalizeLiveSessionWarRooms(db, s);
+    const { totalPulses, userTallies } = await applyPulseTally(normalized);
+    console.log(`[live-raid] final capture pulse on early end — total=${totalPulses}`);
+    return { ...normalized, totalPulses, userTallies };
+  } catch (err) {
+    console.error('[live-raid] final capture pulse failed:', err.message);
+    return s;
+  }
+}
+
+/**
+ * Start the voice-presence polling ticker.
+ * Fires one pulse immediately, then every pollIntervalMs.
+ * tenantId is captured at arm time so interval ticks keep ALS after the HTTP/bot context ends.
+ */
+function startTicker(pollIntervalMs, monitoringEndsAt, tenantId) {
+  if (global.liveRaidIntervalTicker) {
+    clearInterval(global.liveRaidIntervalTicker);
+    global.liveRaidIntervalTicker = undefined;
+  }
+
+  let pulseInFlight = false;
+  const tick = async () => {
+    if (pulseInFlight) return;
+    pulseInFlight = true;
+    try {
+      const run = async () => {
+        const result = await runPulseOnce(pollIntervalMs, monitoringEndsAt);
+        if (result.stop) {
+          if (global.liveRaidIntervalTicker) {
+            clearInterval(global.liveRaidIntervalTicker);
+            global.liveRaidIntervalTicker = undefined;
+          }
+        }
+      };
+      if (tenantId) await runWithTenant(tenantId, run);
+      else await run();
+    } catch (err) {
+      console.error("⚠️ Ticker error:", err.message);
+    } finally {
+      pulseInFlight = false;
+    }
+  };
+
+  // Immediate first pulse — do not wait a full interval (was causing 0 pulses on short windows)
+  tick();
+  global.liveRaidIntervalTicker = setInterval(tick, pollIntervalMs);
+}
+
+/** Clear existing tickers, then start or schedule monitoring based on start/end times.
+ *  Writes monitoringTickerStatus to Firebase so the UI can show armed/scheduled/ended from DB.
+ */
+function armMonitoringSchedule(startsAt, endsAt, intervalMins) {
+  const db = getTenantStore();
+  const tenantId = getCurrentTenantId();
+
+  if (global.liveRaidIntervalTicker) {
+    clearInterval(global.liveRaidIntervalTicker);
+    global.liveRaidIntervalTicker = undefined;
+  }
+  if (global.monitoringSchedulerTicker) {
+    clearInterval(global.monitoringSchedulerTicker);
+    global.monitoringSchedulerTicker = undefined;
+  }
+
+  const safeIntervalMins = Math.max(15, Number(intervalMins) || 15);
+  const pollIntervalMs = safeIntervalMins * 60 * 1000;
+  const now = Date.now();
+  pulseMemory.monitoringEndsAt = endsAt;
+
+  if (now >= endsAt) {
+    console.log(`⏹  Monitoring window already ended (now=${now}, endsAt=${endsAt}) — not starting ticker.`);
+    db.ref('attendance/live_session').update({
+      monitoringTickerStatus: 'ended',
+      monitoringTickerNote: 'Window already ended when armed — no pulses will be recorded.',
+    }).catch(() => {});
+    return { armed: false, reason: 'ended' };
+  }
+
+  if (now >= startsAt) {
+    console.log(`▶️  Monitoring start reached — starting ticker (interval=${safeIntervalMins}m).`);
+    db.ref('attendance/live_session').update({
+      monitoringTickerStatus: 'running',
+      monitoringTickerNote: `Ticker started at ${new Date().toISOString()}`,
+    }).catch(() => {});
+    startTicker(pollIntervalMs, endsAt, tenantId);
+    return { armed: true, reason: 'running' };
+  }
+
+  console.log(`⏳ Scheduling monitoring ticker for ${new Date(startsAt).toISOString()} (interval=${safeIntervalMins}m)`);
+  db.ref('attendance/live_session').update({
+    monitoringTickerStatus: 'scheduled',
+    monitoringTickerNote: `Waiting until ${new Date(startsAt).toISOString()}`,
+  }).catch(() => {});
+
+  global.monitoringSchedulerTicker = setInterval(() => {
+    const fire = () => {
+      if (Date.now() < startsAt) return;
+      console.log(`▶️  Monitoring start time reached — starting ticker.`);
+      clearInterval(global.monitoringSchedulerTicker);
+      global.monitoringSchedulerTicker = undefined;
+      if (Date.now() < endsAt) {
+        db.ref('attendance/live_session').update({
+          monitoringTickerStatus: 'running',
+          monitoringTickerNote: `Ticker started at ${new Date().toISOString()}`,
+        }).catch(() => {});
+        startTicker(pollIntervalMs, endsAt, tenantId);
+      } else {
+        db.ref('attendance/live_session').update({
+          monitoringTickerStatus: 'ended',
+          monitoringTickerNote: 'Start reached but end already passed.',
+        }).catch(() => {});
+      }
+    };
+    if (tenantId) runWithTenant(tenantId, fire);
+    else fire();
+  }, 15 * 1000);
+
+  return { armed: true, reason: 'scheduled' };
+}
+
+/** 'unknown' until the first read. 'absent' skips further reads. 'active' means a session is live. */
+let liveSessionWatch = 'unknown';
+
+export function getLiveSessionWatch() {
+  return liveSessionWatch;
+}
+
+export function noteLiveSessionStarted() {
+  liveSessionWatch = 'active';
+}
+
+export function noteLiveSessionCleared() {
+  liveSessionWatch = 'absent';
+  clearPulseMemory();
+}
+
+/**
+ * Re-arm monitoring after backend restart if an Active live_session still has a schedule.
+ * Tickers live only in memory — without this, pulses stop permanently after a restart.
+ */
+export async function resumeLiveRaidMonitoringIfNeeded() {
+  try {
+    const meta = await loadLiveSessionPulseMeta();
+    if (!meta || meta.status !== 'Active') return;
+    rememberPulseContext(meta);
+
+    if (!meta.monitoringStartsAt || !meta.monitoringEndsAt || !meta.pollIntervalMinutes) {
+      console.log('[live-raid] Active session found but no monitoring schedule — nothing to resume.');
+      return;
+    }
+    if (Date.now() > Number(meta.monitoringEndsAt)) {
+      console.log('[live-raid] Active session monitoring window already ended while offline — auto-ending + archiving now.');
+      const db = getTenantStore();
+      const snap = await db.ref('attendance/live_session').once('value');
+      if (snap.exists()) {
+        await endLiveRaidSessionInternal(snap.val()).catch((err) => {
+          console.error('[live-raid] auto-end on boot failed:', err.message);
+        });
+      }
+      return;
+    }
+
+    console.log('[live-raid] Resuming monitoring ticker from active live_session…');
+    armMonitoringSchedule(meta.monitoringStartsAt, meta.monitoringEndsAt, meta.pollIntervalMinutes);
+  } catch (err) {
+    console.error('[live-raid] Failed to resume monitoring:', err.message);
+  }
+}
+
+function parseMonitoringFields(body = {}) {
+  const { monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes } = body;
+  if (monitoringStartsAt == null && monitoringEndsAt == null && pollIntervalMinutes == null) {
+    return { ok: true, monitoring: null };
+  }
+  if (monitoringStartsAt == null || monitoringEndsAt == null || pollIntervalMinutes == null) {
+    return { ok: false, error: 'monitoringStartsAt, monitoringEndsAt, and pollIntervalMinutes are all required when setting monitoring.' };
+  }
+  const startsAt = Number(monitoringStartsAt);
+  const endsAt = Number(monitoringEndsAt);
+  const intervalMins = Math.max(15, Number(pollIntervalMinutes));
+  if (isNaN(startsAt) || isNaN(endsAt) || isNaN(intervalMins) || intervalMins < 15) {
+    return { ok: false, error: 'Invalid monitoring time values. pollIntervalMinutes must be at least 15.' };
+  }
+  if (endsAt <= startsAt) {
+    return { ok: false, error: 'monitoringEndsAt must be after monitoringStartsAt.' };
+  }
+  return {
+    ok: true,
+    monitoring: {
+      monitoringStartsAt: startsAt,
+      monitoringEndsAt: endsAt,
+      pollIntervalMinutes: intervalMins,
+    },
+  };
+}
+
+/**
+ * Create an Active live_session from a published snapshot. Used by officer POST /create
+ * and by War Room automation (no HTTP-to-self).
+ */
+export async function createLiveRaidFromPublished({
+  publishedId,
+  selectedWarRoomIds,
+  monitoringStartsAt,
+  monitoringEndsAt,
+  pollIntervalMinutes,
+  launchedBy = 'War Room',
+}) {
+  const db = getTenantStore();
+  const activeSnap = await db.ref('attendance/live_session').once('value');
+  if (activeSnap.exists()) {
+    if (activeSnap.val()?.status === 'Active') noteLiveSessionStarted();
+    return { ok: false, error: 'An active Live Raid session is already running.' };
+  }
+  if (!publishedId || !selectedWarRoomIds?.length) {
+    return { ok: false, error: 'Published composition and at least one war room are required.' };
+  }
+
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const settingsObj = configSnap.exists() ? configSnap.val() : {};
+  const resolvedWarRoomChannelIds = resolveWarRoomChannelIds(
+    selectedWarRoomIds,
+    settingsObj.warRooms || {}
+  );
+  if (resolvedWarRoomChannelIds.length === 0) {
+    return { ok: false, error: 'No valid Discord war room channels resolved. Map voice channel IDs in Settings.' };
+  }
+
+  const publishedSnap = await db.ref(`attendance/published/${publishedId}`).once('value');
+  if (!publishedSnap.exists()) {
+    return { ok: false, error: 'Active composition not found.' };
+  }
+  const published = publishedSnap.val();
+  const gridsPayload = published.grids || {};
+  const selectedGridIds = Array.isArray(published.selectedGridIds) && published.selectedGridIds.length > 0
+    ? published.selectedGridIds
+    : Object.keys(gridsPayload);
+  if (selectedGridIds.length === 0) {
+    return { ok: false, error: 'Selected composition has no Grid Tabs.' };
+  }
+
+  const duplicates = findCrossTabDuplicates(gridsPayload);
+  if (duplicates.length > 0) {
+    return {
+      ok: false,
+      error: `Cannot start Live Raid: composition has ${duplicates.length} member(s) assigned in multiple Grid Tabs.`,
+      duplicates,
+    };
+  }
+
+  const parsedMon = parseMonitoringFields({ monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes });
+  if (!parsedMon.ok) {
+    return { ok: false, error: parsedMon.error };
+  }
+
+  const eventKey = published.eventKey;
+  const eventDate = published.eventDate;
+  const eventTitle = published.eventTitle || published.eventKey || 'Raid Session';
+  const configId = published.configId || selectedGridIds[0];
+
+  const sessionPayload = {
+    status: 'Active',
+    launchedBy,
+    startedAt: Date.now(),
+    publishedId,
+    eventKey,
+    eventDate,
+    eventTitle,
+    selectedConfigId: configId,
+    selectedConfigIds: selectedGridIds,
+    selectedWarRoomIds,
+    selectedWarRooms: resolvedWarRoomChannelIds,
+    grids: gridsPayload,
+    totalPulses: 0,
+    userTallies: {},
+    version: 2,
+    ...(parsedMon.monitoring || {}),
+  };
+
+  await db.ref('attendance/live_session').set(sessionPayload);
+  rememberPulseContext(sessionPayload);
+  noteLiveSessionStarted();
+
+  if (parsedMon.monitoring) {
+    armMonitoringSchedule(
+      parsedMon.monitoring.monitoringStartsAt,
+      parsedMon.monitoring.monitoringEndsAt,
+      parsedMon.monitoring.pollIntervalMinutes
+    );
+  }
+
+  return { ok: true, session: sessionPayload };
+}
+
+// Internal end live raid handler
+async function endLiveRaidSessionInternal(s) {
+  const db = getTenantStore();
+  
+  if (global.liveRaidIntervalTicker) {
+    clearInterval(global.liveRaidIntervalTicker);
+    global.liveRaidIntervalTicker = undefined;
+  }
+  if (global.monitoringSchedulerTicker) {
+    clearInterval(global.monitoringSchedulerTicker);
+    global.monitoringSchedulerTicker = undefined;
+  }
+
+  // --- Early-end handling: capture a closing pulse + recompute the effective window ---
+  const now = Date.now();
+  const monStart = Number(s.monitoringStartsAt) || 0;
+  const monEnd = Number(s.monitoringEndsAt) || 0;
+  const intervalMins = Number(s.pollIntervalMinutes) || 0;
+  const monitoringStarted = monStart > 0 && now >= monStart;
+  const endedEarly = monitoringStarted && monEnd > 0 && now < monEnd;
+
+  // Ending mid-window: record the final headcount so no pulses are lost.
+  if (endedEarly) {
+    s = await captureFinalMonitoringPulse(db, s);
+  }
+
+  const totalPulses = parseInt(s.totalPulses, 10) || 0;
+
+  // Effective end = the earlier of the scheduled end or the actual stop time.
+  const effectiveMonitoringEndsAt = monitoringStarted
+    ? (monEnd > 0 ? Math.min(monEnd, now) : now)
+    : null;
+
+  // Expected pulses recomputed from the ACTUAL monitored duration (not the full schedule).
+  let expectedPulses = 0;
+  if (monitoringStarted && intervalMins > 0 && effectiveMonitoringEndsAt) {
+    const durationMs = Math.max(0, effectiveMonitoringEndsAt - monStart);
+    expectedPulses = Math.max(1, Math.round(durationMs / (intervalMins * 60 * 1000)));
+  }
+
+  const membersSnap = await db.ref('auction/members').once('value');
+  const membersData = membersSnap.exists() ? membersSnap.val() : {};
+
+  const excusedUids = [];
+  const eventCommitmentsKey = buildCompositeKey(s.eventDate, s.eventKey);
+  const commitmentsSnap = await db.ref(`attendance/commitments/${eventCommitmentsKey}`).once('value');
+  let commitmentsData = {};
+  if (commitmentsSnap.exists()) {
+    commitmentsData = commitmentsSnap.val() || {};
+    Object.entries(commitmentsData).forEach(([uid, commitment]) => {
+      if (normalizeCommitmentStatus(commitment?.status) === 'Leave') {
+        excusedUids.push(uid);
+      }
+    });
+  }
+
+  const gridAssignedUids = new Set();
+  if (s.grids) {
+    Object.values(s.grids).forEach(grid => {
+      if (grid.slots_allocation) {
+        Object.entries(grid.slots_allocation).forEach(([coord, slot]) => {
+          if (!coord.startsWith("meta_") && !coord.startsWith("party_name_") && slot?.userId) {
+            gridAssignedUids.add(slot.userId);
+          }
+        });
+      }
+    });
+  }
+
+  const atomicUpdates = {};
+  const sessionHistoryId = db.ref('attendance/history').push().key;
+
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const systemThreshold = configSnap.exists() ? (parseInt(configSnap.val().attendancePresentThreshold, 10) || 75) : 75;
+
+  // Snapshot live calendar RSVPs (Confirmed / Leave / NoConfirm) into the archive.
+  const commitments = {};
+  Object.keys(membersData).forEach(uid => {
+    if (membersData[uid]?.isRaidRoster !== true) return;
+    const status = normalizeCommitmentStatus(commitmentsData[uid]?.status);
+    if (isArchivedRsvp(status)) {
+      commitments[uid] = status;
+    }
+  });
+
+  const { inGameStatus: pendingInGame, clearPath: pendingClearPath } = await consumePendingInGameStatus(db, s.eventDate, s.eventKey);
+
+  atomicUpdates[`attendance/session_archive/${sessionHistoryId}`] = {
+    id: sessionHistoryId,
+    eventDate: s.eventDate,
+    eventTitle: s.eventTitle,
+    eventKey: s.eventKey,
+    committedBy: s.launchedBy || "System",
+    totalPulses: totalPulses,
+    expectedPulses,
+    grids: s.grids || {},
+    selectedWarRooms: s.selectedWarRooms || [],
+    selectedWarRoomIds: s.selectedWarRoomIds || [],
+    userTallies: s.userTallies || {},
+    commitments,
+    monitoringStartsAt: monStart || null,
+    monitoringEndsAt: monEnd || null,
+    pollIntervalMinutes: intervalMins || null,
+    effectiveMonitoringEndsAt: effectiveMonitoringEndsAt || null,
+    endedEarly,
+    endedAt: now,
+    ...(pendingInGame ? { inGameStatus: pendingInGame } : {}),
+  };
+
+  atomicUpdates['attendance/live_session'] = null;
+  if (pendingClearPath) atomicUpdates[pendingClearPath] = null;
+  await db.ref().update(atomicUpdates);
+  await touchSessionArchiveIndex({ id: sessionHistoryId, endedAt: now });
+  noteLiveSessionCleared();
+}
+
+// Endpoints
+router.get('/session', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const sessionSnap = await db.ref('attendance/live_session').once('value');
+    if (!sessionSnap.exists()) {
+      return res.json({ success: true, session: null });
+    }
+
+    const s = sessionSnap.val();
+    
+    const normalizedSession = await normalizeLiveSessionWarRooms(db, s);
+    return res.json({ success: true, session: normalizedSession });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/create', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+
+    const activeSnap = await db.ref('attendance/live_session').once('value');
+    if (activeSnap.exists()) {
+      return res.status(400).json({ success: false, error: 'An active Live Raid session is already running.' });
+    }
+
+    const {
+      publishedId,
+      selectedWarRooms: selectedWarRoomIds,
+      monitoringStartsAt,
+      monitoringEndsAt,
+      pollIntervalMinutes,
+    } = req.body;
+
+    const created = await createLiveRaidFromPublished({
+      publishedId,
+      selectedWarRoomIds,
+      monitoringStartsAt,
+      monitoringEndsAt,
+      pollIntervalMinutes,
+      launchedBy: user.displayName || user.username || 'Officer',
+    });
+    if (!created.ok) {
+      const status = /not found/i.test(created.error || '') ? 404 : 400;
+      return res.status(status).json({
+        success: false,
+        error: created.error,
+        duplicates: created.duplicates,
+      });
+    }
+
+    return res.json({ success: true, session: created.session, path: 'attendance/live_session' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/update', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const { session } = req.body;
+    if (!session) return res.status(400).json({ success: false, error: 'Missing session parameters.' });
+
+    if (session.grids) {
+      // Treat live grids as tabs for uniqueness validation
+      const tabShape = {};
+      Object.entries(session.grids).forEach(([gridId, grid]) => {
+        tabShape[gridId] = { slots_allocation: grid?.slots_allocation || {} };
+      });
+      const duplicates = findCrossTabDuplicates(tabShape);
+      if (duplicates.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Cross-tab duplicate members detected (${duplicates.length}).`,
+          duplicates,
+        });
+      }
+    }
+
+    await db.ref('attendance/live_session').update(session);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/cell-update', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
+    const { configId, coordKey, userId } = req.body;
+    if (!configId || !coordKey) {
+      return res.status(400).json({ success: false, error: 'Missing configId or coordKey.' });
+    }
+
+    const sessionSnap = await db.ref('attendance/live_session').once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'No active live session.' });
+    }
+
+    const session = sessionSnap.val();
+    const grids = session.grids || {};
+    if (!grids[configId]) {
+      return res.status(404).json({ success: false, error: 'Grid Tab not found in live session.' });
+    }
+
+    const updates = {};
+
+    // Cross-tab move: clear this uid from every grid first
+    if (userId) {
+      Object.entries(grids).forEach(([gridId, gridObj]) => {
+        const alloc = gridObj?.slots_allocation || {};
+        Object.entries(alloc).forEach(([key, slot]) => {
+          if (!isSlotCoordKey(key)) return;
+          if (slot?.userId === userId && !(gridId === configId && key === coordKey)) {
+            updates[`attendance/live_session/grids/${gridId}/slots_allocation/${key}/userId`] = '';
+          }
+        });
+      });
+    }
+
+    updates[`attendance/live_session/grids/${configId}/slots_allocation/${coordKey}/userId`] = userId || '';
+
+    await db.ref().update(updates);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/voice-presence', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  return res.json({ success: true, presentUids: [] });
+});
+
+router.post('/end', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    const sessionSnap = await db.ref('attendance/live_session').once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(400).json({ success: false, error: 'No active Live Raid session found.' });
+    }
+
+    const s = sessionSnap.val();
+    await endLiveRaidSessionInternal(s);
+
+    return res.json({ success: true, message: 'Live Raid ended and archived successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/cancel', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied.' });
+    }
+
+    if (global.liveRaidIntervalTicker) {
+      clearInterval(global.liveRaidIntervalTicker);
+      global.liveRaidIntervalTicker = undefined;
+    }
+
+    await db.ref('attendance/live_session').set(null);
+    noteLiveSessionCleared();
+    return res.json({ success: true, message: 'Live Raid session terminated and cleared without archiving.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/history/:sessionId', async (req, res) => {
+  const { user, ok } = await checkOfficer(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
+
+  const { sessionId } = req.params;
+  if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId is required' });
+
+  try {
+    const db = getTenantStore();
+    await db.ref(`attendance/session_archive/${sessionId}`).remove();
+    await touchSessionArchiveIndex({ id: sessionId, remove: true });
+    return res.json({ success: true, message: `Session ${sessionId} deleted.` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/live-raid/history/:sessionId/in-game
+ * Officer toggle: confirm/unconfirm that a member was present in-game for this archived session.
+ * Writes attendance/session_archive/{sessionId}/inGameStatus/{userId} = true | null
+ */
+router.patch('/history/:sessionId/in-game', async (req, res) => {
+  const { user, ok } = await checkOfficer(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
+
+  const { sessionId } = req.params;
+  const { userId, confirmed } = req.body || {};
+  if (!sessionId || !userId) {
+    return res.status(400).json({ success: false, error: 'sessionId and userId are required' });
+  }
+
+  try {
+    const db = getTenantStore();
+    const sessionRef = db.ref(`attendance/session_archive/${sessionId}`);
+    const sessionSnap = await sessionRef.once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Session archive not found' });
+    }
+
+    const confirmedFlag = await setInGameStatusFlag(db, sessionId, userId, confirmed === true);
+    return res.json({ success: true, confirmed: confirmedFlag });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/history/all', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const sessionId = String(req.query.sessionId || '').trim();
+    const limit = parseInt(req.query.limit, 10) || 12;
+    const fields = req.query.fields === 'full' || sessionId ? 'full' : 'trend';
+    const sessions = await loadSessionArchive({
+      sessionId: sessionId || undefined,
+      limit,
+      fields,
+    });
+    return res.json({
+      success: true,
+      sessions,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Set Monitoring Time ──────────────────────────────────────────────────────
+router.post('/set-monitoring-time', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const allowedRoles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+
+    if (!await verifyDiscordOfficerRole(req, allowedRoles)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
+
+    const parsedMon = parseMonitoringFields(req.body);
+    if (!parsedMon.ok) {
+      return res.status(400).json({ success: false, error: parsedMon.error });
+    }
+    if (!parsedMon.monitoring) {
+      return res.status(400).json({ success: false, error: 'monitoringStartsAt, monitoringEndsAt, and pollIntervalMinutes are required.' });
+    }
+
+    const { monitoringStartsAt: startsAt, monitoringEndsAt: endsAt, pollIntervalMinutes: intervalMins } = parsedMon.monitoring;
+
+    const activeSnap = await db.ref('attendance/live_session').once('value');
+    if (!activeSnap.exists() || activeSnap.val().status !== 'Active') {
+      return res.status(400).json({ success: false, error: 'No active Live Raid session found.' });
+    }
+
+    const monitoringPatch = {
+      monitoringStartsAt: startsAt,
+      monitoringEndsAt: endsAt,
+      pollIntervalMinutes: intervalMins,
+    };
+
+    // Exact Firebase path: attendance/live_session/{monitoringStartsAt|monitoringEndsAt|pollIntervalMinutes}
+    await db.ref('attendance/live_session').update(monitoringPatch);
+
+    // Read-back confirmation (proves the write landed in this DB)
+    const verifySnap = await db.ref('attendance/live_session').once('value');
+    const verified = verifySnap.val() || {};
+    rememberPulseContext(verified);
+    console.log('[live-raid] monitoring written to attendance/live_session:', {
+      monitoringStartsAt: verified.monitoringStartsAt,
+      monitoringEndsAt: verified.monitoringEndsAt,
+      pollIntervalMinutes: verified.pollIntervalMinutes,
+    });
+
+    if (verified.monitoringStartsAt !== startsAt) {
+      return res.status(500).json({
+        success: false,
+        error: 'Monitoring write did not persist. Check the database connection.',
+      });
+    }
+
+    const armResult = armMonitoringSchedule(startsAt, endsAt, intervalMins);
+    if (armResult?.reason === 'ended') {
+      return res.status(400).json({
+        success: false,
+        error: 'Monitoring end time is already in the past — ticker was not started. Set a future end time.',
+        path: 'attendance/live_session',
+        monitoringStartsAt: verified.monitoringStartsAt,
+        monitoringEndsAt: verified.monitoringEndsAt,
+        pollIntervalMinutes: verified.pollIntervalMinutes,
+        monitoringTickerStatus: 'ended',
+      });
+    }
+
+    return res.json({
+      success: true,
+      path: 'attendance/live_session',
+      monitoringStartsAt: verified.monitoringStartsAt,
+      monitoringEndsAt: verified.monitoringEndsAt,
+      pollIntervalMinutes: verified.pollIntervalMinutes,
+      monitoringTickerStatus: armResult?.reason || 'unknown',
+    });
+  } catch (err) {
+    console.error('[live-raid] set-monitoring-time failed:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+export default router;

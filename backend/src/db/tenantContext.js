@@ -1,10 +1,19 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
 
 const tenantAls = new AsyncLocalStorage();
 
 const configCache = new Map();
 const channelCache = new Map();
 let onboardedTenantList = null;
+
+function configCacheKey(tenantId, gameId) {
+  return `${String(tenantId)}::${String(gameId || RAGNAROK_ORIGIN_ID)}`;
+}
+
+function resolveGameId(gameId) {
+  return String(gameId || tenantAls.getStore()?.gameId || RAGNAROK_ORIGIN_ID);
+}
 
 export function getCachedOnboardedTenants() {
   return onboardedTenantList;
@@ -22,22 +31,39 @@ export function getCurrentTenantId() {
   return tenantAls.getStore()?.tenantId || null;
 }
 
+export function getCurrentGameId() {
+  return tenantAls.getStore()?.gameId || null;
+}
+
 export function runWithTenant(tenantId, fn) {
   if (!tenantId) return fn();
-  return tenantAls.run({ tenantId: String(tenantId) }, fn);
+  const prev = tenantAls.getStore() || {};
+  return tenantAls.run({
+    tenantId: String(tenantId),
+    gameId: prev.gameId || RAGNAROK_ORIGIN_ID,
+  }, fn);
 }
 
-export function setCachedConfig(tenantId, config) {
-  if (tenantId) configCache.set(String(tenantId), config || {});
+export function runWithGame(gameId, fn) {
+  const prev = tenantAls.getStore() || {};
+  return tenantAls.run({
+    ...prev,
+    gameId: String(gameId || RAGNAROK_ORIGIN_ID),
+  }, fn);
 }
 
-export function hasCachedConfig(tenantId = getCurrentTenantId()) {
-  return Boolean(tenantId) && configCache.has(String(tenantId));
+export function setCachedConfig(tenantId, config, gameId) {
+  if (!tenantId) return;
+  configCache.set(configCacheKey(tenantId, resolveGameId(gameId)), config || {});
 }
 
-export function getCachedConfig(tenantId = getCurrentTenantId()) {
+export function hasCachedConfig(tenantId = getCurrentTenantId(), gameId) {
+  return Boolean(tenantId) && configCache.has(configCacheKey(tenantId, resolveGameId(gameId)));
+}
+
+export function getCachedConfig(tenantId = getCurrentTenantId(), gameId) {
   if (!tenantId) return null;
-  return configCache.get(String(tenantId)) || null;
+  return configCache.get(configCacheKey(tenantId, resolveGameId(gameId))) || null;
 }
 
 export function setCachedChannels(tenantId, channels) {
@@ -55,6 +81,9 @@ export function getCachedChannels(tenantId = getCurrentTenantId()) {
 
 export function clearTenantCaches(tenantId) {
   if (!tenantId) return;
-  configCache.delete(String(tenantId));
+  const prefix = `${String(tenantId)}::`;
+  for (const key of [...configCache.keys()]) {
+    if (key === String(tenantId) || key.startsWith(prefix)) configCache.delete(key);
+  }
   channelCache.delete(String(tenantId));
 }

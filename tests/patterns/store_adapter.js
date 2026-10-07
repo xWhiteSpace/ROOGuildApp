@@ -131,11 +131,13 @@ export async function otherNestedUsesJsonDocsRoot() {
       await getTenantStore().ref('compositions/board/tab1').set({ slots: {} });
     });
     const w = lastMatching(/INSERT INTO json_docs/i);
-    const pathParam = w?.params?.[1];
+    const pathParam = w?.params?.[2];
+    const gameIdParam = w?.params?.[1];
     return {
       hit: Boolean(w),
       docRoot: pathParam,
       expectedRoot: 'compositions/board',
+      gameId: gameIdParam,
     };
   });
 }

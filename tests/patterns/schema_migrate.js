@@ -52,9 +52,19 @@ export async function migrateAppliesNamedTables() {
     'special_events',
     'json_docs',
     'platform_state',
+    'game_settings',
   ];
   const missing = required.filter((t) => !new RegExp(`CREATE TABLE IF NOT EXISTS ${t}\\b`, 'i').test(sql));
   return { applied: missing.length === 0, missing, sqlLen: sql.length };
+}
+
+export function originGameSettingsBackfillCopiesThenStrips() {
+  const sql = readFileSync(SCHEMA_PATH, 'utf8');
+  return {
+    copiesOrigin: /INSERT INTO game_settings[\s\S]*'ragnarok-origin'[\s\S]*FROM tenant_settings/i.test(sql),
+    fillsEmptyOnly: /WHERE COALESCE\(game_settings\.configuration, '\{\}'::jsonb\) = '\{\}'::jsonb/i.test(sql),
+    stripsLeftoverGameKeys: /WHERE \(configuration - 'guildDisplayName'[\s\S]*<> '\{\}'::jsonb/i.test(sql),
+  };
 }
 
 export function tenantScopedTablesKeyTenantId() {
@@ -69,6 +79,7 @@ export function tenantScopedTablesKeyTenantId() {
     'special_events',
     'json_docs',
     'tenant_settings',
+    'game_settings',
   ];
   const details = tables.map((t) => {
     const block = sql.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${t}[\\s\\S]*?;`, 'i'))?.[0] || '';

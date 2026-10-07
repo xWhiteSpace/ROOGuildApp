@@ -1,9 +1,10 @@
 import { RAGNAROK_ORIGIN, RAGNAROK_ORIGIN_ID } from './ragnarok-origin/manifest.js';
 import { ADVENTURER_GUILD, ADVENTURER_GUILD_ID } from './adventurer-guild/manifest.js';
+import { RAGNAROK_3, RAGNAROK_3_ID } from './ragnarok-3/manifest.js';
 
-export { RAGNAROK_ORIGIN, RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD, ADVENTURER_GUILD_ID };
+export { RAGNAROK_ORIGIN, RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD, ADVENTURER_GUILD_ID, RAGNAROK_3, RAGNAROK_3_ID };
 
-export const GAMES = [ADVENTURER_GUILD, RAGNAROK_ORIGIN];
+export const GAMES = [ADVENTURER_GUILD, RAGNAROK_ORIGIN, RAGNAROK_3];
 
 export function getGame(gameId) {
   return GAMES.find((game) => game.id === String(gameId || '')) || null;
@@ -41,6 +42,9 @@ export function gameIdForPath(pathname) {
   const path = String(pathname || '');
   if (path === '/games/adventurer-guild' || path.startsWith('/games/adventurer-guild/')) {
     return ADVENTURER_GUILD_ID;
+  }
+  if (path === '/games/ragnarok-3' || path.startsWith('/games/ragnarok-3/')) {
+    return RAGNAROK_3_ID;
   }
   if (path === '/games/ragnarok-origin' || path.startsWith('/games/ragnarok-origin/')) {
     return RAGNAROK_ORIGIN_ID;

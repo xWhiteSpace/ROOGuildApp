@@ -1,11 +1,13 @@
 export const RAGNAROK_ORIGIN_ID = 'ragnarok-origin';
 export const ADVENTURER_GUILD_ID = 'adventurer-guild';
+export const RAGNAROK_3_ID = 'ragnarok-3';
 
-export const KNOWN_GAME_IDS = [ADVENTURER_GUILD_ID, RAGNAROK_ORIGIN_ID];
+export const KNOWN_GAME_IDS = [ADVENTURER_GUILD_ID, RAGNAROK_ORIGIN_ID, RAGNAROK_3_ID];
 
 export const GAME_HOME_PATHS = {
   [ADVENTURER_GUILD_ID]: '/games/adventurer-guild',
   [RAGNAROK_ORIGIN_ID]: '/',
+  [RAGNAROK_3_ID]: '/games/ragnarok-3',
 };
 
 export const GAME_SETUP_PATHS = {
@@ -46,5 +48,6 @@ export function gameSetupMap(enabledGames, discordChannels) {
   return {
     [RAGNAROK_ORIGIN_ID]: enabled.has(RAGNAROK_ORIGIN_ID) && isRagnarokSetupComplete(discordChannels),
     [ADVENTURER_GUILD_ID]: enabled.has(ADVENTURER_GUILD_ID),
+    [RAGNAROK_3_ID]: enabled.has(RAGNAROK_3_ID),
   };
 }

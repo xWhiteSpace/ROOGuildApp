@@ -6,7 +6,7 @@ import authRoutes from './auth/discordOAuth.js';
 import { query } from './db/pool.js';
 import { attachTenantContext, requireTenant, requireActiveSubscription } from './middleware/tenantContext.js';
 import { requireGame } from './middleware/requireGame.js';
-import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from './games/catalog.js';
+import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID, RAGNAROK_3_ID } from './games/catalog.js';
 import tenantRoutes from './api/tenant.routes.js';
 import { discordChannel } from './db/channels.js';
 import { getTenantStore } from './db/database.js';
@@ -24,6 +24,7 @@ import { getDiscordRateLimitStatus } from './utils/discordRateLimit.js';
 
 import attendanceRoutes from './api/attendance.routes.js';
 import adventurerGuildRoutes from './api/adventurerGuild.routes.js';
+import ragnarok3Routes from './api/ragnarok3.routes.js';
 import billingRoutes, { handleStripeWebhook } from './api/billing.routes.js';
 
 // Loaded for the same startup module graph as before this split. Routes call them later.
@@ -103,6 +104,7 @@ export function createApp() {
   app.use('/api/war-room', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), warRoomRoutes);
   app.use('/api/ocr-reviews', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), ocrReviewRoutes);
   app.use('/api/adventurer-guild', requireTenant, requireActiveSubscription, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
+  app.use('/api/ragnarok-3', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_3_ID), ragnarok3Routes);
 
   app.get('/', async (req, res) => {
     try {

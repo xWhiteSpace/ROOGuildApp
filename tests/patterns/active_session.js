@@ -51,6 +51,12 @@ vi.mock('../../backend/src/db/database.js', async (importOriginal) => {
     ...actual,
     getTenantStore: () => storeHolder.store,
     loadAuctionRequests: async () => ({}),
+    loadMembersByIds: async (ids) => {
+      const members = storeHolder.store?.members?.() || {};
+      const out = {};
+      for (const id of ids || []) if (members[id]) out[id] = members[id];
+      return out;
+    },
   };
 });
 
@@ -127,6 +133,40 @@ export async function freshSessionReturnedNotReset() {
     storeHolder.store = createMemoryTenantStore({
       settings: { configuration: CONFIG },
       auction: { members: {}, web_requests: {}, active_session: fresh },
+    });
+    const res = await runWithTenant(TENANT_ID, () => dispatch(requestRoutes, {
+      method: 'GET',
+      path: '/active-session',
+      session: sessionUser(),
+    }));
+    return { res, stored: storeHolder.store.activeSession() };
+  });
+}
+
+export async function occupiedSessionReturnsOccupantMembers() {
+  return withEnv({}, async () => {
+    const occupied = {
+      version: 4,
+      activeStep: 2,
+      qtyPerPage: 4,
+      lootRows: [],
+      lootSummary: { puppet: { qty: 1, limit: 2, seats: 1 } },
+      categoryAllocations: { puppet: { selected: ['111', '', '222'] } },
+      initialWinnersByItem: {},
+      isDiscordGateOpen: true,
+      lastUpdated: Date.now() - (60 * 60 * 1000),
+    };
+    storeHolder.store = createMemoryTenantStore({
+      settings: { configuration: CONFIG },
+      auction: {
+        members: {
+          '111': { displayName: 'Ada', status: 'Active' },
+          '222': { displayName: 'Ben', status: 'Active' },
+          '999': { displayName: 'NotOnBoard', status: 'Active' },
+        },
+        web_requests: {},
+        active_session: occupied,
+      },
     });
     const res = await runWithTenant(TENANT_ID, () => dispatch(requestRoutes, {
       method: 'GET',

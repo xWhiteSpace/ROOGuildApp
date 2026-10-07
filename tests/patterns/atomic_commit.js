@@ -328,3 +328,26 @@ export async function httpAndAutoShareWriter() {
     writerName: performCommitSession.name,
   };
 }
+
+export async function forcedAddSnowflakeNameResolvesFromRoster() {
+  return withEnv({}, async () => {
+    baseSeed();
+    await storeHolder.store.ref('auction/members/333').set({ displayName: 'Cara', status: 'Active' });
+    await runWithTenant(TENANT_ID, () => performCommitSession({
+      event: 'Weekly',
+      date: '10/04/2026',
+      allocations: {
+        puppet: {
+          selected: [{ userId: '333', name: '333', slots: 1 }],
+          absent: [],
+          notSelected: [],
+        },
+      },
+      summary,
+    }));
+    const snap = storeHolder.store.snapshot();
+    const forced = Object.values(storeHolder.store.webRequests()).find((r) => r.userId === '333');
+    const award = Object.values(snap.auction?.past_auctions || {}).find((r) => r.userId === '333');
+    return { forced, award };
+  });
+}

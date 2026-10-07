@@ -1,10 +1,13 @@
 import { query } from './pool.js';
-import { getCurrentTenantId, setCachedConfig } from './tenantContext.js';
+import { getCurrentGameId, getCurrentTenantId, setCachedConfig } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { DEFAULT_TZ, formatGuildDate, getWeekMonday, weekKeyBounds } from '../utils/guildTime.js';
 import { clampLookbackDays } from '../games/ragnarok-origin/defaults.js';
 import { PUSH_CHARS, pushIdAt } from '../games/ragnarok-origin/utils/sortingEngine.js';
 import { ledgerCalendarDaySql, lookbackStartDay } from '../games/ragnarok-origin/services/requestLedger.js';
+import { RAGNAROK_ORIGIN_ID } from '../games/catalog.js';
+import { mergeGameConfiguration, omitWorkspaceConfig, pickWorkspaceConfig } from '../config/gameConfiguration.js';
+import { WORKSPACE_DEFAULTS } from '../config/workspaceDefaults.js';
 
 const COLLECTION_MAP = {
   'auction/members': { table: 'members', idCol: 'discord_id' },
@@ -14,6 +17,10 @@ const COLLECTION_MAP = {
   'scheduler/instances': { table: 'schedule_instances', idCol: 'id' },
   'scheduler/special_events': { table: 'special_events', idCol: 'id' },
 };
+
+function currentGameId() {
+  return String(getCurrentGameId() || RAGNAROK_ORIGIN_ID);
+}
 
 function normalizePath(path) {
   if (!path) return '';
@@ -117,8 +124,8 @@ class DataSnapshot {
 
 async function loadCollection(tenantId, spec) {
   const { rows } = await query(
-    `SELECT ${spec.idCol} AS id, data FROM ${spec.table} WHERE tenant_id = $1`,
-    [tenantId]
+    `SELECT ${spec.idCol} AS id, data FROM ${spec.table} WHERE tenant_id = $1 AND game_id = $2`,
+    [tenantId, currentGameId()]
   );
   if (!rows.length) return null;
   const out = {};
@@ -145,8 +152,8 @@ async function loadCollectionFiltered(tenantId, spec, field, value) {
   }
   const { rows } = await query(
     `SELECT ${spec.idCol} AS id, data FROM ${spec.table}
-     WHERE tenant_id = $1 AND data->>$2 = $3`,
-    [tenantId, field, value == null ? '' : String(value)]
+     WHERE tenant_id = $1 AND game_id = $2 AND data->>$3 = $4`,
+    [tenantId, currentGameId(), field, value == null ? '' : String(value)]
   );
   return rowsToMap(rows);
 }
@@ -181,8 +188,8 @@ export async function loadMembersProjected(view = 'list', tenantId) {
   const id = requireTenant(tenantId);
   const projection = view === 'card' ? memberCardProjectionSql() : memberListProjectionSql();
   const { rows } = await query(
-    `SELECT discord_id AS id, ${projection} AS data FROM members WHERE tenant_id = $1`,
-    [id]
+    `SELECT discord_id AS id, ${projection} AS data FROM members WHERE tenant_id = $1 AND game_id = $2`,
+    [id, currentGameId()]
   );
   const out = {};
   for (const row of rows) out[row.id] = row.data;
@@ -195,8 +202,8 @@ export async function loadMembersByIds(ids, tenantId) {
   const keys = [...new Set((ids || []).map((uid) => String(uid || '').trim()).filter(Boolean))];
   if (!keys.length) return {};
   const { rows } = await query(
-    `SELECT discord_id AS id, data FROM members WHERE tenant_id = $1 AND discord_id = ANY($2::text[])`,
-    [id, keys]
+    `SELECT discord_id AS id, data FROM members WHERE tenant_id = $1 AND game_id = $2 AND discord_id = ANY($3::text[])`,
+    [id, currentGameId(), keys]
   );
   const out = {};
   for (const row of rows) out[row.id] = row.data;
@@ -209,12 +216,12 @@ export async function raidRosterMissingLeaveCredits(tenantId) {
   const { rows } = await query(
     `SELECT EXISTS (
        SELECT 1 FROM members
-       WHERE tenant_id = $1
+       WHERE tenant_id = $1 AND game_id = $2
          AND COALESCE((data->>'isRaidRoster')::boolean, false) = true
          AND (data->>'status') IS DISTINCT FROM 'Ghost'
          AND jsonb_typeof(data->'leaveCreditsRemaining') IS DISTINCT FROM 'number'
      ) AS missing`,
-    [id]
+    [id, currentGameId()]
   );
   return Boolean(rows[0]?.missing);
 }
@@ -235,8 +242,8 @@ export async function loadLiveSessionPulseMeta(tenantId) {
        'lastVoicePoll', data->'lastVoicePoll'
      ) AS data
      FROM json_docs
-     WHERE tenant_id = $1 AND path = $2`,
-    [id, LIVE_SESSION_PATH]
+     WHERE tenant_id = $1 AND game_id = $2 AND path = $3`,
+    [id, currentGameId(), LIVE_SESSION_PATH]
   );
   return rows[0]?.data || null;
 }
@@ -285,11 +292,11 @@ export async function incrementLiveSessionPulse({ presentUids, entered, left, ch
          ) tallied
        )
      )
-     WHERE tenant_id = $1 AND path = $4 AND COALESCE(data->>'status', '') = 'Active'
+     WHERE tenant_id = $1 AND game_id = $5 AND path = $4 AND COALESCE(data->>'status', '') = 'Active'
      RETURNING
        COALESCE((data->>'totalPulses')::int, 0) AS total_pulses,
        COALESCE(data->'userTallies', '{}'::jsonb) AS user_tallies`,
-    [id, present, JSON.stringify(lastVoicePoll), LIVE_SESSION_PATH]
+    [id, present, JSON.stringify(lastVoicePoll), LIVE_SESSION_PATH, currentGameId()]
   );
   const row = rows[0];
   if (!row) return { totalPulses: 0, userTallies: {}, lastVoicePoll };
@@ -311,9 +318,10 @@ export async function loadAuctionRequests({
   untilId,
 } = {}, tenantId) {
   const id = requireTenant(tenantId);
-  const clauses = ['tenant_id = $1'];
-  const params = [id];
-  let i = 2;
+  const gameId = currentGameId();
+  const clauses = ['tenant_id = $1', 'game_id = $2'];
+  const params = [id, gameId];
+  let i = 3;
   if (status != null && status !== '') {
     clauses.push(`data->>'selectionStatus' = $${i++}`);
     params.push(String(status));
@@ -396,9 +404,10 @@ export async function listAuctionHistory({
   countOnly = false,
 } = {}, tenantId) {
   const id = requireTenant(tenantId);
-  const clauses = ['tenant_id = $1'];
-  const params = [id];
-  let i = 2;
+  const gameId = currentGameId();
+  const clauses = ['tenant_id = $1', 'game_id = $2'];
+  const params = [id, gameId];
+  let i = 3;
   if (userId) {
     clauses.push(`data->>'userId' = $${i++}`);
     params.push(String(userId));
@@ -451,9 +460,9 @@ export async function loadCollectionSince(path, { sinceDays, userId, sinceId } =
   const id = requireTenant(tenantId);
   const spec = COLLECTION_MAP[path];
   if (!spec) return {};
-  const clauses = ['tenant_id = $1'];
-  const params = [id];
-  let i = 2;
+  const clauses = ['tenant_id = $1', 'game_id = $2'];
+  const params = [id, currentGameId()];
+  let i = 3;
   if (userId != null && userId !== '') {
     clauses.push(`data->>'userId' = $${i++}`);
     params.push(String(userId));
@@ -519,9 +528,9 @@ export async function listPastAuctionDates(tenantId) {
   const { rows } = await query(
     `SELECT data->>'date' AS date, COUNT(*)::int AS n
      FROM past_auction_awards
-     WHERE tenant_id = $1 AND COALESCE(data->>'date', '') <> ''
+     WHERE tenant_id = $1 AND game_id = $2 AND COALESCE(data->>'date', '') <> ''
      GROUP BY 1`,
-    [id]
+    [id, currentGameId()]
   );
   return rows
     .map((row) => ({
@@ -538,9 +547,9 @@ export async function listPastAuctionsForDate(date, tenantId) {
   if (!variants.length) return [];
   const { rows } = await query(
     `SELECT id, data FROM past_auction_awards
-     WHERE tenant_id = $1 AND data->>'date' = ANY($2::text[])
+     WHERE tenant_id = $1 AND game_id = $2 AND data->>'date' = ANY($3::text[])
      ORDER BY id DESC`,
-    [id, variants]
+    [id, currentGameId(), variants]
   );
   return rows.map(mapPastAuctionRow);
 }
@@ -550,9 +559,9 @@ export async function listLootHistoryDates(tenantId) {
   const { rows } = await query(
     `SELECT data->>'date' AS date, COUNT(*)::int AS n
      FROM loot_history
-     WHERE tenant_id = $1 AND COALESCE(data->>'date', '') <> ''
+     WHERE tenant_id = $1 AND game_id = $2 AND COALESCE(data->>'date', '') <> ''
      GROUP BY 1`,
-    [id]
+    [id, currentGameId()]
   );
   return rows
     .map((row) => ({
@@ -569,9 +578,9 @@ export async function listLootHistoryForDate(date, tenantId) {
   if (!variants.length) return [];
   const { rows } = await query(
     `SELECT id, data FROM loot_history
-     WHERE tenant_id = $1 AND data->>'date' = ANY($2::text[])
+     WHERE tenant_id = $1 AND game_id = $2 AND data->>'date' = ANY($3::text[])
      ORDER BY id DESC`,
-    [id, variants]
+    [id, currentGameId(), variants]
   );
   return rows.map((row) => {
     const data = row.data || {};
@@ -593,9 +602,9 @@ export async function countLootHistoryBattles(tenantId) {
   const { rows } = await query(
     `SELECT COUNT(*)::int AS n FROM (
        SELECT DISTINCT COALESCE(data->>'date', ''), COALESCE(data->>'event', '')
-       FROM loot_history WHERE tenant_id = $1
+       FROM loot_history WHERE tenant_id = $1 AND game_id = $2
      ) t`,
-    [id]
+    [id, currentGameId()]
   );
   return rows[0]?.n || 0;
 }
@@ -604,8 +613,8 @@ export async function loadPastAuctionsForMember(userId, tenantId) {
   const id = requireTenant(tenantId);
   const { rows } = await query(
     `SELECT id, data FROM past_auction_awards
-     WHERE tenant_id = $1 AND data->>'userId' = $2`,
-    [id, String(userId)]
+     WHERE tenant_id = $1 AND game_id = $2 AND data->>'userId' = $3`,
+    [id, currentGameId(), String(userId)]
   );
   return rowsToMap(rows) || {};
 }
@@ -616,9 +625,9 @@ export async function loadInstancesForWeek(weekMonday, tenantId) {
   if (!bounds) return {};
   const { rows } = await query(
     `SELECT id, data FROM schedule_instances
-     WHERE tenant_id = $1
-       AND (data->>'weekMonday' = $2 OR (id >= $2 AND id < $3))`,
-    [id, bounds.start, bounds.endExclusive]
+     WHERE tenant_id = $1 AND game_id = $2
+       AND (data->>'weekMonday' = $3 OR (id >= $3 AND id < $4))`,
+    [id, currentGameId(), bounds.start, bounds.endExclusive]
   );
   return rowsToMap(rows) || {};
 }
@@ -634,8 +643,8 @@ export async function listCommitmentKeysForEventId(eventId, tenantId) {
   if (suffix === '_') return [];
   const { rows } = await query(
     `SELECT DISTINCT event_key FROM attendance_commitments
-     WHERE tenant_id = $1 AND event_key LIKE $2`,
-    [id, `%${suffix}`]
+     WHERE tenant_id = $1 AND game_id = $2 AND event_key LIKE $3`,
+    [id, currentGameId(), `%${suffix}`]
   );
   return rows.map((row) => row.event_key);
 }
@@ -648,8 +657,8 @@ export async function loadPublishedByIds(ids, tenantId) {
     `SELECT e.key AS id, e.value AS data
      FROM json_docs d
      CROSS JOIN LATERAL jsonb_each(d.data) e
-     WHERE d.tenant_id = $1 AND d.path = 'attendance/published' AND e.key = ANY($2::text[])`,
-    [id, keys]
+     WHERE d.tenant_id = $1 AND d.game_id = $3 AND d.path = 'attendance/published' AND e.key = ANY($2::text[])`,
+    [id, keys, currentGameId()]
   );
   return rowsToMap(rows) || {};
 }
@@ -717,10 +726,10 @@ async function rebuildArchiveIndex(tenantId, limit) {
     `SELECT e.key AS id, COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) AS ended_at
      FROM json_docs d
      CROSS JOIN LATERAL jsonb_each(d.data) e
-     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
+     WHERE d.tenant_id = $1 AND d.game_id = $3 AND d.path = 'attendance/session_archive'
      ORDER BY 2 DESC
      LIMIT $2`,
-    [tenantId, limit]
+    [tenantId, limit, currentGameId()]
   );
   const entries = rows.map((row) => ({ id: row.id, endedAt: Number(row.ended_at) || 0 }));
   await saveDoc(tenantId, ARCHIVE_INDEX_PATH, { entries });
@@ -735,13 +744,13 @@ async function loadArchiveSessionsByIds(tenantId, ids, full) {
       ? `SELECT k AS id, d.data -> k AS data
          FROM json_docs d
          CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
-         WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'`
+         WHERE d.tenant_id = $1 AND d.game_id = $3 AND d.path = 'attendance/session_archive'`
       : `SELECT k AS id, ${ARCHIVE_TREND_OBJECT} AS data
          FROM json_docs d
          CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
          CROSS JOIN LATERAL (SELECT d.data -> k AS blob) sliced
-         WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive' AND d.data -> k IS NOT NULL`,
-    [tenantId, JSON.stringify(keys)]
+         WHERE d.tenant_id = $1 AND d.game_id = $3 AND d.path = 'attendance/session_archive' AND d.data -> k IS NOT NULL`,
+    [tenantId, JSON.stringify(keys), currentGameId()]
   );
   return rowsToMap(rows) || {};
 }
@@ -751,9 +760,9 @@ export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } 
   const full = fields === 'full';
   if (sessionId) {
     const { rows } = await query(
-      `SELECT data -> $2 AS data FROM json_docs
-       WHERE tenant_id = $1 AND path = 'attendance/session_archive'`,
-      [id, String(sessionId)]
+      `SELECT data -> $3 AS data FROM json_docs
+       WHERE tenant_id = $1 AND game_id = $2 AND path = 'attendance/session_archive'`,
+      [id, currentGameId(), String(sessionId)]
     );
     const data = rows[0]?.data;
     if (data == null) return {};
@@ -780,11 +789,11 @@ export async function findArchiveForEvent(eventDate, eventKey, tenantId) {
     `SELECT e.key AS id, e.value AS data
      FROM json_docs d
      CROSS JOIN LATERAL jsonb_each(d.data) e
-     WHERE d.tenant_id = $1 AND d.path = 'attendance/session_archive'
+     WHERE d.tenant_id = $1 AND d.game_id = $4 AND d.path = 'attendance/session_archive'
        AND e.value->>'eventDate' = $2 AND e.value->>'eventKey' = $3
      ORDER BY COALESCE((NULLIF(e.value->>'endedAt', ''))::bigint, 0) DESC
      LIMIT 1`,
-    [id, String(eventDate || ''), String(eventKey || '')]
+    [id, String(eventDate || ''), String(eventKey || ''), currentGameId()]
   );
   if (!rows[0]?.data) return null;
   return { ...rows[0].data, id: rows[0].id };
@@ -798,83 +807,99 @@ export async function sqlFingerprint(tenantId, {
   commitmentWeekMonday = null,
 } = {}) {
   const id = requireTenant(tenantId);
+  const gameId = currentGameId();
   const paths = Array.isArray(docPaths) ? docPaths.filter(Boolean) : [];
   const bounds = commitmentWeekMonday ? weekKeyBounds(commitmentWeekMonday) : null;
   const { rows } = await query(
     `SELECT md5(concat(
-       CASE WHEN $2 THEN COALESCE((SELECT md5(string_agg(discord_id || data::text, chr(30) ORDER BY discord_id)) FROM members WHERE tenant_id = $1), '') ELSE '' END,
+       CASE WHEN $2 THEN COALESCE((SELECT md5(string_agg(discord_id || data::text, chr(30) ORDER BY discord_id)) FROM members WHERE tenant_id = $1 AND game_id = $9), '') ELSE '' END,
        CASE WHEN $3 THEN COALESCE((SELECT md5(string_agg(event_key || member_id || data::text, chr(30) ORDER BY event_key, member_id))
          FROM attendance_commitments
-         WHERE tenant_id = $1
+         WHERE tenant_id = $1 AND game_id = $9
            AND ($7::text IS NULL OR (event_key >= $7 AND event_key < $8))), '') ELSE '' END,
        CASE WHEN $4 THEN COALESCE((SELECT md5(string_agg(
          path || CASE
            WHEN path = 'attendance/live_session'
            THEN (data - 'lastVoicePoll' - 'userTallies' - 'totalPulses' - 'expectedPulses')::text
            ELSE data::text
-         END, chr(30) ORDER BY path)) FROM json_docs WHERE tenant_id = $1 AND path = ANY($6::text[])), '') ELSE '' END,
-       CASE WHEN $5 THEN COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), '') ELSE '' END
+         END, chr(30) ORDER BY path)) FROM json_docs WHERE tenant_id = $1 AND game_id = $9 AND path = ANY($6::text[])), '') ELSE '' END,
+       CASE WHEN $5 THEN COALESCE((SELECT md5(COALESCE(gs.configuration::text, '') || COALESCE(ts.configuration::text, ''))
+         FROM tenant_settings ts
+         LEFT JOIN game_settings gs ON gs.tenant_id = ts.tenant_id AND gs.game_id = $9
+         WHERE ts.tenant_id = $1), '') ELSE '' END
      )) AS fp`,
-    [id, members, commitments, paths.length > 0, config, paths, bounds?.start || null, bounds?.endExclusive || null]
+    [id, members, commitments, paths.length > 0, config, paths, bounds?.start || null, bounds?.endExclusive || null, gameId]
   );
   return String(rows[0]?.fp || '');
 }
 
 export async function lobbyFingerprint(tenantId, userId) {
   const id = requireTenant(tenantId);
+  const gameId = currentGameId();
   const { rows } = await query(
     `SELECT md5(concat(
-       COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), ''),
+       COALESCE((SELECT md5(COALESCE(gs.configuration::text, '') || COALESCE(ts.configuration::text, ''))
+         FROM tenant_settings ts
+         LEFT JOIN game_settings gs ON gs.tenant_id = ts.tenant_id AND gs.game_id = $3
+         WHERE ts.tenant_id = $1), ''),
        COALESCE((SELECT md5(string_agg(auction_requests.id || data::text, chr(30) ORDER BY auction_requests.id))
          FROM auction_requests
-         WHERE tenant_id = $1 AND data->>'userId' = $2 AND data->>'selectionStatus' = 'Pending'), '')
+         WHERE tenant_id = $1 AND game_id = $3 AND data->>'userId' = $2 AND data->>'selectionStatus' = 'Pending'), '')
      )) AS fp`,
-    [id, String(userId || '')]
+    [id, String(userId || ''), gameId]
   );
   return String(rows[0]?.fp || '');
 }
 
 export async function queueFingerprint(tenantId, itemId, itemName) {
   const id = requireTenant(tenantId);
+  const gameId = currentGameId();
   const { rows } = await query(
     `SELECT md5(concat(
-       COALESCE((SELECT md5(configuration::text) FROM tenant_settings WHERE tenant_id = $1), ''),
+       COALESCE((SELECT md5(COALESCE(gs.configuration::text, '') || COALESCE(ts.configuration::text, ''))
+         FROM tenant_settings ts
+         LEFT JOIN game_settings gs ON gs.tenant_id = ts.tenant_id AND gs.game_id = $4
+         WHERE ts.tenant_id = $1), ''),
        COALESCE((SELECT md5(string_agg(auction_requests.id || data::text, chr(30) ORDER BY auction_requests.id))
          FROM auction_requests
-         WHERE tenant_id = $1
+         WHERE tenant_id = $1 AND game_id = $4
            AND (
              ($2::text <> '' AND data->>'itemId' = $2)
              OR ($3::text <> '' AND data->>'item' = $3)
            )), '')
      )) AS fp`,
-    [id, String(itemId || ''), String(itemName || '')]
+    [id, String(itemId || ''), String(itemName || ''), gameId]
   );
   return String(rows[0]?.fp || '');
 }
 
 async function loadCollectionRow(tenantId, spec, id) {
   const { rows } = await query(
-    `SELECT data FROM ${spec.table} WHERE tenant_id = $1 AND ${spec.idCol} = $2`,
-    [tenantId, id]
+    `SELECT data FROM ${spec.table} WHERE tenant_id = $1 AND game_id = $2 AND ${spec.idCol} = $3`,
+    [tenantId, currentGameId(), id]
   );
   return rows[0]?.data;
 }
 
 async function upsertCollectionRow(tenantId, spec, id, data) {
+  const gameId = currentGameId();
   if (data === null || data === undefined) {
-    await query(`DELETE FROM ${spec.table} WHERE tenant_id = $1 AND ${spec.idCol} = $2`, [tenantId, id]);
+    await query(
+      `DELETE FROM ${spec.table} WHERE tenant_id = $1 AND game_id = $2 AND ${spec.idCol} = $3`,
+      [tenantId, gameId, id]
+    );
     return;
   }
   await query(
-    `INSERT INTO ${spec.table} (tenant_id, ${spec.idCol}, data)
-     VALUES ($1, $2, $3::jsonb)
-     ON CONFLICT (tenant_id, ${spec.idCol}) DO UPDATE SET data = EXCLUDED.data`,
-    [tenantId, id, JSON.stringify(data)]
+    `INSERT INTO ${spec.table} (tenant_id, game_id, ${spec.idCol}, data)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (tenant_id, game_id, ${spec.idCol}) DO UPDATE SET data = EXCLUDED.data`,
+    [tenantId, gameId, id, JSON.stringify(data)]
   );
 }
 
 async function replaceCollection(tenantId, spec, obj) {
-  await query(`DELETE FROM ${spec.table} WHERE tenant_id = $1`, [tenantId]);
+  await query(`DELETE FROM ${spec.table} WHERE tenant_id = $1 AND game_id = $2`, [tenantId, currentGameId()]);
   if (!obj || typeof obj !== 'object') return;
   for (const [id, data] of Object.entries(obj)) {
     if (data === null || data === undefined) continue;
@@ -883,6 +908,7 @@ async function replaceCollection(tenantId, spec, obj) {
 }
 
 async function loadCommitments(tenantId, eventKey, memberId, weekMonday) {
+  const gameId = currentGameId();
   if (!eventKey) {
     const config = await loadConfig(tenantId);
     const monday = weekMonday || getWeekMonday(config?.timezone || DEFAULT_TZ);
@@ -890,8 +916,8 @@ async function loadCommitments(tenantId, eventKey, memberId, weekMonday) {
     if (!bounds) return {};
     const { rows } = await query(
       `SELECT event_key, member_id, data FROM attendance_commitments
-       WHERE tenant_id = $1 AND event_key >= $2 AND event_key < $3`,
-      [tenantId, bounds.start, bounds.endExclusive]
+       WHERE tenant_id = $1 AND game_id = $2 AND event_key >= $3 AND event_key < $4`,
+      [tenantId, gameId, bounds.start, bounds.endExclusive]
     );
     const tree = {};
     for (const row of rows) {
@@ -902,31 +928,35 @@ async function loadCommitments(tenantId, eventKey, memberId, weekMonday) {
   }
   if (!memberId) {
     const { rows } = await query(
-      'SELECT member_id, data FROM attendance_commitments WHERE tenant_id = $1 AND event_key = $2',
-      [tenantId, eventKey]
+      'SELECT member_id, data FROM attendance_commitments WHERE tenant_id = $1 AND game_id = $2 AND event_key = $3',
+      [tenantId, gameId, eventKey]
     );
     const out = {};
     for (const row of rows) out[row.member_id] = row.data;
     return out;
   }
   const { rows } = await query(
-    'SELECT data FROM attendance_commitments WHERE tenant_id = $1 AND event_key = $2 AND member_id = $3',
-    [tenantId, eventKey, memberId]
+    'SELECT data FROM attendance_commitments WHERE tenant_id = $1 AND game_id = $2 AND event_key = $3 AND member_id = $4',
+    [tenantId, gameId, eventKey, memberId]
   );
   return rows[0]?.data;
 }
 
 async function writeCommitment(tenantId, eventKey, memberId, data) {
+  const gameId = currentGameId();
   if (!memberId) {
-    await query('DELETE FROM attendance_commitments WHERE tenant_id = $1 AND event_key = $2', [tenantId, eventKey]);
+    await query(
+      'DELETE FROM attendance_commitments WHERE tenant_id = $1 AND game_id = $2 AND event_key = $3',
+      [tenantId, gameId, eventKey]
+    );
     if (data && typeof data === 'object') {
       for (const [uid, row] of Object.entries(data)) {
         if (row == null) continue;
         await query(
-          `INSERT INTO attendance_commitments (tenant_id, event_key, member_id, data)
-           VALUES ($1, $2, $3, $4::jsonb)
-           ON CONFLICT (tenant_id, event_key, member_id) DO UPDATE SET data = EXCLUDED.data`,
-          [tenantId, eventKey, uid, JSON.stringify(row)]
+          `INSERT INTO attendance_commitments (tenant_id, game_id, event_key, member_id, data)
+           VALUES ($1, $2, $3, $4, $5::jsonb)
+           ON CONFLICT (tenant_id, game_id, event_key, member_id) DO UPDATE SET data = EXCLUDED.data`,
+          [tenantId, gameId, eventKey, uid, JSON.stringify(row)]
         );
       }
     }
@@ -934,36 +964,84 @@ async function writeCommitment(tenantId, eventKey, memberId, data) {
   }
   if (data === null || data === undefined) {
     await query(
-      'DELETE FROM attendance_commitments WHERE tenant_id = $1 AND event_key = $2 AND member_id = $3',
-      [tenantId, eventKey, memberId]
+      'DELETE FROM attendance_commitments WHERE tenant_id = $1 AND game_id = $2 AND event_key = $3 AND member_id = $4',
+      [tenantId, gameId, eventKey, memberId]
     );
     return;
   }
   await query(
-    `INSERT INTO attendance_commitments (tenant_id, event_key, member_id, data)
-     VALUES ($1, $2, $3, $4::jsonb)
-     ON CONFLICT (tenant_id, event_key, member_id) DO UPDATE SET data = EXCLUDED.data`,
-    [tenantId, eventKey, memberId, JSON.stringify(data)]
+    `INSERT INTO attendance_commitments (tenant_id, game_id, event_key, member_id, data)
+     VALUES ($1, $2, $3, $4, $5::jsonb)
+     ON CONFLICT (tenant_id, game_id, event_key, member_id) DO UPDATE SET data = EXCLUDED.data`,
+    [tenantId, gameId, eventKey, memberId, JSON.stringify(data)]
   );
 }
 
 async function loadConfig(tenantId) {
-  const { rows } = await query(
-    'SELECT configuration FROM tenant_settings WHERE tenant_id = $1',
-    [tenantId]
-  );
-  if (!rows[0]) return null;
-  return rows[0].configuration;
+  const gameId = currentGameId();
+  const [wsRes, gameRes] = await Promise.all([
+    query('SELECT configuration FROM tenant_settings WHERE tenant_id = $1', [tenantId]),
+    query(
+      'SELECT configuration FROM game_settings WHERE tenant_id = $1 AND game_id = $2',
+      [tenantId, gameId]
+    ),
+  ]);
+  const storedWorkspace = wsRes.rows[0]?.configuration || {};
+  const workspace = pickWorkspaceConfig(storedWorkspace);
+  const leftover = omitWorkspaceConfig(storedWorkspace);
+  const gameRow = gameRes.rows[0]?.configuration;
+  const gameRowEmpty = !gameRow || Object.keys(gameRow).length === 0;
+  const leftoverEmpty = Object.keys(leftover).length === 0;
+  const game = !gameRowEmpty
+    ? gameRow
+    : (gameId === RAGNAROK_ORIGIN_ID && !leftoverEmpty ? leftover : (gameRow || {}));
+  if (!wsRes.rows[0] && !gameRes.rows[0]) return null;
+  if (gameId === RAGNAROK_ORIGIN_ID && gameRowEmpty && !leftoverEmpty) {
+    await query(
+      `INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
+       VALUES ($1, $2, $3::jsonb, NOW())
+       ON CONFLICT (tenant_id, game_id) DO UPDATE SET
+         configuration = CASE
+           WHEN COALESCE(game_settings.configuration, '{}'::jsonb) = '{}'::jsonb THEN EXCLUDED.configuration
+           ELSE game_settings.configuration
+         END,
+         updated_at = NOW()`,
+      [tenantId, gameId, JSON.stringify(leftover)]
+    );
+  }
+  return mergeGameConfiguration(workspace, game, gameId);
 }
 
 async function saveConfig(tenantId, configuration) {
+  const gameId = currentGameId();
+  const incoming = configuration || {};
+  const workspaceIncoming = { ...WORKSPACE_DEFAULTS, ...pickWorkspaceConfig(incoming) };
+  const game = omitWorkspaceConfig(incoming);
+  if (gameId === RAGNAROK_ORIGIN_ID) {
+    await query(
+      `INSERT INTO tenant_settings (tenant_id, configuration, discord_channels)
+       VALUES ($1, $2::jsonb, '{}'::jsonb)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         configuration = jsonb_strip_nulls(jsonb_build_object(
+           'guildDisplayName', EXCLUDED.configuration->'guildDisplayName',
+           'timezone', EXCLUDED.configuration->'timezone',
+           'adminRoles', EXCLUDED.configuration->'adminRoles',
+           'guildLogoUrl', EXCLUDED.configuration->'guildLogoUrl'
+         )),
+         updated_at = NOW()`,
+      [tenantId, JSON.stringify(workspaceIncoming)]
+    );
+  }
   await query(
-    `INSERT INTO tenant_settings (tenant_id, configuration, discord_channels)
-     VALUES ($1, $2::jsonb, '{}'::jsonb)
-     ON CONFLICT (tenant_id) DO UPDATE SET configuration = $2::jsonb, updated_at = NOW()`,
-    [tenantId, JSON.stringify(configuration || {})]
+    `INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
+     VALUES ($1, $2, $3::jsonb, NOW())
+     ON CONFLICT (tenant_id, game_id) DO UPDATE SET configuration = EXCLUDED.configuration, updated_at = NOW()`,
+    [tenantId, gameId, JSON.stringify(game)]
   );
-  setCachedConfig(tenantId, { ...DEFAULT_CONFIGURATION, ...(configuration || {}) });
+  const wsRes = await query('SELECT configuration FROM tenant_settings WHERE tenant_id = $1', [tenantId]);
+  const workspace = pickWorkspaceConfig(wsRes.rows[0]?.configuration || workspaceIncoming);
+  const merged = mergeGameConfiguration(workspace, game, gameId);
+  setCachedConfig(tenantId, merged, gameId);
 }
 
 function docRootFor(parts) {
@@ -973,8 +1051,8 @@ function docRootFor(parts) {
 
 async function loadDoc(tenantId, docPath) {
   const { rows } = await query(
-    'SELECT data FROM json_docs WHERE tenant_id = $1 AND path = $2',
-    [tenantId, docPath]
+    'SELECT data FROM json_docs WHERE tenant_id = $1 AND game_id = $2 AND path = $3',
+    [tenantId, currentGameId(), docPath]
   );
   if (!rows[0]) return undefined;
   return rows[0].data;
@@ -984,12 +1062,12 @@ function jsonKeyPath(keyPath) {
   return JSON.stringify(keyPath);
 }
 
-const JSON_KEY_ARRAY = `ARRAY(SELECT jsonb_array_elements_text($3::jsonb))`;
+const JSON_KEY_ARRAY = `ARRAY(SELECT jsonb_array_elements_text($4::jsonb))`;
 
 async function loadDocKey(tenantId, docPath, keyPath) {
   const { rows } = await query(
-    `SELECT data #> ${JSON_KEY_ARRAY} AS data FROM json_docs WHERE tenant_id = $1 AND path = $2`,
-    [tenantId, docPath, jsonKeyPath(keyPath)]
+    `SELECT data #> ${JSON_KEY_ARRAY} AS data FROM json_docs WHERE tenant_id = $1 AND game_id = $2 AND path = $3`,
+    [tenantId, currentGameId(), docPath, jsonKeyPath(keyPath)]
   );
   if (!rows[0] || rows[0].data == null) return null;
   return rows[0].data;
@@ -997,34 +1075,39 @@ async function loadDocKey(tenantId, docPath, keyPath) {
 
 async function upsertDocKey(tenantId, docPath, keyPath, value) {
   const payload = JSON.stringify(value ?? null);
+  const gameId = currentGameId();
   await query(
-    `INSERT INTO json_docs (tenant_id, path, data)
-     VALUES ($1, $2, jsonb_set('{}'::jsonb, ${JSON_KEY_ARRAY}, $4::jsonb, true))
-     ON CONFLICT (tenant_id, path) DO UPDATE
-     SET data = jsonb_set(COALESCE(json_docs.data, '{}'::jsonb), ${JSON_KEY_ARRAY}, $4::jsonb, true)`,
-    [tenantId, docPath, jsonKeyPath(keyPath), payload]
+    `INSERT INTO json_docs (tenant_id, game_id, path, data)
+     VALUES ($1, $2, $3, jsonb_set('{}'::jsonb, ${JSON_KEY_ARRAY}, $5::jsonb, true))
+     ON CONFLICT (tenant_id, game_id, path) DO UPDATE
+     SET data = jsonb_set(COALESCE(json_docs.data, '{}'::jsonb), ${JSON_KEY_ARRAY}, $5::jsonb, true)`,
+    [tenantId, gameId, docPath, jsonKeyPath(keyPath), payload]
   );
 }
 
 async function deleteDocKey(tenantId, docPath, keyPath) {
   await query(
-    `UPDATE json_docs SET data = data #- ${JSON_KEY_ARRAY} WHERE tenant_id = $1 AND path = $2`,
-    [tenantId, docPath, jsonKeyPath(keyPath)]
+    `UPDATE json_docs SET data = data #- ${JSON_KEY_ARRAY} WHERE tenant_id = $1 AND game_id = $2 AND path = $3`,
+    [tenantId, currentGameId(), docPath, jsonKeyPath(keyPath)]
   );
 }
 
 async function saveDoc(tenantId, docPath, data) {
+  const gameId = currentGameId();
   if (data === null || data === undefined || (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0 && docPath.includes('/'))) {
     if (data === null || data === undefined) {
-      await query('DELETE FROM json_docs WHERE tenant_id = $1 AND path = $2', [tenantId, docPath]);
+      await query(
+        'DELETE FROM json_docs WHERE tenant_id = $1 AND game_id = $2 AND path = $3',
+        [tenantId, gameId, docPath]
+      );
       return;
     }
   }
   await query(
-    `INSERT INTO json_docs (tenant_id, path, data)
-     VALUES ($1, $2, $3::jsonb)
-     ON CONFLICT (tenant_id, path) DO UPDATE SET data = EXCLUDED.data`,
-    [tenantId, docPath, JSON.stringify(data ?? null)]
+    `INSERT INTO json_docs (tenant_id, game_id, path, data)
+     VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (tenant_id, game_id, path) DO UPDATE SET data = EXCLUDED.data`,
+    [tenantId, gameId, docPath, JSON.stringify(data ?? null)]
   );
 }
 
@@ -1111,7 +1194,10 @@ async function writePath(tenantId, path, value) {
 
   if (parts[0] === 'attendance' && parts[1] === 'commitments') {
     if (parts.length === 2) {
-      await query('DELETE FROM attendance_commitments WHERE tenant_id = $1', [tenantId]);
+      await query(
+        'DELETE FROM attendance_commitments WHERE tenant_id = $1 AND game_id = $2',
+        [tenantId, currentGameId()]
+      );
       if (value && typeof value === 'object') {
         for (const [eventKey, members] of Object.entries(value)) {
           await writeCommitment(tenantId, eventKey, null, members);

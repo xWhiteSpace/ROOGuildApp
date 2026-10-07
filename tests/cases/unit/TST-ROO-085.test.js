@@ -9,9 +9,11 @@ import {
 
 describe('TST-ROO-085 InteractiveClaimPanel updates claims only while the live-claim gate is open', () => {
   it('Open gate and rostered member update the session claim', async () => {
-    const { claimed, after } = await openGateClaimUpdatesSession();
+    const { claimed, after, members } = await openGateClaimUpdatesSession();
     expect(claimed).toBe('111');
     expect(after.version).toBeGreaterThan(1);
+    expect(after.categoryAllocations.puppet.selected[0]).toBe('111');
+    expect(members['111'].displayName).toBe('Ada');
   });
 
   it('Closed live-claim gate does not change the session', async () => {

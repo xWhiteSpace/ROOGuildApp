@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 import { patterns } from './registry.js';
 import { withEnv } from './envSandbox.js';
 import { dispatch } from '../support/dispatch.js';
-import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID } from '../../backend/src/games/catalog.js';
+import { RAGNAROK_ORIGIN_ID, ADVENTURER_GUILD_ID, RAGNAROK_3_ID } from '../../backend/src/games/catalog.js';
 
 patterns.unit_require_game_mount_tree = 'used';
 patterns.ro_ag_mount_gate = 'used';
@@ -90,6 +90,17 @@ export async function agMountWithoutAg() {
     return dispatch(app, {
       method: 'GET',
       path: '/api/adventurer-guild/highlights',
+      session: sessionWithTenant([RAGNAROK_ORIGIN_ID]),
+    });
+  });
+}
+
+export async function r3MountWithoutR3() {
+  return withEnv({}, async () => {
+    const app = createApp();
+    return dispatch(app, {
+      method: 'GET',
+      path: '/api/ragnarok-3/health',
       session: sessionWithTenant([RAGNAROK_ORIGIN_ID]),
     });
   });

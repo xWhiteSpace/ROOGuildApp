@@ -33,6 +33,15 @@ import { PRODUCT_NAME, productTitle } from './brand';
 import { GAMES, firstEnabledGameId, gameIdForPath, RAGNAROK_ORIGIN_ID, resolvePostLoginPath } from './games/catalog';
 import HighlightsPage from './games/adventurer-guild/pages/HighlightsPage';
 import GuildEventsPage from './games/adventurer-guild/pages/GuildEventsPage';
+import R3MasterListTab from './games/ragnarok-3/pages/MasterListTab';
+import R3Profile from './games/ragnarok-3/pages/Profile';
+import R3PeakHoursTab from './games/ragnarok-3/pages/PeakHoursTab';
+import R3RaidPartyTab from './games/ragnarok-3/pages/RaidPartyTab';
+import R3WarRoomTab from './games/ragnarok-3/pages/WarRoomTab';
+import R3OcrReviewTab from './games/ragnarok-3/pages/OcrReviewTab';
+import R3Scheduler from './games/ragnarok-3/pages/Scheduler';
+import R3SettingsTab from './games/ragnarok-3/pages/SettingsTab';
+import R3HelpGuide from './games/ragnarok-3/pages/HelpGuide';
 
 export const MimicBookContext = createContext(null);
 
@@ -366,6 +375,17 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/games/adventurer-guild" element={<HighlightsPage user={authUser} />} />
         <Route path="/games/adventurer-guild/highlights" element={<Navigate to="/games/adventurer-guild" replace />} />
         <Route path="/games/adventurer-guild/events" element={<GuildEventsPage user={authUser} />} />
+        <Route path="/games/ragnarok-3" element={<R3MasterListTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/profile" element={<R3Profile user={authUser} />} />
+        <Route path="/games/ragnarok-3/profile/:uid" element={<R3Profile user={authUser} />} />
+        <Route path="/games/ragnarok-3/peak-hours" element={<R3PeakHoursTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/raid-config" element={<R3RaidPartyTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/war-room" element={<R3WarRoomTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/gvg-attendance" element={<R3OcrReviewTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/gvg-attendance/:reviewId" element={<R3OcrReviewTab user={authUser} />} />
+        <Route path="/games/ragnarok-3/calendar" element={<R3Scheduler user={authUser} />} />
+        <Route path="/games/ragnarok-3/help" element={<R3HelpGuide />} />
+        <Route path="/games/ragnarok-3/settings" element={<R3SettingsTab user={authUser} onSessionUser={onSessionUser} />} />
         <Route path="/games/ragnarok-origin/settings" element={<SettingsTab user={authUser} onSessionUser={onSessionUser} />} />
         <Route path="/settings-configuration" element={<Navigate to="/games/ragnarok-origin/settings" replace />} />
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
