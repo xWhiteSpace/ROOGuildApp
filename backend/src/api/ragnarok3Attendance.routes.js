@@ -1293,7 +1293,8 @@ router.get('/members', async (req, res) => {
   try {
     const view = String(req.query.view || '').trim();
     if (view === 'card' || view === 'list') {
-      const members = await loadMembersProjected(view);
+      const raidRosterOnly = String(req.query.roster || '').trim() === 'raid';
+      const members = await loadMembersProjected(view, undefined, { raidRosterOnly });
       return res.json({ success: true, members });
     }
     const db = getTenantStore();

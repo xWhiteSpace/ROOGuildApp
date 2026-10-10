@@ -1,9 +1,10 @@
 // frontend/src/pages/MimicBookTab.jsx
-import { useState, useEffect, useRef, useContext } from 'react';
+import { memo, useState, useEffect, useRef, useContext } from 'react';
 import { MimicBookContext } from '../../../App';
 import { apiFetch } from '../../../services/apiClient';
 import { buildAllocateBidRows } from '@guildname/shared/allocatePreview';
-import { fetchRequestQueue, invalidateMembers, invalidateRequestLobby, useActiveSession, useRequestInit, useRequestQueue, useSettings } from '../../../query/hooks';
+import { patchChangedAllocations, rosterNamesFromMembers } from '@guildname/shared/mimicBookRoster';
+import { fetchRequestQueue, invalidateMembers, invalidateRequestLobby, useActiveSession, useRaidRosterCard, useRequestInit, useRequestQueue, useSettings } from '../../../query/hooks';
 
 // 🌐 Absolute target network routing parameters for cross-domain Vercel/Render deployments
 const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
@@ -25,6 +26,68 @@ const IconChevron = ({ direction = "right" }) => {
   const rotations = { left: "rotate-180", right: "", up: "-rotate-90", down: "rotate-90" };
   return <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${rotations[direction] || ""}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7"/></svg>;
 };
+
+function auctionBookSlotEqual(prev, next) {
+  return (
+    prev.slotIndex === next.slotIndex
+    && (prev.slot?.name || '') === (next.slot?.name || '')
+    && (prev.slot?.itemName || '') === (next.slot?.itemName || '')
+    && (prev.slot?.itemType || '') === (next.slot?.itemType || '')
+    && prev.slotDisplayName === next.slotDisplayName
+    && prev.isTargetOwner === next.isTargetOwner
+    && prev.spotlightActive === next.spotlightActive
+    && prev.viewLens === next.viewLens
+    && (prev.profile?.className || '') === (next.profile?.className || '')
+    && (prev.profile?.style?.color || '') === (next.profile?.style?.color || '')
+  );
+}
+
+const AuctionBookSlotRow = memo(function AuctionBookSlotRow({
+  slotIndex,
+  slot,
+  profile,
+  slotDisplayName,
+  isTargetOwner,
+  spotlightActive,
+  viewLens,
+}) {
+  if (!slot) {
+    return (
+      <div className="grid grid-cols-12 text-[10px] font-mono p-2.5 border border-slate-900 bg-slate-900/10 rounded-xl text-slate-700 select-none items-center">
+        <div className="col-span-2 font-bold text-slate-800/60">[{String(slotIndex).padStart(2, '0')}]</div>
+        <div className="col-span-10 italic text-[10px] text-slate-800/30">EMPTY IN-GAME BIDDING SLOT</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`grid grid-cols-12 items-center text-[11px] font-mono px-3 py-2 border rounded-xl transition-all ${profile.className} ${spotlightActive ? 'ring-2 ring-amber-500 bg-slate-900/80 scale-[1.01]' : (viewLens === 'MINE' ? 'opacity-10' : '')}`}
+      style={profile.style}
+    >
+      <div className="col-span-2 font-bold text-slate-500/80 flex items-center gap-2 select-none">
+        [{String(slotIndex).padStart(2, '0')}]
+        {isTargetOwner && (
+          <span className="relative flex h-1.5 w-1.5 shrink-0 ml-0.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500 shadow shadow-rose-500/50"></span>
+          </span>
+        )}
+      </div>
+      <div className="col-span-5 font-sans font-semibold text-[11px] tracking-tight truncate pr-2">{slot.itemName}</div>
+      <div className="col-span-5 text-right font-sans font-bold truncate">
+        {slot.name === "" ? (
+          <span className="inline-flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider font-mono font-semibold text-slate-500 select-none w-full">
+            <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" strokeDasharray="3 3"/></svg>
+            Available
+          </span>
+        ) : (
+          <span className="text-slate-300">{slotDisplayName}</span>
+        )}
+      </div>
+    </div>
+  );
+}, auctionBookSlotEqual);
 
 export default function MimicBookTab({ user }) {
   const IconUndo = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>;
@@ -52,7 +115,11 @@ export default function MimicBookTab({ user }) {
   } = useContext(MimicBookContext);
   const [lootHistoryDates, setLootHistoryDates] = useState([]);
   const [selectedLootDate, setSelectedLootDate] = useState('');
-  const sessionQuery = useActiveSession();
+  const sessionQuery = useActiveSession({
+    refetchInterval: isDiscordGateOpen ? 3500 : false,
+  });
+  const raidRosterQuery = useRaidRosterCard();
+  const sessionHydratedRef = useRef(false);
 
   const popoverAnchorRef = useRef(null);
   const [draggedItemIndex, setDraggedItemIndex] = useState(null);
@@ -218,16 +285,7 @@ const [rawMembers, setRawMembers] = useState({});
       if (data.success) {
         alert(`SUCCESS: Realtime Roster sync complete!`);
         await invalidateMembers();
-        const rosterRes = await apiFetch('/api/attendance/members?view=card');
-        const rosterData = await rosterRes.json();
-        if (rosterData.success) {
-          const names = Object.values(rosterData.members || {})
-            .map((row) => row?.displayName)
-            .filter(Boolean)
-            .sort();
-          setMasterGuildRoster(names);
-          setRawMembers((prev) => ({ ...prev, ...(rosterData.members || {}) }));
-        }
+        await raidRosterQuery.refetch();
         loadTrueRequestPool();
       }
     } catch (err) {
@@ -279,6 +337,13 @@ const [rawMembers, setRawMembers] = useState({});
     if (!isInitialMount && (Date.now() - lastLocalWriteTimeRef.current < 4000)) return;
     if (!isInitialMount && s.version !== undefined && s.version <= clientVersionRef.current) return;
     clientVersionRef.current = s.version || 0;
+    if (!isInitialMount) {
+      if (s.categoryAllocations) {
+        setCategoryAllocations((prev) => patchChangedAllocations(prev, s.categoryAllocations));
+      }
+      if (s.members) setRawMembers((prev) => ({ ...prev, ...s.members }));
+      return;
+    }
     if (s.activeStep !== undefined) setActiveStep(s.activeStep);
     if (s.lootRows) setLootRows(s.lootRows);
     if (s.lootSummary) setLootSummary(s.lootSummary);
@@ -385,7 +450,19 @@ const [rawMembers, setRawMembers] = useState({});
   };
 
   useEffect(() => {
-    if (sessionQuery.data) applyActiveSession(sessionQuery.data, true);
+    if (!raidRosterQuery.data) return;
+    setMasterGuildRoster(rosterNamesFromMembers(raidRosterQuery.data));
+    setRawMembers((prev) => ({ ...prev, ...raidRosterQuery.data }));
+  }, [raidRosterQuery.data]);
+
+  useEffect(() => {
+    if (!sessionQuery.data) return;
+    if (!sessionHydratedRef.current) {
+      applyActiveSession(sessionQuery.data, true);
+      sessionHydratedRef.current = true;
+      return;
+    }
+    applyActiveSession(sessionQuery.data, false);
   }, [sessionQuery.data]);
 
   useEffect(() => {
@@ -1590,47 +1667,21 @@ const [rawMembers, setRawMembers] = useState({});
             <div className="space-y-1.5 flex-1 py-0.5">
               {pageSlotsToRender.map((slot, index) => {
                 const slotIndex = index + 1;
-                if (!slot) {
-                  return (
-                    <div key={slotIndex} className="grid grid-cols-12 text-[10px] font-mono p-2.5 border border-slate-900 bg-slate-900/10 rounded-xl text-slate-700 select-none items-center">
-                      <div className="col-span-2 font-bold text-slate-800/60">[{String(slotIndex).padStart(2, '0')}]</div>
-                      <div className="col-span-10 italic text-[10px] text-slate-800/30">EMPTY IN-GAME BIDDING SLOT</div>
-                    </div>
-                  );
-                }
-
-                const profile = getItemStyleProfile(slot.itemType);
-                const slotDisplayName = resolveDisplayName(slot.name);
-                const isTargetOwner = user && (slot.name === user?.id || slotDisplayName.toLowerCase() === currentUserName.toLowerCase());
+                const profile = slot ? getItemStyleProfile(slot.itemType) : { className: '', style: {} };
+                const slotDisplayName = slot ? resolveDisplayName(slot.name) : '';
+                const isTargetOwner = Boolean(slot && user && (slot.name === user?.id || slotDisplayName.toLowerCase() === currentUserName.toLowerCase()));
                 const spotlightActive = viewLens === 'MINE' && isTargetOwner;
-
                 return (
-                  <div 
-                    key={slotIndex} 
-                    className={`grid grid-cols-12 items-center text-[11px] font-mono px-3 py-2 border rounded-xl transition-all ${profile.className} ${spotlightActive ? 'ring-2 ring-amber-500 bg-slate-900/80 scale-[1.01]' : (viewLens === 'MINE' ? 'opacity-10' : '')}`} 
-                    style={profile.style}
-                  >
-                    <div className="col-span-2 font-bold text-slate-500/80 flex items-center gap-2 select-none">
-                      [{String(slotIndex).padStart(2, '0')}]
-                      {isTargetOwner && (
-                        <span className="relative flex h-1.5 w-1.5 shrink-0 ml-0.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500 shadow shadow-rose-500/50"></span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="col-span-5 font-sans font-semibold text-[11px] tracking-tight truncate pr-2">{slot.itemName}</div>
-                    <div className="col-span-5 text-right font-sans font-bold truncate">
-                      {slot.name === "" ? (
-                        <span className="inline-flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-wider font-mono font-semibold text-slate-500 select-none w-full">
-                          <svg className="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" strokeDasharray="3 3"/></svg>
-                          Available
-                        </span>
-                      ) : (
-                        <span className="text-slate-300">{slotDisplayName}</span>
-                      )}
-                    </div>
-                  </div>
+                  <AuctionBookSlotRow
+                    key={slot ? `${slot.page}-${slot.slot}` : slotIndex}
+                    slotIndex={slotIndex}
+                    slot={slot}
+                    profile={profile}
+                    slotDisplayName={slotDisplayName}
+                    isTargetOwner={isTargetOwner}
+                    spotlightActive={spotlightActive}
+                    viewLens={viewLens}
+                  />
                 );
               })}
             </div>

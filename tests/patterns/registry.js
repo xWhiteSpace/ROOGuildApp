@@ -326,6 +326,7 @@ export const patterns = {
   "r3_game_id_stamp": "unused",
   "r3_path_catalog": "unused",
   "r3_no_schedule_contributor": "unused",
+  "mimic_book_roster": "unused",
 };
 
 export function patternStatus(name) {

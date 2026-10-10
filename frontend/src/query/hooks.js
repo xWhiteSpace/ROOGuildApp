@@ -80,6 +80,20 @@ export function useMembers(view, options = {}) {
   });
 }
 
+/** Raid-roster card slice only. Own cache key so full card/list maps stay intact. */
+export function useRaidRosterCard(options = {}) {
+  return useQuery({
+    queryKey: queryKeys.members('card-raid'),
+    queryFn: async () => {
+      const res = await apiFetch('/api/attendance/members?view=card&roster=raid');
+      const data = await readSuccess(res, 'Failed to load members');
+      return data.members || {};
+    },
+    staleTime: FIVE_MIN,
+    ...options,
+  });
+}
+
 function toCardMember(uid, m) {
   return {
     uid,
@@ -93,20 +107,31 @@ function toCardMember(uid, m) {
 export function setMembersCaches(members) {
   const list = members || {};
   const card = {};
+  const raid = {};
   Object.entries(list).forEach(([uid, m]) => {
-    card[uid] = toCardMember(uid, m);
+    const row = toCardMember(uid, m);
+    card[uid] = row;
+    if (row.isRaidRoster) raid[uid] = row;
   });
   queryClient.setQueryData(queryKeys.members('list'), list);
   queryClient.setQueryData(queryKeys.members('card'), card);
+  queryClient.setQueryData(queryKeys.members('card-raid'), raid);
 }
 
 export function upsertMemberCaches(uid, member) {
   if (!uid || !member) return;
+  const cardRow = toCardMember(uid, member);
   queryClient.setQueryData(queryKeys.members('list'), (prev) => ({ ...(prev || {}), [uid]: member }));
   queryClient.setQueryData(queryKeys.members('card'), (prev) => ({
     ...(prev || {}),
-    [uid]: toCardMember(uid, member),
+    [uid]: cardRow,
   }));
+  queryClient.setQueryData(queryKeys.members('card-raid'), (prev) => {
+    const next = { ...(prev || {}) };
+    if (cardRow.isRaidRoster) next[uid] = cardRow;
+    else delete next[uid];
+    return next;
+  });
 }
 
 export function useSettings(fields, options = {}) {

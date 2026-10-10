@@ -7,7 +7,8 @@
     "./raidCycle": "./raidCycle.js",
     "./attendanceStatus": "./attendanceStatus.js",
     "./inGameAlias": "./inGameAlias.js",
-    "./allocatePreview": "./allocatePreview.js"
+    "./allocatePreview": "./allocatePreview.js",
+    "./mimicBookRoster": "./mimicBookRoster.js"
   },
   "private": true
 }

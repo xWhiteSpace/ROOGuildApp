@@ -183,12 +183,17 @@ function memberListProjectionSql() {
   )`;
 }
 
+/** Same raid-roster predicate used by leave-credit scans and the cheap card slice. */
+export const RAID_ROSTER_SQL = `COALESCE((data->>'isRaidRoster')::boolean, false) = true`;
+
 /** Project roster columns in SQL. Never SELECT data (playSchedule stays in the table). */
-export async function loadMembersProjected(view = 'list', tenantId) {
+export async function loadMembersProjected(view = 'list', tenantId, options = {}) {
   const id = requireTenant(tenantId);
   const projection = view === 'card' ? memberCardProjectionSql() : memberListProjectionSql();
+  const raidOnly = options.raidRosterOnly === true;
+  const raidClause = raidOnly ? ` AND ${RAID_ROSTER_SQL}` : '';
   const { rows } = await query(
-    `SELECT discord_id AS id, ${projection} AS data FROM members WHERE tenant_id = $1 AND game_id = $2`,
+    `SELECT discord_id AS id, ${projection} AS data FROM members WHERE tenant_id = $1 AND game_id = $2${raidClause}`,
     [id, currentGameId()]
   );
   const out = {};
@@ -217,7 +222,7 @@ export async function raidRosterMissingLeaveCredits(tenantId) {
     `SELECT EXISTS (
        SELECT 1 FROM members
        WHERE tenant_id = $1 AND game_id = $2
-         AND COALESCE((data->>'isRaidRoster')::boolean, false) = true
+         AND ${RAID_ROSTER_SQL}
          AND (data->>'status') IS DISTINCT FROM 'Ghost'
          AND jsonb_typeof(data->'leaveCreditsRemaining') IS DISTINCT FROM 'number'
      ) AS missing`,
