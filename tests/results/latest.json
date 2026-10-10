@@ -1,0 +1,458 @@
+{
+  "commit": "9237b35321389ccfef3ca0768305caa8ba345152",
+  "time": "2026-10-06T12:44:52.770Z",
+  "cases": [
+    {
+      "file": "tests/cases/system/TST-ROO-244.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/requestLedger.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/requestLobby.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-R3-001.test.js",
+      "status": "failed"
+    },
+    {
+      "file": "tests/cases/unit/TST-R3-002.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-R3-003.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-R3-004.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-R3-005.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-001.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-003.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-004.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-005.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-006.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-007.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-023.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-024.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-025.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-026.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-027.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-028.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-029.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-030.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-031.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-046.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-047.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-048.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-049.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-050.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-051.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-052.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-057.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-066.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-067.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-068.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-069.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-070.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-071.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-072.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-073.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-074.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-075.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-076.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-077.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-078.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-079.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-080.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-081.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-082.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-083.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-084.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-085.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-088.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-089.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-090.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-091.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-092.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-093.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-094.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-095.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-096.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-098.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-099.test.js",
+      "status": "failed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-100.test.js",
+      "status": "failed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-108.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-109.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-110.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-121.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-129.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-130.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-138.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-139.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-152.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-168.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-171.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-173.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-174.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-175.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-180.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-181.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-188.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-189.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-190.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-191.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-192.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-193.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-200.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-201.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-202.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-203.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-205.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-206.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-207.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-208.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-209.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-210.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-211.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-212.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-213.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-214.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-223.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-228.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-238.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-239.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-240.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-243.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-245.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-246.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-247.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/cases/unit/TST-ROO-248.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/smoke/acceptance.smoke.spec.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/smoke/integration.smoke.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/smoke/system.smoke.test.js",
+      "status": "passed"
+    },
+    {
+      "file": "tests/smoke/unit.smoke.test.js",
+      "status": "passed"
+    }
+  ]
+}

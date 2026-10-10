@@ -60,10 +60,13 @@ export async function migrateAppliesNamedTables() {
 
 export function originGameSettingsBackfillCopiesThenStrips() {
   const sql = readFileSync(SCHEMA_PATH, 'utf8');
+  const originInsert = sql.match(/INSERT INTO game_settings[\s\S]*?FROM tenant_settings/i)?.[0] || '';
   return {
     copiesOrigin: /INSERT INTO game_settings[\s\S]*'ragnarok-origin'[\s\S]*FROM tenant_settings/i.test(sql),
-    fillsEmptyOnly: /WHERE COALESCE\(game_settings\.configuration, '\{\}'::jsonb\) = '\{\}'::jsonb/i.test(sql),
+    leftoverTenantCatalogsWin: /ON CONFLICT \(tenant_id, game_id\) DO UPDATE\s+SET configuration = EXCLUDED\.configuration/i.test(sql)
+      && !/WHERE COALESCE\(game_settings\.configuration, '\{\}'::jsonb\) = '\{\}'::jsonb/i.test(sql),
     stripsLeftoverGameKeys: /WHERE \(configuration - 'guildDisplayName'[\s\S]*<> '\{\}'::jsonb/i.test(sql),
+    noR3Insert: originInsert.length > 0 && !/'ragnarok-3'/.test(originInsert),
   };
 }
 

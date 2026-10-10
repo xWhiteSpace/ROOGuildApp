@@ -151,7 +151,10 @@ WHERE path LIKE 'adventurer-guild/%'
 
 -- Origin catalogs used to live on tenant_settings.configuration. Copy them into
 -- game_settings for ragnarok-origin, then leave only workspace keys on the tenant row.
--- Fill an empty Origin game_settings row; never clobber a catalog officers already saved.
+-- If tenant_settings still has leftover game catalogs, that unmigrated production
+-- row wins (even if an empty/partial Origin game_settings row already exists).
+-- After this strip, leftover is gone so later boots do not overwrite Origin.
+-- Do not insert ragnarok-3 rows here — RO3 catalogs stay empty until the game is enabled.
 INSERT INTO game_settings (tenant_id, game_id, configuration, updated_at)
 SELECT tenant_id,
        'ragnarok-origin',
@@ -161,8 +164,7 @@ FROM tenant_settings
 WHERE (configuration - 'guildDisplayName' - 'timezone' - 'adminRoles' - 'guildLogoUrl') <> '{}'::jsonb
 ON CONFLICT (tenant_id, game_id) DO UPDATE
 SET configuration = EXCLUDED.configuration,
-    updated_at = NOW()
-WHERE COALESCE(game_settings.configuration, '{}'::jsonb) = '{}'::jsonb;
+    updated_at = NOW();
 
 UPDATE tenant_settings
 SET configuration = jsonb_strip_nulls(jsonb_build_object(
