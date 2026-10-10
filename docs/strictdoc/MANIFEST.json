@@ -47,7 +47,7 @@
   "poison": "Requirements/Requirements.md is NOT SoT",
   "skipped_nodes": {
     "design_full_bodies": "FNC/API/CMP/INT/UNT full nodes summarized by domain ranges only (not every node inlined)",
-    "invented_requirements": "none \u2014 SSOT JSON only"
+    "invented_requirements": "none — SSOT JSON only"
   },
   "missing_req_parents": [],
   "files": [
@@ -95,5 +95,44 @@
   "total_bytes": 265085,
   "notes": {
     "freetext": "Narrative blocks use [TEXT]/STATEMENT (StrictDoc post-2024); classic [SECTION] retained per package spec"
+  },
+  "ssot_sync": {
+    "at": "2026-10-10 (JST)",
+    "graph_version": 91,
+    "source": "xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8",
+    "counts": {
+      "ROO": {
+        "USR": 44,
+        "REQ": 211,
+        "FNC": 212,
+        "API": 118,
+        "CMP": 29,
+        "INT": 121,
+        "UNT": 223,
+        "TST": 258
+      },
+      "RO3": {
+        "USR": 9,
+        "REQ": 22,
+        "FNC": 24,
+        "API": 51,
+        "CMP": 11,
+        "INT": 40,
+        "UNT": 41,
+        "TST": 46
+      }
+    },
+    "execution_status": "blocked_on_tooling",
+    "evidence_status": "none",
+    "evd_count": 0,
+    "cross_project_links": 0,
+    "files_added": [
+      "requirements/ro3_usr.sdoc",
+      "requirements/ro3_req.sdoc",
+      "design/ro3_summary.sdoc",
+      "verification/ro3_tests.sdoc",
+      "trace/RO3/neighborhood.html"
+    ],
+    "note": "Top-level counts/tips above are the 2026-09-26 export; see this block for current SSOT counts."
   }
 }

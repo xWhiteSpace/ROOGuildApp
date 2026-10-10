@@ -11,6 +11,36 @@
 
 ---
 
+## SSOT sync 2026-10-10 (JST) — graph 91
+
+Regenerated from the published SSOT store (graph 91; tests index 26, units 26, structure 26, interfaces 30, requirements 16; source `xWhiteSpace/ROOGuildApp@f38e137`). The tables further down are the original 2026-09-26 export and are kept as history; they are not current.
+
+| Project | Published nodes in SSOT |
+| --- | --- |
+| ROO (Ragnarok Origin) | USR 44 / REQ 211 / FNC 212 / API 118 / CMP 29 / INT 121 / UNT 223 / TST 258 |
+| RO3 (Ragnarok 3) | USR 9 / REQ 22 / FNC 24 / API 51 / CMP 11 / INT 40 / UNT 41 / TST 46 |
+
+| Path | What it is |
+| --- | --- |
+| [`requirements/usr.sdoc`](requirements/usr.sdoc) / [`requirements/req.sdoc`](requirements/req.sdoc) | ROO USR / REQ (REQ → Parent USR) |
+| [`verification/tests.sdoc`](verification/tests.sdoc) | ROO TST plans (TST-ROO-001 .. TST-ROO-260; 248 and 250 not minted in SSOT) |
+| [`design/summary.sdoc`](design/summary.sdoc) | ROO left-side counts and next free ids |
+| [`requirements/ro3_usr.sdoc`](requirements/ro3_usr.sdoc) / [`requirements/ro3_req.sdoc`](requirements/ro3_req.sdoc) | RO3 USR / REQ |
+| [`verification/ro3_tests.sdoc`](verification/ro3_tests.sdoc) | RO3 TST plans (TST-RO3-001 .. TST-RO3-046) |
+| [`design/ro3_summary.sdoc`](design/ro3_summary.sdoc) | RO3 left-side counts and next free ids |
+| [`trace/neighborhood.html`](trace/neighborhood.html) | ROO standing map (V landing, focus, World) |
+| [`trace/RO3/neighborhood.html`](trace/RO3/neighborhood.html) | RO3 standing map |
+| [`trace/interfaces.sqlite`](trace/interfaces.sqlite) | Interface variables, ROO + RO3 rows with a `project` column |
+
+ROO and RO3 are strictly isolated: no relation in one project points at the other. Counterpart ids appear only as plain text.
+Every TST is a plan: execution_status `blocked_on_tooling`, evidence_status `none`. Nothing is marked passed; there is no EVD.
+`design/onboarding.sdoc` and `design/gvg-readiness.sdoc` are Staging-authored and were not regenerated.
+The `REQ-R3-*` / `TST-R3-*` sections in the ROO documents are Staging-authored legacy text and were left as they are.
+
+Plan lineage, not proof.
+
+---
+
 ## How to open
 
 1. **Humans:** start here (`DELIVERABLES.md`), then follow links below.

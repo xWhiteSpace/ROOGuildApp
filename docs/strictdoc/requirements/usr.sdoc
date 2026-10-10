@@ -16,6 +16,7 @@ Source: SSOT requirements/usr (published only).
 Poison: Requirements/Requirements.md is NOT SoT — Firebase historical SRS; refused by policy quarantine.
 Phase 1 complete: USR-ROO-001 .. USR-ROO-042 (42 nodes).
 STATUS Active means published in SSOT registry, not proven by evidence.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. ROO USR published: 44 (USR-ROO-001 .. USR-ROO-044). Ragnarok 3 lives in its own project: requirements/ro3_usr.sdoc (no cross-project links). Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
 <<<
 
 [[/SECTION]]
@@ -426,19 +427,20 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [REQUIREMENT]
 UID: USR-ROO-043
 STATUS: Active
-TITLE: Discord onboarding hub for newcomers
+TITLE: Discord public Onboarding hub
 STATEMENT: >>>
-Guild members need: Discord onboarding hub for newcomers. One public card that explains Auction, GvG, General Chat, and the website, then points at the mapped channel or site.
+See where guild tools live from a public Onboarding hub and open a private topic card with a jump to the mapped channel or VALHALLA.
 <<<
 RATIONALE: >>>
-Newcomers do not know where Request/claim, war-announce, GEN, or VALHALLA live.
+New members and returning members need a single Discord card that explains Auction, GvG, General Chat, and the website without mixing that with HTTP workspace onboard.
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-who: Guild members
-why: One public card that explains Auction, GvG, General Chat, and the website, then points at the mapped channel or site.
-spoken_constraints: dedicated onboarding channel; ephemeral topic cards
+who: Guild members in Discord
+why: New members and returning members need a single Discord card that explains Auction, GvG, General Chat, and the website without mixing that with HTTP workspace onboard.
+spoken_constraints: Distinct from HTTP tenant onboard (USR-ROO-008).; Topic jumps use tenant discord channel map fields; website uses the VALHALLA frontend origin.
 ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 
 [[/SECTION]]
@@ -735,7 +737,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: OCR/GVG Attendance (USR-ROO-035 .. USR-ROO-035)
+TITLE: OCR/GVG Attendance (USR-ROO-035)
 
 [REQUIREMENT]
 UID: USR-ROO-035
@@ -902,6 +904,30 @@ why: apiFetch 402→billing; Officer Role Picker / Discord Sign-In / brand locku
 spoken_constraints: (none)
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Data isolation (USR-ROO-044)
+
+[REQUIREMENT]
+UID: USR-ROO-044
+STATUS: Active
+TITLE: Keep each game's data and settings apart in one workspace
+STATEMENT: >>>
+When a workspace plays more than one game, each game's roster, auctions, attendance, schedule, documents and settings stay separate, while guild name, timezone, admin roles and logo stay shared.
+<<<
+RATIONALE: >>>
+Ragnarok 3 was added next to Origin in the same workspace.
+<<<
+COMMENT: >>>
+domain: Data isolation
+who: Officers / platform
+why: Ragnarok 3 was added next to Origin in the same workspace.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 
 [[/SECTION]]

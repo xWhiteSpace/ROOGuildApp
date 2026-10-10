@@ -1,0 +1,128 @@
+[DOCUMENT]
+TITLE: RO3 Design Summary (left-side tips)
+UID: DOC-RO3-DESIGN
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: Left-side status
+
+[TEXT]
+STATEMENT: >>>
+Published counts and next free ids (from SSOT):
+- FNC published=24; tip=FNC-RO3-025
+- API published=51; tip=API-RO3-052
+- CMP published=11; tip=CMP-RO3-012
+- INT published=40; tip=INT-RO3-041
+- UNT published=41; tip=UNT-RO3-042
+
+This document summarizes by domain with ID ranges only (not every design node).
+Full node JSON remains in SSOT registries under interfaces/, structure/, units/.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: FNC — Functional specs
+
+[TEXT]
+STATEMENT: >>>
+Published count: 24
+ID span: FNC-RO3-001 .. FNC-RO3-024
+Next tip: FNC-RO3-025
+
+Domain map:
+- (none): count=24; range=FNC-RO3-001 .. FNC-RO3-024
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: API — Interfaces
+
+[TEXT]
+STATEMENT: >>>
+Published count: 51
+ID span: API-RO3-001 .. API-RO3-051
+Next tip: API-RO3-052
+
+Domain map:
+- (none): count=51; range=API-RO3-001 .. API-RO3-051
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: CMP — Components
+
+[TEXT]
+STATEMENT: >>>
+Published count: 11
+ID span: CMP-RO3-001 .. CMP-RO3-011
+Next tip: CMP-RO3-012
+
+Domain map:
+- Games/Access: count=3; range=CMP-RO3-001, CMP-RO3-010 .. CMP-RO3-011
+- Data isolation/Storage: count=1; range=CMP-RO3-002
+- Settings: count=1; range=CMP-RO3-003
+- Attendance/Roster: count=2; range=CMP-RO3-004 .. CMP-RO3-005
+- Raid compose/Party: count=1; range=CMP-RO3-006
+- Live raid: count=1; range=CMP-RO3-007
+- War Room: count=1; range=CMP-RO3-008
+- Party OCR: count=1; range=CMP-RO3-009
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: INT — Integration seams
+
+[TEXT]
+STATEMENT: >>>
+Published count: 40
+ID span: INT-RO3-001 .. INT-RO3-040
+Next tip: INT-RO3-041
+
+Domain map:
+- (none): count=40; range=INT-RO3-001 .. INT-RO3-040
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: UNT — Units
+
+[TEXT]
+STATEMENT: >>>
+Published count: 41
+ID span: UNT-RO3-001 .. UNT-RO3-041
+Next tip: UNT-RO3-042
+
+Domain map:
+- Games/Access: count=5; range=UNT-RO3-001 .. UNT-RO3-002, UNT-RO3-031 .. UNT-RO3-033
+- Data isolation/Storage: count=3; range=UNT-RO3-003 .. UNT-RO3-005
+- Settings: count=5; range=UNT-RO3-006 .. UNT-RO3-010
+- Attendance/Roster: count=6; range=UNT-RO3-011 .. UNT-RO3-015, UNT-RO3-029
+- Attendance/Scheduling: count=3; range=UNT-RO3-016 .. UNT-RO3-018
+- Attendance/Parties: count=2; range=UNT-RO3-019 .. UNT-RO3-020
+- Attendance/Live raid: count=10; range=UNT-RO3-021 .. UNT-RO3-023, UNT-RO3-035 .. UNT-RO3-041
+- War room: count=1; range=UNT-RO3-024
+- Attendance/OCR review: count=4; range=UNT-RO3-025 .. UNT-RO3-027, UNT-RO3-030
+- SPA/Profile: count=1; range=UNT-RO3-028
+- SPA/Navigation: count=1; range=UNT-RO3-034
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Cross-kind tip snapshot
+
+[TEXT]
+STATEMENT: >>>
+Tips (next free): FNC=FNC-RO3-025, API=API-RO3-052, CMP=CMP-RO3-012, INT=INT-RO3-041, UNT=UNT-RO3-042
+ROO design summary: design/summary.sdoc (separate project; no links).
+<<<
+
+[[/SECTION]]

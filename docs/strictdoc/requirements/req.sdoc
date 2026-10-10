@@ -17,6 +17,7 @@ Each REQ Parent-links to its USR via linked_from.
 Poison: Requirements/Requirements.md is NOT SoT.
 Phase 1 complete: REQ-ROO-001 .. REQ-ROO-172 (172 nodes).
 published ≠ proven; zero EVD at export time.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. ROO REQ published: 211 (REQ-ROO-001 .. REQ-ROO-211). Ragnarok 3 REQs live in requirements/ro3_req.sdoc (RO3 project). The 'Ragnarok 3 (REQ-R3-…)' section below is Staging-authored legacy text kept as-is; it is not an SSOT node set. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
 <<<
 
 [[/SECTION]]
@@ -835,19 +836,19 @@ TITLE: Games catalog (REQ-ROO-039 .. REQ-ROO-048)
 [REQUIREMENT]
 UID: REQ-ROO-039
 STATUS: Active
-TITLE: REQ-ROO-039: Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
+TITLE: REQ-ROO-039: The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
 STATEMENT: >>>
-Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
+The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
 <<<
 COMMENT: >>>
 domain: Games catalog
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Known games: `adventurer-guild`, `ragnarok-origin`, `ragnarok-3`.
+acceptance_criteria: The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
 source_draft: D-REQ-039
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1323,7 +1324,7 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077, REQ-ROO-190, REQ-ROO-197 .. REQ-ROO-200)
+TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077, REQ-ROO-190, REQ-ROO-194, REQ-ROO-197 .. REQ-ROO-201)
 
 [REQUIREMENT]
 UID: REQ-ROO-062
@@ -1412,19 +1413,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-066
 STATUS: Active
-TITLE: REQ-ROO-066: ~60s tenant ticker runs phase announces, raid event announces, leave-credit refr
+TITLE: REQ-ROO-066: Every 60 seconds, for each onboarded tenant the process still serves, the tick r
 STATEMENT: >>>
-~60s tenant ticker runs phase announces, raid event announces, leave-credit refresh, deadline close, live-raid auto-end, war-room automation, GVG readiness refresh, auto-commit auction (skips Discord-facing work when circuit open; skips first Discord tick after ready).
+Every 60 seconds, for each onboarded tenant the process still serves, the tick runs phase announces and raid event announces only when it is not the first tick after ready and the Discord 429 circuit is closed; then monthly leave-credit refresh and war-room automation (REQ-ROO-192). Automatic archiving of a live raid at its monitoring end time is required by REQ-ROO-144 and is not tied to this tick.
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: ~60s tenant ticker runs phase announces, raid event announces, leave-credit refresh, deadline close, live-raid auto-end, war-room automation, GVG readiness refresh, auto-commit auction (skips Discord-facing work when circuit open; skips first Discord tick after ready).
+acceptance_criteria: Every 60 seconds, for each onboarded tenant the process still serves, the tick runs phase announces and raid event announces only when it is not the first tick after ready and the Discord 429 circuit is closed; then monthly leave-credit refresh and war-room automation (REQ-ROO-192). Automatic archiving of a live raid at its monitoring end time is required by REQ-ROO-144 and is not tied to this tick. | The tick does not call closeExpiredDeadlines, refreshGvgReadinessBoard, or maybeAutoCommitAuction.
 source_draft: D-REQ-066
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@56261347f46af5fb72d96b653fd48e8fda273d5c
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1580,19 +1581,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-074
 STATUS: Active
-TITLE: REQ-ROO-074: Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings S
+TITLE: REQ-ROO-074: Attendance deploy-* aliases for Settings Send UX
 STATEMENT: >>>
-Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings Send UX.
+Attendance deploy-* aliases for Settings Send UX
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Same deploy actions also exposed under `/api/attendance/deploy-*` for Settings Send UX.
+acceptance_criteria: Officer deploy actions remain exposed under /api/attendance/deploy-* for Settings-style mounts: deploy-card (GVG readiness), deploy-party-card, deploy-ocr-card, and deploy-onboarding-card. | GET /api/attendance/deploy-onboarding-card performs the same Discord Onboarding hub deploy as GET /api/deploy-onboarding-card for an officer session.
 source_draft: D-REQ-074
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1601,19 +1602,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-075
 STATUS: Active
-TITLE: REQ-ROO-075: Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per
+TITLE: REQ-ROO-075: Per-tenant Discord channel map storage
 STATEMENT: >>>
-Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per tenant).
+Per-tenant Discord channel map storage
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Channel IDs live in `tenant_settings.discord_channels` JSON (not process env per tenant).
+acceptance_criteria: Channel IDs for a tenant live in tenant_settings.discord_channels JSON (and the tenant channel cache), including onboardingChannelId alongside existing fields such as aucreqChannelId, auctionChannelId, warAnnounceChannelId, genroomId, and warRooms. | Resolvers never fill empty mapped channel fields from process.env; an empty onboardingChannelId stays empty even when DISCORD_ONBOARDING_CHANNEL_ID is set in the process environment. | Officers can enter and persist the Onboarding hub channel id in Ragnarok Origin setup and in Game Settings Discord channel IDs. | Ragnarok Origin setup completeness still depends only on aucreqChannelId, auctionChannelId, or warAnnounceChannelId; onboardingChannelId alone does not complete setup.
 source_draft: D-REQ-075
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1662,19 +1663,42 @@ RELATIONS:
   VALUE: USR-ROO-020
 
 [REQUIREMENT]
-UID: REQ-ROO-197
+UID: REQ-ROO-194
 STATUS: Active
-TITLE: REQ-ROO-197: Tenant discord_channels may include optional onboardingChannelId; empty stays empty
+TITLE: REQ-ROO-194: The minute loop reuses cached onboarded tenants and settings
 STATEMENT: >>>
-Tenant `discord_channels` may include optional `onboardingChannelId`. Empty stays empty. `process.env` does not fill it. Missing this field does not fail RO setup completeness.
+The minute loop reuses cached onboarded tenants and settings
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-priority: must
+priority: unspecified
 type: system
-constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Tenant `discord_channels` may include optional `onboardingChannelId`. Empty stays empty. `process.env` does not fill it. Missing this field does not fail RO setup completeness.
+constraints: The onboarded-tenant list cache is cleared on tenant create, mark onboarded, billing activation, and the automatic founding-seat revert.; Per-tenant configuration and channel caches are reused only when both are already populated for that tenant.; Tenants without access are still skipped.
+acceptance_criteria: A 60-second tick does not call listOnboardedTenants again while the in-process list cache is populated. | A tick does not call loadTenantSettings for a tenant whose configuration and channels are already cached. | Creating a tenant, marking one onboarded, or activating/reverting billing clears the list so the next tick reloads onboarded tenants.
+source_draft: delta-2026-10-03/mints.json
 ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-018
+
+[REQUIREMENT]
+UID: REQ-ROO-197
+STATUS: Active
+TITLE: REQ-ROO-197: Public Onboarding hub lists four topic buttons
+STATEMENT: >>>
+Public Onboarding hub lists four topic buttons
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: unspecified
+type: software
+constraints: Hub embed title is Onboarding.; Topic button labels are Auction, GvG, General Chat, and Website.; Button customIds are onboard:auction, onboard:gvg, onboard:general, and onboard:website.
+acceptance_criteria: A deployed public Onboarding message shows title Onboarding and a welcome body that tells the member to pick a topic for a private explanation and jump. | The message has exactly four topic buttons labeled Auction, GvG, General Chat, and Website with customIds onboard:auction, onboard:gvg, onboard:general, and onboard:website. | Those four buttons are not link-style buttons on the hub itself.
+source_draft: discord-onboarding-2026-10-05/mints.json
+ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1683,17 +1707,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-198
 STATUS: Active
-TITLE: REQ-ROO-198: Officer GET /api/deploy-onboarding-card posts the Onboarding hub
+TITLE: REQ-ROO-198: Onboarding topic cards explain purpose and jump to mapped places
 STATEMENT: >>>
-Officer `GET /api/deploy-onboarding-card` posts the public Onboarding hub to the mapped onboarding channel. Unmapped → 400; bot offline or Discord circuit open → 503; channel locate miss → 404; not officer → 403. Same action also on `GET /api/attendance/deploy-onboarding-card`.
+Onboarding topic cards explain purpose and jump to mapped places
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-priority: must
-type: system
-constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Officer `GET /api/deploy-onboarding-card` posts the public Onboarding hub to the mapped onboarding channel. Unmapped → 400; bot offline or Discord circuit open → 503; channel locate miss → 404; not officer → 403. Same action also on `GET /api/attendance/deploy-onboarding-card`.
+priority: unspecified
+type: software
+constraints: Auction topic resolves aucreqChannelId; GvG resolves warAnnounceChannelId; General Chat resolves genroomId.; Website topic has no Discord channel field; jump uses the VALHALLA frontend origin with a trailing slash removed.; Unmapped sentence when the topic channel id is empty: This channel is not mapped yet. Ask an officer to paste the ID in Settings.; Back control customId is onboard:back.
+acceptance_criteria: Pressing Auction, GvG, or General Chat on the hub yields a private topic card whose title matches the topic and whose body includes that topic's purpose text. | When the mapped channel id for that topic is set, the body mentions the channel and the card offers a Jump to channel link to discord.com/channels/{guildId}/{channelId} plus Back. | When that mapped channel id is empty, the body includes the unmapped Settings sentence, there is no jump link, and Back is present. | Pressing Website yields a topic card with the website purpose; when a frontend origin is configured it offers Open VALHALLA to that origin; when the origin is empty there is no Open VALHALLA link; Back is always present. | Pressing Back from a topic card restores the public hub payload (title Onboarding and the four topic buttons).
+source_draft: discord-onboarding-2026-10-05/mints.json
 ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1702,17 +1728,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-199
 STATUS: Active
-TITLE: REQ-ROO-199: Onboarding hub buttons open ephemeral topic cards with purpose and location
+TITLE: REQ-ROO-199: Onboarding button ACK is ephemeral reply from the public hub and update when alr
 STATEMENT: >>>
-Hub buttons `Auction`, `GvG`, `General Chat`, `Website` open a private ephemeral topic card with purpose text and a location (channel mention + jump URL, or website URL). `Back` returns to the hub layout on that same ephemeral. Unmapped destinations still explain purpose and do not emit a jump or `#invalid` mention.
+Onboarding button ACK is ephemeral reply from the public hub and update when already private
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-priority: must
+priority: unspecified
 type: system
-constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Hub buttons `Auction`, `GvG`, `General Chat`, `Website` open a private ephemeral topic card with purpose text and a location (channel mention + jump URL, or website URL). `Back` returns to the hub layout on that same ephemeral. Unmapped destinations still explain purpose and do not emit a jump or `#invalid` mention.
+constraints: Gateway routes interaction customIds that start with onboard:.; Public hub means the interaction is not already on an ephemeral message.; Unknown onboard customIds are ignored (no ACK class).
+acceptance_criteria: From the public hub, a known topic button is acknowledged with an ephemeral defer-reply, then the reply is edited to that topic card. | From an already-ephemeral onboarding message, a topic button or Back is acknowledged with defer-update, then the same message is edited to the topic or hub. | Back from a topic returns the hub content in place without posting a new public hub message.
+source_draft: discord-onboarding-2026-10-05/mints.json
 ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -1740,26 +1768,49 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-200
 STATUS: Active
-TITLE: REQ-ROO-200: GVG Readiness card rematerializes once when GvG Preparation starts
+TITLE: REQ-ROO-200: Onboarding hub redeploy edits the stored message when possible
 STATEMENT: >>>
-When the raid cycle enters GvG Preparation and war-room publish succeeds, the public GVG Readiness card on war-announce rematerializes for that cycle’s war. If the stored pointer already has this cycle’s eventKey, skip — no roster dump and no Discord edit. Phases 2–3 still post the card only if missing. RSVP clicks and officer Send still refresh. The 60s ticker does not refresh the board every minute.
+Onboarding hub redeploy edits the stored message when possible
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-priority: must
+priority: unspecified
 type: system
-constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: When the raid cycle enters GvG Preparation and war-room publish succeeds, the public GVG Readiness card on war-announce rematerializes for that cycle’s war. If the stored pointer already has this cycle’s eventKey, skip — no roster dump and no Discord edit. Phases 2–3 still post the card only if missing. RSVP clicks and officer Send still refresh. The 60s ticker does not refresh the board every minute.
+constraints: Store path is attendance/onboarding_card.; Stored fields are channelId, messageId, and updatedAt.; Edit is attempted only when stored channelId equals the target channel id and messageId is present.
+acceptance_criteria: After a successful send or edit of the hub, the tenant store writes attendance/onboarding_card with that channelId, messageId, and an updatedAt timestamp. | A later deploy to the same channel edits the stored message's hub payload when Discord still has that message, and refreshes the pointer without requiring a new public message. | If the stored message cannot be fetched or edited, deploy sends a new hub message and updates the pointer to the new messageId.
+source_draft: discord-onboarding-2026-10-05/mints.json
 ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-ROO-043
+
+[REQUIREMENT]
+UID: REQ-ROO-201
+STATUS: Active
+TITLE: REQ-ROO-201: Officer deploys the Onboarding hub to the mapped onboarding channel
+STATEMENT: >>>
+Officer deploys the Onboarding hub to the mapped onboarding channel
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+priority: unspecified
+type: system
+constraints: Root route is GET /api/deploy-onboarding-card; Settings Send uses that root route.; Alias route is GET /api/attendance/deploy-onboarding-card.; Target channel is the tenant onboardingChannelId resolved via the DISCORD_ONBOARDING_CHANNEL_ID alias (tenant map only).; Live HTTP handlers do not call evaluateDeployOnboardingGate; they use officer checks plus deployPublicOnboardingCard error mapping.
+acceptance_criteria: An authenticated officer calling GET /api/deploy-onboarding-card posts or edits the Onboarding hub in the tenant's mapped onboarding channel and returns success. | GET /api/attendance/deploy-onboarding-card performs the same Discord deploy for an officer and returns a JSON success envelope with the deploy result. | Unauthenticated callers receive 401; authenticated non-officers receive 403. | Empty onboarding channel mapping yields 400 without posting. | Bot not ready or Discord circuit/IP block yields 503 without posting. | Mapped id that the gateway cannot locate yields 404 without posting. | Game Settings shows an Onboarding Send control that triggers the root deploy route.
+source_draft: discord-onboarding-2026-10-05/mints.json
+ssot_status: published
+sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Auction/Requests (REQ-ROO-078 .. REQ-ROO-100)
+TITLE: Auction/Requests (REQ-ROO-078 .. REQ-ROO-100, REQ-ROO-174, REQ-ROO-179 .. REQ-ROO-181, REQ-ROO-185)
 
 [REQUIREMENT]
 UID: REQ-ROO-078
@@ -1869,19 +1920,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-083
 STATUS: Active
-TITLE: REQ-ROO-083: `GET /api/requests/active-session` returns Mimic Book session; auto-resets if ol
+TITLE: REQ-ROO-083: Returns the active Mimic Book session with a names list for slot holders; resets
 STATEMENT: >>>
-`GET /api/requests/active-session` returns Mimic Book session; auto-resets if older than 24h.
+Returns the active Mimic Book session with a names list for slot holders; resets if older than 24h, with an empty names list; the stored session never gets the names list.
 <<<
 COMMENT: >>>
 domain: Auction/Requests
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/requests/active-session` returns Mimic Book session; auto-resets if older than 24h.
+acceptance_criteria: Returns the active Mimic Book session with a names list for slot holders; resets if older than 24h, with an empty names list; the stored session never gets the names list.
 source_draft: D-REQ-083
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2037,19 +2088,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-091
 STATUS: Active
-TITLE: REQ-ROO-091: `GET /api/requests/request-history` returns web_requests ledger newest-first.
+TITLE: REQ-ROO-091: GET /api/requests/request-history defaults to page 1 and limit 20, and returns h
 STATEMENT: >>>
-`GET /api/requests/request-history` returns web_requests ledger newest-first.
+GET /api/requests/request-history defaults to page 1 and limit 20, and returns history, total, page, and limit. Limit is clamped to 1–10000.
 <<<
 COMMENT: >>>
 domain: Auction/Requests
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/requests/request-history` returns web_requests ledger newest-first.
+acceptance_criteria: GET /api/requests/request-history defaults to page 1 and limit 20, and returns history, total, page, and limit. Limit is clamped to 1–10000. | mine=1 or mine=true returns only the signed-in user's rows. status other than all filters selectionStatus case-insensitively. q matches member or item, case-insensitive. | export=1 returns page 1 with limit 10000. preview=1 returns history as an empty array and the total count. | startDate and endDate, when both parse and start is not after end, keep rows whose push id falls in that timestamp window. They do not filter by the calendar-day expression. | Default sort date orders by the parsed calendar day of data.date (YYYY-MM-DD or M/D/YYYY). Descending puts unparseable dates last; ascending puts them first. id is the tie-break in the same direction. | sort member, item, or priority orders by those fields instead.
 source_draft: D-REQ-091
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@e9b6b9e804ad5d5433784039d738a568ee7850ca
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2058,19 +2109,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-092
 STATUS: Active
-TITLE: REQ-ROO-092: `GET /api/requests/loot-history` returns loot_history newest-first.
+TITLE: REQ-ROO-092: GET /api/requests/loot-history with no date returns dates, each { date, iso, cou
 STATEMENT: >>>
-`GET /api/requests/loot-history` returns loot_history newest-first.
+GET /api/requests/loot-history with no date returns dates, each { date, iso, count }, sorted by iso descending. It does not return history rows.
 <<<
 COMMENT: >>>
 domain: Auction/Requests
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/requests/loot-history` returns loot_history newest-first.
+acceptance_criteria: GET /api/requests/loot-history with no date returns dates, each { date, iso, count }, sorted by iso descending. It does not return history rows. | GET with date returns that date plus history rows whose stored date equals the ISO form, the M/D/YYYY form, or the zero-padded MM/DD/YYYY form, ordered by id descending. | Each history row has id, date, event, item, itemId, quantity, max, and mem.
 source_draft: D-REQ-092
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2079,19 +2130,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-093
 STATUS: Active
-TITLE: REQ-ROO-093: `GET /api/requests/past-auctions` returns past awards + members map.
+TITLE: REQ-ROO-093: GET /api/requests/past-auctions with no date returns dates ({ date, iso, count }
 STATEMENT: >>>
-`GET /api/requests/past-auctions` returns past awards + members map.
+GET /api/requests/past-auctions with no date returns dates ({ date, iso, count }) sorted by iso descending, and does not return a members map.
 <<<
 COMMENT: >>>
 domain: Auction/Requests
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/requests/past-auctions` returns past awards + members map.
+acceptance_criteria: GET /api/requests/past-auctions with no date returns dates ({ date, iso, count }) sorted by iso descending, and does not return a members map. | GET with date returns history for that night using the same ISO / M/D/YYYY / MM/DD/YYYY match as loot history, ordered by id descending, plus the date echo, and no members map.
 source_draft: D-REQ-093
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2244,10 +2295,115 @@ RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-024
 
+[REQUIREMENT]
+UID: REQ-ROO-174
+STATUS: Active
+TITLE: REQ-ROO-174: Request pity and lobby priority are scored by calendar day and reset after a win
+STATEMENT: >>>
+Request pity and lobby priority are scored by calendar day and reset after a win
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: unspecified
+type: system
+constraints: Calendar day is row.date if it parses, else row.eventDate. Accepted forms: YYYY-MM-DD and M/D/YYYY. Unparseable dates are ignored.; Lookback is priorityLookbackDays clamped to 1–365; unset uses 30. Inclusive window is today-(days-1) through today in the guild timezone. Days after today are excluded.; Order inside the window is calendar day, then write-time decoded from the row id, then the id string.; Selected and Reset end the streak. Absent ends it unless the item is high value. High-value Absent counts as one night and does not end the streak.; After the last ending row, each distinct calendar day of NotSelected counts 1. Pending, Superseded, and Canceled neither count nor end. The same night counts once.; Commit and reset-priority store eventDate as the ISO session date: parsed targetSessionDate, otherwise the guild calendar day.
+acceptance_criteria: A Selected (or Reset, or non-high-value Absent) on a later calendar day than a NotSelected yields pity 0 for that member and item, even when the win row's id sorts before the loss id. | Two NotSelected rows on the same calendar day contribute 1, not 2. A Pending or Canceled row on another day contributes 0. | For a high-value item, an Absent night plus a later NotSelected night scores 2, and the Absent does not end the streak. For a non-high-value item the same rows score 1 (only the NotSelected after the Absent). | The request lobby, Mimic standings, Discord request snapshot, and auction auto-commit leaderboard show this live score on pending bids, not the priority number stored on the pending row. | A pending bid and a Selected row for the same member, item, and calendar day show priority 0. | Committed web_requests (Selected, NotSelected, Absent, Superseded) and an officer priority-reset row carry eventDate set to that ISO session date. | Request History renders eventDate when it is non-empty and '---' when it is empty.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-023
+
+[REQUIREMENT]
+UID: REQ-ROO-179
+STATUS: Active
+TITLE: REQ-ROO-179: Review Allocation and the Live Auction announce are per-item rows
+STATEMENT: >>>
+Review Allocation and the Live Auction announce are per-item rows
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: unspecified
+type: software
+constraints: Only items with lootSummary qty > 0 are listed.; Selected rows are the unique non-empty uids in categoryAllocations[itemId].selected, ordered by rank then uid.; Not-selected rows are rankingsByItem[itemId] minus those uids, in ranking order.; Rank label is the 1-based index in that item's ranking, padded to 2 digits, or an em dash when the uid is not in the ranking.; Priority is the lobby detail priority, or 0 when missing. One row per item and member, not per loot slot.; Discord mentions snowflake uids; other uids are shown as display name. Messages chunk at 2000 characters.
+acceptance_criteria: Review Allocation selected and not-selected tables have columns #, Item, Member, Priority, and do not have a Requested column. | The same member selected on two loot items appears twice, once per item, instead of once in a unique-member list. | An item with no loot qty does not appear. | The GEN-room Live Auction message lists those same rows as '#{rank}  **{item}**  {member}  Prio {n}' under the existing selected and not-selected sentences, not as mention columns of unique members.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-180
+STATUS: Active
+TITLE: REQ-ROO-180: Confirm Allocate saves the session, then announces from the server
+STATEMENT: >>>
+Confirm Allocate saves the session, then announces from the server
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: unspecified
+type: system
+constraints: POST /api/requests/announce-allocate accepts no client winner list. Body may be empty.; Officer check uses configuration adminRoles via the Discord officer check. No session identity is 401. Non-officer is 403.; No active_session is 400 with error 'No active Mimic Book session.'; Discord 'not configured' is 400; offline, not connected, rate-limited, or temporarily blocking is 503; not found is 404.; Confirm writes activeStep 2, the preview loot summary, category allocations, initial winners, active matrix filter, and sidebarTab 'standby' before announcing.
+acceptance_criteria: Confirm Allocate does not call the announce route when the session write fails, and the officer sees 'Session saved locally, but the server write failed. Discord announce skipped.' | When the session write succeeds, Confirm Allocate posts /api/requests/announce-allocate and the GEN-room message is built from the stored session plus the current request lobby (REQ-ROO-179 rows). | Announce Live Auction posts that same route without requiring the confirm-modal save. | While the announce is in flight the confirm button reads 'Allocating…' and is disabled.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-181
+STATUS: Active
+TITLE: REQ-ROO-181: Mimic Book does not re-GET the session while the page stays open
+STATEMENT: >>>
+Mimic Book does not re-GET the session while the page stays open
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: unspecified
+type: software
+constraints: GET /api/requests/active-session ETag is 'empty' when no session exists, otherwise s:{version}:{lastUpdated}.; A matching If-None-Match returns 304 with an empty body and Cache-Control private, no-cache. The 24-hour auto-reset in REQ-ROO-083 still applies on a real GET.
+acceptance_criteria: Leaving Mimic Book open does not issue a repeating GET of /api/requests/active-session. | The session is loaded when the signed-in user identity for the page changes. | A client that repeats the GET with the current ETag receives 304 and no session body.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-185
+STATUS: Active
+TITLE: REQ-ROO-185: Settings GET can return an allow-listed field subset
+STATEMENT: >>>
+Settings GET can return an allow-listed field subset
+<<<
+COMMENT: >>>
+domain: Auction/Requests
+priority: unspecified
+type: system
+constraints: Allow-list: jobs, items, timezone, roles, events, specialEventCategories, expectedAttendanceRate, warRooms, liveRaidMaxWarRooms, liveRaidMaxConfigs, helpEmbedUrl, raidHelpEmbedUrl, guildDisplayName, guildLogoUrl, defaultLeaveCredits, isForceLocked.; Unknown names are dropped. Non-officers are still filtered through the public settings view before the pick.
+acceptance_criteria: GET /api/requests/settings/get?fields=jobs,timezone returns success, needsSetup, publicOnly, and a config object that has only those requested allow-listed keys. | GET without fields still returns the full officer config plus discord channels, or the public view, as in REQ-ROO-096.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-024
+
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Attendance/Roster (REQ-ROO-101 .. REQ-ROO-113)
+TITLE: Attendance/Roster (REQ-ROO-101 .. REQ-ROO-113, REQ-ROO-173, REQ-ROO-187)
 
 [REQUIREMENT]
 UID: REQ-ROO-101
@@ -2522,10 +2678,52 @@ RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-027
 
+[REQUIREMENT]
+UID: REQ-ROO-173
+STATUS: Active
+TITLE: REQ-ROO-173: Master List chevrons stay fixed when the slide title changes
+STATEMENT: >>>
+Master List chevrons stay fixed when the slide title changes
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: software
+constraints: Roster sizer label uses the larger of the active raid-roster count and ROSTER_CAP (200 at this tip), not the live count alone.; Visible title truncates; invisible copies of every slide label occupy the same grid cell.
+acceptance_criteria: On Master List, switching carousel slides does not move the previous/next chevrons horizontally. | The reserved title width is at least the widest slide label, and for the roster slide at least the label that would show if the active count were ROSTER_CAP. | The visible heading is the current slide title (roster heading includes the live active count and cap) and truncates instead of widening the chevron row.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-027
+
+[REQUIREMENT]
+UID: REQ-ROO-187
+STATUS: Active
+TITLE: REQ-ROO-187: Card roster view omits unused member fields
+STATEMENT: >>>
+Card roster view omits unused member fields
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: system
+constraints: Card fields are exactly uid, displayName, jobCode, and isRaidRoster (true only when the stored flag is true).
+acceptance_criteria: GET /api/attendance/members?view=card returns one object per roster member containing only uid, displayName, jobCode, and isRaidRoster. | GET /api/attendance/members with no view returns the stored roster objects. | Both require a signed-in session (401 otherwise).
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-025
+
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Scheduler/RSVP (REQ-ROO-114 .. REQ-ROO-122)
+TITLE: Scheduler/RSVP (REQ-ROO-114 .. REQ-ROO-122, REQ-ROO-176 .. REQ-ROO-178, REQ-ROO-183, REQ-ROO-189)
 
 [REQUIREMENT]
 UID: REQ-ROO-114
@@ -2572,19 +2770,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-116
 STATUS: Active
-TITLE: REQ-ROO-116: `GET /api/attendance/commitments` returns live RSVP tree.
+TITLE: REQ-ROO-116: GET /api/attendance/commitments returns commitments whose event date falls in th
 STATEMENT: >>>
-`GET /api/attendance/commitments` returns live RSVP tree.
+GET /api/attendance/commitments returns commitments whose event date falls in the week of weekMonday (query param, or the current week in the guild timezone), plus etag and weekMonday.
 <<<
 COMMENT: >>>
 domain: Scheduler/RSVP
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/attendance/commitments` returns live RSVP tree.
+acceptance_criteria: GET /api/attendance/commitments returns commitments whose event date falls in the week of weekMonday (query param, or the current week in the guild timezone), plus etag and weekMonday. | If If-None-Match matches that week's commitment fingerprint, the response is 304 with an empty body. | The response is not the all-weeks RSVP tree.
 source_draft: D-REQ-116
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2635,19 +2833,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-119
 STATUS: Active
-TITLE: REQ-ROO-119: Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+TITLE: REQ-ROO-119: The Discord 60-second tenant ticker does not auto-close expired RSVP deadlines.
 STATEMENT: >>>
-Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+The Discord 60-second tenant ticker does not auto-close expired RSVP deadlines.
 <<<
 COMMENT: >>>
 domain: Scheduler/RSVP
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Expired RSVP deadlines auto-close via ticker (`closeExpiredDeadlines`).
+acceptance_criteria: The Discord 60-second tenant ticker does not auto-close expired RSVP deadlines. | closeExpiredDeadlines remains a callable function, but nothing in the minute loop invokes it.
 source_draft: D-REQ-119
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@56261347f46af5fb72d96b653fd48e8fda273d5c
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2716,10 +2914,115 @@ RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-029
 
+[REQUIREMENT]
+UID: REQ-ROO-176
+STATUS: Active
+TITLE: REQ-ROO-176: GVG Readiness stays on the cycle War after the RSVP deadline
+STATEMENT: >>>
+GVG Readiness stays on the cycle War after the RSVP deadline
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: unspecified
+type: system
+constraints: A cycle targets the war only when needsSetup is not true, the cycle is not force-locked, and warDate, activeEventId, and warStartTime are all set.; The instance is loaded or materialized for the week of that war date, not blindly for the current week.; Board fingerprint includes event key, date, timeStart, title, locked-vs-open, and each member RSVP status.
+acceptance_criteria: When the raid cycle targets a war, the GVG Readiness card shows that war even after its RSVP deadline, and the confirm/leave buttons are locked. | If that war's scheduler instance is missing or isCancelled, the card target is missing and does not fall through to the Set Active published composition or the next open RSVP. | When the cycle does not target a war, the card still prefers the anchored published composition, else the next event with an open RSVP window. | The readiness message is edited when the war date, start time, title, or locked/open flag changes, even if the RSVP map is unchanged.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-177
+STATUS: Active
+TITLE: REQ-ROO-177: Rematerializing a week deletes stale non-special instances
+STATEMENT: >>>
+Rematerializing a week deletes stale non-special instances
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: unspecified
+type: system
+constraints: Rows with isSpecial true or source 'special' are not deleted by this sweep.
+acceptance_criteria: When a week is materialized, a non-special scheduler instance whose key is no longer in the generated week map is removed. | Special-event instances in that week are left in place.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
+[REQUIREMENT]
+UID: REQ-ROO-178
+STATUS: Active
+TITLE: REQ-ROO-178: Scheduler and Raid Compose use raid phase 3 when the event is a raid
+STATEMENT: >>>
+Scheduler and Raid Compose use raid phase 3 when the event is a raid
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: unspecified
+type: software
+constraints: isRaidEnabled(event) selects event.raid.phases[3]; otherwise event.phases[3] is used.; Scheduler business-hours fallback when phase 3 is missing remains 20:55–22:15. The day-focus time fallback remains 21:30–23:00.
+acceptance_criteria: Scheduler weekly blocks, business-hour shading, and the RSVP deadline clock use raid.phases[3] day/time for a raid-enabled event, not a legacy phases[3] on the event root. | Raid Compose's generated war dates and default start time use that same raid phase 3.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-029
+
+[REQUIREMENT]
+UID: REQ-ROO-183
+STATUS: Active
+TITLE: REQ-ROO-183: Scheduler does not re-GET commitments while the page stays open
+STATEMENT: >>>
+Scheduler does not re-GET commitments while the page stays open
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: unspecified
+type: software
+constraints: The page asks settings for fields events, specialEventCategories, and timezone only.; The commitments request includes weekMonday when the page already has one.
+acceptance_criteria: Leaving the Scheduler open does not repeat GET /api/attendance/commitments on a timer. | Commitments load when the page opens, and again when weekMonday changes. Changing week clears the stored ETag before that fetch so the new week is not answered with the previous week's 304.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-029
+
+[REQUIREMENT]
+UID: REQ-ROO-189
+STATUS: Active
+TITLE: REQ-ROO-189: Attendance-card RSVP posts a GEN-room line at most once a minute
+STATEMENT: >>>
+Attendance-card RSVP posts a GEN-room line at most once a minute
+<<<
+COMMENT: >>>
+domain: Scheduler/RSVP
+priority: unspecified
+type: system
+constraints: Cooldown key is snowflake id plus the card composite key. Window is 60 seconds.; The line uses the raid cycle's activeEventTitle and warDate, not the button's event key. Missing title becomes 'the raid'. Missing name becomes 'A raider'.; Date format is Mon DD, YYYY (example shape Sep 23, 2026). Unparseable date becomes an em dash.; Confirmed is Available. Leave is Unavailable. If DISCORD_WARANNOUNCE_CHANNEL_ID is set, the line ends with ' Confirm yours at <#id>.' Otherwise that clause is omitted.; A no-op press that does not change status does not announce. A failed applyAttendanceDecision does not announce.
+acceptance_criteria: After a member's GVG card press changes them to Confirmed, GEN room receives the Available sentence for the cycle war title and war date. | A press that changes them to Leave receives the Unavailable sentence. | A second successful change for the same member and card within 60 seconds does not send another GEN-room line.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-028
+
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Raid compose/Party (REQ-ROO-123 .. REQ-ROO-132)
+TITLE: Raid compose/Party (REQ-ROO-123 .. REQ-ROO-132, REQ-ROO-175, REQ-ROO-182, REQ-ROO-186, REQ-ROO-191 .. REQ-ROO-192)
 
 [REQUIREMENT]
 UID: REQ-ROO-123
@@ -2787,19 +3090,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-126
 STATUS: Active
-TITLE: REQ-ROO-126: Published compositions list/set-active/delete under `/api/attendance/published*`
+TITLE: REQ-ROO-126: GET /api/attendance/published returns the published record for the current raid-
 STATEMENT: >>>
-Published compositions list/set-active/delete under `/api/attendance/published*`.
+GET /api/attendance/published returns the published record for the current raid-cycle published id, plus any extra ids in the ids query, and the anchor.
 <<<
 COMMENT: >>>
 domain: Raid compose/Party
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Published compositions list/set-active/delete under `/api/attendance/published*`.
+acceptance_criteria: GET /api/attendance/published returns the published record for the current raid-cycle published id, plus any extra ids in the ids query, and the anchor. | Published ids outside that set are not included.
 source_draft: D-REQ-126
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2850,19 +3153,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-129
 STATUS: Active
-TITLE: REQ-ROO-129: `GET /api/war-room/init` returns raid cycle status, published record, live sessi
+TITLE: REQ-ROO-129: GET /api/war-room/init returns the raid cycle, the published record for cycle.pu
 STATEMENT: >>>
-`GET /api/war-room/init` returns raid cycle status, published record, live session, members, jobs, commitments, war rooms, automation status.
+GET /api/war-room/init returns the raid cycle, the published record for cycle.publishedId when it exists, the live session, members, jobs, the current week's commitments, the selected war rooms, automation status, and etag.
 <<<
 COMMENT: >>>
 domain: Raid compose/Party
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/war-room/init` returns raid cycle status, published record, live session, members, jobs, commitments, war rooms, automation status.
+acceptance_criteria: GET /api/war-room/init returns the raid cycle, the published record for cycle.publishedId when it exists, the live session, members, jobs, the current week's commitments, the selected war rooms, automation status, and etag. | Commitments are not the all-weeks tree. | A matching If-None-Match returns 304 and no JSON body.
 source_draft: D-REQ-129
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -2931,10 +3234,115 @@ RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-031
 
+[REQUIREMENT]
+UID: REQ-ROO-175
+STATUS: Active
+TITLE: REQ-ROO-175: War Room cycle stays on the next War whose end is still ahead
+STATEMENT: >>>
+War Room cycle stays on the next War whose end is still ahead
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: unspecified
+type: system
+constraints: Ended means now is strictly after phase-3 timeEnd on the war end date in the guild timezone.; The search walks at most three Monday-weeks forward.; While currentPhase is 3, that occurrence is kept even if its end has passed.; Phase-1 prep date is the chosen war date walked backward (weekday wrap of 7) to the phase-1 weekday, not a separately shifted week.
+acceptance_criteria: After a war's phase-3 end, and when the cycle is not in phase 3, warDate, war start/end, and published id roll to the next occurrence that has not ended. | A Tuesday war that has already ended does not remain the current war just because Sunday sits at both the start of the minute circle and the end of the Monday week. | During phase 3 the cycle keeps the in-progress war date even after warEndsAt. | If no occurrence qualifies within three weeks, the cycle falls back to the war weekday in the current Monday-week.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-182
+STATUS: Active
+TITLE: REQ-ROO-182: War Room does not re-GET init or voice presence while the page stays open
+STATEMENT: >>>
+War Room does not re-GET init or voice presence while the page stays open
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: unspecified
+type: software
+constraints: GET /api/war-room/init may return 304 when If-None-Match equals the fingerprint of members, this week's commitments, config, the war-room docs, published id, phase, and war date.
+acceptance_criteria: Leaving War Room open does not repeat GET /api/war-room/init and does not repeat the voice-presence poll. | Init still loads once when the page is opened for a signed-in user.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-186
+STATUS: Active
+TITLE: REQ-ROO-186: Composition list can omit grids
+STATEMENT: >>>
+Composition list can omit grids
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: unspecified
+type: system
+constraints: fields=list applies only when id is absent.; A list row is { id, title } with title defaulting to empty string.
+acceptance_criteria: GET /api/attendance/compositions?fields=list returns every config as id and title only, with no grids or slot maps. | GET /api/attendance/compositions?id={id} returns that one full composition, or an empty compositions object when the id does not exist. | GET with neither id nor fields=list still returns full compositions.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-030
+
+[REQUIREMENT]
+UID: REQ-ROO-191
+STATUS: Active
+TITLE: REQ-ROO-191: War Room publish keeps only the Raid Party config assigned in settings
+STATEMENT: >>>
+War Room publish keeps only the Raid Party config assigned in settings
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: unspecified
+type: system
+constraints: Target config id is cycle.configId. Missing id fails the publish with 'No Raid Party config is assigned in Game Settings.'; Sync runs in phases 1 through 3 only when the phase is 1 or 2, or no Active live session exists. During phase 3 with an Active live session the published snapshot is left alone.; Already holding exactly that one config still sets the published anchor active.
+acceptance_criteria: After a successful war-room publish sync, the published composition's grids contain only the settings Raid Party config; other configs that were on that published id are removed. | If that config is already the only one present, it is not re-added, and the anchor is set to that published id. | During phase 3 while a live session is Active, automation does not add or remove configs on the published composition.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
+[REQUIREMENT]
+UID: REQ-ROO-192
+STATUS: Active
+TITLE: REQ-ROO-192: War Room republish and live-raid auto-start run once per cycle key
+STATEMENT: >>>
+War Room republish and live-raid auto-start run once per cycle key
+<<<
+COMMENT: >>>
+domain: Raid compose/Party
+priority: unspecified
+type: system
+constraints: Cycle key is currentPhase, activeEventId, publishedId, configId, and warDate joined by '|'.; The live-start key is recorded before createLiveRaidFromPublished returns. An empty warRoomIds list returns before the key is recorded, so a later non-empty list can still start.; ensureGvgReadinessBoardIfMissing runs only inside the successful publish branch, not on every minute tick.
+acceptance_criteria: While the cycle key is unchanged, later 60-second ticks do not call publish/set-active again. | A failed live-raid auto-start is not attempted again on later ticks for that same cycle key. | A successful auto-start is not repeated for that same cycle key. | The GVG readiness board is not refreshed every minute; it is ensured only when that publish branch runs.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-031
+
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Live Raid/Voice (REQ-ROO-133 .. REQ-ROO-146)
+TITLE: Live Raid/Voice (REQ-ROO-133 .. REQ-ROO-146, REQ-ROO-184, REQ-ROO-188, REQ-ROO-193, REQ-ROO-195)
 
 [REQUIREMENT]
 UID: REQ-ROO-133
@@ -3170,16 +3578,16 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-144
 STATUS: Active
-TITLE: REQ-ROO-144: Pulse ticker and boot resume auto-archive when monitoringEndsAt is reached.
+TITLE: REQ-ROO-144: A live raid is archived automatically when its monitoring end time is reached
 STATEMENT: >>>
-Voice pulse ticker and boot resume auto-archive the live raid when monitoringEndsAt is reached.
+A live raid is archived automatically when its monitoring end time is reached
 <<<
 COMMENT: >>>
 domain: Live Raid/Voice
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Voice pulse ticker and boot resume auto-archive the live raid when monitoringEndsAt is reached.
+acceptance_criteria: When a live raid's monitoring end time is reached, the session is archived automatically with no officer action.
 source_draft: D-REQ-144
 ssot_status: published
 sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
@@ -3191,19 +3599,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-145
 STATUS: Active
-TITLE: REQ-ROO-145: `GET /api/live-raid/history/all` returns session archives; officer can delete on
+TITLE: REQ-ROO-145: GET /api/live-raid/history/all with no sessionId and without fields=full returns
 STATEMENT: >>>
-`GET /api/live-raid/history/all` returns session archives; officer can delete one and PATCH in-game present flags.
+GET /api/live-raid/history/all with no sessionId and without fields=full returns at most limit sessions (default 12, clamped to 1–50), newest endedAt first.
 <<<
 COMMENT: >>>
 domain: Live Raid/Voice
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: `GET /api/live-raid/history/all` returns session archives; officer can delete one and PATCH in-game present flags.
+acceptance_criteria: GET /api/live-raid/history/all with no sessionId and without fields=full returns at most limit sessions (default 12, clamped to 1–50), newest endedAt first. | Each default session object has only id, eventTitle, eventDate, eventKey, endedAt, endedEarly, committedBy, totalPulses, expectedPulses, userTallies, commitments, and inGameStatus. Grids are not included. | fields=full, or a sessionId query, returns the stored archive row (one id when sessionId is set).
 source_draft: D-REQ-145
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: Develop@3a3169d9b50670c8e6f6e4c45a0472b6c36b2630
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -3229,6 +3637,90 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-184
+STATUS: Active
+TITLE: REQ-ROO-184: Live Raid does not re-GET session, voice, or published data while the page stays
+STATEMENT: >>>
+Live Raid does not re-GET session, voice, or published data while the page stays open
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: unspecified
+type: software
+constraints: A 1-second local clock that only updates the on-screen now is allowed and is not a server poll.; History on this page requests /api/live-raid/history/all?limit=12.; Roster for the card view uses GET /api/attendance/members?view=card (REQ-ROO-187).
+acceptance_criteria: With or without an active live session, leaving Live Raid open does not repeat GET of the live session, voice presence, published compositions, or commitments. | Those loads still happen when the page opens or the session identity changes.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-032
+
+[REQUIREMENT]
+UID: REQ-ROO-188
+STATUS: Active
+TITLE: REQ-ROO-188: Attendance begin-raid does not start a presence ticker
+STATEMENT: >>>
+Attendance begin-raid does not start a presence ticker
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: unspecified
+type: system
+constraints: Any previous attendanceIntervalTicker is cleared and not replaced.
+acceptance_criteria: POST /api/attendance/begin-raid stores the active attendance session and responds with message 'Live Raid active.' | That call does not start a 15-minute interval that increments attendance/active_session user tallies from voice channels.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-033
+
+[REQUIREMENT]
+UID: REQ-ROO-193
+STATUS: Active
+TITLE: REQ-ROO-193: The minute loop does not re-read an idle live session
+STATEMENT: >>>
+The minute loop does not re-read an idle live session
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: unspecified
+type: system
+constraints: Watch starts unknown. The first automatic end-time check that does not find status Active sets the watch to absent. Active sets it to active.; createLiveRaidFromPublished of a new session, and a war-room read that finds Active, set the watch active. End and cancel set it absent.; This watch is in-process memory. Another process is not visible to it.
+acceptance_criteria: After this process has observed that no Active live session exists, later 60-second ticks do not query attendance/live_session until this process starts one or otherwise marks the watch active. | While the watch is active and monitoringEndsAt is in the past, the session is still archived automatically (REQ-ROO-144) and then the watch is marked absent. | A non-Active document is treated as absent and is not polled again.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-034
+
+[REQUIREMENT]
+UID: REQ-ROO-195
+STATUS: Active
+TITLE: REQ-ROO-195: Voice-monitoring ticks keep the tenant that armed them
+STATEMENT: >>>
+Voice-monitoring ticks keep the tenant that armed them
+<<<
+COMMENT: >>>
+domain: Live Raid/Voice
+priority: unspecified
+type: system
+constraints: tenantId is captured when the monitoring schedule is armed, including the delayed start interval (15s checks until startsAt).; If no tenant id was current at arm time, the tick runs without runWithTenant.
+acceptance_criteria: After the HTTP or bot call that armed monitoring has finished, interval pulses and the delayed start still read and write the live session under the tenant that armed the schedule. | A pulse that asks to stop still clears the interval ticker.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-033
 
 [[/SECTION]]
 
@@ -3343,7 +3835,7 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Adventurer Guild (REQ-ROO-152 .. REQ-ROO-157)
+TITLE: Adventurer Guild (REQ-ROO-152 .. REQ-ROO-157, REQ-ROO-196)
 
 [REQUIREMENT]
 UID: REQ-ROO-152
@@ -3471,6 +3963,27 @@ RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-037
 
+[REQUIREMENT]
+UID: REQ-ROO-196
+STATUS: Active
+TITLE: REQ-ROO-196: Highlight videos preload metadata only
+STATEMENT: >>>
+Highlight videos preload metadata only
+<<<
+COMMENT: >>>
+domain: Adventurer Guild
+priority: unspecified
+type: software
+constraints: Upload cacheControl value is 31536000.; Size cap remains 25MB (REQ-ROO-153).
+acceptance_criteria: A highlight video element on the gallery sets preload to metadata. | A highlight upload sends cacheControl 31536000 with the storage object.
+source_draft: delta-2026-10-03/mints.json
+ssot_status: published
+sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-036
+
 [[/SECTION]]
 
 [[SECTION]]
@@ -3479,19 +3992,19 @@ TITLE: Data isolation/Storage (REQ-ROO-158 .. REQ-ROO-166)
 [REQUIREMENT]
 UID: REQ-ROO-158
 STATUS: Active
-TITLE: REQ-ROO-158: Every operational row is stamped with `tenant_id`; tenant middleware runs handle
+TITLE: REQ-ROO-158: Rows are stamped with tenant and game; handlers need an explicit game
 STATEMENT: >>>
-Every operational row is stamped with `tenant_id`; game-scoped operational rows are also stamped with `game_id`. Tenant middleware runs handlers inside `runWithTenant`; `requireGame` sets ALS `gameId`.
+Rows are stamped with tenant and game; handlers need an explicit game
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Every operational row is stamped with `tenant_id`; game-scoped operational rows are also stamped with `game_id`. Tenant middleware runs handlers inside `runWithTenant`; `requireGame` sets ALS `gameId`.
+acceptance_criteria: Every operational row is stamped with tenant and game. | Handlers run inside the tenant and an explicitly set game. | A handler that would read or write game data with no game set is refused with a 'select a game' error and writes nothing.
 source_draft: D-REQ-158
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -3521,19 +4034,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-160
 STATUS: Active
-TITLE: REQ-ROO-160: Postgres tables: tenants, invite_codes, tenant_settings, members, auction_reques
+TITLE: REQ-ROO-160: Adds the per-game settings table; operational tables are keyed by game too.
 STATEMENT: >>>
-Postgres tables: tenants, invite_codes, tenant_settings, game_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+Adds the per-game settings table; operational tables are keyed by game too.
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Postgres tables: tenants, invite_codes, tenant_settings, game_settings, members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events, json_docs, platform_state.
+acceptance_criteria: The schema has a per-game settings table keyed by tenant and game. | members, auction_requests, past_auction_awards, loot_history, attendance_commitments, schedule_instances, special_events and json_docs carry a game id in their key, default ragnarok-origin. | platform_state has no game id.
 source_draft: D-REQ-160
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -3542,19 +4055,19 @@ RELATIONS:
 [REQUIREMENT]
 UID: REQ-ROO-161
 STATUS: Active
-TITLE: REQ-ROO-161: Flexible trees (compositions, live_session, auction session, highlights, etc.) p
+TITLE: REQ-ROO-161: Flexible trees persist per tenant, game and path; the same path in two games is 
 STATEMENT: >>>
-Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id, game_id, path)` Firebase-compatible store API.
+Flexible trees persist per tenant, game and path; the same path in two games is two separate documents.
 <<<
 COMMENT: >>>
 domain: Data isolation/Storage
 priority: must
 type: system
 constraints: Live Develop behavior only; Do not import Firebase Requirements.md wording
-acceptance_criteria: Flexible trees (compositions, live_session, auction session, highlights, etc.) persist via `json_docs(tenant_id, game_id, path)` Firebase-compatible store API.
+acceptance_criteria: Flexible trees persist per tenant, game and path; the same path in two games is two separate documents.
 source_draft: D-REQ-161
 ssot_status: published
-sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
@@ -3795,6 +4308,231 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 RELATIONS:
 - TYPE: Parent
   VALUE: USR-ROO-042
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Mimic Book (REQ-ROO-202 .. REQ-ROO-204)
+
+[REQUIREMENT]
+UID: REQ-ROO-202
+STATUS: Active
+TITLE: REQ-ROO-202: Live Claim shows names for everyone holding a slot
+STATEMENT: >>>
+Live Claim shows names for everyone holding a slot
+<<<
+COMMENT: >>>
+domain: Mimic Book
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Opening the Mimic Book while a session is active shows each slot holder's roster display name, including members not otherwise loaded on the page. | Members with no roster name are not added. | The names are sent with the session but are not saved into the stored session. | On the 24h fresh reset the names list is empty.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-203
+STATUS: Active
+TITLE: REQ-ROO-203: Committing replaces an ID-only winner name with the roster name
+STATEMENT: >>>
+Committing replaces an ID-only winner name with the roster name
+<<<
+COMMENT: >>>
+domain: Mimic Book
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: If a winner's name arrives as only digits (a Discord ID), loot history, awards and forced adds record the roster display name. | Any other given name is kept as given. | With no name and no roster name, the record says Unknown Member.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[REQUIREMENT]
+UID: REQ-ROO-204
+STATUS: Active
+TITLE: REQ-ROO-204: A Discord claim updates the member's roster name
+STATEMENT: >>>
+A Discord claim updates the member's roster name
+<<<
+COMMENT: >>>
+domain: Mimic Book
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: After a member claims a slot from Discord and passes the collision check, their roster display name becomes the name used for the claim.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-022
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Data isolation (REQ-ROO-205 .. REQ-ROO-210)
+
+[REQUIREMENT]
+UID: REQ-ROO-205
+STATUS: Active
+TITLE: REQ-ROO-205: Each game's records are stored and read only as that game, and no-game code is r
+STATEMENT: >>>
+Each game's records are stored and read only as that game, and no-game code is refused
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Roster, auction requests, awards, loot history, commitments, schedule instances, special events and documents saved from Origin cannot be read or changed from Ragnarok 3, and those saved from Ragnarok 3 cannot be read or changed from Origin, in the same workspace. | Records saved before this change count as Origin; Adventurer Guild documents count as Adventurer Guild. | A request, Discord card press or background job that reads or writes game data with no game set is refused with a 'select a game' error and reads or writes nothing; it never falls back to Origin.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[REQUIREMENT]
+UID: REQ-ROO-206
+STATUS: Active
+TITLE: REQ-ROO-206: Same Discord member can be on each game's roster, changed independently both way
+STATEMENT: >>>
+Same Discord member can be on each game's roster, changed independently both ways
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: One Discord member can have one roster entry per game in the same workspace. | Changing that member's Origin roster entry leaves their Ragnarok 3 entry unchanged. | Changing that member's Ragnarok 3 roster entry leaves their Origin entry unchanged.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[REQUIREMENT]
+UID: REQ-ROO-207
+STATUS: Active
+TITLE: REQ-ROO-207: Game settings saved apart from shared workspace settings
+STATEMENT: >>>
+Game settings saved apart from shared workspace settings
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: software
+constraints: Shared keys: guild name, timezone, admin roles, logo.
+acceptance_criteria: Saving one game's settings does not change another game's settings or the shared workspace keys (except Origin, which still saves the shared keys). | Reading a game's settings gives defaults, then that game's defaults, then shared workspace values, then the game's own values, later ones winning. | After a game's settings are saved, the next read for that game returns the new values and other games' reads are unaffected.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[REQUIREMENT]
+UID: REQ-ROO-208
+STATUS: Active
+TITLE: REQ-ROO-208: Existing Origin settings carry over on upgrade
+STATEMENT: >>>
+Existing Origin settings carry over on upgrade
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: On upgrade, Origin settings in the workspace record are copied to Origin's game settings only when Origin's game settings are empty, then the workspace record keeps only the four shared keys. | Leftover Origin keys found later are copied on read.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[REQUIREMENT]
+UID: REQ-ROO-209
+STATUS: Active
+TITLE: REQ-ROO-209: Login adds a roster entry only when Origin is enabled
+STATEMENT: >>>
+Login adds a roster entry only when Origin is enabled
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Signing in to a workspace without Origin enabled creates or updates no roster entry. | With Origin enabled, sign-in updates the Origin roster entry.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[REQUIREMENT]
+UID: REQ-ROO-210
+STATUS: Active
+TITLE: REQ-ROO-210: Origin automation runs only for workspaces with Origin enabled
+STATEMENT: >>>
+Origin automation runs only for workspaces with Origin enabled
+<<<
+COMMENT: >>>
+domain: Data isolation
+priority: unspecified
+type: system
+constraints: (none)
+acceptance_criteria: The schedule tick, leave-credit seeding and live-raid resume at startup run only for workspaces with Origin enabled, and only on Origin data.
+source_draft: f38e137/mints-ROO.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-044
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Discord (REQ-ROO-211)
+
+[REQUIREMENT]
+UID: REQ-ROO-211
+STATUS: Active
+TITLE: REQ-ROO-211: Origin card deploys are gated to Origin
+STATEMENT: >>>
+Origin card deploys are gated to Origin
+<<<
+COMMENT: >>>
+domain: Discord
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Every Origin card deploy (request, GvG readiness/attendance, party, party-screenshot and onboarding cards, at the root and the attendance-alias addresses) is accepted only when Origin is enabled for the workspace; otherwise it is refused and nothing is posted. | An Origin card deploy reads and writes only Origin data, and posts, edits or removes no Ragnarok 3 card. | A Ragnarok 3 card deploy posts, edits or removes no Origin card and writes no Origin record.
+source_draft: f38e137/answers-2026-10-08/mints.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-ROO-019
 
 [[/SECTION]]
 

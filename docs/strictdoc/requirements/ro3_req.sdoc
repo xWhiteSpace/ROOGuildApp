@@ -1,0 +1,548 @@
+[DOCUMENT]
+TITLE: RO3 System Requirements (REQ)
+UID: DOC-RO3-REQ
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+Project: RO3 (Ragnarok 3 in ROOGuildApp). Strictly isolated from ROO (Ragnarok Origin): every relation in this document points at RO3 nodes only. Origin counterparts appear as plain text (counterpart …) and are never links.
+Source: SSOT requirements/req (published only). Each REQ Parent-links to its RO3 USR via linked_from.
+Published nodes: 22 (REQ-RO3-001 .. REQ-RO3-022).
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Games/Access (REQ-RO3-001 .. REQ-RO3-003, REQ-RO3-018, REQ-RO3-022)
+
+[REQUIREMENT]
+UID: REQ-RO3-001
+STATUS: Active
+TITLE: REQ-RO3-001: Ragnarok 3 is a known game with no setup step
+STATEMENT: >>>
+Ragnarok 3 is a known game with no setup step
+<<<
+COMMENT: >>>
+domain: Games/Access
+priority: unspecified
+type: software
+constraints: Game id ragnarok-3; home path /games/ragnarok-3.
+acceptance_criteria: The games catalog lists Ragnarok 3 next to Origin and Adventurer Guild. | When Ragnarok 3 is enabled it counts as set up with no Discord channel mapping required. | Pages under /games/ragnarok-3 are treated as Ragnarok 3, not Origin.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-039, REQ-ROO-042, REQ-ROO-043
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-001
+
+[REQUIREMENT]
+UID: REQ-RO3-002
+STATUS: Active
+TITLE: REQ-RO3-002: Ragnarok 3 pages need the game enabled and an active subscription
+STATEMENT: >>>
+Ragnarok 3 pages need the game enabled and an active subscription
+<<<
+COMMENT: >>>
+domain: Games/Access
+priority: unspecified
+type: software
+constraints: Applies to every Ragnarok 3 API.
+acceptance_criteria: A signed-in workspace with an active subscription but without Ragnarok 3 enabled gets 403 with code game_required and gameId ragnarok-3 from any Ragnarok 3 API. | With Ragnarok 3 enabled, the Ragnarok 3 health check answers success with gameId ragnarok-3.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-045
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-001
+
+[REQUIREMENT]
+UID: REQ-RO3-003
+STATUS: Active
+TITLE: REQ-RO3-003: Ragnarok 3 and Origin are kept apart in both directions, both their data and the
+STATEMENT: >>>
+Ragnarok 3 and Origin are kept apart in both directions, both their data and their running activity
+<<<
+COMMENT: >>>
+domain: Games/Access
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: A record saved through Ragnarok 3 never appears in, and never changes, Origin data for the same workspace. | A record saved through Origin never appears in, and never changes, Ragnarok 3 data for the same workspace. | No Ragnarok 3 page, request or card press reads or writes Origin data, and no Origin page, request or card press reads or writes Ragnarok 3 data. | The same Discord member can have a Ragnarok 3 roster entry and an Origin roster entry at once. | Starting, running or ending a live raid in one game never stops, pauses or changes a live raid that is already running in the other game in the same workspace, in either direction.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-158
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-001
+
+[REQUIREMENT]
+UID: REQ-RO3-018
+STATUS: Active
+TITLE: REQ-RO3-018: Ragnarok 3 posts its own cards to Discord
+STATEMENT: >>>
+Ragnarok 3 posts its own cards to Discord
+<<<
+COMMENT: >>>
+domain: Games/Access
+priority: unspecified
+type: software
+constraints: Card set offered at f38e137: GvG readiness/attendance, party, party-screenshot, onboarding. The customer has not listed which cards Ragnarok 3 offers (open question Q8).
+acceptance_criteria: An officer deploying a Ragnarok 3 card gets the card posted, or the existing Ragnarok 3 card updated, in the workspace's mapped Discord channel. | A Ragnarok 3 card shows only Ragnarok 3 data (roster, events, published grids, settings) and never Origin data. | Posting or updating a Ragnarok 3 card does not edit, replace or remove an Origin card. | When the channel is not mapped, the bot is unavailable or the caller is not an officer, the deploy is refused with an error and nothing is posted.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-019 (Origin deploys cards)
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-009
+
+[REQUIREMENT]
+UID: REQ-RO3-022
+STATUS: Active
+TITLE: REQ-RO3-022: Ragnarok 3 has no auction or request features
+STATEMENT: >>>
+Ragnarok 3 has no auction or request features
+<<<
+COMMENT: >>>
+domain: Games/Access
+priority: unspecified
+type: business
+constraints: (none)
+acceptance_criteria: No Ragnarok 3 page or navigation item offers an auction, request lobby, item queue, request history, past auctions, Mimic Book or auction rewards. | Using any Ragnarok 3 page makes no call to Origin's /api/requests/* addresses. | Ragnarok 3 exposes no auction or request address of its own under /api/ragnarok-3. | No Ragnarok 3 Discord card offers an auction or request action.
+source_draft: f38e137/answers-2026-10-08/mints.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-021, USR-ROO-022 (Origin auction)
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-001
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Settings (REQ-RO3-004 .. REQ-RO3-007)
+
+[REQUIREMENT]
+UID: REQ-RO3-004
+STATUS: Active
+TITLE: REQ-RO3-004: Officers unlock settings; others get the public view
+STATEMENT: >>>
+Officers unlock settings; others get the public view
+<<<
+COMMENT: >>>
+domain: Settings
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: An officer can unlock Ragnarok 3 settings for the session. | Reading settings returns the full config to an officer and only the public view to anyone else. | Settings never report that setup is needed.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-024
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-002
+
+[REQUIREMENT]
+UID: REQ-RO3-005
+STATUS: Active
+TITLE: REQ-RO3-005: Saving Ragnarok 3 settings keeps only game settings
+STATEMENT: >>>
+Saving Ragnarok 3 settings keeps only game settings
+<<<
+COMMENT: >>>
+domain: Settings
+priority: unspecified
+type: software
+constraints: No item catalog, loot limits, or priority lookback days in R3 settings.
+acceptance_criteria: After an officer saves, Origin settings and workspace settings (guild name, timezone, admin roles, logo) are unchanged. | Saved Ragnarok 3 settings contain no item catalog and no priority lookback days. | Raid phases saved in the old place are moved under the raid section on save. | Saving two raid cycles that overlap is refused with 400 and nothing is stored.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-166
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-002
+
+[REQUIREMENT]
+UID: REQ-RO3-006
+STATUS: Active
+TITLE: REQ-RO3-006: Ragnarok 3 default settings
+STATEMENT: >>>
+Ragnarok 3 default settings
+<<<
+COMMENT: >>>
+domain: Settings
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: A workspace with no saved Ragnarok 3 settings gets: special event categories Raid, Meeting, PVP, Casual; 5 live raid configs; 2 war rooms; attendance poll interval 5; attendance max duration 40; 3 default leave credits; empty help links; an 8 x 5 party grid; not force-locked.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-166
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-002
+
+[REQUIREMENT]
+UID: REQ-RO3-007
+STATUS: Active
+TITLE: REQ-RO3-007: Ragnarok 3 help links
+STATEMENT: >>>
+Ragnarok 3 help links
+<<<
+COMMENT: >>>
+domain: Settings
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Anyone in a Ragnarok 3 workspace can read the help and raid-help links and the timezone. | On Ragnarok 3 pages the left navigation help link uses the Ragnarok 3 help link, not Origin's.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): none (R3-only help route)
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-002
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Attendance/Roster (REQ-RO3-008 .. REQ-RO3-011)
+
+[REQUIREMENT]
+UID: REQ-RO3-008
+STATUS: Active
+TITLE: REQ-RO3-008: Weekly attendance and availability for Ragnarok 3
+STATEMENT: >>>
+Weekly attendance and availability for Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Officers can announce and create a week's War instances; members can commit availability; the week, commitments and special events are readable and editable only within Ragnarok 3. | Officers can add, edit and delete special events.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-028, USR-ROO-029
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-003
+
+[REQUIREMENT]
+UID: REQ-RO3-009
+STATUS: Active
+TITLE: REQ-RO3-009: Party compositions and published grids for Ragnarok 3
+STATEMENT: >>>
+Party compositions and published grids for Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Officers can create, save, duplicate and delete compositions, publish a party grid, set it active, add or remove configs and save grids, all within Ragnarok 3.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-030, USR-ROO-031
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-003
+
+[REQUIREMENT]
+UID: REQ-RO3-010
+STATUS: Active
+TITLE: REQ-RO3-010: Roster status, job targets and leave credits for Ragnarok 3
+STATEMENT: >>>
+Roster status, job targets and leave credits for Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Officers can change roster status, job target counts, expected attendance rate, batch-save the roster, create dummy members and set a member's leave credits; changes stay in Ragnarok 3.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-025, USR-ROO-026, USR-ROO-027
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-003
+
+[REQUIREMENT]
+UID: REQ-RO3-011
+STATUS: Active
+TITLE: REQ-RO3-011: Removing a member in Ragnarok 3 does not kick from Discord
+STATEMENT: >>>
+Removing a member in Ragnarok 3 does not kick from Discord
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: When an officer removes (vanishes) a member, the result says the member was not kicked and Discord membership is unchanged.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-025 (Origin vanish kicks from Discord)
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-003
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Live raid (REQ-RO3-012 .. REQ-RO3-013)
+
+[REQUIREMENT]
+UID: REQ-RO3-012
+STATUS: Active
+TITLE: REQ-RO3-012: Ragnarok 3 live raid session
+STATEMENT: >>>
+Ragnarok 3 live raid session
+<<<
+COMMENT: >>>
+domain: Live raid
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Officers can create, update, update a cell, end and cancel a live raid session, set monitoring time, list history, delete a history entry and mark in-game status on it, all within Ragnarok 3.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-032, USR-ROO-034
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-004
+
+[REQUIREMENT]
+UID: REQ-RO3-013
+STATUS: Active
+TITLE: REQ-RO3-013: Ragnarok 3 live raid shows no voice presence
+STATEMENT: >>>
+Ragnarok 3 live raid shows no voice presence
+<<<
+COMMENT: >>>
+domain: Live raid
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: The voice presence check always returns an empty list of present members. | The War Room shows no live voice members for Ragnarok 3.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-033 (Origin polls voice)
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-004
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Party OCR (REQ-RO3-014)
+
+[REQUIREMENT]
+UID: REQ-RO3-014
+STATUS: Active
+TITLE: REQ-RO3-014: Ragnarok 3 party screenshot review
+STATEMENT: >>>
+Ragnarok 3 party screenshot review
+<<<
+COMMENT: >>>
+domain: Party OCR
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: Officers can upload a screenshot, list and open reviews, edit, commit, cancel and delete a review at /games/ragnarok-3/gvg-attendance. | Uploaded screenshots are filed under the workspace and the Ragnarok 3 game, separate from Origin uploads.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-035
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-005
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Peak hours (REQ-RO3-015)
+
+[REQUIREMENT]
+UID: REQ-RO3-015
+STATUS: Active
+TITLE: REQ-RO3-015: Ragnarok 3 peak hours
+STATEMENT: >>>
+Ragnarok 3 peak hours
+<<<
+COMMENT: >>>
+domain: Peak hours
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: A member can save their own play schedule; anyone in the workspace can read Ragnarok 3 peak hours; Origin play schedules are not changed.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-027
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-006
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: War Room (REQ-RO3-016)
+
+[REQUIREMENT]
+UID: REQ-RO3-016
+STATUS: Active
+TITLE: REQ-RO3-016: Ragnarok 3 War Room and War window use Ragnarok 3's own labels
+STATEMENT: >>>
+Ragnarok 3 War Room and War window use Ragnarok 3's own labels
+<<<
+COMMENT: >>>
+domain: War Room
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: The War Room shows the current War's phases from Ragnarok 3's own events (fallback names GvG Preparation, Party Adjustments, War) and lets officers update the live raid. | War-window labels on Ragnarok 3 pages come from Ragnarok 3's own events and War cycle; no Ragnarok 3 page shows Origin's current-session label. | Changing Origin's events or War cycle changes no label or phase on Ragnarok 3 pages, and changing Ragnarok 3's changes none on Origin pages. | It shows no war-room voice channel list and no voice counts. | With no published grid it tells the officer to publish a party grid from Raid Config.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-031
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-007
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Profile (REQ-RO3-017)
+
+[REQUIREMENT]
+UID: REQ-RO3-017
+STATUS: Active
+TITLE: REQ-RO3-017: Ragnarok 3 profile without auction rewards
+STATEMENT: >>>
+Ragnarok 3 profile without auction rewards
+<<<
+COMMENT: >>>
+domain: Profile
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: A Ragnarok 3 profile shows attendance trend and roster insights, has no Auction Rewards panel, and officers can set leave credits from it.
+source_draft: f38e137/mints-RO3.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-026
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-008
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Discord (REQ-RO3-019 .. REQ-RO3-021)
+
+[REQUIREMENT]
+UID: REQ-RO3-019
+STATUS: Active
+TITLE: REQ-RO3-019: Ragnarok 3 roster follows Discord membership
+STATEMENT: >>>
+Ragnarok 3 roster follows Discord membership
+<<<
+COMMENT: >>>
+domain: Discord
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: When an officer syncs the Ragnarok 3 roster, every current member of the workspace's Discord server has a Ragnarok 3 roster entry showing their Discord server display name. | A Ragnarok 3 roster member who is no longer in the Discord server is marked Ghost; a Ghost member who is back in the server is marked Active again; dummy members are never marked Ghost. | A Ragnarok 3 roster sync creates or changes no Origin roster entry, and an Origin roster sync creates or changes no Ragnarok 3 roster entry. | A non-officer cannot run the Ragnarok 3 sync; the request is refused and the roster is unchanged.
+source_draft: f38e137/answers-2026-10-08/mints.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-088
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-009
+
+[REQUIREMENT]
+UID: REQ-RO3-020
+STATUS: Active
+TITLE: REQ-RO3-020: Presses on Ragnarok 3 cards are handled by Ragnarok 3
+STATEMENT: >>>
+Presses on Ragnarok 3 cards are handled by Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Discord
+priority: unspecified
+type: system
+constraints: (none)
+acceptance_criteria: A press on any button or menu of a Ragnarok 3 card is handled by Ragnarok 3: everything it reads or writes is Ragnarok 3 data. | A press on a Ragnarok 3 card never runs Origin card handling and changes no Origin record or Origin card. | A press on an Origin card changes no Ragnarok 3 record or Ragnarok 3 card.
+source_draft: f38e137/answers-2026-10-08/mints.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-065
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-009
+
+[REQUIREMENT]
+UID: REQ-RO3-021
+STATUS: Active
+TITLE: REQ-RO3-021: Ragnarok 3 card deploys are gated to Ragnarok 3
+STATEMENT: >>>
+Ragnarok 3 card deploys are gated to Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Discord
+priority: unspecified
+type: software
+constraints: (none)
+acceptance_criteria: A Ragnarok 3 card deploy is accepted only when Ragnarok 3 is enabled for the workspace; otherwise it is refused and nothing is posted. | A deploy made in Ragnarok 3 posts, edits or removes no Origin card and writes no Origin record. | A deploy made in Origin posts, edits or removes no Ragnarok 3 card and writes no Ragnarok 3 record. | No Ragnarok 3 page starts an Origin card deploy.
+source_draft: f38e137/answers-2026-10-08/mints.json
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): REQ-ROO-211
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: USR-RO3-009
+
+[[/SECTION]]

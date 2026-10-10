@@ -1,0 +1,244 @@
+[DOCUMENT]
+TITLE: RO3 User Requirements (USR)
+UID: DOC-RO3-USR
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+Project: RO3 (Ragnarok 3 in ROOGuildApp). Strictly isolated from ROO (Ragnarok Origin): every relation in this document points at RO3 nodes only. Origin counterparts appear as plain text (counterpart …) and are never links.
+Source: SSOT requirements/usr (published only).
+Published nodes: 9 (USR-RO3-001 .. USR-RO3-009).
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Games/Access (USR-RO3-001)
+
+[REQUIREMENT]
+UID: USR-RO3-001
+STATUS: Active
+TITLE: Turn Ragnarok 3 on for a workspace
+STATEMENT: >>>
+Add Ragnarok 3 as its own game in the workspace and keep its pages and data closed unless the game is enabled.
+<<<
+RATIONALE: >>>
+Guilds that also play Ragnarok 3 want one workspace without mixing it with Origin.
+<<<
+COMMENT: >>>
+domain: Games/Access
+who: Officers
+why: Guilds that also play Ragnarok 3 want one workspace without mixing it with Origin.
+spoken_constraints: Ragnarok 3 is independent of Origin.; Ragnarok 3 has no auction or request features.; Ragnarok 3 data is Ragnarok 3-only and Origin data is Origin-only; neither game reads or writes the other's data.
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-011, USR-ROO-012
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Settings (USR-RO3-002)
+
+[REQUIREMENT]
+UID: USR-RO3-002
+STATUS: Active
+TITLE: Ragnarok 3 guild settings
+STATEMENT: >>>
+Keep Ragnarok 3 settings (events, raid cycles, jobs, roles, grid size, help links) separate from Origin, with no auction catalog.
+<<<
+RATIONALE: >>>
+R3 has no Mimic Book auction; its config must not overwrite Origin's.
+<<<
+COMMENT: >>>
+domain: Settings
+who: Officers
+why: R3 has no Mimic Book auction; its config must not overwrite Origin's.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-024 (settings), USR-ROO-040 (defaults)
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Attendance/Roster (USR-RO3-003)
+
+[REQUIREMENT]
+UID: USR-RO3-003
+STATUS: Active
+TITLE: Ragnarok 3 roster, attendance and party compositions
+STATEMENT: >>>
+Run the guild roster, weekly attendance, leave credits and party compositions for Ragnarok 3 on the web.
+<<<
+RATIONALE: >>>
+Same workflow guilds use in Origin, for the R3 roster.
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+who: Officers and members
+why: Same workflow guilds use in Origin, for the R3 roster.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-025, 026, 027, 028, 029, 030, 031
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Live raid (USR-RO3-004)
+
+[REQUIREMENT]
+UID: USR-RO3-004
+STATUS: Active
+TITLE: Ragnarok 3 live raid
+STATEMENT: >>>
+Run a live raid session (create, update cells, end, cancel, history) for Ragnarok 3 without Discord voice tracking.
+<<<
+RATIONALE: >>>
+Track who showed up during War without a Discord voice bot.
+<<<
+COMMENT: >>>
+domain: Live raid
+who: Officers
+why: Track who showed up during War without a Discord voice bot.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-032, 033, 034
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Party OCR (USR-RO3-005)
+
+[REQUIREMENT]
+UID: USR-RO3-005
+STATUS: Active
+TITLE: Ragnarok 3 party screenshot review
+STATEMENT: >>>
+Upload party screenshots, review the read result, then commit or cancel it for Ragnarok 3 attendance.
+<<<
+RATIONALE: >>>
+Faster attendance capture from in-game screenshots.
+<<<
+COMMENT: >>>
+domain: Party OCR
+who: Officers
+why: Faster attendance capture from in-game screenshots.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-035
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Peak hours (USR-RO3-006)
+
+[REQUIREMENT]
+UID: USR-RO3-006
+STATUS: Active
+TITLE: Ragnarok 3 peak hours
+STATEMENT: >>>
+Record when I usually play and let the guild see peak hours for Ragnarok 3.
+<<<
+RATIONALE: >>>
+Plan raids when most members are online.
+<<<
+COMMENT: >>>
+domain: Peak hours
+who: Members
+why: Plan raids when most members are online.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-027
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: War Room (USR-RO3-007)
+
+[REQUIREMENT]
+UID: USR-RO3-007
+STATUS: Active
+TITLE: Ragnarok 3 War Room
+STATEMENT: >>>
+See the War Room view for the current Ragnarok 3 War and adjust the live raid from it.
+<<<
+RATIONALE: >>>
+One screen during War.
+<<<
+COMMENT: >>>
+domain: War Room
+who: Officers
+why: One screen during War.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-031
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Profile (USR-RO3-008)
+
+[REQUIREMENT]
+UID: USR-RO3-008
+STATUS: Active
+TITLE: Ragnarok 3 member profile
+STATEMENT: >>>
+Open a member's Ragnarok 3 profile with attendance and leave credits, without auction rewards.
+<<<
+RATIONALE: >>>
+R3 has no auction.
+<<<
+COMMENT: >>>
+domain: Profile
+who: Members and officers
+why: R3 has no auction.
+spoken_constraints: (none)
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-026
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Discord (USR-RO3-009)
+
+[REQUIREMENT]
+UID: USR-RO3-009
+STATUS: Active
+TITLE: Ragnarok 3 on Discord
+STATEMENT: >>>
+Use the guild's Discord server for Ragnarok 3: the Ragnarok 3 roster follows Discord membership, officers post Ragnarok 3's own cards to Discord, and presses on those cards are handled by Ragnarok 3.
+<<<
+RATIONALE: >>>
+Discord is where the guild already is; customer decided Ragnarok 3 uses Discord and Discord is the member source of truth.
+<<<
+COMMENT: >>>
+domain: Discord
+who: Officers and members
+why: Discord is where the guild already is; customer decided Ragnarok 3 uses Discord and Discord is the member source of truth.
+spoken_constraints: Discord is the member source of truth for Ragnarok 3.; Ragnarok 3 renders its own Discord cards.; Ragnarok 3 card presses are handled by Ragnarok 3, never by the Origin handler.; Card deploys are game-gated and never touch another game's data or cards.
+ssot_status: published
+sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
+counterpart (text only, not a link): USR-ROO-018 (interactions), USR-ROO-019 (deploy cards), USR-ROO-023 (roster sync)
+<<<
+
+[[/SECTION]]

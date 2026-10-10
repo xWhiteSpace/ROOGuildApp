@@ -17,13 +17,14 @@ CRITICAL HONESTY (Last Boss challenges accepted):
 - Zero evidences edges. Zero done claims.
 - verifies fields / graph edges are plan lineage — not execution proof.
 - Soft greens / coverage alone are NOT pass criteria.
-- Tip next: TST-ROO-249. Catch-up plans through TST-ROO-248 are in this file. Every published requirement has a plan. Nothing is executed. No EVD.
+- Tip next: TST-ROO-261. SSOT publishes 258 ROO plans (TST-ROO-001 .. TST-ROO-247, TST-ROO-249, TST-ROO-251 .. TST-ROO-260); TST-ROO-248 and TST-ROO-250 are not minted in SSOT. Ragnarok 3 plans live in verification/ro3_tests.sdoc. Nothing is executed. No EVD.
 
 Open must gaps (Auth): REQ-ROO-008, REQ-ROO-015, REQ-ROO-017
 Open must live-Discord (Tenant): REQ-ROO-026, REQ-ROO-029, REQ-ROO-030
 
 Poison: Requirements/Requirements.md is NOT SoT.
 SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
 <<<
 
 [[/SECTION]]
@@ -642,7 +643,7 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Tenant/Workspace — TST-ROO-023 .. TST-ROO-045 (23 plans)
+TITLE: Tenant/Workspace — TST-ROO-023 .. TST-ROO-045, TST-ROO-260 (24 plans)
 
 [REQUIREMENT]
 UID: TST-ROO-023
@@ -1269,10 +1270,37 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-037
 
+[REQUIREMENT]
+UID: TST-ROO-260
+STATUS: Active
+TITLE: LoginRosterUpsertOriginOnly writes the sign-in roster entry only for Origin and never for Ragnarok 3
+STATEMENT: >>>
+Plan: LoginRosterUpsertOriginOnly writes the sign-in roster entry only for Origin and never for Ragnarok 3
+level: unit
+verifies: REQ-ROO-209, FNC-ROO-211, UNT-ROO-222, CMP-ROO-005
+requires_tol: TOL-ROO-006
+patterns: login_roster_origin_only
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Origin not enabled skips the roster write: expected=no roster entry created or updated in any game
+  - Origin enabled upserts the Origin entry: expected=auction/members/{uid} upserted inside runWithGame('ragnarok-origin')
+  - No Ragnarok 3 entry is written at sign-in: expected=the Ragnarok 3 roster is unchanged
+<<<
+COMMENT: >>>
+domain: Tenant/Workspace
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Ragnarok 3 counterpart, text only: UNT-RO3-029 (the Ragnarok 3 roster follows Discord sync, not sign-in).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-209
+
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065 (20 plans)
+TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065, TST-ROO-251 .. TST-ROO-253, TST-ROO-258 .. TST-ROO-259 (25 plans)
 
 [REQUIREMENT]
 UID: TST-ROO-046
@@ -1830,6 +1858,156 @@ HONESTY: published plan only; not executed; no EVD.
 RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-047
+
+[REQUIREMENT]
+UID: TST-ROO-251
+STATUS: Active
+TITLE: GameScopedRowFilterStamp and PerGameRosterRow: Origin reads and writes never touch Ragnarok 3 records (Origin to Ragnarok 3 direction)
+STATEMENT: >>>
+Plan: GameScopedRowFilterStamp and PerGameRosterRow: Origin reads and writes never touch Ragnarok 3 records (Origin to Ragnarok 3 direction)
+level: unit
+verifies: REQ-ROO-205, REQ-ROO-206, FNC-ROO-207, FNC-ROO-208, UNT-ROO-218, UNT-ROO-219, CMP-ROO-027
+requires_tol: TOL-ROO-006
+patterns: isolation_origin_to_ro3, game_id_stamp, game_id_filter
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An Origin insert is stamped ragnarok-origin and leaves the Ragnarok 3 twin unchanged: expected=Origin row stamped game_id ragnarok-origin; the Ragnarok 3 row is unchanged
+  - An Origin read filters by game: expected=the read returns nothing
+  - An Origin update or remove leaves the Ragnarok 3 twin unchanged: expected=the Ragnarok 3 row is unchanged
+  - Caches are keyed workspace::game: expected=cache key T::ragnarok-origin; it is never served to a ragnarok-3 read
+  - One Discord member has one roster row per game: expected=two rows keyed (T, ragnarok-origin, u1) and (T, ragnarok-3, u1)
+  - Changing a member's Origin roster entry leaves their Ragnarok 3 entry unchanged: expected=the Ragnarok 3 entry is unchanged
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Origin to Ragnarok 3. Ragnarok 3 counterpart, text only: UNT-RO3-003. The reverse direction, as an Origin rule, is TST-ROO-252.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-205
+
+[REQUIREMENT]
+UID: TST-ROO-252
+STATUS: Active
+TITLE: GameScopedRowFilterStamp and PerGameRosterRow: Ragnarok 3 reads and writes never touch Origin records; legacy rows stay Origin (Ragnarok 3 to Origin direction)
+STATEMENT: >>>
+Plan: GameScopedRowFilterStamp and PerGameRosterRow: Ragnarok 3 reads and writes never touch Origin records; legacy rows stay Origin (Ragnarok 3 to Origin direction)
+level: unit
+verifies: REQ-ROO-205, REQ-ROO-206, FNC-ROO-207, FNC-ROO-208, UNT-ROO-218, UNT-ROO-219, CMP-ROO-027
+requires_tol: TOL-ROO-006
+patterns: isolation_ro3_to_origin, legacy_rows_origin
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A Ragnarok 3 write leaves the Origin twin unchanged: expected=the Origin row is unchanged
+  - A Ragnarok 3 read does not return Origin records: expected=none of them is returned
+  - Changing a member's Ragnarok 3 roster entry leaves their Origin entry unchanged: expected=the Origin entry is unchanged
+  - Rows saved before game stamping count as Origin: expected=returned to an Origin read; not returned to a Ragnarok 3 read
+  - Adventurer Guild documents count as Adventurer Guild: expected=returned under adventurer-guild only; not to an Origin or Ragnarok 3 read
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Ragnarok 3 to Origin, as stated by the Origin units (UNT-ROO-218 invariant 1, UNT-ROO-219 algorithm 2, REQ-ROO-205 criterion 1, REQ-ROO-206 criterion 3). Ragnarok 3 counterpart, text only: UNT-RO3-003.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-205
+
+[REQUIREMENT]
+UID: TST-ROO-253
+STATUS: Active
+TITLE: Request context and store bind an explicit game; game data with no game set is refused with 'select a game' and never treated as Origin
+STATEMENT: >>>
+Plan: Request context and store bind an explicit game; game data with no game set is refused with 'select a game' and never treated as Origin
+level: unit
+verifies: REQ-ROO-158, REQ-ROO-205, FNC-ROO-159, FNC-ROO-207, UNT-ROO-169, UNT-ROO-218, CMP-ROO-008, CMP-ROO-027
+requires_tol: TOL-ROO-006
+patterns: explicit_game, select_a_game, no_origin_fallback
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - runWithTenant keeps a game already set: expected=current game stays ragnarok-origin
+  - runWithTenant supplies no default game: expected=current game is unset; it is not ragnarok-origin
+  - A request reading game data with no game set is refused: expected=refused with a 'select a game' error; nothing read; Origin rows not returned
+  - A request writing game data with no game set is refused: expected=refused with a 'select a game' error; nothing written in any game
+  - A background job with no game set is refused: expected=refused with a 'select a game' error; nothing read or written
+  - Workspace-level data needs no game: expected=not refused
+  - Operational rows are stamped with the current game: expected=row stamped tenant_id T and game_id ragnarok-origin
+  - clearTenantCaches clears every game key and keeps the channel cache tenant-only: expected=both game config entries cleared; the channel cache is keyed by T only
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-ROO-205/158, FNC-ROO-159/207, CMP-ROO-008). Tenant-resolution cases for UNT-ROO-169 stay in TST-ROO-206. Ragnarok 3 counterpart, text only: UNT-RO3-003.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-158
+
+[REQUIREMENT]
+UID: TST-ROO-258
+STATUS: Active
+TITLE: WorkspaceVsGameSettingsSplit: only Origin saves write workspace keys; a game save writes only its own game row
+STATEMENT: >>>
+Plan: WorkspaceVsGameSettingsSplit: only Origin saves write workspace keys; a game save writes only its own game row
+level: unit
+verifies: REQ-ROO-207, FNC-ROO-209, UNT-ROO-220, CMP-ROO-027
+requires_tol: TOL-ROO-006
+patterns: settings_split, workspace_keys_origin_only
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An Origin save splits workspace and game keys: expected=guildDisplayName and timezone written to tenant_settings; jobs written to game_settings(T, ragnarok-origin)
+  - An Origin save leaves the Ragnarok 3 row unchanged: expected=game_settings(T, ragnarok-3) unchanged
+  - Another game's save writes only its game row: expected=only game_settings(T, ragnarok-3) written; tenant_settings and the Origin row unchanged
+  - Reads merge in the published order: expected=workspace defaults < game defaults < workspace < game; later wins; cached under T::game
+  - A save or load with no game set is refused: expected=refused; nothing read or written
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-ROO-205/158, FNC-ROO-159/207, CMP-ROO-008). Ragnarok 3 counterpart, text only: UNT-RO3-004, UNT-RO3-008.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-207
+
+[REQUIREMENT]
+UID: TST-ROO-259
+STATUS: Active
+TITLE: OriginSettingsCarryOver copies leftover game keys into Origin only, never into Ragnarok 3
+STATEMENT: >>>
+Plan: OriginSettingsCarryOver copies leftover game keys into Origin only, never into Ragnarok 3
+level: unit
+verifies: REQ-ROO-208, FNC-ROO-210, UNT-ROO-221, CMP-ROO-027
+requires_tol: TOL-ROO-006
+patterns: origin_carry_over, never_copy_to_ro3
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An empty Origin row receives the old game keys: expected=non-workspace keys copied into the Origin row
+  - A non-empty Origin row is not overwritten: expected=no copy
+  - Workspace settings keep only workspace keys: expected=tenant_settings holds only guildDisplayName, timezone, adminRoles, guildLogoUrl
+  - Leftover keys are copied into Origin on read: expected=key copied into the Origin row
+  - Nothing is copied into Ragnarok 3: expected=the Ragnarok 3 row stays empty
+  - Adventurer Guild documents are marked adventurer-guild: expected=marked adventurer-guild
+<<<
+COMMENT: >>>
+domain: Games catalog
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-208
 
 [[/SECTION]]
 
@@ -2617,8 +2795,10 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-185
 
+[[/SECTION]]
+
 [[SECTION]]
-TITLE: Discord bot/Channels — TST-ROO-093 .. TST-ROO-110 (18 plans)
+TITLE: Discord bot/Channels — TST-ROO-093 .. TST-ROO-110, TST-ROO-254 .. TST-ROO-256 (21 plans)
 
 [REQUIREMENT]
 UID: TST-ROO-093
@@ -2748,12 +2928,12 @@ cases:
   - After ready the ticker period is 60 seconds: expected=a per-onboarded-tenant interval whose period is 60 seconds
   - The first post-ready tick skips Discord announcers: expected=maybeAnnounceEvents and maybeAnnounceRaidEvents are not invoked on that first tick
   - A later tick with the circuit closed runs both Discord announcers: expected=maybeAnnounceEvents and maybeAnnounceRaidEvents are invoked; Discord-facing work goes through enqueueDiscordCall
-  - An open circuit skips Discord announcers and still allows the non-Discord jobs: expected=Discord-facing announcers are not issued; maybeRefreshMonthlyLeaveCredits, maybeAutoEndLiveRaid, and maybeRunWarRoomAutomation may still run
-  - closeExpiredDeadlines, refreshGvgReadinessBoard, and maybeAutoCommitAuction are not on this clock: expected=closeExpiredDeadlines, refreshGvgReadinessBoard, and maybeAutoCommitAuction are not invoked
+  - An open circuit skips Discord announcers and still allows the non-Discord jobs: expected=Discord-facing announcers are not issued; maybeRefreshMonthlyLeaveCredits and maybeRunWarRoomAutomation may still run
+  - closeExpiredDeadlines, refreshGvgReadinessBoard, maybeAutoCommitAuction and live-raid auto-end are not on this clock: expected=closeExpiredDeadlines, refreshGvgReadinessBoard, and maybeAutoCommitAuction are not invoked, and no live-raid auto-end job runs from this clock (removed in 9237b35, still absent at f38e137)
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Live-raid auto-end is not a job of this clock (UNT-ROO-052, FNC-ROO-041; removed in 9237b35, still absent at f38e137): the 60-second bot tick (discord-bot/client.js:257-286) has no auto-end. Automatic archiving of an Active live raid whose monitoring end time (monitoringEndsAt) has passed stays required behavior (REQ-ROO-144, FNC-ROO-137, UNT-ROO-147), whatever runs it; at f38e137 it runs only in runPulseOnce (backend/src/api/liveRaid.routes.js:204-216, archive call L211), which runs only inside the pulse ticker (startTicker L290-322) armed by armMonitoringSchedule (L327-394), and at boot in resumeLiveRaidMonitoringIfNeeded (L426-435, archive call L431; called from backend/src/index.js:27-32). Both archive through endLiveRaidSessionInternal (L571-684), the same path as officer End Raid. That archive rule is planned in TST-ROO-122, not in this plan; the code gap vs REQ-ROO-144 (Req Guardian ruling A) is recorded on FNC-ROO-137, FNC-ROO-041 and UNT-ROO-147.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
@@ -3125,6 +3305,95 @@ RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-194
 
+[REQUIREMENT]
+UID: TST-ROO-254
+STATUS: Active
+TITLE: InteractionRouterByCustomId sets Origin explicitly on Origin card presses, never routes a Ragnarok 3 card press to Origin, and refuses an unknown game
+STATEMENT: >>>
+Plan: InteractionRouterByCustomId sets Origin explicitly on Origin card presses, never routes a Ragnarok 3 card press to Origin, and refuses an unknown game
+level: unit
+verifies: REQ-ROO-205, FNC-ROO-040, UNT-ROO-051, CMP-ROO-010
+requires_tol: TOL-ROO-006
+patterns: explicit_origin_press, ro3_press_not_origin, select_a_game
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An Origin card press runs with Origin set explicitly: expected=the handler runs with game ragnarok-origin set explicitly, not by default
+  - An Origin press reads and writes Origin data only: expected=Origin records change; no Ragnarok 3 record or card changes
+  - A press on a Ragnarok 3 card is not routed to an Origin handler: expected=no Origin handler is invoked; no Origin record changes
+  - A press whose game cannot be determined changes nothing: expected=refused with a 'select a game' error; nothing changes; not handled as Origin
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): discord-bot/client.js wraps presses in runWithTenant (game defaults to Origin) and routes every ocr:* press to the Origin handler, so cases 1, 3 and 4 are expected to fail at f38e137 (code gap (b) on FNC-ROO-040, UNT-ROO-051). Prefix routing stays in TST-ROO-096. Ragnarok 3 counterpart, text only: UNT-RO3-033.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-205
+
+[REQUIREMENT]
+UID: TST-ROO-255
+STATUS: Active
+TITLE: Origin root card deploys (auction, attendance, party, ocr) are accepted only with Origin enabled and touch only Origin data and cards
+STATEMENT: >>>
+Plan: Origin root card deploys (auction, attendance, party, ocr) are accepted only with Origin enabled and touch only Origin data and cards
+level: system
+verifies: REQ-ROO-211, FNC-ROO-045, FNC-ROO-046, FNC-ROO-047, FNC-ROO-048, API-ROO-024, API-ROO-025, API-ROO-026, API-ROO-027, UNT-ROO-058, UNT-ROO-059, UNT-ROO-060, UNT-ROO-061, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: deploy_game_gate, origin_card_pointer, never_touch_ro3_card
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - deploy-auction-card without Origin enabled is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'}; nothing posted
+  - deploy-attendance-card without Origin enabled is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'}; nothing posted
+  - deploy-party-card without Origin enabled is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'}; nothing posted
+  - deploy-ocr-card without Origin enabled is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'}; nothing posted
+  - Ragnarok 3 enabled alone does not count: expected=403 game_required naming ragnarok-origin; nothing posted
+  - An accepted deploy runs in the Origin context and keeps its pointer as Origin data: expected=the deploy runs with game ragnarok-origin set; the card pointer is read and written as Origin data
+  - The Ragnarok 3 card in the same channel is not touched: expected=the Ragnarok 3 message is not edited, replaced or removed; the Ragnarok 3 pointer record is unchanged
+  - No Ragnarok 3 record changes: expected=every Ragnarok 3 record is unchanged
+  - An inactive seat does not refuse these root routes: expected=not refused with 402; these root routes have no seat check
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-ROO-045..048, FNC-ROO-202, API-ROO-024..027, API-ROO-118). Officer, mapping and Discord status cases stay in TST-ROO-103..106. Ragnarok 3 counterpart, text only: UNT-RO3-031 / UNT-RO3-032.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-211
+
+[REQUIREMENT]
+UID: TST-ROO-256
+STATUS: Active
+TITLE: Attendance deploy aliases refuse without Origin enabled and touch only Origin data and cards
+STATEMENT: >>>
+Plan: Attendance deploy aliases refuse without Origin enabled and touch only Origin data and cards
+level: system
+verifies: REQ-ROO-211, FNC-ROO-049, API-ROO-028, UNT-ROO-062, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: deploy_game_gate, origin_card_pointer
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Each alias without Origin enabled is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'} each; nothing posted
+  - Ragnarok 3 enabled alone does not count: expected=403 game_required naming ragnarok-origin; nothing posted
+  - An accepted alias deploy runs in the Origin context with an Origin pointer: expected=game ragnarok-origin set; pointer read and written as Origin data
+  - No Ragnarok 3 card or record changes: expected=Ragnarok 3 message and every Ragnarok 3 record unchanged
+<<<
+COMMENT: >>>
+domain: Discord bot/Channels
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Met at f38e137 for the gate (aliases sit behind requireGame(ragnarok-origin), backend/src/createApp.js:102). Same-send and mount-gate cases stay in TST-ROO-107.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-211
+
 [[/SECTION]]
 
 [[SECTION]]
@@ -3461,12 +3730,12 @@ patterns: auto_end_window, active_guard_skip
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - An Active session whose end has been reached is archived: expected=EndLiveRaidAndArchive internal runs, the same archive path as officer End
+  - An Active session whose end has been reached is archived: expected=the session is archived through endLiveRaidSessionInternal (EndLiveRaidAndArchive internal), the same archive path as officer End Raid, with no officer action
   - No session, a non-Active status, or an end still in the future does not count: expected=skip; no archive
 <<<
 COMMENT: >>>
 domain: Live Raid/Voice
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Archiving an Active live raid once monitoringEndsAt has passed is behavior, not a required clock (UNT-ROO-147 responsibility and algorithm 1, FNC-ROO-137 behavior, REQ-ROO-144): it must happen whether or not an in-memory ticker is running and whether or not the process restarted. The 60-second bot tick (discord-bot/client.js:257-286) has no auto-end (removed in 9237b35, still absent at f38e137; UNT-ROO-147 notes). At f38e137 the end-time check runs only in runPulseOnce (backend/src/api/liveRaid.routes.js:204-216, Active re-check L210, archive call L211), which runs only inside the pulse ticker (startTicker L290-322) armed by armMonitoringSchedule (L327-394), and at boot in resumeLiveRaidMonitoringIfNeeded (L426-435, archive call L431; called from backend/src/index.js:27-32). Both archive through endLiveRaidSessionInternal (L571-684; EndLiveRaidAndArchive, UNT-ROO-143), the same path as officer End Raid. Skips in code: runPulseOnce returns without archiving when the session is missing or not Active (L199-202); the boot path returns when the session is missing or not Active (L419) or has no monitoring schedule (L422-425). Case 1 can be driven through either runner; while the pulse ticker is not running and the process does not restart, nothing reaches case 1 at f38e137. That is the code gap vs REQ-ROO-144 recorded on UNT-ROO-147 and FNC-ROO-137 (Req Guardian ruling A), not a plan defect. While the Discord rate-limit circuit is open, runPulseOnce returns before its end check (L194-197); that only delays archiving until the first pulse after the circuit closes.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
@@ -3663,12 +3932,12 @@ cases:
   - A war-room read that finds Active sets the watch active: expected=the watch is set to active
   - End or cancel sets the watch absent: expected=the watch is set to absent
   - Later ticks after absent do not query the live session: expected=that tick does not query attendance/live_session
-  - An active watch past monitoringEndsAt archives and then marks absent: expected=auto-end archives the session, then the watch is marked absent
+  - An active watch past monitoringEndsAt archives and then marks absent: expected=the session is archived through endLiveRaidSessionInternal (the same path as officer End Raid), then the watch is marked absent
   - Another process is not visible to this watch: expected=the other process is not visible to this watch
 <<<
 COMMENT: >>>
 domain: Live Raid/Voice
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Watch reads come from the minute loop's live-session check, resolveLiveExists (games/ragnarok-origin/services/warRoomAutomation.js:135-144), per UNT-ROO-204 and FNC-ROO-194; there is no maybeAutoEndLiveRaid at f38e137 (removed in 9237b35, still absent). Case 7 follows the end-time check that exists today: at f38e137 it runs only in runPulseOnce (backend/src/api/liveRaid.routes.js:204-216, archive call L211), which runs only inside the pulse ticker (startTicker L290-322) armed by armMonitoringSchedule (L327-394), and at boot in resumeLiveRaidMonitoringIfNeeded (L426-435, archive call L431; called from backend/src/index.js:27-32). Both archive through endLiveRaidSessionInternal (L571-684), the same path as officer End Raid. endLiveRaidSessionInternal then marks the watch absent (noteLiveSessionCleared, L683; watch L397-410). The 60-second tick itself does not archive a past-end session (UNT-ROO-204 code gap vs REQ-ROO-193 criterion 2, with REQ-ROO-144), so while the pulse ticker is not running and the process does not restart nothing reaches case 7 at f38e137; that is a code gap, not a plan defect.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
@@ -7042,29 +7311,91 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord onboarding hub — TST-ROO-243 .. TST-ROO-247 (5 plans)
+TITLE: Discord onboarding hub — TST-ROO-243 .. TST-ROO-247, TST-ROO-249, TST-ROO-257 (7 plans)
 
 [REQUIREMENT]
 UID: TST-ROO-243
 STATUS: Active
-TITLE: OnboardingChannelResolver reads tenant JSON and never process.env
+TITLE: OnboardingChannelIdField resolves tenant onboardingChannelId and ignores it for setup completeness
 STATEMENT: >>>
-Plan: OnboardingChannelResolver reads tenant JSON and never process.env
+Plan: OnboardingChannelIdField resolves tenant onboardingChannelId and ignores it for setup completeness
 level: unit
-verifies: REQ-ROO-197, FNC-ROO-198, UNT-ROO-208, CMP-ROO-007
+verifies: REQ-ROO-075, FNC-ROO-050, UNT-ROO-213, CMP-ROO-007
 requires_tol: TOL-ROO-006
 patterns: channel_map, no_env_fallback, onboarding_channel
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - A stored onboardingChannelId resolves to that channel id: expected=resolved channel id is the stored JSON field value
-  - An empty or missing onboardingChannelId stays empty: expected=resolved channel id is empty
-  - process.env does not fill an empty onboardingChannelId: expected=process.env is not read; resolved channel id stays empty
-  - Setup completeness ignores onboardingChannelId: expected=only onboardingChannelId is incomplete; aucreq or auction or warAnnounce remains complete with onboarding empty
+  - A stored onboardingChannelId resolves to that channel id: expected=resolved channel id is the stored tenant_settings.discord_channels.onboardingChannelId value
+  - An empty or missing onboardingChannelId stays empty: expected=resolved onboardingChannelId stays empty
+  - process.env does not fill an empty onboardingChannelId: expected=alias resolves from the tenant map only; process.env is not read; resolved id stays empty
+  - mergeChannelFallback always emits onboardingChannelId: expected=emitted channel fields always include onboardingChannelId among the channel fields
+  - Setup completeness ignores onboardingChannelId: expected=onboardingChannelId alone does not complete setup; aucreqChannelId or auctionChannelId or warAnnounceChannelId still completes setup with onboarding empty
 <<<
 COMMENT: >>>
-domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-243.test.js. Reconciled verifies away from Develop sdoc (was wrongly REQ-197/FNC-198/UNT-208). New rules vs published TST-ROO-108/UNT-063: onboardingChannelId field, tenant-only DISCORD_ONBOARDING_CHANNEL_ID, mergeChannelFallback emit, setup completeness ignore. Officer Settings/setup entry surfaces are UI — not minted as unit cases.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-075
+
+[REQUIREMENT]
+UID: TST-ROO-244
+STATUS: Active
+TITLE: DeployOnboardingHub posts or edits the hub via GET /api/deploy-onboarding-card with documented statuses
+STATEMENT: >>>
+Plan: DeployOnboardingHub posts or edits the hub via GET /api/deploy-onboarding-card with documented statuses
+level: system
+verifies: REQ-ROO-201, FNC-ROO-202, API-ROO-118, UNT-ROO-212, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: deploy_onboarding_card, onboarding_channel
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Officer deploy posts or edits the Onboarding hub on the tenant onboarding channel: expected=server rebuilds hub and posts or edits via sendPublicOnboardingCard/pointer to the tenant-mapped onboarding channel; success returned; process.env channel id is not used
+  - Unauthenticated caller returns 401 and does not post: expected=401; no hub posted
+  - Non-officer returns 403 and does not post: expected=403; no hub posted
+  - Unmapped onboarding channel returns 400 and does not post: expected=400; no hub posted
+  - Offline, not connected, rate-limited, or temporarily blocking returns 503 and does not post: expected=503; no hub posted
+  - Cannot locate the onboarding channel returns 404 and does not post: expected=404; no hub posted
+  - Attendance alias performs the same Discord deploy: expected=same Discord deploy outcome and status mapping as GET /api/deploy-onboarding-card
+  - Live handlers do not call evaluateDeployOnboardingGate: expected=handlers use officer checks, deployPublicOnboardingCard, and onboardingDeployHttpStatus; evaluateDeployOnboardingGate is not called
+<<<
+COMMENT: >>>
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/system/TST-ROO-244.test.js. Reconciled verifies to REQ-201/FNC-202/UNT-212 (Develop sdoc had REQ-198/FNC-199). Disagreement (unit wins): gym exercises evaluateDeployOnboardingGate; published UNT-212 rejects that helper for live HTTP — cases follow the unit status mapping and the no-gate rule. No INT-* in verifies (API only at system level, matching prior deploy TSTs).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-201
+
+[REQUIREMENT]
+UID: TST-ROO-245
+STATUS: Active
+TITLE: PublicOnboardingHubFourTopics buildHubPayload emits Onboarding title and four non-link topic buttons
+STATEMENT: >>>
+Plan: PublicOnboardingHubFourTopics buildHubPayload emits Onboarding title and four non-link topic buttons
+level: unit
+verifies: REQ-ROO-197, FNC-ROO-198, UNT-ROO-208, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: onboarding_hub_payload
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Hub title is Onboarding: expected=embed title is Onboarding
+  - Welcome body tells the member to pick a topic: expected=welcome body tells the member to pick a topic for a private explanation and jump
+  - Exactly four topic buttons Auction, GvG, General Chat, Website: expected=exactly four topic buttons labeled Auction, GvG, General Chat, Website
+  - Topic customIds are onboard auction gvg general website: expected=customIds are onboard:auction, onboard:gvg, onboard:general, onboard:website
+  - Hub topic buttons are not link-style: expected=the four hub topic buttons are not link-style on the hub itself
+<<<
+COMMENT: >>>
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-245.test.js. Reconciled verifies to UNT-208/FNC-198/REQ-197/CMP-011 (Develop sdoc wrongly pointed at UNT-209/CMP-010).
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
@@ -7073,28 +7404,27 @@ RELATIONS:
   VALUE: REQ-ROO-197
 
 [REQUIREMENT]
-UID: TST-ROO-244
+UID: TST-ROO-246
 STATUS: Active
-TITLE: DeployOnboardingCard posts the hub or returns the gate statuses
+TITLE: OnboardingTopicCards buildTopicPayload explains purpose with jump, unmapped sentence, or Open VALHALLA
 STATEMENT: >>>
-Plan: DeployOnboardingCard posts the hub or returns the gate statuses
-level: system
-verifies: REQ-ROO-198, FNC-ROO-199, API-ROO-118, UNT-ROO-212, CMP-ROO-011
+Plan: OnboardingTopicCards buildTopicPayload explains purpose with jump, unmapped sentence, or Open VALHALLA
+level: unit
+verifies: REQ-ROO-198, FNC-ROO-199, UNT-ROO-209, CMP-ROO-011
 requires_tol: TOL-ROO-006
-patterns: deploy_onboarding_card, onboarding_channel
+patterns: onboarding_topic_payload
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - Officer deploy posts the Onboarding hub to the mapped onboarding channel: expected=hub posted to the mapped onboarding channel from tenant discord_channels; success returned; process.env channel id is not used
-  - Unmapped channel returns 400 and does not post: expected=400 and no card posted
-  - Bot offline or an open circuit returns 503 and does not post: expected=503 and no card posted
-  - A mapped channel that cannot be located returns 404 and does not post: expected=404 and no card posted
-  - A caller who is not an authenticated officer returns 403 and does not post: expected=403 and no card posted
-  - Attendance alias does not diverge from root deploy: expected=same post decision as GET /api/deploy-onboarding-card
+  - Mapped Auction/GvG/General Chat topics resolve the matching channel field: expected=title matches topic; body includes that topic's purpose text and channel mention; Jump to channel link is https://discord.com/channels/{guildId}/{channelId}; Back present
+  - Unmapped Discord topic has the officer-paste sentence and no jump: expected=body includes 'This channel is not mapped yet. Ask an officer to paste the ID in Settings.'; no jump link; Back present
+  - Website Open VALHALLA uses frontend origin without trailing slash: expected=purpose text present; Open VALHALLA link URL is that origin with trailing slash removed; Back present
+  - Empty frontend origin offers no Open VALHALLA link: expected=no Open VALHALLA link; Back always present
+  - Back customId is onboard:back: expected=Back control customId is onboard:back
 <<<
 COMMENT: >>>
-domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-118. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-246.test.js. Reconciled verifies to UNT-209/FNC-199/REQ-198/CMP-011. Do not invent Discord sentence text beyond the published unmapped Settings sentence.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
@@ -7103,87 +7433,88 @@ RELATIONS:
   VALUE: REQ-ROO-198
 
 [REQUIREMENT]
-UID: TST-ROO-245
-STATUS: Active
-TITLE: BuildOnboardingHubPayload emits four onboard customIds
-STATEMENT: >>>
-Plan: BuildOnboardingHubPayload emits four onboard customIds
-level: unit
-verifies: REQ-ROO-199, FNC-ROO-199, UNT-ROO-209, CMP-ROO-010
-requires_tol: TOL-ROO-006
-patterns: onboarding_hub_payload
-execution_status: blocked_on_tooling
-evidence_status: none
-cases:
-  - Hub title is Onboarding: expected=embed title is Onboarding
-  - Four buttons are Auction, GvG, General Chat, Website: expected=labels are Auction, GvG, General Chat, Website
-  - CustomIds are onboard auction gvg general website: expected=customIds onboard:auction, onboard:gvg, onboard:general, onboard:website
-  - Hub has no Link buttons: expected=no Link-style button on the hub
-<<<
-COMMENT: >>>
-domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
-ssot_status: published
-HONESTY: published plan only; not executed; no EVD.
-<<<
-RELATIONS:
-- TYPE: Parent
-  VALUE: REQ-ROO-199
-
-[REQUIREMENT]
-UID: TST-ROO-246
-STATUS: Active
-TITLE: BuildOnboardingTopicPayload explains purpose and location
-STATEMENT: >>>
-Plan: BuildOnboardingTopicPayload explains purpose and location
-level: unit
-verifies: REQ-ROO-199, FNC-ROO-200, UNT-ROO-210, CMP-ROO-010
-requires_tol: TOL-ROO-006
-patterns: onboarding_topic_payload
-execution_status: blocked_on_tooling
-evidence_status: none
-cases:
-  - A mapped Discord topic includes a channel mention and jump URL: expected=description contains <#channelId>; Link URL is https://discord.com/channels/{guildId}/{channelId}
-  - An unmapped Discord topic has the officer-paste sentence and no jump: expected=purpose text plus This channel is not mapped yet. Ask an officer to paste the ID in Settings.; no <#; no Link button; Back still present
-  - Website uses the frontend origin: expected=Link URL is the given frontendUrl
-  - Back customId is present: expected=a button customId onboard:back
-<<<
-COMMENT: >>>
-domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
-ssot_status: published
-HONESTY: published plan only; not executed; no EVD.
-<<<
-RELATIONS:
-- TYPE: Parent
-  VALUE: REQ-ROO-199
-
-[REQUIREMENT]
 UID: TST-ROO-247
 STATUS: Active
-TITLE: ClassifyOnboardingAck chooses deferReply vs deferUpdate
+TITLE: OnboardingAckEphemeralOrUpdate chooses ephemeral defer-reply from hub and defer-update when already ephemeral
 STATEMENT: >>>
-Plan: ClassifyOnboardingAck chooses deferReply vs deferUpdate
+Plan: OnboardingAckEphemeralOrUpdate chooses ephemeral defer-reply from hub and defer-update when already ephemeral
 level: unit
-verifies: REQ-ROO-199, FNC-ROO-200, UNT-ROO-211, CMP-ROO-010
+verifies: REQ-ROO-199, FNC-ROO-200, UNT-ROO-210, CMP-ROO-011
 requires_tol: TOL-ROO-006
 patterns: onboarding_ack
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - A public topic click is ephemeral deferReply: expected=ack is deferReply and view is that topic
-  - An in-place topic or Back is deferUpdate: expected=ack is deferUpdate; Back view is hub
-  - An unknown onboard id is noop: expected=ack is noop and view is none
+  - Public hub known topic is ephemeral defer-reply then topic card: expected=ack is ephemeral defer-reply; reply is edited to that topic card
+  - Already-ephemeral topic or Back is defer-update in place: expected=ack is defer-update; same message edited to the topic or hub; Back does not post a new public hub message
+  - Unknown onboard customId is ignored with no ACK: expected=ignored; no ACK
 <<<
 COMMENT: >>>
-domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-247.test.js. Reconciled verifies to UNT-210/FNC-200/REQ-199/CMP-011 (Develop sdoc wrongly pointed at UNT-211). Gateway onboard: routing is CMP-010 soft note — no separate interaction INT minted.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
   VALUE: REQ-ROO-199
+
+[REQUIREMENT]
+UID: TST-ROO-249
+STATUS: Active
+TITLE: OnboardingHubPointerRedeploy edits the stored hub message when possible else sends a new hub
+STATEMENT: >>>
+Plan: OnboardingHubPointerRedeploy edits the stored hub message when possible else sends a new hub
+level: unit
+verifies: REQ-ROO-200, FNC-ROO-201, UNT-ROO-211, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: onboarding_card_pointer
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Pointer is stored at attendance/onboarding_card with channelId, messageId, updatedAt: expected=attendance/onboarding_card is written with channelId, messageId, and updatedAt
+  - Edit is attempted only when stored channelId matches target and messageId is present: expected=edit path is taken only when stored channelId equals the target channel id and messageId is present; otherwise send path
+  - When Discord still has the message, edit the hub and refresh the pointer: expected=existing hub message is edited to the hub payload; pointer refreshed; no new public message required
+  - Fetch or edit failure sends a new hub and updates the pointer: expected=a new hub message is sent; pointer updated to the new messageId
+<<<
+COMMENT: >>>
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. No matching gym case on Develop@9237b353 (243–247 exist; 248 is GvG — left alone). Minted next free after leaving 248 unused by this slice.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-200
+
+[REQUIREMENT]
+UID: TST-ROO-257
+STATUS: Active
+TITLE: Onboarding hub deploy needs Origin enabled and an active seat and touches only Origin data and cards
+STATEMENT: >>>
+Plan: Onboarding hub deploy needs Origin enabled and an active seat and touches only Origin data and cards
+level: system
+verifies: REQ-ROO-050, REQ-ROO-211, FNC-ROO-202, API-ROO-118, UNT-ROO-212, CMP-ROO-011
+requires_tol: TOL-ROO-006
+patterns: deploy_game_gate, seat_required, origin_card_pointer
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Without Origin enabled the deploy is refused: expected=403 {code: 'game_required', gameId: 'ragnarok-origin'}; no hub posted
+  - Ragnarok 3 enabled alone does not count: expected=403 game_required naming ragnarok-origin; no hub posted
+  - An inactive seat is 402: expected=402 {code: 'payment_required'}; no hub posted
+  - An accepted deploy keeps its pointer as Origin data: expected=game ragnarok-origin set; hub pointer read and written as Origin data
+  - No Ragnarok 3 card or record changes: expected=Ragnarok 3 message and every Ragnarok 3 record unchanged
+<<<
+COMMENT: >>>
+domain: Discord onboarding
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-ROO-045..048, FNC-ROO-202, API-ROO-024..027, API-ROO-118). Status mapping cases stay in TST-ROO-244. Root onboarding deploy carries the seat check per UNT-ROO-212 invariant and API-ROO-118; the four other root deploys do not (UNT-ROO-058..061).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-ROO-050
 
 [[/SECTION]]
 

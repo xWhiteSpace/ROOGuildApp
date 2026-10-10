@@ -13,6 +13,9 @@
 | Design tip summary | [`design/summary.sdoc`](design/summary.sdoc) |
 | Test plans + honesty | [`verification/tests.sdoc`](verification/tests.sdoc) |
 | Tools present vs greenfield | [`tools/tol.sdoc`](tools/tol.sdoc) |
+| Ragnarok 3 (RO3) requirements | [`requirements/ro3_usr.sdoc`](requirements/ro3_usr.sdoc), [`requirements/ro3_req.sdoc`](requirements/ro3_req.sdoc) |
+| Ragnarok 3 (RO3) design / tests | [`design/ro3_summary.sdoc`](design/ro3_summary.sdoc), [`verification/ro3_tests.sdoc`](verification/ro3_tests.sdoc) |
+| Standing maps + variables | [`trace/neighborhood.html`](trace/neighborhood.html) (ROO), [`trace/RO3/neighborhood.html`](trace/RO3/neighborhood.html) (RO3), [`trace/interfaces.sqlite`](trace/interfaces.sqlite) |
 
 ## Install location (Staging)
 

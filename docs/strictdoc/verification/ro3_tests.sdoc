@@ -1,0 +1,1403 @@
+[DOCUMENT]
+TITLE: RO3 Verification Plans (TST)
+UID: DOC-RO3-TST
+VERSION: 0.1
+OPTIONS:
+  MARKUP: Text
+
+[[SECTION]]
+TITLE: About
+
+[TEXT]
+STATEMENT: >>>
+Project: RO3 (Ragnarok 3 in ROOGuildApp). Strictly isolated from ROO (Ragnarok Origin): every relation in this document points at RO3 nodes only. Origin counterparts appear as plain text (counterpart …) and are never links.
+Source: SSOT tests/tst (published only). These are plans, not results: execution_status blocked_on_tooling, evidence_status none, nothing passed, no EVD.
+TST-RO3-001 .. TST-RO3-006 carry legacy ids TST-R3-001 .. TST-R3-006 as text aliases. The repo test files still use the TST-R3 names; renaming them is a separate code change that waits for approval.
+Published nodes: 46 (TST-RO3-001 .. TST-RO3-046).
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+<<<
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Games/Access — TST-RO3-001, TST-RO3-004 .. TST-RO3-011, TST-RO3-039 (10 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-001
+STATUS: Active
+TITLE: Ro3MountGate returns 403 game_required for Ragnarok 3 mounts
+STATEMENT: >>>
+Plan: Ro3MountGate returns 403 game_required for Ragnarok 3 mounts
+level: unit
+verifies: REQ-RO3-002, FNC-RO3-002, UNT-RO3-002, CMP-RO3-001
+requires_tol: 
+patterns: require_game_gate, r3_game_required
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Ragnarok 3 gate without ragnarok-3 enabled refuses with 403 game_required: expected=403 {code: 'game_required', gameId: 'ragnarok-3'}; next is not called; nothing runs
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-001 (text alias). Repo file carries a second legacy sdoc case (API tree /api/ragnarok-3/health → 403); that case is TST-RO3-006 and is not repeated here. Legacy verifies REQ-ROO-046 dropped: cross-project (Origin counterpart, text only).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-001
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-002
+
+[REQUIREMENT]
+UID: TST-RO3-004
+STATUS: Active
+TITLE: Ragnarok 3 operational rows are stamped with game ragnarok-3 on Origin-shaped paths
+STATEMENT: >>>
+Plan: Ragnarok 3 operational rows are stamped with game ragnarok-3 on Origin-shaped paths
+level: unit
+verifies: REQ-RO3-003, FNC-RO3-003, UNT-RO3-003, CMP-RO3-002
+requires_tol: 
+patterns: r3_game_id_stamp, schema_migrate
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - The store schema keys operational rows and settings by game: expected=a game_settings table exists and members (and the other mapped operational tables) carry game_id in their key
+  - A Ragnarok 3 json_docs write on an Origin-shaped path is stamped ragnarok-3: expected=json_docs row inserted with game_id ragnarok-3 and path attendance/compositions
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-004. Unit check (unit wins): the legacy case also asserted the Origin backfill and the Adventurer Guild json_docs stamp; those are Origin rules (Origin counterpart, text only: UNT-ROO-218 algorithm 5), not in any RO3 unit, so they are trimmed here. The legacy helper name says 'unreadable from R3 context' but asserts only the write stamp; the read side is planned separately in this batch. Legacy verifies REQ-ROO-158, REQ-ROO-160, REQ-ROO-161 dropped: cross-project.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-004
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-005
+STATUS: Active
+TITLE: Path resolver keeps leftover Origin root paths as Origin
+STATEMENT: >>>
+Plan: Path resolver keeps leftover Origin root paths as Origin
+level: unit
+verifies: REQ-RO3-001, FNC-RO3-001, UNT-RO3-001, CMP-RO3-001
+requires_tol: 
+patterns: r3_path_catalog
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A leftover Origin root path resolves to Origin: expected=ragnarok-origin
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-005 (legacy title: R3 calendar does not leak into scheduleContributors). Unit check (unit wins): the legacy case 'no ragnarok-3 schedule contributor is registered' has no published RO3 unit rule; CMP-RO3-005 only describes the code, and whether RO3 gets schedule automation is an open customer decision. That case is dropped from the registry plan (the repo test still asserts it). The kept case matches UNT-RO3-001 algorithm 3 and REQ-RO3-001 criterion 3; title updated to the kept rule.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-005
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-001
+
+[REQUIREMENT]
+UID: TST-RO3-006
+STATUS: Active
+TITLE: Ragnarok 3 API tree without ragnarok-3 returns 403 game_required
+STATEMENT: >>>
+Plan: Ragnarok 3 API tree without ragnarok-3 returns 403 game_required
+level: unit
+verifies: REQ-RO3-002, FNC-RO3-002, UNT-RO3-002, CMP-RO3-001
+requires_tol: 
+patterns: unit_require_game_mount_tree, r3_game_required
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - The mounted Ragnarok 3 tree refuses when ragnarok-3 is not enabled: expected=403 {code: 'game_required', gameId: 'ragnarok-3'}
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-006. Unit check: UNT-RO3-002 algorithm 3 and 5. Kept at level unit (mount-tree wiring), as in the legacy plan.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-006
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-002
+
+[REQUIREMENT]
+UID: TST-RO3-007
+STATUS: Active
+TITLE: Ro3KnownGameRegistration lists ragnarok-3 once, needs no setup step, and maps /games/ragnarok-3 pages to Ragnarok 3
+STATEMENT: >>>
+Plan: Ro3KnownGameRegistration lists ragnarok-3 once, needs no setup step, and maps /games/ragnarok-3 pages to Ragnarok 3
+level: unit
+verifies: REQ-RO3-001, FNC-RO3-001, UNT-RO3-001, CMP-RO3-001
+requires_tol: 
+patterns: known_game, no_setup, path_resolver
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - The catalog lists Ragnarok 3 once with its home path: expected=exactly one entry ragnarok-3 with home /games/ragnarok-3, next to ragnarok-origin and adventurer-guild
+  - Enabled Ragnarok 3 needs no setup step: expected=setup requirement for ragnarok-3 is none; the game counts as set up
+  - /games/ragnarok-3 pages resolve to Ragnarok 3: expected=ragnarok-3 for both; never ragnarok-origin
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. The leftover-Origin-root-path rule is in TST-RO3-005.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-001
+
+[REQUIREMENT]
+UID: TST-RO3-008
+STATUS: Active
+TITLE: Ro3MountGate refuses 409, 402 or 403 in that order and runs allowed requests in the ragnarok-3 context; health answers gameId
+STATEMENT: >>>
+Plan: Ro3MountGate refuses 409, 402 or 403 in that order and runs allowed requests in the ragnarok-3 context; health answers gameId
+level: system
+verifies: REQ-RO3-002, FNC-RO3-002, API-RO3-001, UNT-RO3-002, CMP-RO3-001
+requires_tol: 
+patterns: require_game_gate, gate_order, run_with_game
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No current workspace is 409 tenant_required: expected=409 {code: 'tenant_required'}; nothing runs
+  - No active subscription is 402 payment_required: expected=402 {code: 'payment_required'}; nothing runs
+  - Origin enabled but not Ragnarok 3 does not count: expected=403 {code: 'game_required', gameId: 'ragnarok-3'}; nothing runs
+  - Allowed request runs in the ragnarok-3 context: expected=req.gameId is ragnarok-3 and the handler's current game is ragnarok-3 (runWithGame)
+  - Health answers success with gameId: expected=200 {success: true, gameId: 'ragnarok-3'}
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code cited: backend/src/createApp.js:107 mount; backend/src/middleware/requireGame.js:9-24.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-002
+
+[REQUIREMENT]
+UID: TST-RO3-009
+STATUS: Active
+TITLE: Ro3GamePartitionedRowScope: Ragnarok 3 reads and writes never touch Origin records (Ragnarok 3 to Origin direction)
+STATEMENT: >>>
+Plan: Ro3GamePartitionedRowScope: Ragnarok 3 reads and writes never touch Origin records (Ragnarok 3 to Origin direction)
+level: unit
+verifies: REQ-RO3-003, FNC-RO3-003, UNT-RO3-003, CMP-RO3-002
+requires_tol: 
+patterns: isolation_ro3_to_origin, game_id_stamp, game_id_filter
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A Ragnarok 3 insert on a path Origin also uses leaves the Origin record unchanged: expected=a separate row stamped ragnarok-3 is written; the Origin record is byte-for-byte unchanged
+  - A Ragnarok 3 read does not return an Origin record: expected=the read returns nothing
+  - A Ragnarok 3 update or remove leaves the Origin twin unchanged: expected=only the Ragnarok 3 row changes and is removed; the Origin row is unchanged
+  - Mapped collections filter and stamp game ragnarok-3: expected=each insert lands in its table with game_id ragnarok-3; each read adds game_id = ragnarok-3
+  - Other trees use json_docs keyed by workspace, game and path, with no path prefix: expected=json_docs row keyed (tenant, ragnarok-3, attendance/war_room_status); the stored path string is the same as Origin's
+  - Changing a member's Ragnarok 3 roster entry leaves their Origin entry unchanged: expected=only the Ragnarok 3 entry changes; the Origin entry is unchanged
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Ragnarok 3 to Origin. The reverse direction is TST-RO3-010. Origin counterpart, text only: UNT-ROO-218.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-010
+STATUS: Active
+TITLE: Origin reads, writes and card presses never touch Ragnarok 3 records (Origin to Ragnarok 3 direction, Ragnarok 3 rules)
+STATEMENT: >>>
+Plan: Origin reads, writes and card presses never touch Ragnarok 3 records (Origin to Ragnarok 3 direction, Ragnarok 3 rules)
+level: unit
+verifies: REQ-RO3-003, REQ-RO3-020, FNC-RO3-003, FNC-RO3-021, UNT-RO3-003, UNT-RO3-033, CMP-RO3-002, CMP-RO3-010
+requires_tol: 
+patterns: isolation_origin_to_ro3, game_id_filter
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An Origin read does not return a Ragnarok 3 record: expected=the read returns nothing
+  - An Origin write on a shared path leaves the Ragnarok 3 record unchanged: expected=the Ragnarok 3 row is unchanged
+  - Changing a member's Origin roster entry leaves their Ragnarok 3 entry unchanged: expected=the Ragnarok 3 entry is unchanged
+  - A press on an Origin card changes no Ragnarok 3 record or card: expected=no Ragnarok 3 record changes; the Ragnarok 3 card message is not edited
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Origin to Ragnarok 3, as stated by the Ragnarok 3 units (UNT-RO3-003 responsibility and invariant 2; UNT-RO3-033 invariant 2). The Origin side states the same rule on its own units (counterpart text only).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-011
+STATUS: Active
+TITLE: Game data with no game set is refused with 'select a game' and never treated as Origin
+STATEMENT: >>>
+Plan: Game data with no game set is refused with 'select a game' and never treated as Origin
+level: unit
+verifies: REQ-RO3-003, FNC-RO3-003, UNT-RO3-003, UNT-RO3-004, UNT-RO3-005, CMP-RO3-002
+requires_tol: 
+patterns: no_game_refused, select_a_game, no_origin_fallback
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A store read with no game set is refused: expected=refused with a 'select a game' error; nothing read; the Origin record is not returned
+  - A store write with no game set is refused: expected=refused with a 'select a game' error; nothing written in any game
+  - Settings resolve with no game set is refused: expected=refused; neither the Ragnarok 3 nor the Origin game row is read or written
+  - An OCR staging key with no game set is refused: expected=refused; no object is staged under any game key
+  - Workspace-level data needs no game: expected=not refused; the same shared values both games see
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so this case is expected to fail at f38e137 (code gap (a) on UNT-RO3-002/003/004). UNT-RO3-005 notes its own fallback is to 'ragnarok-3', not Origin; still expected to fail the refusal case at f38e137. Origin counterpart, text only: REQ-ROO-205 and UNT-ROO-218.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-039
+STATUS: Active
+TITLE: Ragnarok 3 pages offer no auction or request feature and call only /api/ragnarok-3 addresses, including for card deploys
+STATEMENT: >>>
+Plan: Ragnarok 3 pages offer no auction or request feature and call only /api/ragnarok-3 addresses, including for card deploys
+level: unit
+verifies: REQ-RO3-017, REQ-RO3-021, REQ-RO3-022, FNC-RO3-018, FNC-RO3-022, FNC-RO3-023, UNT-RO3-028, UNT-RO3-034, CMP-RO3-011
+requires_tol: 
+patterns: no_auction_surface, ro3_addresses_only, no_origin_deploy_from_ro3
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Navigation lists only Ragnarok 3 pages: expected=no auction, request lobby, item queue, request history, past auctions, Mimic Book or auction rewards entry
+  - Ragnarok 3 data hooks call only /api/ragnarok-3 addresses: expected=no request to /api/requests/*; every address starts with /api/ragnarok-3
+  - No auction or request address exists under /api/ragnarok-3: expected=no auction or request address
+  - The Ragnarok 3 profile neither requests nor renders auction data: expected=data from /api/ragnarok-3/profile and /api/ragnarok-3/me only; no Auction Rewards panel; no auction stats request
+  - No Ragnarok 3 page starts an Origin card deploy: expected=no call to /api/deploy-* or /api/attendance/deploy-*; deploys only through /api/ragnarok-3/deploy-*
+  - No Ragnarok 3 card offers an auction or request action: expected=no auction or request control
+<<<
+COMMENT: >>>
+domain: Games/Access
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code gaps (cited): frontend/src/games/ragnarok-3/query.js still defines hooks calling /api/requests/* (not imported by any Ragnarok 3 page), and frontend/src/games/ragnarok-3/pages/SettingsTab.jsx:306-349 (calls at L310, L323, L336, L349) still holds handlers calling Origin's root /api/deploy-*-card (no control wired). A static check of cases 2 and 5 is expected to fail at f38e137.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-017
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Attendance/Roster — TST-RO3-002, TST-RO3-018 .. TST-RO3-021, TST-RO3-023 .. TST-RO3-024 (7 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-002
+STATUS: Active
+TITLE: Same Discord member can hold an Origin and a Ragnarok 3 roster entry at once
+STATEMENT: >>>
+Plan: Same Discord member can hold an Origin and a Ragnarok 3 roster entry at once
+level: unit
+verifies: REQ-RO3-003, FNC-RO3-003, UNT-RO3-003, CMP-RO3-002
+requires_tol: 
+patterns: r3_dual_roster
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Two roster entries for one Discord id, one per game: expected=two members rows for u1 exist, one with game ragnarok-origin and one with game ragnarok-3
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-002. Unit check: UNT-RO3-003 maps auction/members to the members table filtered and stamped by game; FNC-RO3-003 rule 2 and REQ-RO3-003 criterion 4 state the dual entry. That a change to one entry leaves the other alone is planned separately in this batch (both directions).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-002
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-018
+STATUS: Active
+TITLE: Ragnarok 3 roster reads return Ragnarok 3 members only, with no auction data
+STATEMENT: >>>
+Plan: Ragnarok 3 roster reads return Ragnarok 3 members only, with no auction data
+level: system
+verifies: REQ-RO3-010, FNC-RO3-011, API-RO3-020, API-RO3-021, API-RO3-022, UNT-RO3-011, CMP-RO3-004
+requires_tol: 
+patterns: roster_reads, officer_uid_view
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - members returns Ragnarok 3 members only: expected=u1's Ragnarok 3 entry is returned; u2 is absent
+  - view=card or list returns the reduced projection: expected=each member carries only the reduced field set
+  - profile defaults to the caller: expected=u1's Ragnarok 3 profile with jobs, roles and defaultLeaveCredits from the Ragnarok 3 config
+  - An officer may read another member's profile: expected=u2's Ragnarok 3 profile
+  - A non-officer may not read another member's profile: expected=403
+  - me returns leave credits with the Ragnarok 3 default: expected=leaveCreditsRemaining = Ragnarok 3 defaultLeaveCredits, plus noConfirmCount and defaultLeaveCredits
+  - No roster read carries auction data: expected=no auction rewards or auction stats fields
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-010
+
+[REQUIREMENT]
+UID: TST-RO3-019
+STATUS: Active
+TITLE: Ragnarok 3 officer roster writes: job target, batch save and dummy members
+STATEMENT: >>>
+Plan: Ragnarok 3 officer roster writes: job target, batch save and dummy members
+level: system
+verifies: REQ-RO3-010, FNC-RO3-011, API-RO3-017, API-RO3-018, API-RO3-019, UNT-RO3-012, CMP-RO3-004
+requires_tol: 
+patterns: officer_writes, atomic_batch, dummy_ids
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is refused: expected=403; nothing written
+  - update-job-target writes the Ragnarok 3 game row: expected=settings/configuration/jobs/K/desiredCount = 6 in the Ragnarok 3 game row; the Origin row unchanged
+  - save-batch writes all staged changes in one update: expected=one atomic update of auction/members/{uid}/* for all three
+  - displayName is written only for dummy members: expected=dummy_001 displayName written; u1 displayName not written
+  - Raid-roster members without credits get the Ragnarok 3 default: expected=leaveCreditsRemaining = Ragnarok 3 defaultLeaveCredits; noConfirmCount 0
+  - dummy/create takes the next sequential id: expected=dummy_003 created with leaveCreditsRemaining = Ragnarok 3 default
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-010
+
+[REQUIREMENT]
+UID: TST-RO3-020
+STATUS: Active
+TITLE: POST /api/ragnarok-3/members/:uid/leave-credits adjusts by a non-zero integer and never goes below zero
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/members/:uid/leave-credits adjusts by a non-zero integer and never goes below zero
+level: system
+verifies: REQ-RO3-010, FNC-RO3-011, API-RO3-013, UNT-RO3-013, CMP-RO3-004
+requires_tol: 
+patterns: leave_credit_delta, floor_zero
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is 403: expected=403; nothing written
+  - A zero or non-integer delta is 400: expected=400 both times; nothing written
+  - A missing member is 404: expected=404
+  - A member with no credits starts from the Ragnarok 3 default: expected=leaveCreditsRemaining 2
+  - The result is floored at zero: expected=leaveCreditsRemaining 0
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-010
+
+[REQUIREMENT]
+UID: TST-RO3-021
+STATUS: Active
+TITLE: POST /api/ragnarok-3/vanish removes members from the Ragnarok 3 roster only and never kicks from Discord
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/vanish removes members from the Ragnarok 3 roster only and never kicks from Discord
+level: system
+verifies: REQ-RO3-011, FNC-RO3-012, API-RO3-006, UNT-RO3-014, CMP-RO3-004
+requires_tol: 
+patterns: vanish_no_kick, batch_limit
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Vanish clears the Ragnarok 3 entries in one update and reports no kick: expected=auction/members/u1 and /u2 set to null in one update; {kicked: false, vanished, failed, message: 'Ragnarok 3 roster record purged. Discord membership is unchanged.'}
+  - No Discord call is made: expected=no Discord kick or other Discord call
+  - The member's Origin entry is unchanged: expected=the Origin entry is unchanged
+  - Empty targets are 400: expected=400
+  - More than 500 targets are 400; exactly 500 is accepted: expected=400 for 501; 500 processed
+  - A non-officer is 403: expected=403; nothing removed
+  - A failed update is 500 with every target failed: expected=500; all targets listed as failed
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-011
+
+[REQUIREMENT]
+UID: TST-RO3-023
+STATUS: Active
+TITLE: Ragnarok 3 weekly attendance: commit availability, week commitments with ETag, and ensure-week from Ragnarok 3 events
+STATEMENT: >>>
+Plan: Ragnarok 3 weekly attendance: commit availability, week commitments with ETag, and ensure-week from Ragnarok 3 events
+level: system
+verifies: REQ-RO3-008, FNC-RO3-009, API-RO3-014, API-RO3-029, API-RO3-031, UNT-RO3-016, UNT-RO3-017, CMP-RO3-005
+requires_tol: 
+patterns: commit_availability, etag_304, ensure_week
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A member commits availability into Ragnarok 3 commitments: expected=entries under attendance/commitments/{key} in Ragnarok 3; success; Origin commitments unchanged
+  - Commit with no signed-in member is 401: expected=401
+  - commitments defaults to the current week Monday: expected=weekMonday is this week's Monday in the workspace timezone; {etag, weekMonday, commitments}
+  - A matching If-None-Match is 304: expected=304
+  - ensure-week builds missing instances from Ragnarok 3 events only: expected=scheduler/instances written from Ragnarok 3 events and Ragnarok 3 special events only; {weekMonday, instances, timezone}
+  - Existing instances are not rebuilt without force: expected=instances unchanged
+  - force=true rebuilds: expected=instances rebuilt from Ragnarok 3 events
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Who may call ensure-week is an open customer decision (FNC-RO3-009, UNT-RO3-017 still_open); no case asserts either side. Calls are made as a signed-in officer.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-008
+
+[REQUIREMENT]
+UID: TST-RO3-024
+STATUS: Active
+TITLE: Ragnarok 3 special events: anyone lists, officers add, edit and delete; delete clears matching Ragnarok 3 commitments
+STATEMENT: >>>
+Plan: Ragnarok 3 special events: anyone lists, officers add, edit and delete; delete clears matching Ragnarok 3 commitments
+level: system
+verifies: REQ-RO3-008, FNC-RO3-009, API-RO3-030, API-RO3-032, API-RO3-033, API-RO3-034, UNT-RO3-018, CMP-RO3-005
+requires_tol: 
+patterns: special_events_crud
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - List returns Ragnarok 3 special events: expected=Ragnarok 3 events only
+  - A non-officer cannot add, edit or delete: expected=403 each; nothing changes
+  - An invalid body is 400: expected=400; nothing saved
+  - A missing id is 404: expected=404
+  - Delete removes the event and its Ragnarok 3 commitments: expected=e1 and its Ragnarok 3 commitments removed; the Origin event and commitments with the same id unchanged
+<<<
+COMMENT: >>>
+domain: Attendance/Roster
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-008
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Settings — TST-RO3-003, TST-RO3-012, TST-RO3-014 .. TST-RO3-017 (6 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-003
+STATUS: Active
+TITLE: Ragnarok 3 settings save does not change Origin game settings or workspace settings
+STATEMENT: >>>
+Plan: Ragnarok 3 settings save does not change Origin game settings or workspace settings
+level: unit
+verifies: REQ-RO3-005, FNC-RO3-006, UNT-RO3-008, CMP-RO3-003
+requires_tol: 
+patterns: r3_settings_split
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A Ragnarok 3 save writes only the Ragnarok 3 game settings and omits workspace keys: expected=game_settings for ragnarok-3 is written and keeps jobs; no tenant_settings (workspace) write; no Origin game_settings write; the stored Ragnarok 3 config has no timezone
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Legacy id TST-R3-003. Unit check: UNT-RO3-008 algorithm 3 and 6 and its invariant (Origin game row and workspace row untouched) match; REQ-RO3-005 criterion 1.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+legacy_id (text alias): TST-R3-003
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-005
+
+[REQUIREMENT]
+UID: TST-RO3-012
+STATUS: Active
+TITLE: Ragnarok 3 settings resolve from the Ragnarok 3 game row and Ragnarok 3 defaults, cached per game
+STATEMENT: >>>
+Plan: Ragnarok 3 settings resolve from the Ragnarok 3 game row and Ragnarok 3 defaults, cached per game
+level: unit
+verifies: REQ-RO3-003, REQ-RO3-006, FNC-RO3-003, FNC-RO3-007, UNT-RO3-004, UNT-RO3-009, CMP-RO3-002, CMP-RO3-003
+requires_tol: 
+patterns: settings_merge, ro3_defaults, config_cache_per_game
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Merge order is workspace defaults < Ragnarok 3 defaults < workspace keys < Ragnarok 3 game row: expected=the later layer wins
+  - The merged config is cached under tenant::ragnarok-3: expected=cache key T::ragnarok-3; the Origin entry T::ragnarok-origin is never served to Ragnarok 3
+  - clearTenantCaches clears every game key: expected=both entries are cleared
+  - An empty Ragnarok 3 row gives Ragnarok 3 defaults; leftover Origin keys are not copied in: expected=Ragnarok 3 defaults are returned; nothing is copied into the Ragnarok 3 row
+  - Ragnarok 3 defaults have the published values: expected=isForceLocked false; helpEmbedUrl ''; raidHelpEmbedUrl ''; specialEventCategories [Raid, Meeting, PVP, Casual]; events {}; liveRaidMaxConfigs 5; liveRaidMaxWarRooms 2; attendancePollInterval 5; attendanceMaxDuration 40; defaultLeaveCredits 3; warRooms, jobs, roles {}; gridTopology 8 x 5
+  - Ragnarok 3 defaults hold no item catalog or priority look-back: expected=no items key and no priorityLookbackDays key
+  - The time-window fallback config is workspace defaults plus Ragnarok 3 defaults: expected={...WORKSPACE_DEFAULTS, ...RAGNAROK_3_DEFAULTS}
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code cited: backend/src/games/ragnarok-3/defaults.js:3-18 matches the default values. The save path (game row only) is TST-RO3-003.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-014
+STATUS: Active
+TITLE: POST /api/ragnarok-3/settings/unlock unlocks settings for an officer, bound to the current workspace
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/settings/unlock unlocks settings for an officer, bound to the current workspace
+level: system
+verifies: REQ-RO3-004, FNC-RO3-004, API-RO3-002, UNT-RO3-006, CMP-RO3-003
+requires_tol: 
+patterns: officer_unlock
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An officer unlock is bound to the current workspace: expected=session.settingsUnlocked true and session.settingsUnlockedTenantId W; the signed user is returned
+  - No user is 401: expected=401; session unchanged
+  - A non-officer is 403: expected=403; session unchanged
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-004
+
+[REQUIREMENT]
+UID: TST-RO3-015
+STATUS: Active
+TITLE: GET /api/ragnarok-3/settings/get returns the full config to officers and the public view to others, never needing setup
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/settings/get returns the full config to officers and the public view to others, never needing setup
+level: system
+verifies: REQ-RO3-004, FNC-RO3-005, API-RO3-003, UNT-RO3-007, CMP-RO3-003
+requires_tol: 
+patterns: public_view, fields_filter, needs_setup_false
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - An officer gets the full config: expected={config: full Ragnarok 3 config, needsSetup: false, publicOnly: false}
+  - A non-officer gets the public view: expected={config: public view, help, needsSetup: false, publicOnly: true}; public view keys are timezone, jobs, roles, events, warRooms, specialEventCategories, gridTopology, helpEmbedUrl, raidHelpEmbedUrl, defaultLeaveCredits
+  - A fields filter picks from the view the caller may see: expected=officer gets the named keys from the full config; non-officer gets only named keys that are in the public view
+  - Nothing stored gives Ragnarok 3 defaults: expected=the Ragnarok 3 defaults, with needsSetup false
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-004
+
+[REQUIREMENT]
+UID: TST-RO3-016
+STATUS: Active
+TITLE: POST /api/ragnarok-3/settings/save keeps only game settings, migrates legacy phases and refuses overlapping raid cycles
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/settings/save keeps only game settings, migrates legacy phases and refuses overlapping raid cycles
+level: system
+verifies: REQ-RO3-005, FNC-RO3-006, API-RO3-004, UNT-RO3-008, CMP-RO3-003
+requires_tol: 
+patterns: strip_workspace_keys, legacy_phase_migration, overlap_refused
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Missing config is 400: expected=400; nothing saved
+  - No user is 401 and a non-officer is 403: expected=401, then 403; nothing saved
+  - Workspace keys are stripped from stored and incoming config: expected=the saved Ragnarok 3 row holds neither key
+  - Item catalog and priority look-back are dropped: expected=saved row has no items and no priorityLookbackDays
+  - Legacy event phases move under raid.phases: expected=event saved with raid.phases built from phases; phases, announcements and loots removed
+  - An event that already has raid.phases is not rebuilt: expected=raid.phases kept as sent; phases removed
+  - Overlapping raid cycles are refused: expected=400 naming both events; nothing saved
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. That the save leaves Origin and workspace settings unchanged is TST-RO3-003.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-005
+
+[REQUIREMENT]
+UID: TST-RO3-017
+STATUS: Active
+TITLE: GET /api/ragnarok-3/settings/help returns help links and timezone; the navigation help link uses them on Ragnarok 3 pages
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/settings/help returns help links and timezone; the navigation help link uses them on Ragnarok 3 pages
+level: system
+verifies: REQ-RO3-007, FNC-RO3-008, API-RO3-005, UNT-RO3-010, CMP-RO3-003, CMP-RO3-011
+requires_tol: 
+patterns: help_links, nav_help_switch
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Stored links and timezone are returned to any member: expected={helpEmbedUrl, raidHelpEmbedUrl, timezone: 'Asia/Tokyo'}
+  - Missing values fall back: expected=helpEmbedUrl '', raidHelpEmbedUrl '', timezone 'Asia/Manila'
+  - Timezone comes from the shared workspace row: expected=the Ragnarok 3 help read returns the new workspace timezone
+  - On a Ragnarok 3 page the navigation help link uses the Ragnarok 3 link: expected=the navigation help entry reads /api/ragnarok-3/settings/help and opens the Ragnarok 3 link, not Origin's
+<<<
+COMMENT: >>>
+domain: Settings
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Case 4 is an SPA rule from UNT-RO3-010 responsibility and CMP-RO3-011.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-007
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Party OCR — TST-RO3-013, TST-RO3-031 .. TST-RO3-033, TST-RO3-035 (5 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-013
+STATUS: Active
+TITLE: Ro3OcrStagingObjectKey keys staged screenshots by workspace, ragnarok-3 and review
+STATEMENT: >>>
+Plan: Ro3OcrStagingObjectKey keys staged screenshots by workspace, ragnarok-3 and review
+level: unit
+verifies: REQ-RO3-003, REQ-RO3-014, FNC-RO3-003, FNC-RO3-015, UNT-RO3-005, CMP-RO3-002
+requires_tol: 
+patterns: staging_key_game_id
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Prefix is workspace / ragnarok-3 / review: expected=prefix safeId(T)/ragnarok-3/safeId(r1)
+  - Each image is stored under the prefix by index: expected=objects at prefix/0.png and prefix/1.jpg
+  - A Ragnarok 3 key never collides with an Origin key: expected=the Ragnarok 3 objects live under T/ragnarok-3/r1, separate from the Origin objects
+<<<
+COMMENT: >>>
+domain: Party OCR
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. The no-game refusal for this key is in TST-RO3-011.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-031
+STATUS: Active
+TITLE: POST /api/ragnarok-3/ocr-reviews/scan creates a draft Ragnarok 3 review with per-game staged images
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/ocr-reviews/scan creates a draft Ragnarok 3 review with per-game staged images
+level: system
+verifies: REQ-RO3-014, FNC-RO3-015, API-RO3-009, UNT-RO3-025, CMP-RO3-009
+requires_tol: 
+patterns: ocr_scan_draft
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is 403: expected=403; nothing staged
+  - Invalid images are 400: expected=400; nothing staged
+  - Images are staged under the Ragnarok 3 key: expected=objects under tenant/ragnarok-3/{reviewId}/
+  - Names are matched against the Ragnarok 3 roster only: expected=draft attendance/ocr_reviews/{id} lists that name as unmatched
+<<<
+COMMENT: >>>
+domain: Party OCR
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-014
+
+[REQUIREMENT]
+UID: TST-RO3-032
+STATUS: Active
+TITLE: Ragnarok 3 OCR review list, read and draft edit
+STATEMENT: >>>
+Plan: Ragnarok 3 OCR review list, read and draft edit
+level: system
+verifies: REQ-RO3-014, FNC-RO3-015, API-RO3-035, API-RO3-036, API-RO3-037, API-RO3-038, UNT-RO3-026, CMP-RO3-009
+requires_tol: 
+patterns: ocr_review_edit
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is 403: expected=403
+  - Lists return Ragnarok 3 reviews and events only: expected=Ragnarok 3 reviews only
+  - A missing review is 404: expected=404
+  - PATCH sets present members on a draft: expected=presentCount 2
+  - PATCH maps an unmatched name to a member: expected=n1 assigned to u3
+  - A non-draft review cannot be edited: expected=refused; review unchanged
+<<<
+COMMENT: >>>
+domain: Party OCR
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-014
+
+[REQUIREMENT]
+UID: TST-RO3-033
+STATUS: Active
+TITLE: Ragnarok 3 OCR review cancel and delete remove the review and its staged screenshots without writing attendance
+STATEMENT: >>>
+Plan: Ragnarok 3 OCR review cancel and delete remove the review and its staged screenshots without writing attendance
+level: system
+verifies: REQ-RO3-014, FNC-RO3-015, API-RO3-039, API-RO3-040, UNT-RO3-027, CMP-RO3-009
+requires_tol: 
+patterns: ocr_discard
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Cancel of a draft removes the review and staged objects: expected=attendance/ocr_reviews/r1 and tenant/ragnarok-3/r1/* removed; no attendance written
+  - Cancel of a non-draft is refused: expected=refused; review unchanged
+  - Delete works in any status: expected=r2 and its staged objects removed; no attendance written
+  - A non-officer is 403 and a missing review is 404: expected=403; 404
+<<<
+COMMENT: >>>
+domain: Party OCR
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-014
+
+[REQUIREMENT]
+UID: TST-RO3-035
+STATUS: Active
+TITLE: POST /api/ragnarok-3/ocr-reviews/:id/commit stores in-game status for the Ragnarok 3 raid and removes the review
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/ocr-reviews/:id/commit stores in-game status for the Ragnarok 3 raid and removes the review
+level: system
+verifies: REQ-RO3-014, FNC-RO3-024, API-RO3-044, UNT-RO3-030, CMP-RO3-009
+requires_tol: 
+patterns: ocr_commit, pending_until_end, best_effort_discord
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A missing or non-draft review is 409: expected=409; nothing changes
+  - An archived raid gets its in-game status replaced: expected=attendance/session_archive/{id}/inGameStatus = present/absent per raid-roster member
+  - No archive yet holds the status as pending: expected=attendance/ocr_pending/{eventDate+eventKey} written with inGameStatus, reviewId, committedAt, committedBy
+  - presentUids in the call replaces the present set: expected=only u1 present
+  - The review and its staged screenshots are removed: expected=review and staged objects gone
+  - The screenshot post is best-effort: expected=commit still succeeds; message notes the skip
+  - A review message refresh failure does not fail the commit: expected=commit succeeds
+  - Response carries the present count and notes: expected={success, presentCount, message}
+  - No Origin record or message is touched: expected=both unchanged
+<<<
+COMMENT: >>>
+domain: Party OCR
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-014
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Peak hours — TST-RO3-022 (1 plan)
+
+[REQUIREMENT]
+UID: TST-RO3-022
+STATUS: Active
+TITLE: Ragnarok 3 peak hours: members save their own schedule; the aggregate reads the Ragnarok 3 roster only
+STATEMENT: >>>
+Plan: Ragnarok 3 peak hours: members save their own schedule; the aggregate reads the Ragnarok 3 roster only
+level: system
+verifies: REQ-RO3-015, FNC-RO3-016, API-RO3-010, API-RO3-011, UNT-RO3-015, CMP-RO3-004
+requires_tol: 
+patterns: own_schedule, aggregate_ro3_only
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A member saves their own play schedule: expected=auction/members/u1/playSchedule = {hours, days, start, end, updatedAt} in Ragnarok 3; Origin playSchedule unchanged
+  - A dummy or missing Discord id is 400: expected=400
+  - An empty schedule is 400: expected=400
+  - A caller with no Ragnarok 3 roster entry is 404: expected=404
+  - The aggregate uses Ragnarok 3 members only: expected=heatmap, peak, filled and total count Ragnarok 3 schedules only; mine is the caller's Ragnarok 3 schedule
+  - The missing list is only for officers: expected=officer response has missing; non-officer response has none
+  - Timezone defaults to Asia/Manila: expected=timezone 'Asia/Manila'
+<<<
+COMMENT: >>>
+domain: Peak hours
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-015
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Raid compose — TST-RO3-025 .. TST-RO3-026 (2 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-025
+STATUS: Active
+TITLE: Ragnarok 3 compositions: anyone lists, officers create, save, duplicate and delete
+STATEMENT: >>>
+Plan: Ragnarok 3 compositions: anyone lists, officers create, save, duplicate and delete
+level: system
+verifies: REQ-RO3-009, FNC-RO3-010, API-RO3-023, API-RO3-024, API-RO3-025, API-RO3-026, API-RO3-027, UNT-RO3-019, CMP-RO3-006
+requires_tol: 
+patterns: compositions_crud
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - List returns Ragnarok 3 compositions: expected=attendance/compositions in Ragnarok 3 only
+  - A non-officer cannot change compositions: expected=403 each; nothing written
+  - Invalid input is 400: expected=400
+  - A missing composition is 404: expected=404
+  - Officer create writes the Ragnarok 3 composition: expected=attendance/compositions/{id} written in Ragnarok 3
+<<<
+COMMENT: >>>
+domain: Raid compose
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-009
+
+[REQUIREMENT]
+UID: TST-RO3-026
+STATUS: Active
+TITLE: POST /api/ragnarok-3/published/:id/save-grids replaces grids of an existing Ragnarok 3 snapshot
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/published/:id/save-grids replaces grids of an existing Ragnarok 3 snapshot
+level: system
+verifies: REQ-RO3-009, FNC-RO3-010, API-RO3-028, UNT-RO3-020, CMP-RO3-006
+requires_tol: 
+patterns: save_grids
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is 403: expected=403
+  - Missing id or grids is 400: expected=400
+  - A missing snapshot is 404: expected=404; nothing created
+  - Grids are replaced: expected=p1 grids replaced; {success, published}
+<<<
+COMMENT: >>>
+domain: Raid compose
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-009
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Live raid — TST-RO3-027 .. TST-RO3-029, TST-RO3-040 .. TST-RO3-046 (10 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-027
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/update merges into the Ragnarok 3 session and refuses a member in two grids
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/update merges into the Ragnarok 3 session and refuses a member in two grids
+level: system
+verifies: REQ-RO3-012, FNC-RO3-013, API-RO3-016, UNT-RO3-021, CMP-RO3-007
+requires_tol: 
+patterns: live_update, one_grid_per_member
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A non-officer is 403: expected=403
+  - Grids placing one member in two grids are refused: expected=400; nothing saved
+  - Fields merge into the Ragnarok 3 session: expected=fields merged into attendance/live_session in Ragnarok 3; Origin live_session unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-012
+
+[REQUIREMENT]
+UID: TST-RO3-028
+STATUS: Active
+TITLE: Ragnarok 3 live session and history reads return Ragnarok 3 rows only
+STATEMENT: >>>
+Plan: Ragnarok 3 live session and history reads return Ragnarok 3 rows only
+level: system
+verifies: REQ-RO3-012, FNC-RO3-013, API-RO3-008, API-RO3-041, UNT-RO3-022, CMP-RO3-007
+requires_tol: 
+patterns: session_read, history_rows
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - session returns the Ragnarok 3 live session: expected=the Ragnarok 3 attendance/live_session
+  - history defaults to 12 trend rows: expected=12 trend rows
+  - sessionId returns one full archive row: expected=the full s1 archive row
+  - fields=full returns stored archive rows: expected=stored archive rows
+  - Origin archives are never returned: expected=s2 absent from every Ragnarok 3 history response
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-012
+
+[REQUIREMENT]
+UID: TST-RO3-029
+STATUS: Active
+TITLE: GET /api/ragnarok-3/live-raid/voice-presence always returns an empty present list
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/live-raid/voice-presence always returns an empty present list
+level: system
+verifies: REQ-RO3-013, FNC-RO3-014, API-RO3-007, UNT-RO3-023, CMP-RO3-007
+requires_tol: 
+patterns: no_voice_presence
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Empty list even when members are in voice: expected=empty present list
+  - Discord voice state is never read: expected=no Discord voice-state read
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Field name disagreement (unit wins on the rule, field flagged): UNT-RO3-023 algorithm says {present: []}; FNC-RO3-014, CMP-RO3-007 and the code (backend/src/api/ragnarok3LiveRaid.routes.js:830-834) use presentUids. Expected is written as 'empty present list' until Unit Designer settles the field.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-013
+
+[REQUIREMENT]
+UID: TST-RO3-040
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/create starts one Ragnarok 3 session from a Ragnarok 3 snapshot and leaves Origin's raid alone
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/create starts one Ragnarok 3 session from a Ragnarok 3 snapshot and leaves Origin's raid alone
+level: system
+verifies: REQ-RO3-003, REQ-RO3-012, FNC-RO3-003, FNC-RO3-013, API-RO3-045, UNT-RO3-035, CMP-RO3-007
+requires_tol: 
+patterns: live_create, one_session, running_isolation
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403; nothing written
+  - A second create is 400: expected=400; existing session unchanged
+  - publishedId and at least one war room are required: expected=400
+  - No resolvable war-room channel is 400: expected=400 'No valid Discord war room channels resolved'
+  - Unknown snapshot is 404 and an empty one is 400: expected=404; 400; nothing saved
+  - A member in two grids is 400 with duplicates: expected=400 {duplicates}; nothing saved
+  - Monitoring fields are all or none, interval at least 15, end after start: expected=400 each
+  - A valid create sets an Active Ragnarok 3 session: expected=attendance/live_session in Ragnarok 3 with status Active, grids from the snapshot, totalPulses 0, userTallies {}, version 2; {success, session, path: 'attendance/live_session'}
+  - Monitoring times arm the schedule: expected=schedule armed as scheduled, running or ended
+  - A running Origin raid is left alone: expected=Origin raid and its monitoring keep running unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. LATENT code gap (cited, unit intent): the Ragnarok 3 route clears the process-wide global.liveRaidIntervalTicker Origin also uses; no Ragnarok 3 page calls this route at f38e137, so the case is reachable only by a direct call and is expected to fail on one. Caller gap: no Ragnarok 3 page calls create (REQ-RO3-012 code gap); plan exercises the route directly.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-041
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/cell-update moves or clears one slot atomically
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/cell-update moves or clears one slot atomically
+level: system
+verifies: REQ-RO3-012, FNC-RO3-013, API-RO3-046, UNT-RO3-036, CMP-RO3-007
+requires_tol: 
+patterns: cell_update_atomic
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403
+  - Missing configId or coordKey is 400: expected=400
+  - No session or unknown grid tab is 404: expected=404 each
+  - Moving a member clears every other slot holding them in the same write: expected=B = u1 and A = '' in one multi-path update; {success}
+  - An empty userId clears the slot: expected=target slot userId ''
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Caller gap: no Ragnarok 3 page calls cell-update at f38e137; plan exercises the route directly.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-012
+
+[REQUIREMENT]
+UID: TST-RO3-042
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/end archives the Ragnarok 3 session in one write and leaves Origin's raid alone
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/end archives the Ragnarok 3 session in one write and leaves Origin's raid alone
+level: system
+verifies: REQ-RO3-003, REQ-RO3-012, FNC-RO3-003, FNC-RO3-013, API-RO3-047, UNT-RO3-037, CMP-RO3-007
+requires_tol: 
+patterns: end_archive, final_pulse, running_isolation
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401, a non-officer is 403, no session is 400: expected=401; 403; 400
+  - Ending early after monitoring started records one closing pulse: expected=one final pulse captured before archiving
+  - expectedPulses uses the actual monitored duration: expected=expectedPulses 3 (round of 50/15); at least 1 when monitored
+  - The archive snapshots raid-roster RSVP: expected=archive row carries the RSVP snapshot of raid-roster members
+  - A pending in-game status is consumed: expected=its inGameStatus moves into the archive; pending path cleared
+  - Archive and clear happen in one write: expected=session_archive/{newId} written, live_session null and pending null in one update; index gains {id, endedAt}
+  - A running Origin raid is left alone: expected=Origin raid and its pulse ticker keep running unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. LATENT code gap (cited, unit intent): the Ragnarok 3 route clears the process-wide global.liveRaidIntervalTicker Origin also uses; no Ragnarok 3 page calls this route at f38e137, so the case is reachable only by a direct call and is expected to fail on one. Caller gap: no Ragnarok 3 page calls end at f38e137. Automatic end at window close or boot for Ragnarok 3 is an open customer decision; not asserted.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-043
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/cancel clears the Ragnarok 3 session without a history row and leaves Origin's raid alone
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/cancel clears the Ragnarok 3 session without a history row and leaves Origin's raid alone
+level: system
+verifies: REQ-RO3-003, REQ-RO3-012, FNC-RO3-003, FNC-RO3-013, API-RO3-048, UNT-RO3-038, CMP-RO3-007
+requires_tol: 
+patterns: cancel_no_archive, running_isolation
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403
+  - Cancel clears the session and writes no history: expected=attendance/live_session null; no session_archive row; success
+  - Only the Ragnarok 3 session is cleared: expected=Origin live_session unchanged
+  - A running Origin raid is left alone: expected=Origin raid keeps running unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. LATENT code gap (cited, unit intent): the Ragnarok 3 route clears the process-wide global.liveRaidIntervalTicker Origin also uses; no Ragnarok 3 page calls this route at f38e137, so the case is reachable only by a direct call and is expected to fail on one. Caller gap: no Ragnarok 3 page calls cancel at f38e137.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-044
+STATUS: Active
+TITLE: POST /api/ragnarok-3/live-raid/set-monitoring-time sets a valid window on the Active session, reads it back and arms the schedule
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/live-raid/set-monitoring-time sets a valid window on the Active session, reads it back and arms the schedule
+level: system
+verifies: REQ-RO3-003, REQ-RO3-012, FNC-RO3-003, FNC-RO3-013, API-RO3-049, UNT-RO3-039, CMP-RO3-007
+requires_tol: 
+patterns: monitoring_window, read_back, running_isolation
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403
+  - Invalid or missing fields are 400: expected=400 each
+  - No Active Ragnarok 3 session is 400: expected=400
+  - A read-back mismatch is 500: expected=500
+  - End already past is 400 and not started: expected=400; status ended; ticker not started
+  - Start past arms running; start future arms scheduled: expected=monitoringTickerStatus running; then scheduled
+  - Response echoes the window and status: expected={success, path, monitoringStartsAt, monitoringEndsAt, pollIntervalMinutes, monitoringTickerStatus}
+  - A running Origin raid is left alone: expected=Origin raid and its pulse ticker keep running unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. LATENT code gap (cited, unit intent): the Ragnarok 3 route clears the process-wide global.liveRaidIntervalTicker Origin also uses; no Ragnarok 3 page calls this route at f38e137, so the case is reachable only by a direct call and is expected to fail on one. Caller gap: no Ragnarok 3 page calls set-monitoring-time at f38e137.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-003
+
+[REQUIREMENT]
+UID: TST-RO3-045
+STATUS: Active
+TITLE: DELETE /api/ragnarok-3/live-raid/history/:sessionId removes one Ragnarok 3 archive and its index entry
+STATEMENT: >>>
+Plan: DELETE /api/ragnarok-3/live-raid/history/:sessionId removes one Ragnarok 3 archive and its index entry
+level: system
+verifies: REQ-RO3-012, FNC-RO3-013, API-RO3-050, UNT-RO3-040, CMP-RO3-007
+requires_tol: 
+patterns: history_delete
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403
+  - Missing sessionId is 400: expected=400
+  - Delete removes the Ragnarok 3 archive and its index entry: expected=session_archive/s1 and its index entry removed; {success, message}
+  - An Origin archive with the same id is untouched: expected=Origin s1 unchanged
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Caller gap: no Ragnarok 3 page calls history delete at f38e137.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-012
+
+[REQUIREMENT]
+UID: TST-RO3-046
+STATUS: Active
+TITLE: PATCH /api/ragnarok-3/live-raid/history/:sessionId/in-game sets or clears one member's in-game flag
+STATEMENT: >>>
+Plan: PATCH /api/ragnarok-3/live-raid/history/:sessionId/in-game sets or clears one member's in-game flag
+level: system
+verifies: REQ-RO3-012, FNC-RO3-013, API-RO3-051, UNT-RO3-041, CMP-RO3-007
+requires_tol: 
+patterns: in_game_flag
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403
+  - Missing sessionId or userId is 400: expected=400
+  - A missing archive is 404: expected=404
+  - confirmed true sets the flag: expected=session_archive/s1/inGameStatus/u1 = true; {success, confirmed: true}
+  - Anything else clears it: expected=inGameStatus/u1 cleared (null)
+<<<
+COMMENT: >>>
+domain: Live raid
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Caller gap: no Ragnarok 3 page calls the in-game patch at f38e137.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-012
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: War Room — TST-RO3-030 (1 plan)
+
+[REQUIREMENT]
+UID: TST-RO3-030
+STATUS: Active
+TITLE: GET /api/ragnarok-3/war-room/init returns Ragnarok 3 data with labels from Ragnarok 3 events only
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/war-room/init returns Ragnarok 3 data with labels from Ragnarok 3 events only
+level: system
+verifies: REQ-RO3-016, FNC-RO3-017, API-RO3-012, UNT-RO3-024, CMP-RO3-008
+requires_tol: 
+patterns: ro3_phase_labels, labels_independent
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Init returns Ragnarok 3 settings, status and session: expected={settings, warRoomStatus, liveSession, phaseLabels, ...} from the Ragnarok 3 partition
+  - Phase labels come from the Ragnarok 3 event: expected=phaseLabels use those names, in the workspace timezone
+  - Fallback names apply when the event has none: expected=phaseLabels GvG Preparation, Party Adjustments, War
+  - Origin event changes do not change Ragnarok 3 labels: expected=phaseLabels unchanged
+  - Labels are carried as phaseLabels, not Origin's current-session label: expected=response carries phaseLabels; no Origin currentSessionLabel wording is used for the label
+<<<
+COMMENT: >>>
+domain: War Room
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. REQ-RO3-016 code gap is 'unknown': the no-raid and force-locked branches may still return Origin-style label text; those branches are not asserted here.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-016
+
+[[/SECTION]]
+
+[[SECTION]]
+TITLE: Discord — TST-RO3-034, TST-RO3-036 .. TST-RO3-038 (4 plans)
+
+[REQUIREMENT]
+UID: TST-RO3-034
+STATUS: Active
+TITLE: POST /api/ragnarok-3/sync-roster syncs the Ragnarok 3 roster from Discord membership
+STATEMENT: >>>
+Plan: POST /api/ragnarok-3/sync-roster syncs the Ragnarok 3 roster from Discord membership
+level: system
+verifies: REQ-RO3-019, FNC-RO3-020, API-RO3-042, UNT-RO3-029, CMP-RO3-004
+requires_tol: 
+patterns: roster_sync, ghost_active, dummy_never_ghost
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - No user is 401 and a non-officer is 403: expected=401; 403; roster unchanged
+  - Missing bot credentials or guild id is 500: expected=500; roster unchanged
+  - An open Discord circuit is 503: expected=503; roster unchanged
+  - A Discord refusal returns Discord's status: expected=403 returned; roster unchanged
+  - Every server member gets a Ragnarok 3 entry with their server display name: expected=displayName = nick, else global_name, else username; syncedAt = today in workspace timezone
+  - joinedAt is set only when missing: expected=existing joinedAt kept; missing one set
+  - A member who left becomes Ghost; a returning Ghost becomes Active: expected=u1 Ghost; u2 Active
+  - Dummy members are never Ghost: expected=both keep their status
+  - No member data is 422: expected=422; roster unchanged
+  - All patches are written together and only in Ragnarok 3: expected=one atomic update of Ragnarok 3 roster rows; Origin roster unchanged; {success, count}
+<<<
+COMMENT: >>>
+domain: Discord
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-019
+
+[REQUIREMENT]
+UID: TST-RO3-036
+STATUS: Active
+TITLE: GET /api/ragnarok-3/deploy-card, deploy-party-card and deploy-onboarding-card are game-gated and edit only the Ragnarok 3 card
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/deploy-card, deploy-party-card and deploy-onboarding-card are game-gated and edit only the Ragnarok 3 card
+level: system
+verifies: REQ-RO3-018, REQ-RO3-021, FNC-RO3-019, FNC-RO3-022, API-RO3-015, UNT-RO3-031, CMP-RO3-010
+requires_tol: 
+patterns: deploy_game_gate, ro3_card_pointer, never_touch_origin_card
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Ragnarok 3 not enabled refuses the deploy: expected=403 {code: 'game_required', gameId: 'ragnarok-3'}; nothing posted
+  - No workspace is 409 and no subscription is 402: expected=409 tenant_required; 402 payment_required; nothing posted
+  - No user is 401 and a non-officer is 403: expected=401; 403; nothing posted
+  - The target channel comes from the workspace channel map: expected=war-announce channel for the first two; onboarding channel for the onboarding card
+  - An existing Ragnarok 3 card in the same channel is edited in place: expected=message edited; pointer kept as Ragnarok 3 data
+  - Otherwise a new card is posted and the pointer replaced: expected=new card posted; Ragnarok 3 pointer replaced
+  - The Origin card in the same channel is never touched: expected=Origin message not edited, replaced or removed; Origin pointer record unchanged
+  - Refusals post nothing: expected=400; 503; 404; nothing posted
+<<<
+COMMENT: >>>
+domain: Discord
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code gap (cited): at f38e137 the Ragnarok 3 attendance, party and onboarding card services are stubs that throw 'Ragnarok 3 is web-only' (attendance/party answer 500, onboarding 400), so the post and edit cases are expected to fail at f38e137. Which cards Ragnarok 3 offers is an open customer decision; this plan covers deploy gating, pointer and isolation only.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-018
+
+[REQUIREMENT]
+UID: TST-RO3-037
+STATUS: Active
+TITLE: GET /api/ragnarok-3/deploy-ocr-card is game-gated and edits only the Ragnarok 3 party-screenshot card
+STATEMENT: >>>
+Plan: GET /api/ragnarok-3/deploy-ocr-card is game-gated and edits only the Ragnarok 3 party-screenshot card
+level: system
+verifies: REQ-RO3-018, REQ-RO3-021, FNC-RO3-019, FNC-RO3-022, API-RO3-043, UNT-RO3-032, CMP-RO3-010
+requires_tol: 
+patterns: deploy_game_gate, ro3_card_pointer
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - Ragnarok 3 not enabled refuses the deploy: expected=403 {code: 'game_required', gameId: 'ragnarok-3'}; nothing posted
+  - No user is 401 and a non-officer is 403: expected=401; 403; nothing posted
+  - Unmapped war-announce is 400: expected=400 'not configured'; nothing posted
+  - Offline bot or open circuit is 503; channel miss is 404: expected=503; 404; nothing posted
+  - An existing Ragnarok 3 card in the same channel is edited: expected={posted: false, edited: true, messageId}; pointer rewritten as Ragnarok 3 data
+  - Otherwise a new card is posted: expected={posted: true, edited: false, messageId}; Ragnarok 3 pointer written
+  - The Origin party-screenshot card is never touched: expected=Origin message and Origin pointer record unchanged
+<<<
+COMMENT: >>>
+domain: Discord
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Presses on this card going to Origin handling is a separate code gap (TST-RO3-038).
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-018
+
+[REQUIREMENT]
+UID: TST-RO3-038
+STATUS: Active
+TITLE: Ro3CardPressHandling: a press on a Ragnarok 3 card is handled by Ragnarok 3 in the ragnarok-3 context; an unknown game changes nothing
+STATEMENT: >>>
+Plan: Ro3CardPressHandling: a press on a Ragnarok 3 card is handled by Ragnarok 3 in the ragnarok-3 context; an unknown game changes nothing
+level: unit
+verifies: REQ-RO3-020, FNC-RO3-021, UNT-RO3-033, CMP-RO3-010
+requires_tol: 
+patterns: press_classification, ro3_press_context, no_game_press_refused
+execution_status: blocked_on_tooling
+evidence_status: none
+cases:
+  - A Ragnarok 3 control is told apart from the matching Origin control: expected=the Ragnarok 3 press is classified as Ragnarok 3 by its control id marker; the Origin press as Origin
+  - A Ragnarok 3 press runs with ragnarok-3 set explicitly: expected=handled inside runWithTenant(guild) and runWithGame('ragnarok-3') by the Ragnarok 3 handler for that card
+  - A Ragnarok 3 press reads and writes Ragnarok 3 data and edits only Ragnarok 3 messages: expected=Ragnarok 3 records and messages change; no Origin record, card or message changes
+  - Origin card handling never runs for a Ragnarok 3 press: expected=no Origin handler is invoked
+  - A press whose game cannot be told changes nothing: expected=refused ('select a game'); nothing changes; not handled as Origin
+<<<
+COMMENT: >>>
+domain: Discord
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol left empty: no RO3 TOL is published (the tools registry lists TOL-ROO-001..011 only); Tools Manager must catalogue an RO3 runner before this plan can run. No cross-project verifies; Origin counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code gap (cited): discord-bot/client.js registers only Origin handlers and the Ragnarok 3 party-screenshot card uses the same ocr:* control ids, so at f38e137 these presses run Origin handling with the game defaulting to Origin; cases 1-5 are expected to fail at f38e137. The Origin-press direction is in TST-RO3-010.
+ssot_status: published
+HONESTY: published plan only; not executed; no EVD.
+<<<
+RELATIONS:
+- TYPE: Parent
+  VALUE: REQ-RO3-020
+
+[[/SECTION]]
