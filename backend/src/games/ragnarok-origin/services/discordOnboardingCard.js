@@ -1,43 +1,27 @@
 /**
  * Public Onboarding hub plus private ephemeral topic cards (Auction, GvG,
- * General Chat, Website) with purpose text and a jump to the mapped location.
+ * General Chat, Website, Message) with purpose text and a jump to the mapped location.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getTenantStore } from '../../../db/database.js';
 import { currentDiscordChannels, discordChannel } from '../../../db/channels.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { valhallaEnv } from '../../../config/valhallaEnv.js';
+import { resolveDiscordCardCopy } from '../defaults.js';
+import { loadDiscordCardCopy } from './discordCardCopy.js';
 
 const EMBED_COLOR = '#9333ea';
 const CARD_PATH = 'attendance/onboarding_card';
 const UNMAPPED_SENTENCE = 'This channel is not mapped yet. Ask an officer to paste the ID in Settings.';
 
 const HUB_TITLE = 'Onboarding';
-const HUB_BODY = 'Welcome, Adventurer! This card shows where guild tools live. Pick a topic for a private explanation and a jump link.';
 
 const TOPICS = {
-  auction: {
-    title: 'Auction',
-    purpose:
-      'Request weekly auction items and claim vacant loot slots. Use **Open Request** and **Open Live Dashboard** on the Request Card.',
-    channelField: 'aucreqChannelId',
-  },
-  gvg: {
-    title: 'GvG',
-    purpose:
-      'War-announce is the GvG board: mark Available / Unavailable, change in-game name or job, and view your party.',
-    channelField: 'warAnnounceChannelId',
-  },
-  general: {
-    title: 'General Chat',
-    purpose: 'Guild-wide pings live here: loot allocation, raid-ready notices, RSVP lines.',
-    channelField: 'genroomId',
-  },
-  website: {
-    title: 'Website',
-    purpose: 'VALHALLA is the full dashboard (requests, raid compose, live raid, history). Sign in with Discord.',
-    channelField: null,
-  },
+  auction: { title: 'Auction', channelField: 'aucreqChannelId' },
+  gvg: { title: 'GvG', channelField: 'warAnnounceChannelId' },
+  general: { title: 'General Chat', channelField: 'genroomId' },
+  website: { title: 'Website', channelField: null },
+  message: { title: 'Message', channelField: 'messageChannelId' },
 };
 
 const TOPIC_CUSTOM_IDS = {
@@ -45,7 +29,13 @@ const TOPIC_CUSTOM_IDS = {
   'onboard:gvg': 'gvg',
   'onboard:general': 'general',
   'onboard:website': 'website',
+  'onboard:message': 'message',
 };
+
+function cardCopy(copy) {
+  if (copy?.onboarding) return resolveDiscordCardCopy({ discordCardCopy: copy });
+  return resolveDiscordCardCopy({});
+}
 
 function isEphemeralInteraction(interaction) {
   if (interaction?.ephemeral === true) return true;
@@ -56,17 +46,19 @@ function isEphemeralInteraction(interaction) {
   }
 }
 
-export function buildHubPayload() {
+export function buildHubPayload(copy) {
+  const resolved = cardCopy(copy);
   const embed = new EmbedBuilder()
     .setTitle(HUB_TITLE)
     .setColor(EMBED_COLOR)
-    .setDescription(HUB_BODY);
+    .setDescription(resolved.onboarding.hub);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('onboard:auction').setLabel('Auction').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('onboard:gvg').setLabel('GvG').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('onboard:general').setLabel('General Chat').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('onboard:website').setLabel('Website').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('onboard:message').setLabel('Message').setStyle(ButtonStyle.Primary),
   );
 
   return { embeds: [embed], components: [row] };
@@ -94,18 +86,19 @@ function mappedLocationRow(guildId, channelId) {
   return row;
 }
 
-export function buildTopicPayload(topic, channels = {}, { guildId = '', frontendUrl = '' } = {}) {
+export function buildTopicPayload(topic, channels = {}, { guildId = '', frontendUrl = '', copy } = {}) {
   const spec = TOPICS[topic];
   if (!spec) {
     return { embeds: [], components: [] };
   }
 
+  const purpose = cardCopy(copy).onboarding[topic];
   const embed = new EmbedBuilder().setTitle(spec.title).setColor(EMBED_COLOR);
   const components = [];
 
   if (topic === 'website') {
     const origin = String(frontendUrl || '').replace(/\/$/, '');
-    const lines = [spec.purpose];
+    const lines = [purpose];
     embed.setDescription(lines.join('\n\n'));
     const row = new ActionRowBuilder();
     if (origin) {
@@ -123,10 +116,10 @@ export function buildTopicPayload(topic, channels = {}, { guildId = '', frontend
   const channelId = String(channels?.[spec.channelField] || '');
   const resolvedGuild = String(guildId || channels?.guildId || '');
   if (channelId) {
-    embed.setDescription(`${spec.purpose}\n\nGo here: <#${channelId}>`);
+    embed.setDescription(`${purpose}\n\nGo here: <#${channelId}>`);
     components.push(mappedLocationRow(resolvedGuild, channelId));
   } else {
-    embed.setDescription(`${spec.purpose}\n\n${UNMAPPED_SENTENCE}`);
+    embed.setDescription(`${purpose}\n\n${UNMAPPED_SENTENCE}`);
     components.push(backRow());
   }
   return { embeds: [embed], components };
@@ -188,7 +181,7 @@ async function persistCardPointer(channelId, messageId) {
 }
 
 export async function sendPublicOnboardingCard(channel) {
-  const payload = buildHubPayload();
+  const payload = buildHubPayload(await loadDiscordCardCopy());
   const channelId = String(channel.id);
   const db = getTenantStore();
   const storedSnap = await db.ref(CARD_PATH).once('value');
@@ -229,12 +222,14 @@ export async function deployPublicOnboardingCard() {
   return sendPublicOnboardingCard(targetChannel);
 }
 
-function topicReplyPayload(topic) {
+async function topicReplyPayload(topic) {
   const channels = currentDiscordChannels();
   const { frontendUrl } = valhallaEnv();
+  const copy = await loadDiscordCardCopy();
   return buildTopicPayload(topic, channels, {
     guildId: channels.guildId || '',
     frontendUrl,
+    copy,
   });
 }
 
@@ -248,9 +243,9 @@ export async function handleOnboardingCardInteraction(interaction) {
     }
   }
   if (decision.view === 'hub') {
-    return interaction.editReply(buildHubPayload());
+    return interaction.editReply(buildHubPayload(await loadDiscordCardCopy()));
   }
   if (decision.view === 'topic') {
-    return interaction.editReply(topicReplyPayload(decision.topic));
+    return interaction.editReply(await topicReplyPayload(decision.topic));
   }
 }

@@ -8,7 +8,8 @@
     "./attendanceStatus": "./attendanceStatus.js",
     "./inGameAlias": "./inGameAlias.js",
     "./allocatePreview": "./allocatePreview.js",
-    "./mimicBookRoster": "./mimicBookRoster.js"
+    "./mimicBookRoster": "./mimicBookRoster.js",
+    "./discordCardCopy": "./discordCardCopy.js"
   },
   "private": true
 }

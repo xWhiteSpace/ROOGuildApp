@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import { getTenantStore } from '../../../db/database.js';
 import { discordChannel } from '../../../db/channels.js';
+import { loadDiscordCardCopy } from './discordCardCopy.js';
 import { getTenant, loadTenantSettings, mergeChannelFallback } from '../../../db/tenants.js';
 import { getCachedConfig, runWithTenant, setCachedConfig, setCachedChannels } from '../../../db/tenantContext.js';
 import { isTenantOfficer, roleTokensFromMember } from '../../../auth/officer.js';
@@ -542,15 +543,12 @@ async function buildEventSelect(officerName) {
   };
 }
 
-function publicOcrCard() {
+async function publicOcrCard() {
+  const copy = await loadDiscordCardCopy();
   const embed = new EmbedBuilder()
     .setTitle('Party OCR')
     .setColor(EMBED_COLOR)
-    .setDescription(
-      'Officers: **Scan Party Screenshot** picks the event and drops the Team Party image here.\n' +
-      'Review, O/X, and Commit swords happen on **VALHALLA** (Raid → GVG Attendance). You can also upload there.\n' +
-      'Images are not saved in VALHALLA. After Commit they may be posted to the Raid Screenshot channel.'
-    );
+    .setDescription(copy.ocr);
   return {
     content: null,
     embeds: [embed],
@@ -576,7 +574,7 @@ export async function deployPublicOcrCardToWarAnnounce() {
   const discordClient = await requireReadyClient();
   const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
   if (!targetChannel) throw new Error('Discord gateway client failed to locate the war-announce channel.');
-  const payload = publicOcrCard();
+  const payload = await publicOcrCard();
   const db = getTenantStore();
   const storedSnap = await db.ref(CARD_PATH).once('value');
   const stored = storedSnap.exists() ? storedSnap.val() : null;

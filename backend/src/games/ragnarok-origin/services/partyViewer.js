@@ -8,6 +8,7 @@ import { isSlotCoordKey } from '@guildname/shared/compositionTabs';
 import { enqueueDiscordCall } from '../../../utils/discordRateLimit.js';
 import { resolveAnchoredComposition } from './publishedComposition.js';
 import { discordChannel } from '../../../db/channels.js';
+import { loadDiscordCardCopy } from './discordCardCopy.js';
 
 const EMBED_COLOR = '#9333ea';
 
@@ -243,10 +244,11 @@ function buildPartyEmbed(party, viewerId) {
 }
 
 export async function sendPublicPartyCard(channel) {
+  const copy = await loadDiscordCardCopy();
   const embed = new EmbedBuilder()
     .setTitle('Party')
     .setColor(EMBED_COLOR)
-    .setDescription('See which party you were assigned to on the active composition.\n\nClick below to open your personal party panel.')
+    .setDescription(copy.party)
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(

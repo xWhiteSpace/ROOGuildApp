@@ -26,6 +26,7 @@ import {
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { jobIconEmoji, withJobIcon } from './discordJobEmojis.js';
 import { discordChannel } from '../../../db/channels.js';
+import { loadDiscordCardCopy } from './discordCardCopy.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
 import {
   buildRsvpAnnounceLine,
@@ -79,10 +80,6 @@ function formatEventWhen(dateStr, timeStart) {
   const time = timeStart || '20:55';
   return Number.isFinite(year) ? `${mon} ${dd}, ${year}  ${time}` : `${dateStr}  ${time}`;
 }
-
-const AVAILABILITY_COPY =
-  'Please confirm your availability for our upcoming GVG.\n' +
-  'This will help our officers to build balanced parties. Your Response is greatly appreciated.';
 
 function formatDeadline(deadlineMs, timezone) {
   if (!Number.isFinite(deadlineMs)) return '—';
@@ -327,9 +324,10 @@ async function buildPublicReadinessBoard() {
   const confirmed = Object.values(commitments).filter((c) => c?.status === 'Confirmed' || c?.status === 'Confirm').length;
   const leave = Object.values(commitments).filter((c) => c?.status === 'Leave').length;
   const rosterCount = Object.values(members).filter(isRaidRosterMember).length;
+  const copy = await loadDiscordCardCopy();
 
   embed.setDescription(
-    `${AVAILABILITY_COPY}\n\n` +
+    `${copy.gvg}\n\n` +
       `**${event.title || event.eventId || 'Raid'}** · ${formatEventWhen(event.date, event.timeStart)}\n` +
       `${buildDeadlineBarLine(nowMs, windowStart, deadlineMs)}`
   );

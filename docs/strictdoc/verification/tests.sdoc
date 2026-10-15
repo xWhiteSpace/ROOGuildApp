@@ -11,16 +11,16 @@ TITLE: Honesty — published ≠ proven
 [TEXT]
 STATEMENT: >>>
 CRITICAL HONESTY (Last Boss challenges accepted):
-- TST-ROO-001 .. TST-ROO-065 are published PLANS only.
+- Published TST nodes are plans only (VAL platform and ROO Origin).
 - execution_status for published nodes: blocked_on_tooling (runners catalogued, not pinned in app repo).
 - evidence_status: none. EVD node count: 0.
 - Zero evidences edges. Zero done claims.
 - verifies fields / graph edges are plan lineage — not execution proof.
 - Soft greens / coverage alone are NOT pass criteria.
-- Tip next: TST-ROO-261. SSOT publishes 258 ROO plans (TST-ROO-001 .. TST-ROO-247, TST-ROO-249, TST-ROO-251 .. TST-ROO-260); TST-ROO-248 and TST-ROO-250 are not minted in SSOT. Ragnarok 3 plans live in verification/ro3_tests.sdoc. Nothing is executed. No EVD.
+- Tip next: TST-ROO-261. SSOT publishes 258 plans (VAL 124, ROO 134). TST-ROO-248 and TST-ROO-250 are not minted in SSOT. Ragnarok 3 plans live in verification/ro3_tests.sdoc. Nothing is executed. No EVD.
 
-Open must gaps (Auth): REQ-ROO-008, REQ-ROO-015, REQ-ROO-017
-Open must live-Discord (Tenant): REQ-ROO-026, REQ-ROO-029, REQ-ROO-030
+Open must gaps (Auth): REQ-VAL-008, REQ-VAL-015, REQ-VAL-017
+Open must live-Discord (Tenant): REQ-VAL-026, REQ-VAL-029, REQ-VAL-030
 
 Poison: Requirements/Requirements.md is NOT SoT.
 SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
@@ -35,9 +35,9 @@ TITLE: Open must & deferred gaps
 [TEXT]
 STATEMENT: >>>
 ### Platform/Auth open must
-- GAP-AUTH-TST-001: REQ-ROO-015 [must/open] — REQ-ROO-015 localhost Vite proxy (empty backend base)
-- GAP-AUTH-TST-002: REQ-ROO-017 [must/open] — REQ-ROO-017 exhaustive CORS host matrix
-- GAP-AUTH-TST-004: REQ-ROO-008 [must/open] — Production Discord token exchange live Vercel FRONTEND_URL oauth bridge (REQ-ROO-008)
+- GAP-AUTH-TST-001: REQ-VAL-015 [must/open] — REQ-VAL-015 localhost Vite proxy (empty backend base)
+- GAP-AUTH-TST-002: REQ-VAL-017 [must/open] — REQ-VAL-017 exhaustive CORS host matrix
+- GAP-AUTH-TST-004: REQ-VAL-008 [must/open] — Production Discord token exchange live Vercel FRONTEND_URL oauth bridge (REQ-VAL-008)
 
 ### Tenant/Workspace live Discord / open
 - GAP-TENANT-TST-001: priority=None coverage=watch_deferred topic=GAP-TENANT-TST-001
@@ -55,16 +55,16 @@ STATEMENT: >>>
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Platform/Auth — TST-ROO-001 .. TST-ROO-022 (22 plans)
+TITLE: Platform/Auth — TST-VAL-001 .. TST-VAL-022 (22 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-001
+UID: TST-VAL-001
 STATUS: Active
 TITLE: ProcessBootstrap refuses start when required secrets missing
 STATEMENT: >>>
 Plan: ProcessBootstrap refuses start when required secrets missing
 level: unit
-verifies: REQ-ROO-002, FNC-ROO-001, UNT-ROO-001, CMP-ROO-001
+verifies: REQ-VAL-002, FNC-VAL-001, UNT-VAL-001, CMP-VAL-001
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: env_gate_refusal, missing_secret_matrix
 execution_status: blocked_on_tooling
@@ -83,16 +83,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-002
+  VALUE: REQ-VAL-002
 
 [REQUIREMENT]
-UID: TST-ROO-002
+UID: TST-VAL-002
 STATUS: Active
 TITLE: ProcessBootstrap runs migrate before Discord bot start
 STATEMENT: >>>
 Plan: ProcessBootstrap runs migrate before Discord bot start
 level: unit
-verifies: REQ-ROO-003, FNC-ROO-001, UNT-ROO-001, CMP-ROO-001
+verifies: REQ-VAL-003, FNC-VAL-001, UNT-VAL-001, CMP-VAL-001
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: boot_order, migrate_before_bot
 execution_status: blocked_on_tooling
@@ -109,16 +109,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-003
+  VALUE: REQ-VAL-003
 
 [REQUIREMENT]
-UID: TST-ROO-003
+UID: TST-VAL-003
 STATUS: Active
 TITLE: HealthProbe maps DB ping success/failure to HTTP outcomes
 STATEMENT: >>>
 Plan: HealthProbe maps DB ping success/failure to HTTP outcomes
 level: unit
-verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001, UNT-ROO-005, CMP-ROO-001
+verifies: REQ-VAL-001, FNC-VAL-002, API-VAL-001, UNT-VAL-005, CMP-VAL-001
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: health_probe_unit, db_ping_stub
 execution_status: blocked_on_tooling
@@ -135,16 +135,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-001
+  VALUE: REQ-VAL-001
 
 [REQUIREMENT]
-UID: TST-ROO-004
+UID: TST-VAL-004
 STATUS: Active
 TITLE: IdentityResolver prefers session then HMAC x-user-profile
 STATEMENT: >>>
 Plan: IdentityResolver prefers session then HMAC x-user-profile
 level: unit
-verifies: REQ-ROO-012, FNC-ROO-004, UNT-ROO-010, CMP-ROO-003
+verifies: REQ-VAL-012, FNC-VAL-004, UNT-VAL-010, CMP-VAL-003
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: identity_resolution, hmac_verify
 execution_status: blocked_on_tooling
@@ -162,16 +162,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-012
+  VALUE: REQ-VAL-012
 
 [REQUIREMENT]
-UID: TST-ROO-005
+UID: TST-VAL-005
 STATUS: Active
 TITLE: ProfileSigner re-signs profile for authenticated /auth/me payload
 STATEMENT: >>>
 Plan: ProfileSigner re-signs profile for authenticated /auth/me payload
 level: unit
-verifies: REQ-ROO-010, FNC-ROO-004, UNT-ROO-011, API-ROO-004, CMP-ROO-003
+verifies: REQ-VAL-010, FNC-VAL-004, UNT-VAL-011, API-VAL-004, CMP-VAL-003
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: profile_resign, hmac_sign
 execution_status: blocked_on_tooling
@@ -188,16 +188,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-010
+  VALUE: REQ-VAL-010
 
 [REQUIREMENT]
-UID: TST-ROO-006
+UID: TST-VAL-006
 STATUS: Active
 TITLE: SessionCookiePolicy local HTTP vs deployed HTTPS flags
 STATEMENT: >>>
 Plan: SessionCookiePolicy local HTTP vs deployed HTTPS flags
 level: unit
-verifies: REQ-ROO-016, FNC-ROO-006, UNT-ROO-003, CMP-ROO-001
+verifies: REQ-VAL-016, FNC-VAL-006, UNT-VAL-003, CMP-VAL-001
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: cookie_policy_matrix
 execution_status: blocked_on_tooling
@@ -214,16 +214,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-016
+  VALUE: REQ-VAL-016
 
 [REQUIREMENT]
-UID: TST-ROO-007
+UID: TST-VAL-007
 STATUS: Active
 TITLE: OAuthLoginStart builds Discord authorize URL with scopes and intent
 STATEMENT: >>>
 Plan: OAuthLoginStart builds Discord authorize URL with scopes and intent
 level: unit
-verifies: REQ-ROO-004, FNC-ROO-003, API-ROO-002, UNT-ROO-006, CMP-ROO-002
+verifies: REQ-VAL-004, FNC-VAL-003, API-VAL-002, UNT-VAL-006, CMP-VAL-002
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: oauth_authorize_url, scope_intent_state
 execution_status: blocked_on_tooling
@@ -240,16 +240,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-004
+  VALUE: REQ-VAL-004
 
 [REQUIREMENT]
-UID: TST-ROO-008
+UID: TST-VAL-008
 STATUS: Active
 TITLE: SessionRestore prefers auth_user query then migrates legacy localStorage key
 STATEMENT: >>>
 Plan: SessionRestore prefers auth_user query then migrates legacy localStorage key
 level: unit
-verifies: REQ-ROO-013, FNC-ROO-005, UNT-ROO-013, CMP-ROO-004
+verifies: REQ-VAL-013, FNC-VAL-005, UNT-VAL-013, CMP-VAL-004
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: spa_session_restore, legacy_key_migrate
 execution_status: blocked_on_tooling
@@ -261,28 +261,28 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-ROO-004 absent from unit/integ verifies (Gate already stripped live).
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays not_run / blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-VAL-004 absent from unit/integ verifies (Gate already stripped live).
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-013
+  VALUE: REQ-VAL-013
 
 [REQUIREMENT]
-UID: TST-ROO-009
+UID: TST-VAL-009
 STATUS: Active
 TITLE: Platform health seam end-to-end through CMP host + INT-001
 STATEMENT: >>>
 Plan: Platform health seam end-to-end through CMP host + INT-001
 level: integration
-verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001, CMP-ROO-001, INT-ROO-001, UNT-ROO-005
+verifies: REQ-VAL-001, FNC-VAL-002, API-VAL-001, CMP-VAL-001, INT-VAL-001, UNT-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: health_seam, db_reachability_integration
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - Reachable DB → GET / online via host seam: expected=INT-ROO-001/API-ROO-001 returns online body
+  - Reachable DB → GET / online via host seam: expected=INT-VAL-001/API-VAL-001 returns online body
   - Unreachable DB → GET / 503 via host seam: expected=503 failure body through same seam
 <<<
 COMMENT: >>>
@@ -293,16 +293,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-001
+  VALUE: REQ-VAL-001
 
 [REQUIREMENT]
-UID: TST-ROO-010
+UID: TST-VAL-010
 STATUS: Active
 TITLE: Discord OAuth login+callback seam with mocked Discord token exchange
 STATEMENT: >>>
 Plan: Discord OAuth login+callback seam with mocked Discord token exchange
 level: integration
-verifies: REQ-ROO-004, REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-002, API-ROO-003, CMP-ROO-002, INT-ROO-002, INT-ROO-003, UNT-ROO-006, UNT-ROO-007
+verifies: REQ-VAL-004, REQ-VAL-005, REQ-VAL-006, REQ-VAL-007, FNC-VAL-003, API-VAL-002, API-VAL-003, CMP-VAL-002, INT-VAL-002, INT-VAL-003, UNT-VAL-006, UNT-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: oauth_seam_msw, callback_routing_integration
 execution_status: blocked_on_tooling
@@ -321,16 +321,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-004
+  VALUE: REQ-VAL-004
 
 [REQUIREMENT]
-UID: TST-ROO-011
+UID: TST-VAL-011
 STATUS: Active
 TITLE: Identity me/logout seam across CMP-003 and INT-004/005
 STATEMENT: >>>
 Plan: Identity me/logout seam across CMP-003 and INT-004/005
 level: integration
-verifies: REQ-ROO-010, REQ-ROO-011, FNC-ROO-004, API-ROO-004, API-ROO-005, CMP-ROO-003, INT-ROO-004, INT-ROO-005, UNT-ROO-010, UNT-ROO-011, UNT-ROO-012
+verifies: REQ-VAL-010, REQ-VAL-011, FNC-VAL-004, API-VAL-004, API-VAL-005, CMP-VAL-003, INT-VAL-004, INT-VAL-005, UNT-VAL-010, UNT-VAL-011, UNT-VAL-012
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: session_me_logout_seam
 execution_status: blocked_on_tooling
@@ -347,16 +347,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-010
+  VALUE: REQ-VAL-010
 
 [REQUIREMENT]
-UID: TST-ROO-012
+UID: TST-VAL-012
 STATUS: Active
 TITLE: Discord circuit-open guard redirects login/callback to landing
 STATEMENT: >>>
 Plan: Discord circuit-open guard redirects login/callback to landing
 level: integration
-verifies: REQ-ROO-009, FNC-ROO-003, CMP-ROO-002, UNT-ROO-009, INT-ROO-002, INT-ROO-003
+verifies: REQ-VAL-009, FNC-VAL-003, CMP-VAL-002, UNT-VAL-009, INT-VAL-002, INT-VAL-003
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: circuit_breaker_oauth, rate_limit_redirect
 execution_status: blocked_on_tooling
@@ -373,16 +373,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-009
+  VALUE: REQ-VAL-009
 
 [REQUIREMENT]
-UID: TST-ROO-013
+UID: TST-VAL-013
 STATUS: Active
 TITLE: SPA CredentialedApiClient attaches credentials and auth headers (MSW)
 STATEMENT: >>>
 Plan: SPA CredentialedApiClient attaches credentials and auth headers (MSW)
 level: integration
-verifies: REQ-ROO-014, FNC-ROO-005, CMP-ROO-004, UNT-ROO-014
+verifies: REQ-VAL-014, FNC-VAL-005, CMP-VAL-004, UNT-VAL-014
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: credentialed_fetch_msw, header_attachment
 execution_status: blocked_on_tooling
@@ -393,28 +393,28 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-ROO-004 absent from unit/integ verifies (Gate already stripped live).
+notes: Requires TOL-ROO-006 Vitest + TOL-ROO-007 MSW when introduced; neither installed in repo yet. execution_status blocked_on_tooling until Adepts pin. evidence_status=none — Last Boss owns EVD. | Gate amend 2026-09-26: stripped non-acceptance USR from verifies (Last Boss C3). | AMEND CHALLENGE: C3 confirmed — USR-VAL-004 absent from unit/integ verifies (Gate already stripped live).
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-014
+  VALUE: REQ-VAL-014
 
 [REQUIREMENT]
-UID: TST-ROO-014
+UID: TST-VAL-014
 STATUS: Active
 TITLE: GET / health probe HTTP contract (online vs 503)
 STATEMENT: >>>
 Plan: GET / health probe HTTP contract (online vs 503)
 level: system
-verifies: REQ-ROO-001, FNC-ROO-002, API-ROO-001
+verifies: REQ-VAL-001, FNC-VAL-002, API-VAL-001
 requires_tol: TOL-ROO-006, TOL-ROO-005
 patterns: http_health_contract
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - GET / 200 online when DB ping succeeds: expected=Online success body per API-ROO-001
+  - GET / 200 online when DB ping succeeds: expected=Online success body per API-VAL-001
   - GET / 503 when DB ping fails: expected=Failure body; not false-online
 <<<
 COMMENT: >>>
@@ -425,16 +425,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-001
+  VALUE: REQ-VAL-001
 
 [REQUIREMENT]
-UID: TST-ROO-015
+UID: TST-VAL-015
 STATUS: Active
 TITLE: GET /auth/login Discord OAuth start HTTP contract
 STATEMENT: >>>
 Plan: GET /auth/login Discord OAuth start HTTP contract
 level: system
-verifies: REQ-ROO-004, REQ-ROO-009, FNC-ROO-003, API-ROO-002
+verifies: REQ-VAL-004, REQ-VAL-009, FNC-VAL-003, API-VAL-002
 requires_tol: TOL-ROO-006, TOL-ROO-005
 patterns: http_oauth_login
 execution_status: blocked_on_tooling
@@ -451,16 +451,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-004
+  VALUE: REQ-VAL-004
 
 [REQUIREMENT]
-UID: TST-ROO-016
+UID: TST-VAL-016
 STATUS: Active
 TITLE: GET /auth/callback exchange, persist, and post-auth routing HTTP
 STATEMENT: >>>
 Plan: GET /auth/callback exchange, persist, and post-auth routing HTTP
 level: system
-verifies: REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-003
+verifies: REQ-VAL-005, REQ-VAL-006, REQ-VAL-007, FNC-VAL-003, API-VAL-003
 requires_tol: TOL-ROO-006, TOL-ROO-005, TOL-ROO-007
 patterns: http_oauth_callback, post_auth_routing
 execution_status: blocked_on_tooling
@@ -469,26 +469,26 @@ cases:
   - Successful exchange persists guild list and session identity: expected=Session established; compact guild list stored
   - Single-guild non-signup → tenant redirect: expected=Redirect into tenant path
   - Zero/multi/signup → /select-guild?auth_user: expected=Select-guild with auth_user context
-  - Production exchange config-path probe (FRONTEND_URL oauth bridge wiring) — NOT REQ-008 closure: expected=Config selects FRONTEND_URL bridge path when production flags set; does NOT prove live Vercel bridge E2E. REQ-ROO-008 remains open (GAP-AUTH-TST-004).
+  - Production exchange config-path probe (FRONTEND_URL oauth bridge wiring) — NOT REQ-008 closure: expected=Config selects FRONTEND_URL bridge path when production flags set; does NOT prove live Vercel bridge E2E. REQ-VAL-008 remains open (GAP-AUTH-TST-004).
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD. | AMEND CHALLENGE C5: REQ-ROO-008 removed from verifies. Config-path case alone does NOT satisfy must REQ-008 (live Vercel FRONTEND_URL oauth exchange bridge). Coverage = open via GAP-AUTH-TST-004. Do not count REQ-008 covered.
+notes: HTTP/API system plans; runner likely Vitest (TOL-ROO-006) against Express app (TOL-ROO-005) when introduced. Not installed yet → not_run / blocked_on_tooling. evidence_status=none — Last Boss owns EVD. | AMEND CHALLENGE C5: REQ-VAL-008 removed from verifies. Config-path case alone does NOT satisfy must REQ-008 (live Vercel FRONTEND_URL oauth exchange bridge). Coverage = open via GAP-AUTH-TST-004. Do not count REQ-008 covered.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-005
+  VALUE: REQ-VAL-005
 
 [REQUIREMENT]
-UID: TST-ROO-017
+UID: TST-VAL-017
 STATUS: Active
 TITLE: GET /auth/me and POST /auth/logout HTTP contracts
 STATEMENT: >>>
 Plan: GET /auth/me and POST /auth/logout HTTP contracts
 level: system
-verifies: REQ-ROO-010, REQ-ROO-011, REQ-ROO-012, FNC-ROO-004, API-ROO-004, API-ROO-005
+verifies: REQ-VAL-010, REQ-VAL-011, REQ-VAL-012, FNC-VAL-004, API-VAL-004, API-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-005
 patterns: http_me_logout
 execution_status: blocked_on_tooling
@@ -506,16 +506,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-010
+  VALUE: REQ-VAL-010
 
 [REQUIREMENT]
-UID: TST-ROO-018
+UID: TST-VAL-018
 STATUS: Active
 TITLE: Acceptance: platform health and safe boot visible to operators
 STATEMENT: >>>
 Plan: Acceptance: platform health and safe boot visible to operators
 level: acceptance
-verifies: USR-ROO-001, REQ-ROO-001, REQ-ROO-002, REQ-ROO-003, FNC-ROO-001, FNC-ROO-002, API-ROO-001
+verifies: USR-VAL-001, REQ-VAL-001, REQ-VAL-002, REQ-VAL-003, FNC-VAL-001, FNC-VAL-002, API-VAL-001
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-008
 patterns: acceptance_boot_health, operator_probe, acceptance_boot_health_playwright, operator_observable_ui
 execution_status: blocked_on_tooling
@@ -528,22 +528,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: Acceptance for USR-ROO-001. HTTP probe cases use TOL-ROO-005/006; operator-observable UI/browser cases require TOL-ROO-008 Playwright (catalog-only, not pinned → blocked_on_tooling). AMEND CHALLENGE C4: added Playwright path for operator-visible acceptance while retaining USR-001 claim. evidence_status=none — Last Boss owns EVD. Never self-certify done. published≠proven.
+notes: Acceptance for USR-VAL-001. HTTP probe cases use TOL-ROO-005/006; operator-observable UI/browser cases require TOL-ROO-008 Playwright (catalog-only, not pinned → blocked_on_tooling). AMEND CHALLENGE C4: added Playwright path for operator-visible acceptance while retaining USR-001 claim. evidence_status=none — Last Boss owns EVD. Never self-certify done. published≠proven.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-001
+  VALUE: REQ-VAL-001
 
 [REQUIREMENT]
-UID: TST-ROO-019
+UID: TST-VAL-019
 STATUS: Active
 TITLE: Acceptance: Discord OAuth sign-in routes to tenant or select-guild
 STATEMENT: >>>
 Plan: Acceptance: Discord OAuth sign-in routes to tenant or select-guild
 level: acceptance
-verifies: USR-ROO-002, REQ-ROO-004, REQ-ROO-005, REQ-ROO-006, REQ-ROO-007, FNC-ROO-003, API-ROO-002, API-ROO-003
+verifies: USR-VAL-002, REQ-VAL-004, REQ-VAL-005, REQ-VAL-006, REQ-VAL-007, FNC-VAL-003, API-VAL-002, API-VAL-003
 requires_tol: TOL-ROO-008
 patterns: acceptance_oauth_browser, post_login_path
 execution_status: blocked_on_tooling
@@ -560,16 +560,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-004
+  VALUE: REQ-VAL-004
 
 [REQUIREMENT]
-UID: TST-ROO-020
+UID: TST-VAL-020
 STATUS: Active
 TITLE: Acceptance: session identity via /auth/me and logout clears cookie
 STATEMENT: >>>
 Plan: Acceptance: session identity via /auth/me and logout clears cookie
 level: acceptance
-verifies: USR-ROO-003, REQ-ROO-010, REQ-ROO-011, FNC-ROO-004, API-ROO-004, API-ROO-005
+verifies: USR-VAL-003, REQ-VAL-010, REQ-VAL-011, FNC-VAL-004, API-VAL-004, API-VAL-005
 requires_tol: TOL-ROO-008
 patterns: acceptance_session_logout_browser
 execution_status: blocked_on_tooling
@@ -586,16 +586,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-010
+  VALUE: REQ-VAL-010
 
 [REQUIREMENT]
-UID: TST-ROO-021
+UID: TST-VAL-021
 STATUS: Active
 TITLE: Acceptance: SPA session restore and credentialed API after OAuth redirect
 STATEMENT: >>>
 Plan: Acceptance: SPA session restore and credentialed API after OAuth redirect
 level: acceptance
-verifies: USR-ROO-004, REQ-ROO-013, REQ-ROO-014, FNC-ROO-005
+verifies: USR-VAL-004, REQ-VAL-013, REQ-VAL-014, FNC-VAL-005
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: acceptance_spa_restore
 execution_status: blocked_on_tooling
@@ -612,16 +612,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-013
+  VALUE: REQ-VAL-013
 
 [REQUIREMENT]
-UID: TST-ROO-022
+UID: TST-VAL-022
 STATUS: Active
 TITLE: Acceptance: unauthenticated shell gate and /login→/landing
 STATEMENT: >>>
 Plan: Acceptance: unauthenticated shell gate and /login→/landing
 level: acceptance
-verifies: USR-ROO-005, REQ-ROO-019, REQ-ROO-020, FNC-ROO-006, UNT-ROO-015, CMP-ROO-004
+verifies: USR-VAL-005, REQ-VAL-019, REQ-VAL-020, FNC-VAL-006, UNT-VAL-015, CMP-VAL-004
 requires_tol: TOL-ROO-008
 patterns: acceptance_unauth_routing
 execution_status: blocked_on_tooling
@@ -638,21 +638,21 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-019
+  VALUE: REQ-VAL-019
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Tenant/Workspace — TST-ROO-023 .. TST-ROO-045, TST-ROO-260 (24 plans)
+TITLE: Tenant/Workspace — TST-VAL-023 .. TST-VAL-045, TST-VAL-260 (24 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-023
+UID: TST-VAL-023
 STATUS: Active
 TITLE: TenantIdentityKey treats Discord guild id as tenants.id PK
 STATEMENT: >>>
 Plan: TenantIdentityKey treats Discord guild id as tenants.id PK
 level: unit
-verifies: REQ-ROO-021, FNC-ROO-007, UNT-ROO-018, CMP-ROO-005
+verifies: REQ-VAL-021, FNC-VAL-007, UNT-VAL-018, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: tenant_pk_guild_id, identity_key_equality
 execution_status: blocked_on_tooling
@@ -670,16 +670,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-021
+  VALUE: REQ-VAL-021
 
 [REQUIREMENT]
-UID: TST-ROO-024
+UID: TST-VAL-024
 STATUS: Active
 TITLE: MineAndOnboardableDiscovery lists onboarded and capacity-gated onboardable
 STATEMENT: >>>
 Plan: MineAndOnboardableDiscovery lists onboarded and capacity-gated onboardable
 level: unit
-verifies: REQ-ROO-022, REQ-ROO-023, FNC-ROO-008, UNT-ROO-019, CMP-ROO-005
+verifies: REQ-VAL-022, REQ-VAL-023, FNC-VAL-008, UNT-VAL-019, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: mine_list, capacity_empty_onboardable
 execution_status: blocked_on_tooling
@@ -697,16 +697,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-022
+  VALUE: REQ-VAL-022
 
 [REQUIREMENT]
-UID: TST-ROO-025
+UID: TST-VAL-025
 STATUS: Active
 TITLE: TenantSelectAndRosterSync builds session and upserts auction member
 STATEMENT: >>>
 Plan: TenantSelectAndRosterSync builds session and upserts auction member
 level: unit
-verifies: REQ-ROO-024, REQ-ROO-025, FNC-ROO-009, UNT-ROO-020, CMP-ROO-005
+verifies: REQ-VAL-024, REQ-VAL-025, FNC-VAL-009, UNT-VAL-020, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: tenant_select, roster_member_upsert
 execution_status: blocked_on_tooling
@@ -724,16 +724,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-024
+  VALUE: REQ-VAL-024
 
 [REQUIREMENT]
-UID: TST-ROO-026
+UID: TST-VAL-026
 STATUS: Active
 TITLE: WorkspaceOnboard gates Manage Server, bot presence, officer roles; 409/bot_not_in_guild
 STATEMENT: >>>
 Plan: WorkspaceOnboard gates Manage Server, bot presence, officer roles; 409/bot_not_in_guild
 level: unit
-verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, UNT-ROO-021, CMP-ROO-005
+verifies: REQ-VAL-026, REQ-VAL-027, REQ-VAL-028, REQ-VAL-029, REQ-VAL-033, FNC-VAL-010, UNT-VAL-021, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: onboard_gates, onboard_409, bot_not_in_guild
 execution_status: blocked_on_tooling
@@ -753,16 +753,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-026
+  VALUE: REQ-VAL-026
 
 [REQUIREMENT]
-UID: TST-ROO-027
+UID: TST-VAL-027
 STATUS: Active
 TITLE: BotInviteUrlProvider returns Discord bot invite URL
 STATEMENT: >>>
 Plan: BotInviteUrlProvider returns Discord bot invite URL
 level: unit
-verifies: REQ-ROO-030, FNC-ROO-011, UNT-ROO-022, CMP-ROO-005
+verifies: REQ-VAL-030, FNC-VAL-011, UNT-VAL-022, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: bot_invite_url
 execution_status: blocked_on_tooling
@@ -779,16 +779,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-030
+  VALUE: REQ-VAL-030
 
 [REQUIREMENT]
-UID: TST-ROO-028
+UID: TST-VAL-028
 STATUS: Active
 TITLE: DiscordRoleCatalog requires bot in guild and sorts non-@everyone roles
 STATEMENT: >>>
 Plan: DiscordRoleCatalog requires bot in guild and sorts non-@everyone roles
 level: unit
-verifies: REQ-ROO-031, FNC-ROO-011, UNT-ROO-023, CMP-ROO-005
+verifies: REQ-VAL-031, FNC-VAL-011, UNT-VAL-023, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: discord_role_catalog, bot_presence_gate
 execution_status: blocked_on_tooling
@@ -805,16 +805,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-031
+  VALUE: REQ-VAL-031
 
 [REQUIREMENT]
-UID: TST-ROO-029
+UID: TST-VAL-029
 STATUS: Active
 TITLE: OfficerPredicate owner OR adminRoles; empty adminRoles → owner only
 STATEMENT: >>>
 Plan: OfficerPredicate owner OR adminRoles; empty adminRoles → owner only
 level: unit
-verifies: REQ-ROO-032, REQ-ROO-033, FNC-ROO-012, UNT-ROO-026, CMP-ROO-006
+verifies: REQ-VAL-032, REQ-VAL-033, FNC-VAL-012, UNT-VAL-026, CMP-VAL-006
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: officer_predicate, admin_roles_casefold
 execution_status: blocked_on_tooling
@@ -833,16 +833,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-032
+  VALUE: REQ-VAL-032
 
 [REQUIREMENT]
-UID: TST-ROO-030
+UID: TST-VAL-030
 STATUS: Active
 TITLE: WorkspaceSettingsService officer-only read/update display/timezone/adminRoles
 STATEMENT: >>>
 Plan: WorkspaceSettingsService officer-only read/update display/timezone/adminRoles
 level: unit
-verifies: REQ-ROO-034, FNC-ROO-013, UNT-ROO-024, CMP-ROO-005
+verifies: REQ-VAL-034, FNC-VAL-013, UNT-VAL-024, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: workspace_settings, officer_only_settings
 execution_status: blocked_on_tooling
@@ -860,16 +860,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-034
+  VALUE: REQ-VAL-034
 
 [REQUIREMENT]
-UID: TST-ROO-031
+UID: TST-VAL-031
 STATUS: Active
 TITLE: GuildLogoManager upload ≤512KB, clear, Discord icon fallback
 STATEMENT: >>>
 Plan: GuildLogoManager upload ≤512KB, clear, Discord icon fallback
 level: unit
-verifies: REQ-ROO-035, REQ-ROO-036, FNC-ROO-014, UNT-ROO-025, CMP-ROO-005
+verifies: REQ-VAL-035, REQ-VAL-036, FNC-VAL-014, UNT-VAL-025, CMP-VAL-005
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: guild_logo_upload, logo_size_gate, discord_icon_fallback
 execution_status: blocked_on_tooling
@@ -888,16 +888,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-035
+  VALUE: REQ-VAL-035
 
 [REQUIREMENT]
-UID: TST-ROO-032
+UID: TST-VAL-032
 STATUS: Active
 TITLE: Tenants mine discovery seam through CMP-005 + INT-006
 STATEMENT: >>>
 Plan: Tenants mine discovery seam through CMP-005 + INT-006
 level: integration
-verifies: REQ-ROO-022, REQ-ROO-023, FNC-ROO-008, API-ROO-006, CMP-ROO-005, INT-ROO-006, UNT-ROO-019
+verifies: REQ-VAL-022, REQ-VAL-023, FNC-VAL-008, API-VAL-006, CMP-VAL-005, INT-VAL-006, UNT-VAL-019
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_tenants_mine, msw_discord_guilds
 execution_status: blocked_on_tooling
@@ -915,16 +915,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-022
+  VALUE: REQ-VAL-022
 
 [REQUIREMENT]
-UID: TST-ROO-033
+UID: TST-VAL-033
 STATUS: Active
 TITLE: Tenant select seam builds session and syncs roster member
 STATEMENT: >>>
 Plan: Tenant select seam builds session and syncs roster member
 level: integration
-verifies: REQ-ROO-024, REQ-ROO-025, FNC-ROO-009, API-ROO-007, CMP-ROO-005, INT-ROO-007, UNT-ROO-020
+verifies: REQ-VAL-024, REQ-VAL-025, FNC-VAL-009, API-VAL-007, CMP-VAL-005, INT-VAL-007, UNT-VAL-020
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_tenant_select, roster_sync_seam
 execution_status: blocked_on_tooling
@@ -942,16 +942,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-024
+  VALUE: REQ-VAL-024
 
 [REQUIREMENT]
-UID: TST-ROO-034
+UID: TST-VAL-034
 STATUS: Active
 TITLE: Tenant onboard seam happy path, 409, and bot_not_in_guild
 STATEMENT: >>>
 Plan: Tenant onboard seam happy path, 409, and bot_not_in_guild
 level: integration
-verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, API-ROO-008, CMP-ROO-005, INT-ROO-008, UNT-ROO-021
+verifies: REQ-VAL-026, REQ-VAL-027, REQ-VAL-028, REQ-VAL-029, REQ-VAL-033, FNC-VAL-010, API-VAL-008, CMP-VAL-005, INT-VAL-008, UNT-VAL-021
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_tenant_onboard, onboard_conflict, bot_invite_on_miss
 execution_status: blocked_on_tooling
@@ -969,16 +969,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-026
+  VALUE: REQ-VAL-026
 
 [REQUIREMENT]
-UID: TST-ROO-035
+UID: TST-VAL-035
 STATUS: Active
 TITLE: Invite URL and Discord roles catalog seams
 STATEMENT: >>>
 Plan: Invite URL and Discord roles catalog seams
 level: integration
-verifies: REQ-ROO-030, REQ-ROO-031, FNC-ROO-011, API-ROO-009, API-ROO-010, CMP-ROO-005, INT-ROO-009, INT-ROO-010, UNT-ROO-022, UNT-ROO-023
+verifies: REQ-VAL-030, REQ-VAL-031, FNC-VAL-011, API-VAL-009, API-VAL-010, CMP-VAL-005, INT-VAL-009, INT-VAL-010, UNT-VAL-022, UNT-VAL-023
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_invite_url, seam_discord_roles
 execution_status: blocked_on_tooling
@@ -996,16 +996,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-030
+  VALUE: REQ-VAL-030
 
 [REQUIREMENT]
-UID: TST-ROO-036
+UID: TST-VAL-036
 STATUS: Active
 TITLE: Workspace settings and logo seams officer-gated via CMP-006
 STATEMENT: >>>
 Plan: Workspace settings and logo seams officer-gated via CMP-006
 level: integration
-verifies: REQ-ROO-032, REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-012, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014, CMP-ROO-005, CMP-ROO-006, INT-ROO-011, INT-ROO-012, INT-ROO-013, INT-ROO-014, UNT-ROO-024, UNT-ROO-025, UNT-ROO-026
+verifies: REQ-VAL-032, REQ-VAL-034, REQ-VAL-035, REQ-VAL-036, FNC-VAL-012, FNC-VAL-013, FNC-VAL-014, API-VAL-011, API-VAL-012, API-VAL-013, API-VAL-014, CMP-VAL-005, CMP-VAL-006, INT-VAL-011, INT-VAL-012, INT-VAL-013, INT-VAL-014, UNT-VAL-024, UNT-VAL-025, UNT-VAL-026
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_workspace_settings, seam_guild_logo, officer_gate_integ
 execution_status: blocked_on_tooling
@@ -1024,16 +1024,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-032
+  VALUE: REQ-VAL-032
 
 [REQUIREMENT]
-UID: TST-ROO-037
+UID: TST-VAL-037
 STATUS: Active
 TITLE: GET /api/tenants/mine and POST /api/tenants/select HTTP contracts
 STATEMENT: >>>
 Plan: GET /api/tenants/mine and POST /api/tenants/select HTTP contracts
 level: system
-verifies: REQ-ROO-022, REQ-ROO-023, REQ-ROO-024, REQ-ROO-025, FNC-ROO-008, FNC-ROO-009, API-ROO-006, API-ROO-007
+verifies: REQ-VAL-022, REQ-VAL-023, REQ-VAL-024, REQ-VAL-025, FNC-VAL-008, FNC-VAL-009, API-VAL-006, API-VAL-007
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_tenants_mine, http_tenants_select
 execution_status: blocked_on_tooling
@@ -1052,16 +1052,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-022
+  VALUE: REQ-VAL-022
 
 [REQUIREMENT]
-UID: TST-ROO-038
+UID: TST-VAL-038
 STATUS: Active
 TITLE: POST /api/tenants/onboard HTTP contract (create, 409, bot_not_in_guild)
 STATEMENT: >>>
 Plan: POST /api/tenants/onboard HTTP contract (create, 409, bot_not_in_guild)
 level: system
-verifies: REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-033, FNC-ROO-010, API-ROO-008
+verifies: REQ-VAL-026, REQ-VAL-027, REQ-VAL-028, REQ-VAL-029, REQ-VAL-033, FNC-VAL-010, API-VAL-008
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_tenants_onboard
 execution_status: blocked_on_tooling
@@ -1080,16 +1080,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-026
+  VALUE: REQ-VAL-026
 
 [REQUIREMENT]
-UID: TST-ROO-039
+UID: TST-VAL-039
 STATUS: Active
 TITLE: GET /api/tenants/invite-url and GET /api/tenants/discord-roles HTTP contracts
 STATEMENT: >>>
 Plan: GET /api/tenants/invite-url and GET /api/tenants/discord-roles HTTP contracts
 level: system
-verifies: REQ-ROO-030, REQ-ROO-031, FNC-ROO-011, API-ROO-009, API-ROO-010
+verifies: REQ-VAL-030, REQ-VAL-031, FNC-VAL-011, API-VAL-009, API-VAL-010
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_invite_url, http_discord_roles
 execution_status: blocked_on_tooling
@@ -1107,16 +1107,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-030
+  VALUE: REQ-VAL-030
 
 [REQUIREMENT]
-UID: TST-ROO-040
+UID: TST-VAL-040
 STATUS: Active
 TITLE: Workspace GET/POST and logo POST/DELETE HTTP contracts (officer-only)
 STATEMENT: >>>
 Plan: Workspace GET/POST and logo POST/DELETE HTTP contracts (officer-only)
 level: system
-verifies: REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014
+verifies: REQ-VAL-034, REQ-VAL-035, REQ-VAL-036, FNC-VAL-013, FNC-VAL-014, API-VAL-011, API-VAL-012, API-VAL-013, API-VAL-014
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_workspace_settings, http_guild_logo
 execution_status: blocked_on_tooling
@@ -1135,16 +1135,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-034
+  VALUE: REQ-VAL-034
 
 [REQUIREMENT]
-UID: TST-ROO-041
+UID: TST-VAL-041
 STATUS: Active
 TITLE: Acceptance: tenant identity is Discord guild (one guild = one tenant PK)
 STATEMENT: >>>
 Plan: Acceptance: tenant identity is Discord guild (one guild = one tenant PK)
 level: acceptance
-verifies: USR-ROO-006, REQ-ROO-021, FNC-ROO-007, CMP-ROO-005, UNT-ROO-018
+verifies: USR-VAL-006, REQ-VAL-021, FNC-VAL-007, CMP-VAL-005, UNT-VAL-018
 requires_tol: TOL-ROO-008, TOL-ROO-006
 patterns: acceptance_tenant_identity, guild_equals_tenant
 execution_status: blocked_on_tooling
@@ -1161,16 +1161,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-021
+  VALUE: REQ-VAL-021
 
 [REQUIREMENT]
-UID: TST-ROO-042
+UID: TST-VAL-042
 STATUS: Active
 TITLE: Acceptance: members discover and select workspace
 STATEMENT: >>>
 Plan: Acceptance: members discover and select workspace
 level: acceptance
-verifies: USR-ROO-007, REQ-ROO-022, REQ-ROO-023, REQ-ROO-024, REQ-ROO-025, FNC-ROO-008, FNC-ROO-009, API-ROO-006, API-ROO-007, CMP-ROO-005
+verifies: USR-VAL-007, REQ-VAL-022, REQ-VAL-023, REQ-VAL-024, REQ-VAL-025, FNC-VAL-008, FNC-VAL-009, API-VAL-006, API-VAL-007, CMP-VAL-005
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: acceptance_discover_select, select_guild_flow
 execution_status: blocked_on_tooling
@@ -1188,16 +1188,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-022
+  VALUE: REQ-VAL-022
 
 [REQUIREMENT]
-UID: TST-ROO-043
+UID: TST-VAL-043
 STATUS: Active
 TITLE: Acceptance: guild owner onboards new Discord guild workspace
 STATEMENT: >>>
 Plan: Acceptance: guild owner onboards new Discord guild workspace
 level: acceptance
-verifies: USR-ROO-008, REQ-ROO-026, REQ-ROO-027, REQ-ROO-028, REQ-ROO-029, REQ-ROO-030, REQ-ROO-031, REQ-ROO-033, FNC-ROO-010, FNC-ROO-011, API-ROO-008, API-ROO-009, API-ROO-010, CMP-ROO-005
+verifies: USR-VAL-008, REQ-VAL-026, REQ-VAL-027, REQ-VAL-028, REQ-VAL-029, REQ-VAL-030, REQ-VAL-031, REQ-VAL-033, FNC-VAL-010, FNC-VAL-011, API-VAL-008, API-VAL-009, API-VAL-010, CMP-VAL-005
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: acceptance_onboard, bot_invite_ux
 execution_status: blocked_on_tooling
@@ -1215,16 +1215,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-026
+  VALUE: REQ-VAL-026
 
 [REQUIREMENT]
-UID: TST-ROO-044
+UID: TST-VAL-044
 STATUS: Active
 TITLE: Acceptance: officers manage officer model and workspace settings including logo
 STATEMENT: >>>
 Plan: Acceptance: officers manage officer model and workspace settings including logo
 level: acceptance
-verifies: USR-ROO-009, REQ-ROO-032, REQ-ROO-033, REQ-ROO-034, REQ-ROO-035, REQ-ROO-036, FNC-ROO-012, FNC-ROO-013, FNC-ROO-014, API-ROO-011, API-ROO-012, API-ROO-013, API-ROO-014, CMP-ROO-005, CMP-ROO-006
+verifies: USR-VAL-009, REQ-VAL-032, REQ-VAL-033, REQ-VAL-034, REQ-VAL-035, REQ-VAL-036, FNC-VAL-012, FNC-VAL-013, FNC-VAL-014, API-VAL-011, API-VAL-012, API-VAL-013, API-VAL-014, CMP-VAL-005, CMP-VAL-006
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: acceptance_officer_settings, acceptance_guild_logo
 execution_status: blocked_on_tooling
@@ -1242,16 +1242,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-032
+  VALUE: REQ-VAL-032
 
 [REQUIREMENT]
-UID: TST-ROO-045
+UID: TST-VAL-045
 STATUS: Active
 TITLE: Acceptance: authenticated user forced to select-guild and ordered post-login path
 STATEMENT: >>>
 Plan: Acceptance: authenticated user forced to select-guild and ordered post-login path
 level: acceptance
-verifies: USR-ROO-010, REQ-ROO-037, REQ-ROO-038, FNC-ROO-015, CMP-ROO-004, UNT-ROO-017
+verifies: USR-VAL-010, REQ-VAL-037, REQ-VAL-038, FNC-VAL-015, CMP-VAL-004, UNT-VAL-017
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: acceptance_post_login_routing, force_select_guild
 execution_status: blocked_on_tooling
@@ -1262,22 +1262,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Tenant/Workspace
-notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. FNC-015 allocated to SPA Shell CMP-004; unit coverage lives on Auth UNT-ROO-017 (no second Tenant PostLoginPathResolver). Cross-domain verifies to CMP-004/UNT-017 intentional. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
+notes: Acceptance plans cite TOL-ROO-008 Playwright (and TOL-ROO-007 MSW where Discord is mocked). Catalog-only greenfield → blocked_on_tooling. USR allowed only because level=acceptance. evidence_status=none — Last Boss owns EVD. verifies = plan lineage only; published ≠ proven. No depends_on. No EVD/evidences. FNC-015 allocated to SPA Shell CMP-004; unit coverage lives on Auth UNT-VAL-017 (no second Tenant PostLoginPathResolver). Cross-domain verifies to CMP-004/UNT-017 intentional. | AMEND C-T1/C-T4: verifies = planned lineage only; published≠proven; coverage (TOL-011) ≠ pass/fail; zero EVD/evidences; never claim covered/done while blocked_on_tooling.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-037
+  VALUE: REQ-VAL-037
 
 [REQUIREMENT]
-UID: TST-ROO-260
+UID: TST-VAL-260
 STATUS: Active
 TITLE: LoginRosterUpsertOriginOnly writes the sign-in roster entry only for Origin and never for Ragnarok 3
 STATEMENT: >>>
 Plan: LoginRosterUpsertOriginOnly writes the sign-in roster entry only for Origin and never for Ragnarok 3
 level: unit
-verifies: REQ-ROO-209, FNC-ROO-211, UNT-ROO-222, CMP-ROO-005
+verifies: REQ-VAL-209, FNC-ROO-211, UNT-ROO-222, CMP-VAL-005
 requires_tol: TOL-ROO-006
 patterns: login_roster_origin_only
 execution_status: blocked_on_tooling
@@ -1295,21 +1295,21 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-209
+  VALUE: REQ-VAL-209
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Games catalog — TST-ROO-046 .. TST-ROO-065, TST-ROO-251 .. TST-ROO-253, TST-ROO-258 .. TST-ROO-259 (25 plans)
+TITLE: Games catalog — TST-VAL-046 .. TST-VAL-065, TST-VAL-251 .. TST-VAL-253, TST-VAL-258 .. TST-VAL-259 (25 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-046
+UID: TST-VAL-046
 STATUS: Active
 TITLE: GamesWhitelist accepts adventurer-guild, ragnarok-origin, and ragnarok-3
 STATEMENT: >>>
 Plan: GamesWhitelist accepts adventurer-guild, ragnarok-origin, and ragnarok-3
 level: unit
-verifies: REQ-ROO-039, REQ-R3-001, FNC-ROO-016, UNT-ROO-027, CMP-ROO-007
+verifies: REQ-VAL-039, REQ-R3-001, FNC-VAL-016, UNT-VAL-027, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: known_game_ids, parse_enabled_games_filter, r3_path_catalog
 execution_status: blocked_on_tooling
@@ -1328,16 +1328,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-039
+  VALUE: REQ-VAL-039
 
 [REQUIREMENT]
-UID: TST-ROO-047
+UID: TST-VAL-047
 STATUS: Active
 TITLE: EnableKnownGame appends known id with active seat and setupPath
 STATEMENT: >>>
 Plan: EnableKnownGame appends known id with active seat and setupPath
 level: unit
-verifies: REQ-ROO-040, FNC-ROO-017, UNT-ROO-028, CMP-ROO-007
+verifies: REQ-VAL-040, FNC-VAL-017, UNT-VAL-028, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: enable_known_game, setup_path_for_game, active_seat_gate_surface
 execution_status: blocked_on_tooling
@@ -1357,16 +1357,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-040
+  VALUE: REQ-VAL-040
 
 [REQUIREMENT]
-UID: TST-ROO-048
+UID: TST-VAL-048
 STATUS: Active
 TITLE: DisableGamePreserveData removes enabled id without wiping stores
 STATEMENT: >>>
 Plan: DisableGamePreserveData removes enabled id without wiping stores
 level: unit
-verifies: REQ-ROO-041, FNC-ROO-018, UNT-ROO-029, CMP-ROO-007
+verifies: REQ-VAL-041, FNC-VAL-018, UNT-VAL-029, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: disable_game_preserve_data, enabled_games_remove
 execution_status: blocked_on_tooling
@@ -1385,16 +1385,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-041
+  VALUE: REQ-VAL-041
 
 [REQUIREMENT]
-UID: TST-ROO-049
+UID: TST-VAL-049
 STATUS: Active
 TITLE: RoSetupCompleteness requires aucreq OR auction OR warAnnounce
 STATEMENT: >>>
 Plan: RoSetupCompleteness requires aucreq OR auction OR warAnnounce
 level: unit
-verifies: REQ-ROO-042, FNC-ROO-019, UNT-ROO-030, CMP-ROO-007
+verifies: REQ-VAL-042, FNC-VAL-019, UNT-VAL-030, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: ro_setup_completeness, channel_or_gate
 execution_status: blocked_on_tooling
@@ -1412,16 +1412,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-042
+  VALUE: REQ-VAL-042
 
 [REQUIREMENT]
-UID: TST-ROO-050
+UID: TST-VAL-050
 STATUS: Active
 TITLE: AgNoSetupReadiness marks AG ready on enable alone
 STATEMENT: >>>
 Plan: AgNoSetupReadiness marks AG ready on enable alone
 level: unit
-verifies: REQ-ROO-043, FNC-ROO-020, UNT-ROO-031, CMP-ROO-007
+verifies: REQ-VAL-043, FNC-VAL-020, UNT-VAL-031, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: ag_no_setup, game_setup_paths_absent
 execution_status: blocked_on_tooling
@@ -1439,16 +1439,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-043
+  VALUE: REQ-VAL-043
 
 [REQUIREMENT]
-UID: TST-ROO-051
+UID: TST-VAL-051
 STATUS: Active
 TITLE: RoChannelMapPersistence writes war rooms 1–5 and channel fields
 STATEMENT: >>>
 Plan: RoChannelMapPersistence writes war rooms 1–5 and channel fields
 level: unit
-verifies: REQ-ROO-044, FNC-ROO-021, UNT-ROO-032, CMP-ROO-007
+verifies: REQ-VAL-044, FNC-VAL-021, UNT-VAL-032, CMP-VAL-007
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: ro_channel_map, war_rooms_1_5, active_seat_gate_surface
 execution_status: blocked_on_tooling
@@ -1467,16 +1467,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-044
+  VALUE: REQ-VAL-044
 
 [REQUIREMENT]
-UID: TST-ROO-052
+UID: TST-VAL-052
 STATUS: Active
 TITLE: RequireGameGate returns 403 game_required for RO and AG mounts
 STATEMENT: >>>
 Plan: RequireGameGate returns 403 game_required for RO and AG mounts
 level: unit
-verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, UNT-ROO-033, CMP-ROO-008
+verifies: REQ-VAL-045, REQ-VAL-046, FNC-VAL-022, UNT-VAL-033, CMP-VAL-008
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: require_game_gate, game_required_403, tenant_required_409
 execution_status: blocked_on_tooling
@@ -1495,16 +1495,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-045
+  VALUE: REQ-VAL-045
 
 [REQUIREMENT]
-UID: TST-ROO-053
+UID: TST-VAL-053
 STATUS: Active
 TITLE: SpaGamePathGate redirects disabled paths and persists valhalla_active_game
 STATEMENT: >>>
 Plan: SpaGamePathGate redirects disabled paths and persists valhalla_active_game
 level: unit
-verifies: REQ-ROO-047, REQ-ROO-048, FNC-ROO-023, UNT-ROO-035, CMP-ROO-004
+verifies: REQ-VAL-047, REQ-VAL-048, FNC-VAL-023, UNT-VAL-035, CMP-VAL-004
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: spa_game_path_gate, valhalla_active_game, post_login_redirect
 execution_status: blocked_on_tooling
@@ -1523,16 +1523,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-047
+  VALUE: REQ-VAL-047
 
 [REQUIREMENT]
-UID: TST-ROO-054
+UID: TST-VAL-054
 STATUS: Active
 TITLE: Enable-game seam INT-015 through CMP-007
 STATEMENT: >>>
 Plan: Enable-game seam INT-015 through CMP-007
 level: integration
-verifies: REQ-ROO-040, FNC-ROO-017, API-ROO-015, CMP-ROO-007, INT-ROO-015, UNT-ROO-028
+verifies: REQ-VAL-040, FNC-VAL-017, API-VAL-015, CMP-VAL-007, INT-VAL-015, UNT-VAL-028
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_enable_game, msw_session_officer_seat
 execution_status: blocked_on_tooling
@@ -1550,16 +1550,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-040
+  VALUE: REQ-VAL-040
 
 [REQUIREMENT]
-UID: TST-ROO-055
+UID: TST-VAL-055
 STATUS: Active
 TITLE: Disable-game seam INT-016 preserves stored game data
 STATEMENT: >>>
 Plan: Disable-game seam INT-016 preserves stored game data
 level: integration
-verifies: REQ-ROO-041, FNC-ROO-018, API-ROO-016, CMP-ROO-007, INT-ROO-016, UNT-ROO-029
+verifies: REQ-VAL-041, FNC-VAL-018, API-VAL-016, CMP-VAL-007, INT-VAL-016, UNT-VAL-029
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_disable_game, preserve_game_stores
 execution_status: blocked_on_tooling
@@ -1577,16 +1577,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-041
+  VALUE: REQ-VAL-041
 
 [REQUIREMENT]
-UID: TST-ROO-056
+UID: TST-VAL-056
 STATUS: Active
 TITLE: RO game-setup seam INT-017 persists channel map including war rooms
 STATEMENT: >>>
 Plan: RO game-setup seam INT-017 persists channel map including war rooms
 level: integration
-verifies: REQ-ROO-044, FNC-ROO-021, API-ROO-017, CMP-ROO-007, INT-ROO-017, UNT-ROO-032
+verifies: REQ-VAL-044, FNC-VAL-021, API-VAL-017, CMP-VAL-007, INT-VAL-017, UNT-VAL-032
 requires_tol: TOL-ROO-006, TOL-ROO-007
 patterns: seam_game_setup, war_rooms_persist, msw_session_ro_enabled
 execution_status: blocked_on_tooling
@@ -1604,16 +1604,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-044
+  VALUE: REQ-VAL-044
 
 [REQUIREMENT]
-UID: TST-ROO-057
+UID: TST-VAL-057
 STATUS: Active
 TITLE: RequireGame mount/API-tree wiring under CMP-008 for RO and AG
 STATEMENT: >>>
 Plan: RequireGame mount/API-tree wiring under CMP-008 for RO and AG
 level: unit
-verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, CMP-ROO-008, UNT-ROO-033
+verifies: REQ-VAL-045, REQ-VAL-046, FNC-VAL-022, CMP-VAL-008, UNT-VAL-033
 requires_tol: TOL-ROO-006, TOL-ROO-011
 patterns: unit_require_game_mount_tree, ro_ag_mount_gate
 execution_status: blocked_on_tooling
@@ -1626,28 +1626,28 @@ cases:
 <<<
 COMMENT: >>>
 domain: Games catalog
-notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling. | AMEND C-G1: demoted level=unit — was false integration (no INT-* for requireGame in SSOT; INT-015/016/017 are enable/disable/setup only). Do not invent private INT. Cases retained as unit mount/API-tree under UNT-033/CMP-008. Differentiated from TST-ROO-052 (gate predicate/body unit) — 057 focuses on mount-tree wiring cases under CMP-008. Same verifies set retained; merge/supersede not required — keep ID. No System Designer INT route needed.
+notes: TOL-ROO-006 Vitest and TOL-ROO-011 @vitest/coverage-v8 are catalog-published but not installed/pinned in the app repo yet (greenfield). Plan exists; execution_status stays blocked_on_tooling until Adepts introduce runners. Coverage reports from TOL-ROO-011 are not pass/fail substitutes. evidence_status=none — Last Boss owns EVD. verifies = planned lineage only (published ≠ proven). No depends_on authored. C-T1: never claim covered/done while blocked_on_tooling. | AMEND C-G1: demoted level=unit — was false integration (no INT-* for requireGame in SSOT; INT-015/016/017 are enable/disable/setup only). Do not invent private INT. Cases retained as unit mount/API-tree under UNT-033/CMP-008. Differentiated from TST-VAL-052 (gate predicate/body unit) — 057 focuses on mount-tree wiring cases under CMP-008. Same verifies set retained; merge/supersede not required — keep ID. No System Designer INT route needed.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-045
+  VALUE: REQ-VAL-045
 
 [REQUIREMENT]
-UID: TST-ROO-058
+UID: TST-VAL-058
 STATUS: Active
 TITLE: POST /api/tenants/enable-game HTTP contract
 STATEMENT: >>>
 Plan: POST /api/tenants/enable-game HTTP contract
 level: system
-verifies: REQ-ROO-040, FNC-ROO-017, API-ROO-015
+verifies: REQ-VAL-040, FNC-VAL-017, API-VAL-015
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_enable_game, api_015_contract
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - POST enable-game officer+seat+known id → 200 enabledGames+setupPath+user: expected=Contract matches API-ROO-015 success shape
+  - POST enable-game officer+seat+known id → 200 enabledGames+setupPath+user: expected=Contract matches API-VAL-015 success shape
   - Unauthenticated → 401: expected=Auth guard fails closed
   - No tenant → 409 tenant_required: expected=Error code tenant_required
   - Inactive seat → 402 payment_required: expected=Surface payment_required (seat mocked)
@@ -1662,22 +1662,22 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-040
+  VALUE: REQ-VAL-040
 
 [REQUIREMENT]
-UID: TST-ROO-059
+UID: TST-VAL-059
 STATUS: Active
 TITLE: POST /api/tenants/disable-game HTTP contract
 STATEMENT: >>>
 Plan: POST /api/tenants/disable-game HTTP contract
 level: system
-verifies: REQ-ROO-041, FNC-ROO-018, API-ROO-016
+verifies: REQ-VAL-041, FNC-VAL-018, API-VAL-016
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_disable_game, api_016_contract
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - POST disable-game officer+known id → 200 enabledGames without id: expected=Contract matches API-ROO-016; data retained
+  - POST disable-game officer+known id → 200 enabledGames without id: expected=Contract matches API-VAL-016; data retained
   - Unauthenticated → 401: expected=Auth fail closed
   - No tenant → 409 tenant_required: expected=Error code tenant_required
   - Unknown game → 400: expected=Validation refuse
@@ -1691,22 +1691,22 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-041
+  VALUE: REQ-VAL-041
 
 [REQUIREMENT]
-UID: TST-ROO-060
+UID: TST-VAL-060
 STATUS: Active
 TITLE: POST /api/tenants/game-setup HTTP contract
 STATEMENT: >>>
 Plan: POST /api/tenants/game-setup HTTP contract
 level: system
-verifies: REQ-ROO-044, FNC-ROO-021, API-ROO-017
+verifies: REQ-VAL-044, FNC-VAL-021, API-VAL-017
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_game_setup, api_017_contract
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - POST game-setup officer+RO+seat+channels → 200 user: expected=Contract matches API-ROO-017; war rooms 1–5 accepted
+  - POST game-setup officer+RO+seat+channels → 200 user: expected=Contract matches API-VAL-017; war rooms 1–5 accepted
   - RO not enabled → 403 game_required: expected=Error code game_required
   - Inactive seat → 402 payment_required: expected=Surface payment_required (seat mocked)
   - Non-officer → 403: expected=Officer guard fails closed
@@ -1720,16 +1720,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-044
+  VALUE: REQ-VAL-044
 
 [REQUIREMENT]
-UID: TST-ROO-061
+UID: TST-VAL-061
 STATUS: Active
 TITLE: Mounted RO/AG APIs enforce requireGame HTTP 403 game_required
 STATEMENT: >>>
 Plan: Mounted RO/AG APIs enforce requireGame HTTP 403 game_required
 level: system
-verifies: REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, API-ROO-031, API-ROO-108
+verifies: REQ-VAL-045, REQ-VAL-046, FNC-VAL-022, API-ROO-031, API-ROO-108
 requires_tol: TOL-ROO-005, TOL-ROO-006, TOL-ROO-007
 patterns: http_require_game_mounts, game_required_system, api_031_108_sample
 execution_status: blocked_on_tooling
@@ -1748,16 +1748,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-045
+  VALUE: REQ-VAL-045
 
 [REQUIREMENT]
-UID: TST-ROO-062
+UID: TST-VAL-062
 STATUS: Active
 TITLE: Acceptance: officers enable/disable known games without data loss
 STATEMENT: >>>
 Plan: Acceptance: officers enable/disable known games without data loss
 level: acceptance
-verifies: USR-ROO-011, REQ-ROO-039, REQ-ROO-040, REQ-ROO-041, FNC-ROO-016, FNC-ROO-017, FNC-ROO-018, CMP-ROO-007, UNT-ROO-027, UNT-ROO-028, UNT-ROO-029
+verifies: USR-VAL-011, REQ-VAL-039, REQ-VAL-040, REQ-VAL-041, FNC-VAL-016, FNC-VAL-017, FNC-VAL-018, CMP-VAL-007, UNT-VAL-027, UNT-VAL-028, UNT-VAL-029
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: accept_enable_disable, known_games_only
 execution_status: blocked_on_tooling
@@ -1776,16 +1776,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-039
+  VALUE: REQ-VAL-039
 
 [REQUIREMENT]
-UID: TST-ROO-063
+UID: TST-VAL-063
 STATUS: Active
 TITLE: Acceptance: RO channel setup completeness and game-setup persistence
 STATEMENT: >>>
 Plan: Acceptance: RO channel setup completeness and game-setup persistence
 level: acceptance
-verifies: USR-ROO-012, REQ-ROO-042, REQ-ROO-043, REQ-ROO-044, FNC-ROO-019, FNC-ROO-020, FNC-ROO-021, CMP-ROO-007, UNT-ROO-030, UNT-ROO-031, UNT-ROO-032
+verifies: USR-VAL-012, REQ-VAL-042, REQ-VAL-043, REQ-VAL-044, FNC-VAL-019, FNC-VAL-020, FNC-VAL-021, CMP-VAL-007, UNT-VAL-030, UNT-VAL-031, UNT-VAL-032
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: accept_ro_setup, ag_no_setup, war_rooms
 execution_status: blocked_on_tooling
@@ -1803,16 +1803,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-042
+  VALUE: REQ-VAL-042
 
 [REQUIREMENT]
-UID: TST-ROO-064
+UID: TST-VAL-064
 STATUS: Active
 TITLE: Acceptance: mounted game APIs gate on requireGame
 STATEMENT: >>>
 Plan: Acceptance: mounted game APIs gate on requireGame
 level: acceptance
-verifies: USR-ROO-012, REQ-ROO-045, REQ-ROO-046, FNC-ROO-022, CMP-ROO-008, UNT-ROO-033
+verifies: USR-VAL-012, REQ-VAL-045, REQ-VAL-046, FNC-VAL-022, CMP-VAL-008, UNT-VAL-033
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: accept_require_game, api_gating
 execution_status: blocked_on_tooling
@@ -1830,16 +1830,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-045
+  VALUE: REQ-VAL-045
 
 [REQUIREMENT]
-UID: TST-ROO-065
+UID: TST-VAL-065
 STATUS: Active
 TITLE: Acceptance: SPA blocks disabled game paths and persists active game
 STATEMENT: >>>
 Plan: Acceptance: SPA blocks disabled game paths and persists active game
 level: acceptance
-verifies: USR-ROO-012, REQ-ROO-047, REQ-ROO-048, FNC-ROO-023, CMP-ROO-004, UNT-ROO-035
+verifies: USR-VAL-012, REQ-VAL-047, REQ-VAL-048, FNC-VAL-023, CMP-VAL-004, UNT-VAL-035
 requires_tol: TOL-ROO-008, TOL-ROO-007
 patterns: accept_spa_path_gate, valhalla_active_game
 execution_status: blocked_on_tooling
@@ -1857,16 +1857,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-047
+  VALUE: REQ-VAL-047
 
 [REQUIREMENT]
-UID: TST-ROO-251
+UID: TST-VAL-251
 STATUS: Active
 TITLE: GameScopedRowFilterStamp and PerGameRosterRow: Origin reads and writes never touch Ragnarok 3 records (Origin to Ragnarok 3 direction)
 STATEMENT: >>>
 Plan: GameScopedRowFilterStamp and PerGameRosterRow: Origin reads and writes never touch Ragnarok 3 records (Origin to Ragnarok 3 direction)
 level: unit
-verifies: REQ-ROO-205, REQ-ROO-206, FNC-ROO-207, FNC-ROO-208, UNT-ROO-218, UNT-ROO-219, CMP-ROO-027
+verifies: REQ-VAL-205, REQ-VAL-206, FNC-ROO-207, FNC-ROO-208, UNT-VAL-218, UNT-VAL-219, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: isolation_origin_to_ro3, game_id_stamp, game_id_filter
 execution_status: blocked_on_tooling
@@ -1881,22 +1881,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Games catalog
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Origin to Ragnarok 3. Ragnarok 3 counterpart, text only: UNT-RO3-003. The reverse direction, as an Origin rule, is TST-ROO-252.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Origin to Ragnarok 3. Ragnarok 3 counterpart, text only: UNT-RO3-003. The reverse direction, as an Origin rule, is TST-VAL-252.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-205
+  VALUE: REQ-VAL-205
 
 [REQUIREMENT]
-UID: TST-ROO-252
+UID: TST-VAL-252
 STATUS: Active
 TITLE: GameScopedRowFilterStamp and PerGameRosterRow: Ragnarok 3 reads and writes never touch Origin records; legacy rows stay Origin (Ragnarok 3 to Origin direction)
 STATEMENT: >>>
 Plan: GameScopedRowFilterStamp and PerGameRosterRow: Ragnarok 3 reads and writes never touch Origin records; legacy rows stay Origin (Ragnarok 3 to Origin direction)
 level: unit
-verifies: REQ-ROO-205, REQ-ROO-206, FNC-ROO-207, FNC-ROO-208, UNT-ROO-218, UNT-ROO-219, CMP-ROO-027
+verifies: REQ-VAL-205, REQ-VAL-206, FNC-ROO-207, FNC-ROO-208, UNT-VAL-218, UNT-VAL-219, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: isolation_ro3_to_origin, legacy_rows_origin
 execution_status: blocked_on_tooling
@@ -1910,22 +1910,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Games catalog
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Ragnarok 3 to Origin, as stated by the Origin units (UNT-ROO-218 invariant 1, UNT-ROO-219 algorithm 2, REQ-ROO-205 criterion 1, REQ-ROO-206 criterion 3). Ragnarok 3 counterpart, text only: UNT-RO3-003.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Direction: Ragnarok 3 to Origin, as stated by the Origin units (UNT-VAL-218 invariant 1, UNT-VAL-219 algorithm 2, REQ-VAL-205 criterion 1, REQ-VAL-206 criterion 3). Ragnarok 3 counterpart, text only: UNT-RO3-003.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-205
+  VALUE: REQ-VAL-205
 
 [REQUIREMENT]
-UID: TST-ROO-253
+UID: TST-VAL-253
 STATUS: Active
 TITLE: Request context and store bind an explicit game; game data with no game set is refused with 'select a game' and never treated as Origin
 STATEMENT: >>>
 Plan: Request context and store bind an explicit game; game data with no game set is refused with 'select a game' and never treated as Origin
 level: unit
-verifies: REQ-ROO-158, REQ-ROO-205, FNC-ROO-159, FNC-ROO-207, UNT-ROO-169, UNT-ROO-218, CMP-ROO-008, CMP-ROO-027
+verifies: REQ-VAL-158, REQ-VAL-205, FNC-VAL-159, FNC-ROO-207, UNT-VAL-169, UNT-VAL-218, CMP-VAL-008, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: explicit_game, select_a_game, no_origin_fallback
 execution_status: blocked_on_tooling
@@ -1942,22 +1942,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Games catalog
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-ROO-205/158, FNC-ROO-159/207, CMP-ROO-008). Tenant-resolution cases for UNT-ROO-169 stay in TST-ROO-206. Ragnarok 3 counterpart, text only: UNT-RO3-003.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-VAL-205/158, FNC-VAL-159/207, CMP-VAL-008). Tenant-resolution cases for UNT-VAL-169 stay in TST-VAL-206. Ragnarok 3 counterpart, text only: UNT-RO3-003.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-158
+  VALUE: REQ-VAL-158
 
 [REQUIREMENT]
-UID: TST-ROO-258
+UID: TST-VAL-258
 STATUS: Active
 TITLE: WorkspaceVsGameSettingsSplit: only Origin saves write workspace keys; a game save writes only its own game row
 STATEMENT: >>>
 Plan: WorkspaceVsGameSettingsSplit: only Origin saves write workspace keys; a game save writes only its own game row
 level: unit
-verifies: REQ-ROO-207, FNC-ROO-209, UNT-ROO-220, CMP-ROO-027
+verifies: REQ-VAL-207, FNC-ROO-209, UNT-ROO-220, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: settings_split, workspace_keys_origin_only
 execution_status: blocked_on_tooling
@@ -1971,22 +1971,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Games catalog
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-ROO-205/158, FNC-ROO-159/207, CMP-ROO-008). Ragnarok 3 counterpart, text only: UNT-RO3-004, UNT-RO3-008.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/db/tenantContext.js:14-15 resolveGameId and backend/src/db/database.js:21-23 currentGameId default the game to ragnarok-origin and no 'select a game' error exists, so no-game cases are expected to fail at f38e137 (code gap (a), published on REQ-VAL-205/158, FNC-VAL-159/207, CMP-VAL-008). Ragnarok 3 counterpart, text only: UNT-RO3-004, UNT-RO3-008.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-207
+  VALUE: REQ-VAL-207
 
 [REQUIREMENT]
-UID: TST-ROO-259
+UID: TST-VAL-259
 STATUS: Active
 TITLE: OriginSettingsCarryOver copies leftover game keys into Origin only, never into Ragnarok 3
 STATEMENT: >>>
 Plan: OriginSettingsCarryOver copies leftover game keys into Origin only, never into Ragnarok 3
 level: unit
-verifies: REQ-ROO-208, FNC-ROO-210, UNT-ROO-221, CMP-ROO-027
+verifies: REQ-VAL-208, FNC-ROO-210, UNT-ROO-221, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: origin_carry_over, never_copy_to_ro3
 execution_status: blocked_on_tooling
@@ -2007,7 +2007,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-208
+  VALUE: REQ-VAL-208
 
 [[/SECTION]]
 
@@ -2527,7 +2527,7 @@ TITLE: DiscordRequestCardInteractions open, submit, and drop through the shared 
 STATEMENT: >>>
 Plan: DiscordRequestCardInteractions open, submit, and drop through the shared deck
 level: unit
-verifies: REQ-ROO-081, FNC-ROO-056, UNT-ROO-082, CMP-ROO-011
+verifies: REQ-ROO-081, FNC-ROO-056, UNT-ROO-082, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: reqcard, shared_deck
 execution_status: blocked_on_tooling
@@ -2556,7 +2556,7 @@ TITLE: InteractiveClaimPanel updates claims only while the live-claim gate is op
 STATEMENT: >>>
 Plan: InteractiveClaimPanel updates claims only while the live-claim gate is open
 level: unit
-verifies: REQ-ROO-082, FNC-ROO-057, UNT-ROO-083, CMP-ROO-011
+verifies: REQ-ROO-082, FNC-ROO-057, UNT-ROO-083, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: claim_panel, gate_open, claim_limit
 execution_status: blocked_on_tooling
@@ -2798,16 +2798,16 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels — TST-ROO-093 .. TST-ROO-110, TST-ROO-254 .. TST-ROO-256 (21 plans)
+TITLE: Discord bot/Channels — TST-VAL-093 .. TST-VAL-110, TST-VAL-254 .. TST-VAL-256 (21 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-093
+UID: TST-VAL-093
 STATUS: Active
 TITLE: BotGatewayIntents enables exactly five gateway intents and not Presence
 STATEMENT: >>>
 Plan: BotGatewayIntents enables exactly five gateway intents and not Presence
 level: unit
-verifies: REQ-ROO-062, FNC-ROO-037, UNT-ROO-048, CMP-ROO-010
+verifies: REQ-VAL-062, FNC-VAL-037, UNT-VAL-048, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: gateway_intents, presence_not_required
 execution_status: blocked_on_tooling
@@ -2819,22 +2819,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Disagreement: REQ-ROO-062 says bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, and GuildVoiceStates. UNT-ROO-048 says exactly those five are enabled, Presence Intent is not required, and intents are fixed at construction. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Disagreement: REQ-VAL-062 says bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, and GuildVoiceStates. UNT-VAL-048 says exactly those five are enabled, Presence Intent is not required, and intents are fixed at construction. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-062
+  VALUE: REQ-VAL-062
 
 [REQUIREMENT]
-UID: TST-ROO-094
+UID: TST-VAL-094
 STATUS: Active
 TITLE: BotTokenInitGate refuses bot login when DISCORD_BOT_TOKEN is missing
 STATEMENT: >>>
 Plan: BotTokenInitGate refuses bot login when DISCORD_BOT_TOKEN is missing
 level: unit
-verifies: REQ-ROO-063, FNC-ROO-038, UNT-ROO-049, CMP-ROO-010
+verifies: REQ-VAL-063, FNC-VAL-038, UNT-VAL-049, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: bot_token_gate, non_bot_http_still_boots
 execution_status: blocked_on_tooling
@@ -2852,16 +2852,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-063
+  VALUE: REQ-VAL-063
 
 [REQUIREMENT]
-UID: TST-ROO-095
+UID: TST-VAL-095
 STATUS: Active
 TITLE: SlashCommandClearOnReady clears guild slash commands and replies ephemeral
 STATEMENT: >>>
 Plan: SlashCommandClearOnReady clears guild slash commands and replies ephemeral
 level: unit
-verifies: REQ-ROO-064, FNC-ROO-039, UNT-ROO-050, CMP-ROO-010
+verifies: REQ-VAL-064, FNC-VAL-039, UNT-VAL-050, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: slash_clear_on_ready, ephemeral_redirect
 execution_status: blocked_on_tooling
@@ -2879,16 +2879,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-064
+  VALUE: REQ-VAL-064
 
 [REQUIREMENT]
-UID: TST-ROO-096
+UID: TST-VAL-096
 STATUS: Active
 TITLE: InteractionRouterByCustomId dispatches card prefixes and skips the general-room gate
 STATEMENT: >>>
 Plan: InteractionRouterByCustomId dispatches card prefixes and skips the general-room gate
 level: unit
-verifies: REQ-ROO-065, FNC-ROO-040, UNT-ROO-051, CMP-ROO-010
+verifies: REQ-VAL-065, FNC-VAL-040, UNT-VAL-051, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: custom_id_route, general_room_bypass
 execution_status: blocked_on_tooling
@@ -2910,16 +2910,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-065
+  VALUE: REQ-VAL-065
 
 [REQUIREMENT]
-UID: TST-ROO-097
+UID: TST-VAL-097
 STATUS: Active
 TITLE: OnboardedTenantTicker runs a 60s clock and skips Discord announcers on the first tick or an open circuit
 STATEMENT: >>>
 Plan: OnboardedTenantTicker runs a 60s clock and skips Discord announcers on the first tick or an open circuit
 level: unit
-verifies: REQ-ROO-066, FNC-ROO-041, UNT-ROO-052, CMP-ROO-010
+verifies: REQ-VAL-066, FNC-VAL-041, UNT-VAL-052, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: tenant_ticker, circuit_skip, jobs_not_on_clock
 execution_status: blocked_on_tooling
@@ -2933,22 +2933,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Live-raid auto-end is not a job of this clock (UNT-ROO-052, FNC-ROO-041; removed in 9237b35, still absent at f38e137): the 60-second bot tick (discord-bot/client.js:257-286) has no auto-end. Automatic archiving of an Active live raid whose monitoring end time (monitoringEndsAt) has passed stays required behavior (REQ-ROO-144, FNC-ROO-137, UNT-ROO-147), whatever runs it; at f38e137 it runs only in runPulseOnce (backend/src/api/liveRaid.routes.js:204-216, archive call L211), which runs only inside the pulse ticker (startTicker L290-322) armed by armMonitoringSchedule (L327-394), and at boot in resumeLiveRaidMonitoringIfNeeded (L426-435, archive call L431; called from backend/src/index.js:27-32). Both archive through endLiveRaidSessionInternal (L571-684), the same path as officer End Raid. That archive rule is planned in TST-ROO-122, not in this plan; the code gap vs REQ-ROO-144 (Req Guardian ruling A) is recorded on FNC-ROO-137, FNC-ROO-041 and UNT-ROO-147.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Live-raid auto-end is not a job of this clock (UNT-VAL-052, FNC-VAL-041; removed in 9237b35, still absent at f38e137): the 60-second bot tick (discord-bot/client.js:257-286) has no auto-end. Automatic archiving of an Active live raid whose monitoring end time (monitoringEndsAt) has passed stays required behavior (REQ-ROO-144, FNC-ROO-137, UNT-ROO-147), whatever runs it; at f38e137 it runs only in runPulseOnce (backend/src/api/liveRaid.routes.js:204-216, archive call L211), which runs only inside the pulse ticker (startTicker L290-322) armed by armMonitoringSchedule (L327-394), and at boot in resumeLiveRaidMonitoringIfNeeded (L426-435, archive call L431; called from backend/src/index.js:27-32). Both archive through endLiveRaidSessionInternal (L571-684), the same path as officer End Raid. That archive rule is planned in TST-ROO-122, not in this plan; the code gap vs REQ-ROO-144 (Req Guardian ruling A) is recorded on FNC-ROO-137, FNC-VAL-041 and UNT-ROO-147.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-066
+  VALUE: REQ-VAL-066
 
 [REQUIREMENT]
-UID: TST-ROO-098
+UID: TST-VAL-098
 STATUS: Active
 TITLE: Discord429CircuitBreaker opens on 429, refuses outbound REST, and returns human status without secrets
 STATEMENT: >>>
 Plan: Discord429CircuitBreaker opens on 429, refuses outbound REST, and returns human status without secrets
 level: unit
-verifies: REQ-ROO-067, FNC-ROO-042, UNT-ROO-053, CMP-ROO-010
+verifies: REQ-VAL-067, FNC-VAL-042, UNT-VAL-053, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: circuit_breaker, human_until, no_secrets
 execution_status: blocked_on_tooling
@@ -2969,16 +2969,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-067
+  VALUE: REQ-VAL-067
 
 [REQUIREMENT]
-UID: TST-ROO-099
+UID: TST-VAL-099
 STATUS: Active
 TITLE: DiscordHttpProxyOptional uses ProxyAgent only when a proxy URL is set
 STATEMENT: >>>
 Plan: DiscordHttpProxyOptional uses ProxyAgent only when a proxy URL is set
 level: unit
-verifies: REQ-ROO-068, FNC-ROO-043, UNT-ROO-054, CMP-ROO-010
+verifies: REQ-VAL-068, FNC-VAL-043, UNT-VAL-054, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: optional_proxy, default_dispatcher
 execution_status: blocked_on_tooling
@@ -2996,16 +2996,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-068
+  VALUE: REQ-VAL-068
 
 [REQUIREMENT]
-UID: TST-ROO-100
+UID: TST-VAL-100
 STATUS: Active
 TITLE: PreferIpv4Discord sets ipv4first and agent family 4 without disabling a configured proxy
 STATEMENT: >>>
 Plan: PreferIpv4Discord sets ipv4first and agent family 4 without disabling a configured proxy
 level: unit
-verifies: REQ-ROO-069, FNC-ROO-044, UNT-ROO-055, CMP-ROO-010
+verifies: REQ-VAL-069, FNC-VAL-044, UNT-VAL-055, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: ipv4_preference, proxy_path_kept
 execution_status: blocked_on_tooling
@@ -3022,16 +3022,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-069
+  VALUE: REQ-VAL-069
 
 [REQUIREMENT]
-UID: TST-ROO-101
+UID: TST-VAL-101
 STATUS: Active
 TITLE: RateLimitDebugProbe returns bot and rate-limit status with no secrets and no login
 STATEMENT: >>>
 Plan: RateLimitDebugProbe returns bot and rate-limit status with no secrets and no login
 level: system
-verifies: REQ-ROO-076, FNC-ROO-051, API-ROO-029, UNT-ROO-056, CMP-ROO-010
+verifies: REQ-VAL-076, FNC-VAL-051, API-VAL-029, UNT-VAL-056, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: debug_ratelimit, no_secrets
 execution_status: blocked_on_tooling
@@ -3042,22 +3042,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-029. API-ROO-029 also names success, remainingHuman, circuitUntilHuman, untilHuman, and oauthLoginExempt. UNT-ROO-056 states botReady, botUser, and wsStatus merged with getDiscordRateLimitStatus fields, and omits the bot token and OAuth secrets. It does not name those extra wrapper fields. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-029. API-VAL-029 also names success, remainingHuman, circuitUntilHuman, untilHuman, and oauthLoginExempt. UNT-VAL-056 states botReady, botUser, and wsStatus merged with getDiscordRateLimitStatus fields, and omits the bot token and OAuth secrets. It does not name those extra wrapper fields. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-076
+  VALUE: REQ-VAL-076
 
 [REQUIREMENT]
-UID: TST-ROO-102
+UID: TST-VAL-102
 STATUS: Active
 TITLE: CachedMemberNicknames returns a 2-minute cache or the roster and never bulk-fetches members
 STATEMENT: >>>
 Plan: CachedMemberNicknames returns a 2-minute cache or the roster and never bulk-fetches members
 level: system
-verifies: REQ-ROO-077, FNC-ROO-052, API-ROO-030, UNT-ROO-057, CMP-ROO-010
+verifies: REQ-VAL-077, FNC-VAL-052, API-VAL-030, UNT-VAL-057, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: member_nickname_cache, roster_fallback, no_bulk_rest
 execution_status: blocked_on_tooling
@@ -3069,22 +3069,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Disagreement: REQ-ROO-077 says the fallback is a Postgres roster and that the route does not REST-fetch 1000 members from the Render IP. UNT-ROO-057 says an empty gateway cache falls back to auction/members roster displayName rows, never bulk REST-fetches guild members from the host/Render IP, and a missing tenant returns 409. Expected output follows the unit. Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-030. API-ROO-030 also names member fields username, globalName, avatarURL, and joinedAt plus a success wrapper. UNT-ROO-057 states nickname/display rows or roster displayName rows. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Disagreement: REQ-VAL-077 says the fallback is a Postgres roster and that the route does not REST-fetch 1000 members from the Render IP. UNT-VAL-057 says an empty gateway cache falls back to auction/members roster displayName rows, never bulk REST-fetches guild members from the host/Render IP, and a missing tenant returns 409. Expected output follows the unit. Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-030. API-VAL-030 also names member fields username, globalName, avatarURL, and joinedAt plus a success wrapper. UNT-VAL-057 states nickname/display rows or roster displayName rows. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-077
+  VALUE: REQ-VAL-077
 
 [REQUIREMENT]
-UID: TST-ROO-103
+UID: TST-VAL-103
 STATUS: Active
 TITLE: DeployRequestCard posts the Request Card to the mapped aucreq channel
 STATEMENT: >>>
 Plan: DeployRequestCard posts the Request Card to the mapped aucreq channel
 level: system
-verifies: REQ-ROO-070, FNC-ROO-045, API-ROO-024, UNT-ROO-058, CMP-ROO-011
+verifies: REQ-VAL-070, FNC-VAL-045, API-VAL-024, UNT-VAL-058, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_request_card, aucreq_channel
 execution_status: blocked_on_tooling
@@ -3098,22 +3098,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-024. API-ROO-024 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-ROO-058 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (aucreq), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-024. API-VAL-024 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-VAL-058 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (aucreq), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-070
+  VALUE: REQ-VAL-070
 
 [REQUIREMENT]
-UID: TST-ROO-104
+UID: TST-VAL-104
 STATUS: Active
 TITLE: DeployGvgReadinessCard posts the GVG readiness card only to mapped war-announce
 STATEMENT: >>>
 Plan: DeployGvgReadinessCard posts the GVG readiness card only to mapped war-announce
 level: system
-verifies: REQ-ROO-071, FNC-ROO-046, API-ROO-025, UNT-ROO-059, CMP-ROO-011
+verifies: REQ-VAL-071, FNC-VAL-046, API-VAL-025, UNT-VAL-059, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_gvg_card, war_announce
 execution_status: blocked_on_tooling
@@ -3127,22 +3127,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-025. API-ROO-025 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-ROO-059 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-025. API-VAL-025 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-VAL-059 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-071
+  VALUE: REQ-VAL-071
 
 [REQUIREMENT]
-UID: TST-ROO-105
+UID: TST-VAL-105
 STATUS: Active
 TITLE: DeployPartyViewerCard posts the party viewer card to mapped war-announce
 STATEMENT: >>>
 Plan: DeployPartyViewerCard posts the party viewer card to mapped war-announce
 level: system
-verifies: REQ-ROO-072, FNC-ROO-047, API-ROO-026, UNT-ROO-060, CMP-ROO-011
+verifies: REQ-VAL-072, FNC-VAL-047, API-VAL-026, UNT-VAL-060, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_party_card, war_announce
 execution_status: blocked_on_tooling
@@ -3156,22 +3156,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-026. API-ROO-026 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-ROO-060 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-026. API-VAL-026 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-VAL-060 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-072
+  VALUE: REQ-VAL-072
 
 [REQUIREMENT]
-UID: TST-ROO-106
+UID: TST-VAL-106
 STATUS: Active
 TITLE: DeployPartyOcrCard posts the party OCR card to mapped war-announce
 STATEMENT: >>>
 Plan: DeployPartyOcrCard posts the party OCR card to mapped war-announce
 level: system
-verifies: REQ-ROO-073, FNC-ROO-048, API-ROO-027, UNT-ROO-061, CMP-ROO-011
+verifies: REQ-VAL-073, FNC-VAL-048, API-VAL-027, UNT-VAL-061, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_ocr_card, war_announce
 execution_status: blocked_on_tooling
@@ -3185,22 +3185,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-027. API-ROO-027 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-ROO-061 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-027. API-VAL-027 also names 401 unauthenticated, 409 tenant_required, and 500. UNT-VAL-061 states 400 unmapped, 503 bot offline or circuit open, 404 channel locate miss, and 403, and requires an authenticated officer and the current tenant. The channel comes from tenant discord_channels (warAnnounce), not process.env. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-073
+  VALUE: REQ-VAL-073
 
 [REQUIREMENT]
-UID: TST-ROO-107
+UID: TST-VAL-107
 STATUS: Active
 TITLE: AttendanceDeployAliases posts the same cards as the root deploy routes when mount gates allow it
 STATEMENT: >>>
 Plan: AttendanceDeployAliases posts the same cards as the root deploy routes when mount gates allow it
 level: system
-verifies: REQ-ROO-074, FNC-ROO-049, API-ROO-028, UNT-ROO-062, CMP-ROO-011
+verifies: REQ-VAL-074, FNC-VAL-049, API-VAL-028, UNT-VAL-062, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: attendance_deploy_alias, mount_gates
 execution_status: blocked_on_tooling
@@ -3214,22 +3214,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Published unit states an HTTP contract, so level=system and verifies includes published API-ROO-028. API-ROO-028 also names 401 and a 403 game_required code plus a JSON success envelope {success, result}. UNT-ROO-062 states the three aliases (deploy-card same as deploy-attendance-card, deploy-party-card same as deploy-party-card, deploy-ocr-card same as deploy-ocr-card), mount-gate errors 403/402/409, deploy errors 400/503/404, and that aliases must not diverge from root deploy behavior. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Published unit states an HTTP contract, so level=system and verifies includes published API-VAL-028. API-VAL-028 also names 401 and a 403 game_required code plus a JSON success envelope {success, result}. UNT-VAL-062 states the three aliases (deploy-card same as deploy-attendance-card, deploy-party-card same as deploy-party-card, deploy-ocr-card same as deploy-ocr-card), mount-gate errors 403/402/409, deploy errors 400/503/404, and that aliases must not diverge from root deploy behavior. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-074
+  VALUE: REQ-VAL-074
 
 [REQUIREMENT]
-UID: TST-ROO-108
+UID: TST-VAL-108
 STATUS: Active
 TITLE: ChannelMapStorageResolver reads tenant discord_channels and never process.env
 STATEMENT: >>>
 Plan: ChannelMapStorageResolver reads tenant discord_channels and never process.env
 level: unit
-verifies: REQ-ROO-075, FNC-ROO-050, UNT-ROO-063, CMP-ROO-007
+verifies: REQ-VAL-075, FNC-VAL-050, UNT-VAL-063, CMP-VAL-007
 requires_tol: TOL-ROO-006
 patterns: channel_map, no_env_fallback
 execution_status: blocked_on_tooling
@@ -3247,16 +3247,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-075
+  VALUE: REQ-VAL-075
 
 [REQUIREMENT]
-UID: TST-ROO-109
+UID: TST-VAL-109
 STATUS: Active
 TITLE: Phase1GvgGetReadyLine posts the phase-1 get-ready sentence to GEN or sends nothing
 STATEMENT: >>>
 Plan: Phase1GvgGetReadyLine posts the phase-1 get-ready sentence to GEN or sends nothing
 level: unit
-verifies: REQ-ROO-190, FNC-ROO-191, UNT-ROO-201, CMP-ROO-010
+verifies: REQ-VAL-190, FNC-VAL-191, UNT-ROO-201, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: phase1_get_ready, raid_announce_silence
 execution_status: blocked_on_tooling
@@ -3275,16 +3275,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-190
+  VALUE: REQ-VAL-190
 
 [REQUIREMENT]
-UID: TST-ROO-110
+UID: TST-VAL-110
 STATUS: Active
 TITLE: CachedOnboardedTenants reuses the list and settings caches and clears the list on lifecycle events
 STATEMENT: >>>
 Plan: CachedOnboardedTenants reuses the list and settings caches and clears the list on lifecycle events
 level: unit
-verifies: REQ-ROO-194, FNC-ROO-195, UNT-ROO-205, CMP-ROO-010
+verifies: REQ-VAL-194, FNC-VAL-195, UNT-ROO-205, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: onboarded_list_cache, settings_cache, skip_no_access
 execution_status: blocked_on_tooling
@@ -3297,22 +3297,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: Disagreement: REQ-ROO-194 says a 60-second tick does not call listOnboardedTenants while the in-process list cache is populated, and that creating a tenant, marking one onboarded, or activating/reverting billing clears the list so the next tick reloads. UNT-ROO-205 says reuse the in-process onboarded-tenant list cache, do not call loadTenantSettings when both configuration and channels are already cached, clear the list cache on tenant create, mark onboarded, billing activation, and automatic founding-seat revert, and still skip tenants without access. It does not name listOnboardedTenants. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
+notes: Disagreement: REQ-VAL-194 says a 60-second tick does not call listOnboardedTenants while the in-process list cache is populated, and that creating a tenant, marking one onboarded, or activating/reverting billing clears the list so the next tick reloads. UNT-ROO-205 says reuse the in-process onboarded-tenant list cache, do not call loadTenantSettings when both configuration and channels are already cached, clear the list cache on tenant create, mark onboarded, billing activation, and automatic founding-seat revert, and still skip tenants without access. It does not name listOnboardedTenants. Expected output follows the unit. verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-194
+  VALUE: REQ-VAL-194
 
 [REQUIREMENT]
-UID: TST-ROO-254
+UID: TST-VAL-254
 STATUS: Active
 TITLE: InteractionRouterByCustomId sets Origin explicitly on Origin card presses, never routes a Ragnarok 3 card press to Origin, and refuses an unknown game
 STATEMENT: >>>
 Plan: InteractionRouterByCustomId sets Origin explicitly on Origin card presses, never routes a Ragnarok 3 card press to Origin, and refuses an unknown game
 level: unit
-verifies: REQ-ROO-205, FNC-ROO-040, UNT-ROO-051, CMP-ROO-010
+verifies: REQ-VAL-205, FNC-VAL-040, UNT-VAL-051, CMP-VAL-010
 requires_tol: TOL-ROO-006
 patterns: explicit_origin_press, ro3_press_not_origin, select_a_game
 execution_status: blocked_on_tooling
@@ -3325,22 +3325,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): discord-bot/client.js wraps presses in runWithTenant (game defaults to Origin) and routes every ocr:* press to the Origin handler, so cases 1, 3 and 4 are expected to fail at f38e137 (code gap (b) on FNC-ROO-040, UNT-ROO-051). Prefix routing stays in TST-ROO-096. Ragnarok 3 counterpart, text only: UNT-RO3-033.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): discord-bot/client.js wraps presses in runWithTenant (game defaults to Origin) and routes every ocr:* press to the Origin handler, so cases 1, 3 and 4 are expected to fail at f38e137 (code gap (b) on FNC-VAL-040, UNT-VAL-051). Prefix routing stays in TST-VAL-096. Ragnarok 3 counterpart, text only: UNT-RO3-033.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-205
+  VALUE: REQ-VAL-205
 
 [REQUIREMENT]
-UID: TST-ROO-255
+UID: TST-VAL-255
 STATUS: Active
 TITLE: Origin root card deploys (auction, attendance, party, ocr) are accepted only with Origin enabled and touch only Origin data and cards
 STATEMENT: >>>
 Plan: Origin root card deploys (auction, attendance, party, ocr) are accepted only with Origin enabled and touch only Origin data and cards
 level: system
-verifies: REQ-ROO-211, FNC-ROO-045, FNC-ROO-046, FNC-ROO-047, FNC-ROO-048, API-ROO-024, API-ROO-025, API-ROO-026, API-ROO-027, UNT-ROO-058, UNT-ROO-059, UNT-ROO-060, UNT-ROO-061, CMP-ROO-011
+verifies: REQ-VAL-211, FNC-VAL-045, FNC-VAL-046, FNC-VAL-047, FNC-VAL-048, API-VAL-024, API-VAL-025, API-VAL-026, API-VAL-027, UNT-VAL-058, UNT-VAL-059, UNT-VAL-060, UNT-VAL-061, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_game_gate, origin_card_pointer, never_touch_ro3_card
 execution_status: blocked_on_tooling
@@ -3358,22 +3358,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-ROO-045..048, FNC-ROO-202, API-ROO-024..027, API-ROO-118). Officer, mapping and Discord status cases stay in TST-ROO-103..106. Ragnarok 3 counterpart, text only: UNT-RO3-031 / UNT-RO3-032.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-VAL-045..048, FNC-VAL-202, API-VAL-024..027, API-VAL-118). Officer, mapping and Discord status cases stay in TST-VAL-103..106. Ragnarok 3 counterpart, text only: UNT-RO3-031 / UNT-RO3-032.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-211
+  VALUE: REQ-VAL-211
 
 [REQUIREMENT]
-UID: TST-ROO-256
+UID: TST-VAL-256
 STATUS: Active
 TITLE: Attendance deploy aliases refuse without Origin enabled and touch only Origin data and cards
 STATEMENT: >>>
 Plan: Attendance deploy aliases refuse without Origin enabled and touch only Origin data and cards
 level: system
-verifies: REQ-ROO-211, FNC-ROO-049, API-ROO-028, UNT-ROO-062, CMP-ROO-011
+verifies: REQ-VAL-211, FNC-VAL-049, API-VAL-028, UNT-VAL-062, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_game_gate, origin_card_pointer
 execution_status: blocked_on_tooling
@@ -3386,13 +3386,13 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Met at f38e137 for the gate (aliases sit behind requireGame(ragnarok-origin), backend/src/createApp.js:102). Same-send and mount-gate cases stay in TST-ROO-107.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Met at f38e137 for the gate (aliases sit behind requireGame(ragnarok-origin), backend/src/createApp.js:102). Same-send and mount-gate cases stay in TST-VAL-107.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-211
+  VALUE: REQ-VAL-211
 
 [[/SECTION]]
 
@@ -4968,7 +4968,7 @@ TITLE: AnnouncePublishedAttendanceCard builds the attendance announce from the p
 STATEMENT: >>>
 Plan: AnnouncePublishedAttendanceCard builds the attendance announce from the published event and 404s a missing id
 level: system
-verifies: REQ-ROO-127, FNC-ROO-117, API-ROO-083, UNT-ROO-130, CMP-ROO-011
+verifies: REQ-ROO-127, FNC-ROO-117, API-ROO-083, UNT-ROO-130, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: announce_fields, discord_send, missing_published
 execution_status: blocked_on_tooling
@@ -4997,7 +4997,7 @@ TITLE: AnnouncePublishedPartyCard builds the party announce from event title and
 STATEMENT: >>>
 Plan: AnnouncePublishedPartyCard builds the party announce from event title and date and 404s a missing id
 level: system
-verifies: REQ-ROO-127, FNC-ROO-118, API-ROO-084, UNT-ROO-131, CMP-ROO-011
+verifies: REQ-ROO-127, FNC-ROO-118, API-ROO-084, UNT-ROO-131, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: party_fields, discord_send, missing_published
 execution_status: blocked_on_tooling
@@ -5597,7 +5597,7 @@ TITLE: AnnounceWeekAttendanceCard posts via enqueue when officer, channel, and b
 STATEMENT: >>>
 Plan: AnnounceWeekAttendanceCard posts via enqueue when officer, channel, and bot readiness pass
 level: system
-verifies: REQ-ROO-121, FNC-ROO-100, API-ROO-068, UNT-ROO-110, CMP-ROO-011
+verifies: REQ-ROO-121, FNC-ROO-100, API-ROO-068, UNT-ROO-110, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: announce_week, war_announce, bot_ready, enqueue
 execution_status: blocked_on_tooling
@@ -5652,7 +5652,7 @@ TITLE: GvgReadinessCardStaysOnCycleWar keeps the cycle war after deadline and do
 STATEMENT: >>>
 Plan: GvgReadinessCardStaysOnCycleWar keeps the cycle war after deadline and does not fall through when missing
 level: unit
-verifies: REQ-ROO-176, FNC-ROO-177, UNT-ROO-187, CMP-ROO-011
+verifies: REQ-ROO-176, FNC-ROO-177, UNT-ROO-187, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: gvg_readiness, cycle_war, locked_after_deadline, no_fallthrough
 execution_status: blocked_on_tooling
@@ -5768,7 +5768,7 @@ TITLE: AttendanceCardRsvpAnnounceCooldown posts at most one GEN line per minute 
 STATEMENT: >>>
 Plan: AttendanceCardRsvpAnnounceCooldown posts at most one GEN line per minute after a real status change
 level: unit
-verifies: REQ-ROO-189, FNC-ROO-190, UNT-ROO-200, CMP-ROO-011
+verifies: REQ-ROO-189, FNC-ROO-190, UNT-ROO-200, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: card_announce, cooldown_60s, available_unavailable, no_op_skip
 execution_status: blocked_on_tooling
@@ -5796,16 +5796,16 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Billing/Capacity — TST-ROO-193 .. TST-ROO-205 (13 plans)
+TITLE: Billing/Capacity — TST-VAL-193 .. TST-VAL-205 (13 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-193
+UID: TST-VAL-193
 STATUS: Active
 TITLE: SeatAccessPredicate grants access only for active or future past_due grace, and occupying a slot uses that same predicate
 STATEMENT: >>>
 Plan: SeatAccessPredicate grants access only for active or future past_due grace, and occupying a slot uses that same predicate
 level: unit
-verifies: REQ-ROO-049, FNC-ROO-024, UNT-ROO-036, CMP-ROO-009
+verifies: REQ-VAL-049, FNC-VAL-024, UNT-VAL-036, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: tenant_has_access, past_due_grace, occupying_slot
 execution_status: blocked_on_tooling
@@ -5828,16 +5828,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-049
+  VALUE: REQ-VAL-049
 
 [REQUIREMENT]
-UID: TST-ROO-194
+UID: TST-VAL-194
 STATUS: Active
 TITLE: PlatformCapacityOccupancy returns activeCount, cap, and full from a public capacity read
 STATEMENT: >>>
 Plan: PlatformCapacityOccupancy returns activeCount, cap, and full from a public capacity read
 level: system
-verifies: REQ-ROO-052, FNC-ROO-027, API-ROO-018, UNT-ROO-037, CMP-ROO-009
+verifies: REQ-VAL-052, FNC-VAL-027, API-VAL-018, UNT-VAL-037, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: capacity_public, cap_default_20, full_when_gte
 execution_status: blocked_on_tooling
@@ -5858,16 +5858,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-052
+  VALUE: REQ-VAL-052
 
 [REQUIREMENT]
-UID: TST-ROO-195
+UID: TST-VAL-195
 STATUS: Active
 TITLE: BillingStatusPublicView returns the public billing view and refreshes Stripe only when source is stripe
 STATEMENT: >>>
 Plan: BillingStatusPublicView returns the public billing view and refreshes Stripe only when source is stripe
 level: system
-verifies: REQ-ROO-053, FNC-ROO-028, API-ROO-019, UNT-ROO-038, CMP-ROO-009
+verifies: REQ-VAL-053, FNC-VAL-028, API-VAL-019, UNT-VAL-038, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: billing_status, stripe_refresh, permanent_guard
 execution_status: blocked_on_tooling
@@ -5887,16 +5887,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-053
+  VALUE: REQ-VAL-053
 
 [REQUIREMENT]
-UID: TST-ROO-196
+UID: TST-VAL-196
 STATUS: Active
 TITLE: StripeCheckoutSession creates a subscription Checkout only when the officer tenant has no seat and capacity remains
 STATEMENT: >>>
 Plan: StripeCheckoutSession creates a subscription Checkout only when the officer tenant has no seat and capacity remains
 level: system
-verifies: REQ-ROO-054, FNC-ROO-029, API-ROO-020, UNT-ROO-039, CMP-ROO-009
+verifies: REQ-VAL-054, FNC-VAL-029, API-VAL-020, UNT-VAL-039, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: checkout_session, already_has_seat, capacity_reached
 execution_status: blocked_on_tooling
@@ -5916,16 +5916,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-054
+  VALUE: REQ-VAL-054
 
 [REQUIREMENT]
-UID: TST-ROO-197
+UID: TST-VAL-197
 STATUS: Active
 TITLE: StripeCustomerPortal returns a portal URL only for a stripe-sourced tenant that has a customer id
 STATEMENT: >>>
 Plan: StripeCustomerPortal returns a portal URL only for a stripe-sourced tenant that has a customer id
 level: system
-verifies: REQ-ROO-055, FNC-ROO-030, API-ROO-021, UNT-ROO-040, CMP-ROO-009
+verifies: REQ-VAL-055, FNC-VAL-030, API-VAL-021, UNT-VAL-040, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: customer_portal, stripe_source, return_billing
 execution_status: blocked_on_tooling
@@ -5945,16 +5945,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-055
+  VALUE: REQ-VAL-055
 
 [REQUIREMENT]
-UID: TST-ROO-198
+UID: TST-VAL-198
 STATUS: Active
 TITLE: InviteCodeRedemption activates an invite seat once under the billing lock and returns a re-signed user
 STATEMENT: >>>
 Plan: InviteCodeRedemption activates an invite seat once under the billing lock and returns a re-signed user
 level: system
-verifies: REQ-ROO-056, FNC-ROO-031, API-ROO-022, UNT-ROO-041, CMP-ROO-009
+verifies: REQ-VAL-056, FNC-VAL-031, API-VAL-022, UNT-VAL-041, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: redeem_invite, billing_lock, one_time_code
 execution_status: blocked_on_tooling
@@ -5979,16 +5979,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-056
+  VALUE: REQ-VAL-056
 
 [REQUIREMENT]
-UID: TST-ROO-199
+UID: TST-VAL-199
 STATUS: Active
 TITLE: StripeWebhookLifecycle verifies the raw body and dispatches only the listed billing events
 STATEMENT: >>>
 Plan: StripeWebhookLifecycle verifies the raw body and dispatches only the listed billing events
 level: system
-verifies: REQ-ROO-057, FNC-ROO-032, API-ROO-023, UNT-ROO-042, CMP-ROO-009
+verifies: REQ-VAL-057, FNC-VAL-032, API-VAL-023, UNT-VAL-042, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: webhook_raw_body, stripe_signature, listed_events
 execution_status: blocked_on_tooling
@@ -6009,16 +6009,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-057
+  VALUE: REQ-VAL-057
 
 [REQUIREMENT]
-UID: TST-ROO-200
+UID: TST-VAL-200
 STATUS: Active
 TITLE: OverflowCancelRefund rejects checkout activation for a missing tenant, a permanent source, or a full platform, and does not reject an already-active stripe seat
 STATEMENT: >>>
 Plan: OverflowCancelRefund rejects checkout activation for a missing tenant, a permanent source, or a full platform, and does not reject an already-active stripe seat
 level: unit
-verifies: REQ-ROO-058, FNC-ROO-033, UNT-ROO-043, CMP-ROO-009
+verifies: REQ-VAL-058, FNC-VAL-033, UNT-VAL-043, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: overflow_reject, cancel_refund, already_active
 execution_status: blocked_on_tooling
@@ -6037,16 +6037,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-058
+  VALUE: REQ-VAL-058
 
 [REQUIREMENT]
-UID: TST-ROO-201
+UID: TST-VAL-201
 STATUS: Active
 TITLE: PastDueGrace sets past_due and a grace window, skips permanent sources, and does not reset an open grace
 STATEMENT: >>>
 Plan: PastDueGrace sets past_due and a grace window, skips permanent sources, and does not reset an open grace
 level: unit
-verifies: REQ-ROO-059, FNC-ROO-034, UNT-ROO-044, CMP-ROO-009
+verifies: REQ-VAL-059, FNC-VAL-034, UNT-VAL-044, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: past_due, grace_days, open_grace
 execution_status: blocked_on_tooling
@@ -6065,16 +6065,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-059
+  VALUE: REQ-VAL-059
 
 [REQUIREMENT]
-UID: TST-ROO-202
+UID: TST-VAL-202
 STATUS: Active
 TITLE: PermanentBillingSources keeps invite and grandfathered seats from being overwritten by Stripe
 STATEMENT: >>>
 Plan: PermanentBillingSources keeps invite and grandfathered seats from being overwritten by Stripe
 level: unit
-verifies: REQ-ROO-060, FNC-ROO-035, UNT-ROO-045, CMP-ROO-009
+verifies: REQ-VAL-060, FNC-VAL-035, UNT-VAL-045, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: permanent_source, invite, grandfathered
 execution_status: blocked_on_tooling
@@ -6094,16 +6094,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-060
+  VALUE: REQ-VAL-060
 
 [REQUIREMENT]
-UID: TST-ROO-203
+UID: TST-VAL-203
 STATUS: Active
 TITLE: StripeOptionalBoot continues boot, invite redemption, and capacity without Stripe keys, and fails Stripe call sites closed
 STATEMENT: >>>
 Plan: StripeOptionalBoot continues boot, invite redemption, and capacity without Stripe keys, and fails Stripe call sites closed
 level: unit
-verifies: REQ-ROO-061, FNC-ROO-036, UNT-ROO-046, CMP-ROO-009
+verifies: REQ-VAL-061, FNC-VAL-036, UNT-VAL-046, CMP-VAL-009
 requires_tol: TOL-ROO-006
 patterns: stripe_optional_boot, invite_without_stripe, call_site_503
 execution_status: blocked_on_tooling
@@ -6122,16 +6122,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-061
+  VALUE: REQ-VAL-061
 
 [REQUIREMENT]
-UID: TST-ROO-204
+UID: TST-VAL-204
 STATUS: Active
 TITLE: SpaBillingRedirect sends a disallowed subscription to /workspace/billing except the stated paths, and also redirects HTTP 402
 STATEMENT: >>>
 Plan: SpaBillingRedirect sends a disallowed subscription to /workspace/billing except the stated paths, and also redirects HTTP 402
 level: unit
-verifies: REQ-ROO-051, FNC-ROO-026, UNT-ROO-047, CMP-ROO-004
+verifies: REQ-VAL-051, FNC-VAL-026, UNT-VAL-047, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: spa_redirect, exempt_paths, http_402
 execution_status: blocked_on_tooling
@@ -6149,16 +6149,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-051
+  VALUE: REQ-VAL-051
 
 [REQUIREMENT]
-UID: TST-ROO-205
+UID: TST-VAL-205
 STATUS: Active
 TITLE: RequireActiveSubscriptionGate returns 409 when there is no tenant and 402 payment_required when the seat is inactive
 STATEMENT: >>>
 Plan: RequireActiveSubscriptionGate returns 409 when there is no tenant and 402 payment_required when the seat is inactive
 level: unit
-verifies: REQ-ROO-050, FNC-ROO-025, UNT-ROO-034, CMP-ROO-008
+verifies: REQ-VAL-050, FNC-VAL-025, UNT-VAL-034, CMP-VAL-008
 requires_tol: TOL-ROO-006
 patterns: payment_required, tenant_required, seat_gate
 execution_status: blocked_on_tooling
@@ -6176,21 +6176,21 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-050
+  VALUE: REQ-VAL-050
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Data isolation/Storage — TST-ROO-206 .. TST-ROO-214 (9 plans)
+TITLE: Data isolation/Storage — TST-VAL-206 .. TST-VAL-214 (9 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-206
+UID: TST-VAL-206
 STATUS: Active
 TITLE: BindRequestHandlersRunWithTenant scopes a resolved tenant with runWithTenant, stamps tenant_id, and returns 409 on a bound route with no tenant
 STATEMENT: >>>
 Plan: BindRequestHandlersRunWithTenant scopes a resolved tenant with runWithTenant, stamps tenant_id, and returns 409 on a bound route with no tenant
 level: unit
-verifies: REQ-ROO-158, FNC-ROO-159, UNT-ROO-169, CMP-ROO-008
+verifies: REQ-VAL-158, FNC-VAL-159, UNT-VAL-169, CMP-VAL-008
 requires_tol: TOL-ROO-006
 patterns: run_with_tenant, tenant_resolve_order, tenant_required
 execution_status: blocked_on_tooling
@@ -6214,16 +6214,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-158
+  VALUE: REQ-VAL-158
 
 [REQUIREMENT]
-UID: TST-ROO-207
+UID: TST-VAL-207
 STATUS: Active
 TITLE: RejectSilentXTenantIdSwitch keeps the session tenant when x-tenant-id disagrees, and lets the header seed only when no session tenant exists
 STATEMENT: >>>
 Plan: RejectSilentXTenantIdSwitch keeps the session tenant when x-tenant-id disagrees, and lets the header seed only when no session tenant exists
 level: unit
-verifies: REQ-ROO-159, FNC-ROO-160, UNT-ROO-170, CMP-ROO-008
+verifies: REQ-VAL-159, FNC-VAL-160, UNT-VAL-170, CMP-VAL-008
 requires_tol: TOL-ROO-006
 patterns: x_tenant_id, no_silent_switch, header_seed
 execution_status: blocked_on_tooling
@@ -6240,16 +6240,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-159
+  VALUE: REQ-VAL-159
 
 [REQUIREMENT]
-UID: TST-ROO-208
+UID: TST-VAL-208
 STATUS: Active
 TITLE: MultiTenantRelationalSchema defines the named tables, puts tenant_id on tenant-scoped keys, and keys platform_state and tenants differently
 STATEMENT: >>>
 Plan: MultiTenantRelationalSchema defines the named tables, puts tenant_id on tenant-scoped keys, and keys platform_state and tenants differently
 level: unit
-verifies: REQ-ROO-160, FNC-ROO-161, UNT-ROO-171, CMP-ROO-027
+verifies: REQ-VAL-160, FNC-VAL-161, UNT-VAL-171, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: relational_schema, tenant_id_pk, platform_state_key
 execution_status: blocked_on_tooling
@@ -6269,16 +6269,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-160
+  VALUE: REQ-VAL-160
 
 [REQUIREMENT]
-UID: TST-ROO-209
+UID: TST-VAL-209
 STATUS: Active
 TITLE: TenantPathStoreJsonDocsCollections routes mapped paths to dedicated tables, other trees to json_docs, and refuses an unbound write
 STATEMENT: >>>
 Plan: TenantPathStoreJsonDocsCollections routes mapped paths to dedicated tables, other trees to json_docs, and refuses an unbound write
 level: unit
-verifies: REQ-ROO-161, FNC-ROO-162, UNT-ROO-172, CMP-ROO-027
+verifies: REQ-VAL-161, FNC-VAL-162, UNT-VAL-172, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: tenant_store, json_docs, dedicated_collection, unbound_write
 execution_status: blocked_on_tooling
@@ -6302,16 +6302,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-161
+  VALUE: REQ-VAL-161
 
 [REQUIREMENT]
-UID: TST-ROO-210
+UID: TST-VAL-210
 STATUS: Active
 TITLE: PlatformWideStateViaPlatformState maps discord_circuit onto platform_state and does not stamp tenant_id
 STATEMENT: >>>
 Plan: PlatformWideStateViaPlatformState maps discord_circuit onto platform_state and does not stamp tenant_id
 level: unit
-verifies: REQ-ROO-162, FNC-ROO-163, UNT-ROO-173, CMP-ROO-027
+verifies: REQ-VAL-162, FNC-VAL-163, UNT-VAL-173, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: platform_state, discord_circuit, no_tenant_stamp
 execution_status: blocked_on_tooling
@@ -6330,16 +6330,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-162
+  VALUE: REQ-VAL-162
 
 [REQUIREMENT]
-UID: TST-ROO-211
+UID: TST-VAL-211
 STATUS: Active
 TITLE: SharedDomainPackageParity exports attendance, composition, raid-cycle, and in-game alias helpers from one package
 STATEMENT: >>>
 Plan: SharedDomainPackageParity exports attendance, composition, raid-cycle, and in-game alias helpers from one package
 level: unit
-verifies: REQ-ROO-163, FNC-ROO-164, UNT-ROO-174, CMP-ROO-028
+verifies: REQ-VAL-163, FNC-VAL-164, UNT-VAL-174, CMP-VAL-028
 requires_tol: TOL-ROO-006
 patterns: shared_package, attendance_status, fe_be_parity
 execution_status: blocked_on_tooling
@@ -6359,16 +6359,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-163
+  VALUE: REQ-VAL-163
 
 [REQUIREMENT]
-UID: TST-ROO-212
+UID: TST-VAL-212
 STATUS: Active
 TITLE: TenantABIsolationVerificationScript passes only when B cannot read A's members or web_requests, and skips when DATABASE_URL is unset
 STATEMENT: >>>
 Plan: TenantABIsolationVerificationScript passes only when B cannot read A's members or web_requests, and skips when DATABASE_URL is unset
 level: unit
-verifies: REQ-ROO-164, FNC-ROO-165, UNT-ROO-175, CMP-ROO-027
+verifies: REQ-VAL-164, FNC-VAL-165, UNT-VAL-175, CMP-VAL-027
 requires_tol: TOL-ROO-006
 patterns: test_isolation, isolation_failed, database_url_skip
 execution_status: blocked_on_tooling
@@ -6388,16 +6388,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-164
+  VALUE: REQ-VAL-164
 
 [REQUIREMENT]
-UID: TST-ROO-213
+UID: TST-VAL-213
 STATUS: Active
 TITLE: DefaultWorkspaceTimezoneWallClock seeds Asia/Manila and formats guild wall time with Intl formatToParts
 STATEMENT: >>>
 Plan: DefaultWorkspaceTimezoneWallClock seeds Asia/Manila and formats guild wall time with Intl formatToParts
 level: unit
-verifies: REQ-ROO-165, FNC-ROO-166, UNT-ROO-176, CMP-ROO-005
+verifies: REQ-VAL-165, FNC-VAL-166, UNT-VAL-176, CMP-VAL-005
 requires_tol: TOL-ROO-006
 patterns: asia_manila, format_to_parts, workspace_defaults
 execution_status: blocked_on_tooling
@@ -6417,16 +6417,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-165
+  VALUE: REQ-VAL-165
 
 [REQUIREMENT]
-UID: TST-ROO-214
+UID: TST-VAL-214
 STATUS: Active
 TITLE: DefaultRoConfigurationSeeds merges the named RO defaults, including leave credits 3 and the four special-event categories, with workspace defaults
 STATEMENT: >>>
 Plan: DefaultRoConfigurationSeeds merges the named RO defaults, including leave credits 3 and the four special-event categories, with workspace defaults
 level: unit
-verifies: REQ-ROO-166, FNC-ROO-167, UNT-ROO-177, CMP-ROO-007
+verifies: REQ-VAL-166, FNC-VAL-167, UNT-VAL-177, CMP-VAL-007
 requires_tol: TOL-ROO-006
 patterns: ro_seeds, default_leave_credits, special_event_categories
 execution_status: blocked_on_tooling
@@ -6447,7 +6447,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-166
+  VALUE: REQ-VAL-166
 
 [[/SECTION]]
 
@@ -6739,16 +6739,16 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Frontend shell/UX — TST-ROO-224 .. TST-ROO-229 (6 plans)
+TITLE: Frontend shell/UX — TST-VAL-224 .. TST-VAL-229 (6 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-224
+UID: TST-VAL-224
 STATUS: Active
 TITLE: PublicFullBleedLandingRedirect renders unauthenticated landing outside MainLayout and redirects authenticated users, login, and unauth shells
 STATEMENT: >>>
 Plan: PublicFullBleedLandingRedirect renders unauthenticated landing outside MainLayout and redirects authenticated users, login, and unauth shells
 level: unit
-verifies: REQ-ROO-167, FNC-ROO-168, UNT-ROO-178, CMP-ROO-004
+verifies: REQ-VAL-167, FNC-VAL-168, UNT-VAL-178, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: landing_full_bleed, post_login_navigate, login_query_preserve, unauth_shell_to_landing
 execution_status: blocked_on_tooling
@@ -6768,16 +6768,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-167
+  VALUE: REQ-VAL-167
 
 [REQUIREMENT]
-UID: TST-ROO-225
+UID: TST-VAL-225
 STATUS: Active
 TITLE: MainLayoutManifestLeftNav composes MainLayout chrome and takes LeftNavBar modules from the active game manifest
 STATEMENT: >>>
 Plan: MainLayoutManifestLeftNav composes MainLayout chrome and takes LeftNavBar modules from the active game manifest
 level: unit
-verifies: REQ-ROO-168, FNC-ROO-169, UNT-ROO-179, CMP-ROO-004
+verifies: REQ-VAL-168, FNC-VAL-169, UNT-VAL-179, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: mainlayout_chrome, manifest_modules, standalone_outside
 execution_status: blocked_on_tooling
@@ -6798,16 +6798,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-168
+  VALUE: REQ-VAL-168
 
 [REQUIREMENT]
-UID: TST-ROO-226
+UID: TST-VAL-226
 STATUS: Active
 TITLE: HelpGuideModal lists helpKey guides, loads auction and raid embed URLs, and does not iframe on mobile
 STATEMENT: >>>
 Plan: HelpGuideModal lists helpKey guides, loads auction and raid embed URLs, and does not iframe on mobile
 level: unit
-verifies: REQ-ROO-169, FNC-ROO-170, UNT-ROO-180, CMP-ROO-004
+verifies: REQ-VAL-169, FNC-VAL-170, UNT-VAL-180, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: helpkey_entry, help_embed_urls, desktop_iframe_mobile_tab
 execution_status: blocked_on_tooling
@@ -6828,16 +6828,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-169
+  VALUE: REQ-VAL-169
 
 [REQUIREMENT]
-UID: TST-ROO-227
+UID: TST-VAL-227
 STATUS: Active
 TITLE: WorkspaceChooseGameBillingRoSetupRoutes mounts the four shells and applies unauth and subscription gates
 STATEMENT: >>>
 Plan: WorkspaceChooseGameBillingRoSetupRoutes mounts the four shells and applies unauth and subscription gates
 level: unit
-verifies: REQ-ROO-170, FNC-ROO-171, UNT-ROO-181, CMP-ROO-004
+verifies: REQ-VAL-170, FNC-VAL-171, UNT-VAL-181, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: workspace_routes, unauth_to_landing, subscription_billing_force
 execution_status: blocked_on_tooling
@@ -6859,16 +6859,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-170
+  VALUE: REQ-VAL-170
 
 [REQUIREMENT]
-UID: TST-ROO-228
+UID: TST-VAL-228
 STATUS: Active
 TITLE: ApiFetchPaymentRequiredBillingRedirect assigns billing on HTTP 402 unless already there and throws payment-required
 STATEMENT: >>>
 Plan: ApiFetchPaymentRequiredBillingRedirect assigns billing on HTTP 402 unless already there and throws payment-required
 level: unit
-verifies: REQ-ROO-171, FNC-ROO-172, UNT-ROO-182, CMP-ROO-004
+verifies: REQ-VAL-171, FNC-VAL-172, UNT-VAL-182, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: credentials_include, signed_session_headers, http_402_billing, payment_required_throw
 execution_status: blocked_on_tooling
@@ -6889,16 +6889,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-171
+  VALUE: REQ-VAL-171
 
 [REQUIREMENT]
-UID: TST-ROO-229
+UID: TST-VAL-229
 STATUS: Active
 TITLE: OnboardLandingSupportComponents matches officer roles, links Discord sign-in by intent, and renders the Valhalla lockup
 STATEMENT: >>>
 Plan: OnboardLandingSupportComponents matches officer roles, links Discord sign-in by intent, and renders the Valhalla lockup
 level: unit
-verifies: REQ-ROO-172, FNC-ROO-173, UNT-ROO-183, CMP-ROO-004
+verifies: REQ-VAL-172, FNC-VAL-173, UNT-VAL-183, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: officer_role_picker, discord_signin_intent, circuit_pause, brand_lockup
 execution_status: blocked_on_tooling
@@ -6922,7 +6922,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-172
+  VALUE: REQ-VAL-172
 
 [[/SECTION]]
 
@@ -7173,7 +7173,7 @@ TITLE: RefreshDiscordOcrReviewPointer edits the Discord review message or no-ops
 STATEMENT: >>>
 Plan: RefreshDiscordOcrReviewPointer edits the Discord review message or no-ops, and does not write swords
 level: unit
-verifies: REQ-ROO-150, FNC-ROO-150, UNT-ROO-160, CMP-ROO-011
+verifies: REQ-ROO-150, FNC-ROO-150, UNT-ROO-160, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: review_embed, valhalla_link, missing_ids_noop, edit_failure_swallowed, no_swords
 execution_status: blocked_on_tooling
@@ -7198,16 +7198,16 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Platform/Auth gaps — TST-ROO-239 .. TST-ROO-242 (4 plans)
+TITLE: Platform/Auth gaps — TST-VAL-239 .. TST-VAL-242 (4 plans)
 
 [REQUIREMENT]
-UID: TST-ROO-239
+UID: TST-VAL-239
 STATUS: Active
 TITLE: DiscordTokenExchangeBridge uses FRONTEND_URL oauth bridge in production and direct Discord exchange locally
 STATEMENT: >>>
 Plan: DiscordTokenExchangeBridge uses FRONTEND_URL oauth bridge in production and direct Discord exchange locally
 level: unit
-verifies: REQ-ROO-008, FNC-ROO-003, UNT-ROO-008, CMP-ROO-002
+verifies: REQ-VAL-008, FNC-VAL-003, UNT-VAL-008, CMP-VAL-002
 requires_tol: TOL-ROO-006
 patterns: prod_frontend_bridge, local_direct_exchange, token_payload_return
 execution_status: blocked_on_tooling
@@ -7225,16 +7225,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-008
+  VALUE: REQ-VAL-008
 
 [REQUIREMENT]
-UID: TST-ROO-240
+UID: TST-VAL-240
 STATUS: Active
 TITLE: CredentialedApiClient uses an empty backend base on localhost and the configured base otherwise
 STATEMENT: >>>
 Plan: CredentialedApiClient uses an empty backend base on localhost and the configured base otherwise
 level: unit
-verifies: REQ-ROO-015, FNC-ROO-005, UNT-ROO-014, CMP-ROO-004
+verifies: REQ-VAL-015, FNC-VAL-005, UNT-VAL-014, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: localhost_empty_base, configured_api_base
 execution_status: blocked_on_tooling
@@ -7245,22 +7245,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. Remaining rules only for REQ-ROO-015. credentials:include and x-user-profile/x-tenant-id header attachment are already cases on published TST-ROO-013 (REQ-ROO-014) — not reminted.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. Remaining rules only for REQ-VAL-015. credentials:include and x-user-profile/x-tenant-id header attachment are already cases on published TST-VAL-013 (REQ-VAL-014) — not reminted.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-015
+  VALUE: REQ-VAL-015
 
 [REQUIREMENT]
-UID: TST-ROO-241
+UID: TST-VAL-241
 STATUS: Active
 TITLE: CorsPolicy allows configured origins with credentials and auth headers, and rejects others without reflecting Origin
 STATEMENT: >>>
 Plan: CorsPolicy allows configured origins with credentials and auth headers, and rejects others without reflecting Origin
 level: unit
-verifies: REQ-ROO-017, FNC-ROO-006, UNT-ROO-004, CMP-ROO-001
+verifies: REQ-VAL-017, FNC-VAL-006, UNT-VAL-004, CMP-VAL-001
 requires_tol: TOL-ROO-006
 patterns: cors_allow_credentials, cors_auth_headers, cors_deny_no_reflect
 execution_status: blocked_on_tooling
@@ -7272,22 +7272,22 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. Rule-level cases only — does not invent an exhaustive per-host CORS matrix. Client-side header attachment on TST-ROO-013 is a different rule (REQ-ROO-014).
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. Rule-level cases only — does not invent an exhaustive per-host CORS matrix. Client-side header attachment on TST-VAL-013 is a different rule (REQ-VAL-014).
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-017
+  VALUE: REQ-VAL-017
 
 [REQUIREMENT]
-UID: TST-ROO-242
+UID: TST-VAL-242
 STATUS: Active
 TITLE: DocumentTitleController sets product name when logged out or without guild context, and '{Guild} · VALHALLA' when guild-authenticated
 STATEMENT: >>>
 Plan: DocumentTitleController sets product name when logged out or without guild context, and '{Guild} · VALHALLA' when guild-authenticated
 level: unit
-verifies: REQ-ROO-018, FNC-ROO-006, UNT-ROO-016, CMP-ROO-004
+verifies: REQ-VAL-018, FNC-VAL-006, UNT-VAL-016, CMP-VAL-004
 requires_tol: TOL-ROO-006
 patterns: title_logged_out, title_no_guild, title_guild_valhalla
 execution_status: blocked_on_tooling
@@ -7300,13 +7300,13 @@ cases:
 <<<
 COMMENT: >>>
 domain: Platform/Auth
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. REQ-ROO-018 names product title only when logged out; unit also applies product title when there is no guild context — expected follows the unit.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Disagreement: expected output follows the unit. REQ-VAL-018 names product title only when logged out; unit also applies product title when there is no guild context — expected follows the unit.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-018
+  VALUE: REQ-VAL-018
 
 [[/SECTION]]
 
@@ -7320,7 +7320,7 @@ TITLE: OnboardingChannelIdField resolves tenant onboardingChannelId and ignores 
 STATEMENT: >>>
 Plan: OnboardingChannelIdField resolves tenant onboardingChannelId and ignores it for setup completeness
 level: unit
-verifies: REQ-ROO-075, FNC-ROO-050, UNT-ROO-213, CMP-ROO-007
+verifies: REQ-VAL-075, FNC-VAL-050, UNT-VAL-213, CMP-VAL-007
 requires_tol: TOL-ROO-006
 patterns: channel_map, no_env_fallback, onboarding_channel
 execution_status: blocked_on_tooling
@@ -7334,13 +7334,13 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord onboarding
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-243.test.js. Reconciled verifies away from Develop sdoc (was wrongly REQ-197/FNC-198/UNT-208). New rules vs published TST-ROO-108/UNT-063: onboardingChannelId field, tenant-only DISCORD_ONBOARDING_CHANNEL_ID, mergeChannelFallback emit, setup completeness ignore. Officer Settings/setup entry surfaces are UI — not minted as unit cases.
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. Vocabulary: planned lineage only; never covered/passed/done. Reconciles Develop@9237b353 gym plan ids where present; unit wins on disagreement. Gym file tests/cases/unit/TST-ROO-243.test.js. Reconciled verifies away from Develop sdoc (was wrongly REQ-197/FNC-198/UNT-208). New rules vs published TST-VAL-108/UNT-063: onboardingChannelId field, tenant-only DISCORD_ONBOARDING_CHANNEL_ID, mergeChannelFallback emit, setup completeness ignore. Officer Settings/setup entry surfaces are UI — not minted as unit cases.
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-075
+  VALUE: REQ-VAL-075
 
 [REQUIREMENT]
 UID: TST-ROO-244
@@ -7349,7 +7349,7 @@ TITLE: DeployOnboardingHub posts or edits the hub via GET /api/deploy-onboarding
 STATEMENT: >>>
 Plan: DeployOnboardingHub posts or edits the hub via GET /api/deploy-onboarding-card with documented statuses
 level: system
-verifies: REQ-ROO-201, FNC-ROO-202, API-ROO-118, UNT-ROO-212, CMP-ROO-011
+verifies: REQ-VAL-201, FNC-VAL-202, API-VAL-118, UNT-ROO-212, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_onboarding_card, onboarding_channel
 execution_status: blocked_on_tooling
@@ -7372,16 +7372,16 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-201
+  VALUE: REQ-VAL-201
 
 [REQUIREMENT]
 UID: TST-ROO-245
 STATUS: Active
-TITLE: PublicOnboardingHubFourTopics buildHubPayload emits Onboarding title and four non-link topic buttons
+TITLE: PublicOnboardingHubFiveTopics buildHubPayload emits Onboarding title and five non-link topic buttons
 STATEMENT: >>>
-Plan: PublicOnboardingHubFourTopics buildHubPayload emits Onboarding title and four non-link topic buttons
+Plan: PublicOnboardingHubFiveTopics buildHubPayload emits Onboarding title and five non-link topic buttons
 level: unit
-verifies: REQ-ROO-197, FNC-ROO-198, UNT-ROO-208, CMP-ROO-011
+verifies: REQ-VAL-197, FNC-VAL-198, UNT-ROO-208, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: onboarding_hub_payload
 execution_status: blocked_on_tooling
@@ -7389,9 +7389,12 @@ evidence_status: none
 cases:
   - Hub title is Onboarding: expected=embed title is Onboarding
   - Welcome body tells the member to pick a topic: expected=welcome body tells the member to pick a topic for a private explanation and jump
-  - Exactly four topic buttons Auction, GvG, General Chat, Website: expected=exactly four topic buttons labeled Auction, GvG, General Chat, Website
-  - Topic customIds are onboard auction gvg general website: expected=customIds are onboard:auction, onboard:gvg, onboard:general, onboard:website
-  - Hub topic buttons are not link-style: expected=the four hub topic buttons are not link-style on the hub itself
+  - Exactly five topic buttons Auction, GvG, General Chat, Website, Message: expected=exactly five topic buttons labeled Auction, GvG, General Chat, Website, Message
+  - Topic customIds are onboard auction gvg general website message: expected=customIds are onboard:auction, onboard:gvg, onboard:general, onboard:website, onboard:message
+  - Hub topic buttons are not link-style: expected=the five hub topic buttons are not link-style on the hub itself
+  - A saved sentence replaces the default purpose: expected=a non-blank discordCardCopy auction sentence replaces the default purpose text
+  - Message jumps to messageChannelId: expected=Message topic title is Message; body mentions the mapped channel; Jump to channel uses messageChannelId; Back present
+  - Blank card copy falls back to the default sentence: expected=blank request and message sentences resolve to the built-in defaults
 <<<
 COMMENT: >>>
 domain: Discord onboarding
@@ -7401,7 +7404,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-197
+  VALUE: REQ-VAL-197
 
 [REQUIREMENT]
 UID: TST-ROO-246
@@ -7410,13 +7413,13 @@ TITLE: OnboardingTopicCards buildTopicPayload explains purpose with jump, unmapp
 STATEMENT: >>>
 Plan: OnboardingTopicCards buildTopicPayload explains purpose with jump, unmapped sentence, or Open VALHALLA
 level: unit
-verifies: REQ-ROO-198, FNC-ROO-199, UNT-ROO-209, CMP-ROO-011
+verifies: REQ-VAL-198, FNC-VAL-199, UNT-ROO-209, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: onboarding_topic_payload
 execution_status: blocked_on_tooling
 evidence_status: none
 cases:
-  - Mapped Auction/GvG/General Chat topics resolve the matching channel field: expected=title matches topic; body includes that topic's purpose text and channel mention; Jump to channel link is https://discord.com/channels/{guildId}/{channelId}; Back present
+  - Mapped Auction/GvG/General Chat/Message topics resolve the matching channel field: expected=title matches topic; body includes that topic's purpose text and channel mention; Jump to channel link is https://discord.com/channels/{guildId}/{channelId}; Back present; Message uses messageChannelId
   - Unmapped Discord topic has the officer-paste sentence and no jump: expected=body includes 'This channel is not mapped yet. Ask an officer to paste the ID in Settings.'; no jump link; Back present
   - Website Open VALHALLA uses frontend origin without trailing slash: expected=purpose text present; Open VALHALLA link URL is that origin with trailing slash removed; Back present
   - Empty frontend origin offers no Open VALHALLA link: expected=no Open VALHALLA link; Back always present
@@ -7430,7 +7433,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-198
+  VALUE: REQ-VAL-198
 
 [REQUIREMENT]
 UID: TST-ROO-247
@@ -7439,7 +7442,7 @@ TITLE: OnboardingAckEphemeralOrUpdate chooses ephemeral defer-reply from hub and
 STATEMENT: >>>
 Plan: OnboardingAckEphemeralOrUpdate chooses ephemeral defer-reply from hub and defer-update when already ephemeral
 level: unit
-verifies: REQ-ROO-199, FNC-ROO-200, UNT-ROO-210, CMP-ROO-011
+verifies: REQ-VAL-199, FNC-VAL-200, UNT-ROO-210, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: onboarding_ack
 execution_status: blocked_on_tooling
@@ -7457,7 +7460,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-199
+  VALUE: REQ-VAL-199
 
 [REQUIREMENT]
 UID: TST-ROO-249
@@ -7466,7 +7469,7 @@ TITLE: OnboardingHubPointerRedeploy edits the stored hub message when possible e
 STATEMENT: >>>
 Plan: OnboardingHubPointerRedeploy edits the stored hub message when possible else sends a new hub
 level: unit
-verifies: REQ-ROO-200, FNC-ROO-201, UNT-ROO-211, CMP-ROO-011
+verifies: REQ-VAL-200, FNC-VAL-201, UNT-ROO-211, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: onboarding_card_pointer
 execution_status: blocked_on_tooling
@@ -7485,7 +7488,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-200
+  VALUE: REQ-VAL-200
 
 [REQUIREMENT]
 UID: TST-ROO-257
@@ -7494,7 +7497,7 @@ TITLE: Onboarding hub deploy needs Origin enabled and an active seat and touches
 STATEMENT: >>>
 Plan: Onboarding hub deploy needs Origin enabled and an active seat and touches only Origin data and cards
 level: system
-verifies: REQ-ROO-050, REQ-ROO-211, FNC-ROO-202, API-ROO-118, UNT-ROO-212, CMP-ROO-011
+verifies: REQ-VAL-050, REQ-VAL-211, FNC-VAL-202, API-VAL-118, UNT-ROO-212, CMP-VAL-011
 requires_tol: TOL-ROO-006
 patterns: deploy_game_gate, seat_required, origin_card_pointer
 execution_status: blocked_on_tooling
@@ -7508,13 +7511,13 @@ cases:
 <<<
 COMMENT: >>>
 domain: Discord onboarding
-notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-ROO-045..048, FNC-ROO-202, API-ROO-024..027, API-ROO-118). Status mapping cases stay in TST-ROO-244. Root onboarding deploy carries the seat check per UNT-ROO-212 invariant and API-ROO-118; the four other root deploys do not (UNT-ROO-058..061).
+notes: verifies = planned lineage only; published ≠ proven. Last Boss owns EVD. No depends_on. No EVD. evidence_status=none. execution_status=blocked_on_tooling. requires_tol is a node field only (TOL-ROO-006 Vitest cataloged, greenfield); do not claim tests can run. No cross-project verifies; Ragnarok 3 counterparts are text only. Vocabulary: planned lineage only; never covered/passed/done. Code at f38e137 (cited only): backend/src/createApp.js:135, 165, 181, 197 and 213 guard the root deploy routes with requireOfficerTenant only (no game gate; they run with no game set and fall back to Origin), so the game-gate cases are expected to fail at f38e137 (code gap on FNC-VAL-045..048, FNC-VAL-202, API-VAL-024..027, API-VAL-118). Status mapping cases stay in TST-ROO-244. Root onboarding deploy carries the seat check per UNT-ROO-212 invariant and API-VAL-118; the four other root deploys do not (UNT-VAL-058..061).
 ssot_status: published
 HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-050
+  VALUE: REQ-VAL-050
 
 [[/SECTION]]
 
@@ -7528,7 +7531,7 @@ TITLE: GvgReadinessSyncMode rematerializes once at Preparation start
 STATEMENT: >>>
 Plan: GvgReadinessSyncMode rematerializes once at Preparation start
 level: unit
-verifies: REQ-ROO-200, FNC-ROO-201, UNT-ROO-213, INT-ROO-117, CMP-ROO-020
+verifies: REQ-VAL-200, FNC-VAL-201, UNT-VAL-213, INT-ROO-117, CMP-ROO-020
 requires_tol: TOL-ROO-006
 patterns: gvg_readiness_sync, readiness_board_gate
 execution_status: blocked_on_tooling
@@ -7552,7 +7555,7 @@ HONESTY: published plan only; not executed; no EVD.
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-200
+  VALUE: REQ-VAL-200
 
 [[/SECTION]]
 
@@ -7566,7 +7569,7 @@ TITLE: RequireGameGate returns 403 game_required for Ragnarok 3 mounts
 STATEMENT: >>>
 Plan: RequireGameGate returns 403 game_required for Ragnarok 3 mounts
 level: unit
-verifies: REQ-R3-005, REQ-ROO-046
+verifies: REQ-R3-005, REQ-VAL-046
 requires_tol: TOL-ROO-006
 patterns: require_game_gate, r3_game_required, unit_require_game_mount_tree
 execution_status: blocked_on_tooling
@@ -7642,7 +7645,7 @@ TITLE: Operational rows are stamped with game_id and Origin backfill exists
 STATEMENT: >>>
 Plan: Operational rows are stamped with game_id and Origin backfill exists
 level: unit
-verifies: REQ-R3-002, REQ-ROO-158, REQ-ROO-160, REQ-ROO-161
+verifies: REQ-R3-002, REQ-VAL-158, REQ-VAL-160, REQ-VAL-161
 requires_tol: TOL-ROO-006
 patterns: r3_game_id_stamp, schema_migrate
 execution_status: blocked_on_tooling

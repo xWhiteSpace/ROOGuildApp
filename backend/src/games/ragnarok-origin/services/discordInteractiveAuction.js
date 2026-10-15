@@ -2,6 +2,7 @@
 import { getTenantStore } from '../../../db/database.js';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getGateStatusDetails } from '../timeWindow.js'; // ⏰ Timeline Intersector: Imports master clock calculations
+import { loadDiscordCardCopy } from './discordCardCopy.js';
 
 // Pure message text block formatting the in-game display alignment rule
 const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
@@ -82,13 +83,10 @@ function compileUserClaimsSummary(virtualMatrix, userId, finalRosterName) {
  * 📣 Renders the permanent, pinned public message card containing the launch action button
  */
 export async function sendPublicAuctionCard(channel) {
+  const copy = await loadDiscordCardCopy();
   const embed = new EmbedBuilder()
     .setTitle('Request Card')
-    .setDescription(
-      'Request loot items during **Bid Open**, Claim or Take Extra Slots during **Live Auction**.\n\n' +
-      '**Open Request** — Apply for Requests, Cancel Bid Requests\n' +
-      '**Open Live Dashboard** — Claim or Take Extra slots. Use Drop down to take extra slots.'
-    )
+    .setDescription(copy.request)
     .setColor('#4f46e5');
 
   const buttonRow = new ActionRowBuilder().addComponents(

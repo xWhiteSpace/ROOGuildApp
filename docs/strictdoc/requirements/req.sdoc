@@ -15,20 +15,20 @@ SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
 Source: SSOT requirements/req (published only).
 Each REQ Parent-links to its USR via linked_from.
 Poison: Requirements/Requirements.md is NOT SoT.
-Phase 1 complete: REQ-ROO-001 .. REQ-ROO-172 (172 nodes).
+Phase 1 complete: 172 REQ nodes (numeric 001 .. 172). Platform domains use VAL; Origin game domains stay ROO.
 published ≠ proven; zero EVD at export time.
-SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. ROO REQ published: 211 (REQ-ROO-001 .. REQ-ROO-211). Ragnarok 3 REQs live in requirements/ro3_req.sdoc (RO3 project). The 'Ragnarok 3 (REQ-R3-…)' section below is Staging-authored legacy text kept as-is; it is not an SSOT node set. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published REQ: 211 (VAL 106, ROO 105). Ragnarok 3 REQs live in requirements/ro3_req.sdoc (RO3 project). The 'Ragnarok 3 (REQ-R3-…)' section below is Staging-authored legacy text kept as-is; it is not an SSOT node set. Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
 <<<
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Platform/Auth (REQ-ROO-001 .. REQ-ROO-020)
+TITLE: Platform/Auth (REQ-VAL-001 .. REQ-VAL-020)
 
 [REQUIREMENT]
-UID: REQ-ROO-001
+UID: REQ-VAL-001
 STATUS: Active
-TITLE: REQ-ROO-001: GET / returns an online body when the database ping succeeds, and returns HTTP 5
+TITLE: REQ-VAL-001: GET / returns an online body when the database ping succeeds, and returns HTTP 5
 STATEMENT: >>>
 GET / returns an online body when the database ping succeeds, and returns HTTP 503 with a failure body when the database ping fails.
 <<<
@@ -44,12 +44,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-001
+  VALUE: USR-VAL-001
 
 [REQUIREMENT]
-UID: REQ-ROO-002
+UID: REQ-VAL-002
 STATUS: Active
-TITLE: REQ-ROO-002: Backend process exits/refuses normal start unless Discord OAuth client credentia
+TITLE: REQ-VAL-002: Backend process exits/refuses normal start unless Discord OAuth client credentia
 STATEMENT: >>>
 Backend process exits/refuses normal start unless Discord OAuth client credentials, bot token, OAUTH_REDIRECT_URI, SESSION_SECRET, and DATABASE_URL are present (env.js gate).
 <<<
@@ -65,12 +65,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-001
+  VALUE: USR-VAL-001
 
 [REQUIREMENT]
-UID: REQ-ROO-003
+UID: REQ-VAL-003
 STATUS: Active
-TITLE: REQ-ROO-003: On successful start, backend runs migrate() before initializing the Discord bot.
+TITLE: REQ-VAL-003: On successful start, backend runs migrate() before initializing the Discord bot.
 STATEMENT: >>>
 On successful start, backend runs migrate() before initializing the Discord bot.
 <<<
@@ -86,12 +86,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-001
+  VALUE: USR-VAL-001
 
 [REQUIREMENT]
-UID: REQ-ROO-004
+UID: REQ-VAL-004
 STATUS: Active
-TITLE: REQ-ROO-004: GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, 
+TITLE: REQ-VAL-004: GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, 
 STATEMENT: >>>
 GET /auth/login redirects to Discord OAuth authorizing scopes identify, guilds, and guilds.members.read, carrying state intent signin or signup.
 <<<
@@ -107,12 +107,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-005
+UID: REQ-VAL-005
 STATUS: Active
-TITLE: REQ-ROO-005: GET /auth/callback exchanges the OAuth code, persists a compact Discord guild li
+TITLE: REQ-VAL-005: GET /auth/callback exchanges the OAuth code, persists a compact Discord guild li
 STATEMENT: >>>
 GET /auth/callback exchanges the OAuth code, persists a compact Discord guild list into session and DB, and builds the base user identity.
 <<<
@@ -128,12 +128,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-006
+UID: REQ-VAL-006
 STATUS: Active
-TITLE: REQ-ROO-006: When OAuth callback finds exactly one onboarded guild and intent is not signup, 
+TITLE: REQ-VAL-006: When OAuth callback finds exactly one onboarded guild and intent is not signup, 
 STATEMENT: >>>
 When OAuth callback finds exactly one onboarded guild and intent is not signup, the user is redirected into that tenant path (home, billing, or onboard as applicable).
 <<<
@@ -149,12 +149,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-007
+UID: REQ-VAL-007
 STATUS: Active
-TITLE: REQ-ROO-007: When OAuth callback finds zero or multiple onboarded guilds, or intent is signup
+TITLE: REQ-VAL-007: When OAuth callback finds zero or multiple onboarded guilds, or intent is signup
 STATEMENT: >>>
 When OAuth callback finds zero or multiple onboarded guilds, or intent is signup, the user is redirected to /select-guild with auth_user context.
 <<<
@@ -170,12 +170,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-008
+UID: REQ-VAL-008
 STATUS: Active
-TITLE: REQ-ROO-008: In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth
+TITLE: REQ-VAL-008: In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth
 STATEMENT: >>>
 In production, Discord token exchange goes through the Vercel FRONTEND_URL oauth exchange bridge so Discord never sees the Render IP; local development may exchange directly.
 <<<
@@ -191,12 +191,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-009
+UID: REQ-VAL-009
 STATUS: Active
-TITLE: REQ-ROO-009: When the Discord circuit is open, login and callback redirect to landing with di
+TITLE: REQ-VAL-009: When the Discord circuit is open, login and callback redirect to landing with di
 STATEMENT: >>>
 When the Discord circuit is open, login and callback redirect to landing with discord_rate_limited (including until hint) instead of completing OAuth.
 <<<
@@ -212,12 +212,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-002
+  VALUE: USR-VAL-002
 
 [REQUIREMENT]
-UID: REQ-ROO-010
+UID: REQ-VAL-010
 STATUS: Active
-TITLE: REQ-ROO-010: GET /auth/me returns {authenticated,user} with a re-signed profile when authenti
+TITLE: REQ-VAL-010: GET /auth/me returns {authenticated,user} with a re-signed profile when authenti
 STATEMENT: >>>
 GET /auth/me returns {authenticated,user} with a re-signed profile when authenticated; returns authenticated:false when not.
 <<<
@@ -233,12 +233,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-003
+  VALUE: USR-VAL-003
 
 [REQUIREMENT]
-UID: REQ-ROO-011
+UID: REQ-VAL-011
 STATUS: Active
-TITLE: REQ-ROO-011: POST /auth/logout destroys the server session and clears the connect.sid cookie.
+TITLE: REQ-VAL-011: POST /auth/logout destroys the server session and clears the connect.sid cookie.
 STATEMENT: >>>
 POST /auth/logout destroys the server session and clears the connect.sid cookie.
 <<<
@@ -254,12 +254,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-003
+  VALUE: USR-VAL-003
 
 [REQUIREMENT]
-UID: REQ-ROO-012
+UID: REQ-VAL-012
 STATUS: Active
-TITLE: REQ-ROO-012: Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-p
+TITLE: REQ-VAL-012: Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-p
 STATEMENT: >>>
 Identity resolution prefers session user; otherwise accepts HMAC-signed x-user-profile verified with DISCORD_CLIENT_SECRET.
 <<<
@@ -275,12 +275,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-003
+  VALUE: USR-VAL-003
 
 [REQUIREMENT]
-UID: REQ-ROO-013
+UID: REQ-VAL-013
 STATUS: Active
-TITLE: REQ-ROO-013: SPA restores session from auth_user query first, then guild_raid_session localSt
+TITLE: REQ-VAL-013: SPA restores session from auth_user query first, then guild_raid_session localSt
 STATEMENT: >>>
 SPA restores session from auth_user query first, then guild_raid_session localStorage (migrating legacy dynasty_raid_session if present), then verifies with GET /auth/me.
 <<<
@@ -296,12 +296,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-004
+  VALUE: USR-VAL-004
 
 [REQUIREMENT]
-UID: REQ-ROO-014
+UID: REQ-VAL-014
 STATUS: Active
-TITLE: REQ-ROO-014: SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x
+TITLE: REQ-VAL-014: SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x
 STATEMENT: >>>
 SPA apiFetch always uses credentials:'include' and attaches x-user-profile and x-tenant-id headers when a session exists.
 <<<
@@ -317,12 +317,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-004
+  VALUE: USR-VAL-004
 
 [REQUIREMENT]
-UID: REQ-ROO-015
+UID: REQ-VAL-015
 STATUS: Active
-TITLE: REQ-ROO-015: On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
+TITLE: REQ-VAL-015: On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
 STATEMENT: >>>
 On localhost, SPA uses an empty backend base so Vite proxies /api and /auth.
 <<<
@@ -338,12 +338,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-004
+  VALUE: USR-VAL-004
 
 [REQUIREMENT]
-UID: REQ-ROO-016
+UID: REQ-VAL-016
 STATUS: Active
-TITLE: REQ-ROO-016: Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS 
+TITLE: REQ-VAL-016: Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS 
 STATEMENT: >>>
 Session cookies use secure:false and sameSite:lax on local HTTP; deployed HTTPS uses secure:true and sameSite:none.
 <<<
@@ -359,12 +359,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-005
+  VALUE: USR-VAL-005
 
 [REQUIREMENT]
-UID: REQ-ROO-017
+UID: REQ-VAL-017
 STATUS: Active
-TITLE: REQ-ROO-017: CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.ap
+TITLE: REQ-VAL-017: CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.ap
 STATEMENT: >>>
 CORS allows configured FRONTEND_URL, localhost, known dynasty hosts, *.vercel.app, LAN, and ngrok; credentials enabled; allows headers x-user-profile and x-tenant-id.
 <<<
@@ -380,12 +380,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-005
+  VALUE: USR-VAL-005
 
 [REQUIREMENT]
-UID: REQ-ROO-018
+UID: REQ-VAL-018
 STATUS: Active
-TITLE: REQ-ROO-018: Document title is the product name when logged out and '{Guild} · VALHALLA' when
+TITLE: REQ-VAL-018: Document title is the product name when logged out and '{Guild} · VALHALLA' when
 STATEMENT: >>>
 Document title is the product name when logged out and '{Guild} · VALHALLA' when authenticated with a guild context.
 <<<
@@ -401,12 +401,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-005
+  VALUE: USR-VAL-005
 
 [REQUIREMENT]
-UID: REQ-ROO-019
+UID: REQ-VAL-019
 STATUS: Active
-TITLE: REQ-ROO-019: /login permanently redirects to /landing.
+TITLE: REQ-VAL-019: /login permanently redirects to /landing.
 STATEMENT: >>>
 /login permanently redirects to /landing.
 <<<
@@ -422,12 +422,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-005
+  VALUE: USR-VAL-005
 
 [REQUIREMENT]
-UID: REQ-ROO-020
+UID: REQ-VAL-020
 STATUS: Active
-TITLE: REQ-ROO-020: Unauthenticated users navigating protected shells are redirected to /landing.
+TITLE: REQ-VAL-020: Unauthenticated users navigating protected shells are redirected to /landing.
 STATEMENT: >>>
 Unauthenticated users navigating protected shells are redirected to /landing.
 <<<
@@ -443,17 +443,17 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-005
+  VALUE: USR-VAL-005
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Tenant/Workspace (REQ-ROO-021 .. REQ-ROO-038)
+TITLE: Tenant/Workspace (REQ-VAL-021 .. REQ-VAL-038)
 
 [REQUIREMENT]
-UID: REQ-ROO-021
+UID: REQ-VAL-021
 STATUS: Active
-TITLE: REQ-ROO-021: One Discord guild id is the tenant primary key (`tenants.id`).
+TITLE: REQ-VAL-021: One Discord guild id is the tenant primary key (`tenants.id`).
 STATEMENT: >>>
 One Discord guild id is the tenant primary key (`tenants.id`).
 <<<
@@ -469,12 +469,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-006
+  VALUE: USR-VAL-006
 
 [REQUIREMENT]
-UID: REQ-ROO-022
+UID: REQ-VAL-022
 STATUS: Active
-TITLE: REQ-ROO-022: `GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboar
+TITLE: REQ-VAL-022: `GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboar
 STATEMENT: >>>
 `GET /api/tenants/mine` lists visible onboarded tenants for the user plus onboardable Manage-Server guilds.
 <<<
@@ -490,12 +490,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-007
+  VALUE: USR-VAL-007
 
 [REQUIREMENT]
-UID: REQ-ROO-023
+UID: REQ-VAL-023
 STATUS: Active
-TITLE: REQ-ROO-023: When platform capacity is full, `onboardable` list is empty and billing capacity
+TITLE: REQ-VAL-023: When platform capacity is full, `onboardable` list is empty and billing capacity
 STATEMENT: >>>
 When platform capacity is full, `onboardable` list is empty and billing capacity flags are returned.
 <<<
@@ -511,12 +511,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-007
+  VALUE: USR-VAL-007
 
 [REQUIREMENT]
-UID: REQ-ROO-024
+UID: REQ-VAL-024
 STATUS: Active
-TITLE: REQ-ROO-024: `POST /api/tenants/select` requires membership visibility; builds session user w
+TITLE: REQ-VAL-024: `POST /api/tenants/select` requires membership visibility; builds session user w
 STATEMENT: >>>
 `POST /api/tenants/select` requires membership visibility; builds session user with officer flag, enabled games, subscriptionAllowed.
 <<<
@@ -532,12 +532,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-007
+  VALUE: USR-VAL-007
 
 [REQUIREMENT]
-UID: REQ-ROO-025
+UID: REQ-VAL-025
 STATUS: Active
-TITLE: REQ-ROO-025: Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/synce
+TITLE: REQ-VAL-025: Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/synce
 STATEMENT: >>>
 Selecting a tenant upserts `auction/members/{discordId}` displayName/roles/syncedAt.
 <<<
@@ -553,12 +553,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-007
+  VALUE: USR-VAL-007
 
 [REQUIREMENT]
-UID: REQ-ROO-026
+UID: REQ-VAL-026
 STATUS: Active
-TITLE: REQ-ROO-026: `POST /api/tenants/onboard` requires Manage Server (or owner), bot already in gu
+TITLE: REQ-VAL-026: `POST /api/tenants/onboard` requires Manage Server (or owner), bot already in gu
 STATEMENT: >>>
 `POST /api/tenants/onboard` requires Manage Server (or owner), bot already in guild, ≥1 officer role name.
 <<<
@@ -574,12 +574,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-027
+UID: REQ-VAL-027
 STATUS: Active
-TITLE: REQ-ROO-027: Onboard creates tenant + settings with empty Discord channel map and marks `onbo
+TITLE: REQ-VAL-027: Onboard creates tenant + settings with empty Discord channel map and marks `onbo
 STATEMENT: >>>
 Onboard creates tenant + settings with empty Discord channel map and marks `onboarded=true`.
 <<<
@@ -595,12 +595,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-028
+UID: REQ-VAL-028
 STATUS: Active
-TITLE: REQ-ROO-028: Onboard rejects if guild already onboarded (409).
+TITLE: REQ-VAL-028: Onboard rejects if guild already onboarded (409).
 STATEMENT: >>>
 Onboard rejects if guild already onboarded (409).
 <<<
@@ -616,12 +616,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-029
+UID: REQ-VAL-029
 STATUS: Active
-TITLE: REQ-ROO-029: Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
+TITLE: REQ-VAL-029: Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
 STATEMENT: >>>
 Onboard rejects if bot not in guild and returns invite URL (`bot_not_in_guild`).
 <<<
@@ -637,12 +637,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-030
+UID: REQ-VAL-030
 STATUS: Active
-TITLE: REQ-ROO-030: `GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
+TITLE: REQ-VAL-030: `GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
 STATEMENT: >>>
 `GET /api/tenants/invite-url` returns bot invite URL (optional `guildId` query).
 <<<
@@ -658,12 +658,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-031
+UID: REQ-VAL-031
 STATUS: Active
-TITLE: REQ-ROO-031: `GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone ro
+TITLE: REQ-VAL-031: `GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone ro
 STATEMENT: >>>
 `GET /api/tenants/discord-roles` requires bot in guild; returns non-@everyone roles sorted by position.
 <<<
@@ -679,12 +679,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-008
+  VALUE: USR-VAL-008
 
 [REQUIREMENT]
-UID: REQ-ROO-032
+UID: REQ-VAL-032
 STATUS: Active
-TITLE: REQ-ROO-032: Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRole
+TITLE: REQ-VAL-032: Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRole
 STATEMENT: >>>
 Officer = tenant `owner_discord_id` OR Discord role name/id listed in `adminRoles` (case-insensitive); empty adminRoles → owner only.
 <<<
@@ -700,12 +700,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-009
+  VALUE: USR-VAL-009
 
 [REQUIREMENT]
-UID: REQ-ROO-033
+UID: REQ-VAL-033
 STATUS: Active
-TITLE: REQ-ROO-033: Manage Server is required to create workspace, not for day-to-day officer tools.
+TITLE: REQ-VAL-033: Manage Server is required to create workspace, not for day-to-day officer tools.
 STATEMENT: >>>
 Manage Server is required to create workspace, not for day-to-day officer tools.
 <<<
@@ -721,12 +721,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-009
+  VALUE: USR-VAL-009
 
 [REQUIREMENT]
-UID: REQ-ROO-034
+UID: REQ-VAL-034
 STATUS: Active
-TITLE: REQ-ROO-034: `GET/POST /api/tenants/workspace` officer-only; read/update display name, timezo
+TITLE: REQ-VAL-034: `GET/POST /api/tenants/workspace` officer-only; read/update display name, timezo
 STATEMENT: >>>
 `GET/POST /api/tenants/workspace` officer-only; read/update display name, timezone, adminRoles; returns Discord roles + invite URL.
 <<<
@@ -742,12 +742,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-009
+  VALUE: USR-VAL-009
 
 [REQUIREMENT]
-UID: REQ-ROO-035
+UID: REQ-VAL-035
 STATUS: Active
-TITLE: REQ-ROO-035: Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear v
+TITLE: REQ-VAL-035: Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear v
 STATEMENT: >>>
 Officers can upload guild logo (≤512KB) via `POST /api/tenants/logo` and clear via `DELETE /api/tenants/logo`.
 <<<
@@ -763,12 +763,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-009
+  VALUE: USR-VAL-009
 
 [REQUIREMENT]
-UID: REQ-ROO-036
+UID: REQ-VAL-036
 STATUS: Active
-TITLE: REQ-ROO-036: Effective logo falls back to Discord guild icon when no custom logo.
+TITLE: REQ-VAL-036: Effective logo falls back to Discord guild icon when no custom logo.
 STATEMENT: >>>
 Effective logo falls back to Discord guild icon when no custom logo.
 <<<
@@ -784,12 +784,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-009
+  VALUE: USR-VAL-009
 
 [REQUIREMENT]
-UID: REQ-ROO-037
+UID: REQ-VAL-037
 STATUS: Active
-TITLE: REQ-ROO-037: Authenticated user without `currentTenantId` is forced to `/select-guild`.
+TITLE: REQ-VAL-037: Authenticated user without `currentTenantId` is forced to `/select-guild`.
 STATEMENT: >>>
 Authenticated user without `currentTenantId` is forced to `/select-guild`.
 <<<
@@ -805,12 +805,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-010
+  VALUE: USR-VAL-010
 
 [REQUIREMENT]
-UID: REQ-ROO-038
+UID: REQ-VAL-038
 STATUS: Active
-TITLE: REQ-ROO-038: Post-login path resolver: select-guild → billing (if not allowed) → choose games
+TITLE: REQ-VAL-038: Post-login path resolver: select-guild → billing (if not allowed) → choose games
 STATEMENT: >>>
 Post-login path resolver: select-guild → billing (if not allowed) → choose games → game setup → game home.
 <<<
@@ -826,17 +826,17 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-010
+  VALUE: USR-VAL-010
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Games catalog (REQ-ROO-039 .. REQ-ROO-048)
+TITLE: Games catalog (REQ-VAL-039 .. REQ-VAL-048)
 
 [REQUIREMENT]
-UID: REQ-ROO-039
+UID: REQ-VAL-039
 STATUS: Active
-TITLE: REQ-ROO-039: The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
+TITLE: REQ-VAL-039: The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
 STATEMENT: >>>
 The known games are adventurer-guild, ragnarok-origin and ragnarok-3.
 <<<
@@ -852,12 +852,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
-UID: REQ-ROO-040
+UID: REQ-VAL-040
 STATUS: Active
-TITLE: REQ-ROO-040: `POST /api/tenants/enable-game` officer + active subscription; appends known gam
+TITLE: REQ-VAL-040: `POST /api/tenants/enable-game` officer + active subscription; appends known gam
 STATEMENT: >>>
 `POST /api/tenants/enable-game` officer + active subscription; appends known game id.
 <<<
@@ -873,12 +873,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
-UID: REQ-ROO-041
+UID: REQ-VAL-041
 STATUS: Active
-TITLE: REQ-ROO-041: `POST /api/tenants/disable-game` officer; removes game from enabled list without
+TITLE: REQ-VAL-041: `POST /api/tenants/disable-game` officer; removes game from enabled list without
 STATEMENT: >>>
 `POST /api/tenants/disable-game` officer; removes game from enabled list without deleting stored game data.
 <<<
@@ -894,12 +894,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
-UID: REQ-ROO-042
+UID: REQ-VAL-042
 STATUS: Active
-TITLE: REQ-ROO-042: Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnn
+TITLE: REQ-VAL-042: Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnn
 STATEMENT: >>>
 Ragnarok Origin setup incomplete until at least one of aucreq / auction / warAnnounce channel ids is mapped.
 <<<
@@ -915,12 +915,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-043
+UID: REQ-VAL-043
 STATUS: Active
-TITLE: REQ-ROO-043: Adventurer Guild has no setup path / no channel requirements.
+TITLE: REQ-VAL-043: Adventurer Guild has no setup path / no channel requirements.
 STATEMENT: >>>
 Adventurer Guild has no setup path / no channel requirements.
 <<<
@@ -936,12 +936,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-044
+UID: REQ-VAL-044
 STATUS: Active
-TITLE: REQ-ROO-044: `POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Disc
+TITLE: REQ-VAL-044: `POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Disc
 STATEMENT: >>>
 `POST /api/tenants/game-setup` officer + RO enabled + active seat; persists Discord channel map including war rooms 1–5.
 <<<
@@ -957,12 +957,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-045
+UID: REQ-VAL-045
 STATUS: Active
-TITLE: REQ-ROO-045: Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
+TITLE: REQ-VAL-045: Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
 STATEMENT: >>>
 Mounted RO APIs require `requireGame(ragnarok-origin)` else 403 `game_required`.
 <<<
@@ -978,12 +978,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-046
+UID: REQ-VAL-046
 STATUS: Active
-TITLE: REQ-ROO-046: Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `
+TITLE: REQ-VAL-046: Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `
 STATEMENT: >>>
 Mounted Adventurer Guild APIs require `requireGame(adventurer-guild)` else 403 `game_required`.
 <<<
@@ -999,12 +999,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-047
+UID: REQ-VAL-047
 STATUS: Active
-TITLE: REQ-ROO-047: SPA blocks navigation into a game path that is not in `enabledGames` (redirect t
+TITLE: REQ-VAL-047: SPA blocks navigation into a game path that is not in `enabledGames` (redirect t
 STATEMENT: >>>
 SPA blocks navigation into a game path that is not in `enabledGames` (redirect to post-login path).
 <<<
@@ -1020,12 +1020,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
-UID: REQ-ROO-048
+UID: REQ-VAL-048
 STATUS: Active
-TITLE: REQ-ROO-048: Active game id persists in `localStorage` key `valhalla_active_game`.
+TITLE: REQ-VAL-048: Active game id persists in `localStorage` key `valhalla_active_game`.
 STATEMENT: >>>
 Active game id persists in `localStorage` key `valhalla_active_game`.
 <<<
@@ -1041,17 +1041,17 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Billing/Capacity (REQ-ROO-049 .. REQ-ROO-061)
+TITLE: Billing/Capacity (REQ-VAL-049 .. REQ-VAL-061)
 
 [REQUIREMENT]
-UID: REQ-ROO-049
+UID: REQ-VAL-049
 STATUS: Active
-TITLE: REQ-ROO-049: Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_du
+TITLE: REQ-VAL-049: Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_du
 STATEMENT: >>>
 Tenant access (`tenantHasAccess`) when `subscription_status=active` OR (`past_due` with future `grace_until`).
 <<<
@@ -1067,12 +1067,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-013
+  VALUE: USR-VAL-013
 
 [REQUIREMENT]
-UID: REQ-ROO-050
+UID: REQ-VAL-050
 STATUS: Active
-TITLE: REQ-ROO-050: Game feature mounts also require `requireActiveSubscription` → 402 `payment_requ
+TITLE: REQ-VAL-050: Game feature mounts also require `requireActiveSubscription` → 402 `payment_requ
 STATEMENT: >>>
 Game feature mounts also require `requireActiveSubscription` → 402 `payment_required` when seat inactive.
 <<<
@@ -1088,12 +1088,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-013
+  VALUE: USR-VAL-013
 
 [REQUIREMENT]
-UID: REQ-ROO-051
+UID: REQ-VAL-051
 STATUS: Active
-TITLE: REQ-ROO-051: SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except
+TITLE: REQ-VAL-051: SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except
 STATEMENT: >>>
 SPA redirects to `/workspace/billing` when `subscriptionAllowed===false` (except onboard/select/billing).
 <<<
@@ -1109,12 +1109,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-013
+  VALUE: USR-VAL-013
 
 [REQUIREMENT]
-UID: REQ-ROO-052
+UID: REQ-VAL-052
 STATUS: Active
-TITLE: REQ-ROO-052: `GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS
+TITLE: REQ-VAL-052: `GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS
 STATEMENT: >>>
 `GET /api/billing/capacity` returns activeCount, cap (`BILLING_MAX_ACTIVE_GUILDS`), full flag (public).
 <<<
@@ -1130,12 +1130,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-014
+  VALUE: USR-VAL-014
 
 [REQUIREMENT]
-UID: REQ-ROO-053
+UID: REQ-VAL-053
 STATUS: Active
-TITLE: REQ-ROO-053: `GET /api/billing/status` returns public billing view for current tenant (refres
+TITLE: REQ-VAL-053: `GET /api/billing/status` returns public billing view for current tenant (refres
 STATEMENT: >>>
 `GET /api/billing/status` returns public billing view for current tenant (refreshes Stripe when source=stripe).
 <<<
@@ -1151,12 +1151,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-014
+  VALUE: USR-VAL-014
 
 [REQUIREMENT]
-UID: REQ-ROO-054
+UID: REQ-VAL-054
 STATUS: Active
-TITLE: REQ-ROO-054: Officer `POST /api/billing/create-checkout-session` creates Stripe subscription 
+TITLE: REQ-VAL-054: Officer `POST /api/billing/create-checkout-session` creates Stripe subscription 
 STATEMENT: >>>
 Officer `POST /api/billing/create-checkout-session` creates Stripe subscription Checkout; rejects if already has access or capacity full.
 <<<
@@ -1172,12 +1172,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-015
+  VALUE: USR-VAL-015
 
 [REQUIREMENT]
-UID: REQ-ROO-055
+UID: REQ-VAL-055
 STATUS: Active
-TITLE: REQ-ROO-055: Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal w
+TITLE: REQ-VAL-055: Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal w
 STATEMENT: >>>
 Officer `POST /api/billing/create-portal-session` opens Stripe Customer Portal when stripe customer exists.
 <<<
@@ -1193,12 +1193,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-015
+  VALUE: USR-VAL-015
 
 [REQUIREMENT]
-UID: REQ-ROO-056
+UID: REQ-VAL-056
 STATUS: Active
-TITLE: REQ-ROO-056: Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=in
+TITLE: REQ-VAL-056: Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=in
 STATEMENT: >>>
 Officer `POST /api/billing/redeem-invite` activates seat with `billing_source=invite` under advisory lock; marks invite code redeemed once.
 <<<
@@ -1214,12 +1214,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-015
+  VALUE: USR-VAL-015
 
 [REQUIREMENT]
-UID: REQ-ROO-057
+UID: REQ-VAL-057
 STATUS: Active
-TITLE: REQ-ROO-057: Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout comple
+TITLE: REQ-VAL-057: Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout comple
 STATEMENT: >>>
 Stripe webhook on `POST /api/billing/webhook` (raw body) handles checkout completed, invoice paid/failed, subscription updated/deleted.
 <<<
@@ -1235,12 +1235,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-016
+  VALUE: USR-VAL-016
 
 [REQUIREMENT]
-UID: REQ-ROO-058
+UID: REQ-VAL-058
 STATUS: Active
-TITLE: REQ-ROO-058: Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckou
+TITLE: REQ-VAL-058: Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckou
 STATEMENT: >>>
 Overflow checkout after capacity is canceled and refunded (rejectOverflowCheckout).
 <<<
@@ -1256,12 +1256,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-016
+  VALUE: USR-VAL-016
 
 [REQUIREMENT]
-UID: REQ-ROO-059
+UID: REQ-VAL-059
 STATUS: Active
-TITLE: REQ-ROO-059: Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE
+TITLE: REQ-VAL-059: Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE
 STATEMENT: >>>
 Invoice payment failed sets `past_due` and grace window (`BILLING_PAST_DUE_GRACE_DAYS`, default 3).
 <<<
@@ -1277,12 +1277,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-016
+  VALUE: USR-VAL-016
 
 [REQUIREMENT]
-UID: REQ-ROO-060
+UID: REQ-VAL-060
 STATUS: Active
-TITLE: REQ-ROO-060: Permanent billing sources `invite` and `grandfathered` are not overwritten by St
+TITLE: REQ-VAL-060: Permanent billing sources `invite` and `grandfathered` are not overwritten by St
 STATEMENT: >>>
 Permanent billing sources `invite` and `grandfathered` are not overwritten by Stripe subscription lifecycle.
 <<<
@@ -1298,12 +1298,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-016
+  VALUE: USR-VAL-016
 
 [REQUIREMENT]
-UID: REQ-ROO-061
+UID: REQ-VAL-061
 STATUS: Active
-TITLE: REQ-ROO-061: Stripe env optional at boot; invite redemption works without Stripe keys.
+TITLE: REQ-VAL-061: Stripe env optional at boot; invite redemption works without Stripe keys.
 STATEMENT: >>>
 Stripe env optional at boot; invite redemption works without Stripe keys.
 <<<
@@ -1319,17 +1319,17 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-016
+  VALUE: USR-VAL-016
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels (REQ-ROO-062 .. REQ-ROO-077, REQ-ROO-190, REQ-ROO-194, REQ-ROO-197 .. REQ-ROO-201)
+TITLE: Discord bot/Channels (REQ-VAL-062 .. REQ-VAL-077, REQ-VAL-190, REQ-VAL-194, REQ-VAL-197 .. REQ-VAL-201)
 
 [REQUIREMENT]
-UID: REQ-ROO-062
+UID: REQ-VAL-062
 STATUS: Active
-TITLE: REQ-ROO-062: Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVo
+TITLE: REQ-VAL-062: Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVo
 STATEMENT: >>>
 Bot intents include Guilds, GuildMessages, MessageContent, GuildMembers, GuildVoiceStates.
 <<<
@@ -1345,12 +1345,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-017
+  VALUE: USR-VAL-017
 
 [REQUIREMENT]
-UID: REQ-ROO-063
+UID: REQ-VAL-063
 STATUS: Active
-TITLE: REQ-ROO-063: Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
+TITLE: REQ-VAL-063: Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
 STATEMENT: >>>
 Missing `DISCORD_BOT_TOKEN` is fatal for bot init.
 <<<
@@ -1366,12 +1366,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-017
+  VALUE: USR-VAL-017
 
 [REQUIREMENT]
-UID: REQ-ROO-064
+UID: REQ-VAL-064
 STATUS: Active
-TITLE: REQ-ROO-064: On ready, clear leftover guild slash commands for each onboarded tenant; slash i
+TITLE: REQ-VAL-064: On ready, clear leftover guild slash commands for each onboarded tenant; slash i
 STATEMENT: >>>
 On ready, clear leftover guild slash commands for each onboarded tenant; slash invocations reply that commands were removed (use cards).
 <<<
@@ -1387,12 +1387,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-017
+  VALUE: USR-VAL-017
 
 [REQUIREMENT]
-UID: REQ-ROO-065
+UID: REQ-VAL-065
 STATUS: Active
-TITLE: REQ-ROO-065: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `req
+TITLE: REQ-VAL-065: Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `req
 STATEMENT: >>>
 Interaction routing by customId prefixes: `attcard:`, `ocr:`, `partycard:`, `reqcard:`, `onboard:`, auction claim panel ids — bypass general-room gate.
 <<<
@@ -1408,12 +1408,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-066
+UID: REQ-VAL-066
 STATUS: Active
-TITLE: REQ-ROO-066: Every 60 seconds, for each onboarded tenant the process still serves, the tick r
+TITLE: REQ-VAL-066: Every 60 seconds, for each onboarded tenant the process still serves, the tick r
 STATEMENT: >>>
 Every 60 seconds, for each onboarded tenant the process still serves, the tick runs phase announces and raid event announces only when it is not the first tick after ready and the Discord 429 circuit is closed; then monthly leave-credit refresh and war-room automation (REQ-ROO-192). Automatic archiving of a live raid at its monitoring end time is required by REQ-ROO-144 and is not tied to this tick.
 <<<
@@ -1429,12 +1429,12 @@ sot: Develop@56261347f46af5fb72d96b653fd48e8fda273d5c
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-067
+UID: REQ-VAL-067
 STATUS: Active
-TITLE: REQ-ROO-067: Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable 
+TITLE: REQ-VAL-067: Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable 
 STATEMENT: >>>
 Discord REST 429 opens a circuit; enqueue/status helpers surface human-readable until times.
 <<<
@@ -1450,12 +1450,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-068
+UID: REQ-VAL-068
 STATUS: Active
-TITLE: REQ-ROO-068: Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAge
+TITLE: REQ-VAL-068: Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAge
 STATEMENT: >>>
 Optional `PROXY_URL` / HTTP(S)_PROXY routes Discord HTTP through Undici ProxyAgent.
 <<<
@@ -1471,12 +1471,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-069
+UID: REQ-VAL-069
 STATUS: Active
-TITLE: REQ-ROO-069: Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
+TITLE: REQ-VAL-069: Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
 STATEMENT: >>>
 Prefer IPv4 for Discord connections (dns ipv4first + Agent family 4).
 <<<
@@ -1492,12 +1492,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-070
+UID: REQ-VAL-070
 STATUS: Active
-TITLE: REQ-ROO-070: Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-requ
+TITLE: REQ-VAL-070: Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-requ
 STATEMENT: >>>
 Officer `GET /api/deploy-auction-card` posts Request Card to mapped auction-request channel.
 <<<
@@ -1513,12 +1513,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-071
+UID: REQ-VAL-071
 STATUS: Active
-TITLE: REQ-ROO-071: Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-a
+TITLE: REQ-VAL-071: Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-a
 STATEMENT: >>>
 Officer `GET /api/deploy-attendance-card` posts GVG readiness dashboard to war-announce channel.
 <<<
@@ -1534,12 +1534,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-072
+UID: REQ-VAL-072
 STATUS: Active
-TITLE: REQ-ROO-072: Officer `GET /api/deploy-party-card` posts party viewer card to war-announce cha
+TITLE: REQ-VAL-072: Officer `GET /api/deploy-party-card` posts party viewer card to war-announce cha
 STATEMENT: >>>
 Officer `GET /api/deploy-party-card` posts party viewer card to war-announce channel.
 <<<
@@ -1555,12 +1555,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-073
+UID: REQ-VAL-073
 STATUS: Active
-TITLE: REQ-ROO-073: Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
+TITLE: REQ-VAL-073: Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
 STATEMENT: >>>
 Officer `GET /api/deploy-ocr-card` posts party OCR card to war-announce channel.
 <<<
@@ -1576,12 +1576,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-074
+UID: REQ-VAL-074
 STATUS: Active
-TITLE: REQ-ROO-074: Attendance deploy-* aliases for Settings Send UX
+TITLE: REQ-VAL-074: Attendance deploy-* aliases for Settings Send UX
 STATEMENT: >>>
 Attendance deploy-* aliases for Settings Send UX
 <<<
@@ -1597,12 +1597,12 @@ sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-075
+UID: REQ-VAL-075
 STATUS: Active
-TITLE: REQ-ROO-075: Per-tenant Discord channel map storage
+TITLE: REQ-VAL-075: Per-tenant Discord channel map storage
 STATEMENT: >>>
 Per-tenant Discord channel map storage
 <<<
@@ -1618,12 +1618,12 @@ sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [REQUIREMENT]
-UID: REQ-ROO-076
+UID: REQ-VAL-076
 STATUS: Active
-TITLE: REQ-ROO-076: `GET /api/debug/discord-ratelimit` returns bot health + rate-limit status withou
+TITLE: REQ-VAL-076: `GET /api/debug/discord-ratelimit` returns bot health + rate-limit status withou
 STATEMENT: >>>
 `GET /api/debug/discord-ratelimit` returns bot health + rate-limit status without secrets.
 <<<
@@ -1639,12 +1639,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-020
+  VALUE: USR-VAL-020
 
 [REQUIREMENT]
-UID: REQ-ROO-077
+UID: REQ-VAL-077
 STATUS: Active
-TITLE: REQ-ROO-077: `GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) 
+TITLE: REQ-VAL-077: `GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) 
 STATEMENT: >>>
 `GET /auth/discord-members` returns cached Discord member nicknames (2 min TTL) or Postgres roster fallback without REST-fetching 1000 members from Render IP.
 <<<
@@ -1660,12 +1660,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-020
+  VALUE: USR-VAL-020
 
 [REQUIREMENT]
-UID: REQ-ROO-194
+UID: REQ-VAL-194
 STATUS: Active
-TITLE: REQ-ROO-194: The minute loop reuses cached onboarded tenants and settings
+TITLE: REQ-VAL-194: The minute loop reuses cached onboarded tenants and settings
 STATEMENT: >>>
 The minute loop reuses cached onboarded tenants and settings
 <<<
@@ -1681,33 +1681,33 @@ sot: Develop@9b8e7ae9ca2f9ccf046c5b609cdda545ced6eae9
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-197
+UID: REQ-VAL-197
 STATUS: Active
-TITLE: REQ-ROO-197: Public Onboarding hub lists four topic buttons
+TITLE: REQ-VAL-197: Public Onboarding hub lists five topic buttons
 STATEMENT: >>>
-Public Onboarding hub lists four topic buttons
+Public Onboarding hub lists five topic buttons
 <<<
 COMMENT: >>>
 domain: Discord bot/Channels
 priority: unspecified
 type: software
-constraints: Hub embed title is Onboarding.; Topic button labels are Auction, GvG, General Chat, and Website.; Button customIds are onboard:auction, onboard:gvg, onboard:general, and onboard:website.
-acceptance_criteria: A deployed public Onboarding message shows title Onboarding and a welcome body that tells the member to pick a topic for a private explanation and jump. | The message has exactly four topic buttons labeled Auction, GvG, General Chat, and Website with customIds onboard:auction, onboard:gvg, onboard:general, and onboard:website. | Those four buttons are not link-style buttons on the hub itself.
+constraints: Hub embed title is Onboarding.; Topic button labels are Auction, GvG, General Chat, Website, and Message.; Button customIds are onboard:auction, onboard:gvg, onboard:general, onboard:website, and onboard:message.
+acceptance_criteria: A deployed public Onboarding message shows title Onboarding and a welcome body that tells the member to pick a topic for a private explanation and jump. | The message has exactly five topic buttons labeled Auction, GvG, General Chat, Website, and Message with customIds onboard:auction, onboard:gvg, onboard:general, onboard:website, and onboard:message. | Those five buttons are not link-style buttons on the hub itself.
 source_draft: discord-onboarding-2026-10-05/mints.json
 ssot_status: published
 sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-043
+  VALUE: USR-VAL-043
 
 [REQUIREMENT]
-UID: REQ-ROO-198
+UID: REQ-VAL-198
 STATUS: Active
-TITLE: REQ-ROO-198: Onboarding topic cards explain purpose and jump to mapped places
+TITLE: REQ-VAL-198: Onboarding topic cards explain purpose and jump to mapped places
 STATEMENT: >>>
 Onboarding topic cards explain purpose and jump to mapped places
 <<<
@@ -1715,20 +1715,20 @@ COMMENT: >>>
 domain: Discord bot/Channels
 priority: unspecified
 type: software
-constraints: Auction topic resolves aucreqChannelId; GvG resolves warAnnounceChannelId; General Chat resolves genroomId.; Website topic has no Discord channel field; jump uses the VALHALLA frontend origin with a trailing slash removed.; Unmapped sentence when the topic channel id is empty: This channel is not mapped yet. Ask an officer to paste the ID in Settings.; Back control customId is onboard:back.
-acceptance_criteria: Pressing Auction, GvG, or General Chat on the hub yields a private topic card whose title matches the topic and whose body includes that topic's purpose text. | When the mapped channel id for that topic is set, the body mentions the channel and the card offers a Jump to channel link to discord.com/channels/{guildId}/{channelId} plus Back. | When that mapped channel id is empty, the body includes the unmapped Settings sentence, there is no jump link, and Back is present. | Pressing Website yields a topic card with the website purpose; when a frontend origin is configured it offers Open VALHALLA to that origin; when the origin is empty there is no Open VALHALLA link; Back is always present. | Pressing Back from a topic card restores the public hub payload (title Onboarding and the four topic buttons).
+constraints: Auction topic resolves aucreqChannelId; GvG resolves warAnnounceChannelId; General Chat resolves genroomId; Message resolves messageChannelId.; Website topic has no Discord channel field; jump uses the VALHALLA frontend origin with a trailing slash removed.; Purpose text and the hub welcome come from game settings discordCardCopy when that sentence is non-blank; blank or missing text uses the built-in default sentence.; Unmapped sentence when the topic channel id is empty: This channel is not mapped yet. Ask an officer to paste the ID in Settings.; Back control customId is onboard:back.
+acceptance_criteria: Pressing Auction, GvG, General Chat, or Message on the hub yields a private topic card whose title matches the topic and whose body includes that topic's purpose text. | When the mapped channel id for that topic is set, the body mentions the channel and the card offers a Jump to channel link to discord.com/channels/{guildId}/{channelId} plus Back. | When that mapped channel id is empty, the body includes the unmapped Settings sentence, there is no jump link, and Back is present. | Pressing Website yields a topic card with the website purpose; when a frontend origin is configured it offers Open VALHALLA to that origin; when the origin is empty there is no Open VALHALLA link; Back is always present. | A saved discordCardCopy sentence replaces the default purpose text on that topic card. | Pressing Back from a topic card restores the public hub payload (title Onboarding and the five topic buttons).
 source_draft: discord-onboarding-2026-10-05/mints.json
 ssot_status: published
 sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-043
+  VALUE: USR-VAL-043
 
 [REQUIREMENT]
-UID: REQ-ROO-199
+UID: REQ-VAL-199
 STATUS: Active
-TITLE: REQ-ROO-199: Onboarding button ACK is ephemeral reply from the public hub and update when alr
+TITLE: REQ-VAL-199: Onboarding button ACK is ephemeral reply from the public hub and update when alr
 STATEMENT: >>>
 Onboarding button ACK is ephemeral reply from the public hub and update when already private
 <<<
@@ -1744,12 +1744,12 @@ sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-043
+  VALUE: USR-VAL-043
 
 [REQUIREMENT]
-UID: REQ-ROO-190
+UID: REQ-VAL-190
 STATUS: Active
-TITLE: REQ-ROO-190: Phase-1 GEN get-ready line names the war date and jumps to GvG when mapped
+TITLE: REQ-VAL-190: Phase-1 GEN get-ready line names the war date and jumps to GvG when mapped
 STATEMENT: >>>
 A due GvG Preparation announcement minute posts to GEN: Get ready for the next GVG on **{Mon DD, YYYY}**. Please Update your Job, or IGN on our System if you have change in-game. Thank you. When `warAnnounceChannelId` is mapped, the same message appends ` Jump in at <#id>.` When unmapped, that jump clause is omitted. The line has no event title and no war start time.
 <<<
@@ -1763,12 +1763,12 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-018
+  VALUE: USR-VAL-018
 
 [REQUIREMENT]
-UID: REQ-ROO-200
+UID: REQ-VAL-200
 STATUS: Active
-TITLE: REQ-ROO-200: Onboarding hub redeploy edits the stored message when possible
+TITLE: REQ-VAL-200: Onboarding hub redeploy edits the stored message when possible
 STATEMENT: >>>
 Onboarding hub redeploy edits the stored message when possible
 <<<
@@ -1784,12 +1784,12 @@ sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-043
+  VALUE: USR-VAL-043
 
 [REQUIREMENT]
-UID: REQ-ROO-201
+UID: REQ-VAL-201
 STATUS: Active
-TITLE: REQ-ROO-201: Officer deploys the Onboarding hub to the mapped onboarding channel
+TITLE: REQ-VAL-201: Officer deploys the Onboarding hub to the mapped onboarding channel
 STATEMENT: >>>
 Officer deploys the Onboarding hub to the mapped onboarding channel
 <<<
@@ -1805,7 +1805,7 @@ sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [[/SECTION]]
 
@@ -3987,12 +3987,12 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Data isolation/Storage (REQ-ROO-158 .. REQ-ROO-166)
+TITLE: Data isolation/Storage (REQ-VAL-158 .. REQ-VAL-166)
 
 [REQUIREMENT]
-UID: REQ-ROO-158
+UID: REQ-VAL-158
 STATUS: Active
-TITLE: REQ-ROO-158: Rows are stamped with tenant and game; handlers need an explicit game
+TITLE: REQ-VAL-158: Rows are stamped with tenant and game; handlers need an explicit game
 STATEMENT: >>>
 Rows are stamped with tenant and game; handlers need an explicit game
 <<<
@@ -4008,12 +4008,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-038
+  VALUE: USR-VAL-038
 
 [REQUIREMENT]
-UID: REQ-ROO-159
+UID: REQ-VAL-159
 STATUS: Active
-TITLE: REQ-ROO-159: `x-tenant-id` header cannot silently switch away from session/current tenant whe
+TITLE: REQ-VAL-159: `x-tenant-id` header cannot silently switch away from session/current tenant whe
 STATEMENT: >>>
 `x-tenant-id` header cannot silently switch away from session/current tenant when mismatched.
 <<<
@@ -4029,12 +4029,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-038
+  VALUE: USR-VAL-038
 
 [REQUIREMENT]
-UID: REQ-ROO-160
+UID: REQ-VAL-160
 STATUS: Active
-TITLE: REQ-ROO-160: Adds the per-game settings table; operational tables are keyed by game too.
+TITLE: REQ-VAL-160: Adds the per-game settings table; operational tables are keyed by game too.
 STATEMENT: >>>
 Adds the per-game settings table; operational tables are keyed by game too.
 <<<
@@ -4050,12 +4050,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-039
+  VALUE: USR-VAL-039
 
 [REQUIREMENT]
-UID: REQ-ROO-161
+UID: REQ-VAL-161
 STATUS: Active
-TITLE: REQ-ROO-161: Flexible trees persist per tenant, game and path; the same path in two games is 
+TITLE: REQ-VAL-161: Flexible trees persist per tenant, game and path; the same path in two games is 
 STATEMENT: >>>
 Flexible trees persist per tenant, game and path; the same path in two games is two separate documents.
 <<<
@@ -4071,12 +4071,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-039
+  VALUE: USR-VAL-039
 
 [REQUIREMENT]
-UID: REQ-ROO-162
+UID: REQ-VAL-162
 STATUS: Active
-TITLE: REQ-ROO-162: Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
+TITLE: REQ-VAL-162: Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
 STATEMENT: >>>
 Platform-wide Discord circuit / flags use `platform_state` (not per-tenant).
 <<<
@@ -4092,12 +4092,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-039
+  VALUE: USR-VAL-039
 
 [REQUIREMENT]
-UID: REQ-ROO-163
+UID: REQ-VAL-163
 STATUS: Active
-TITLE: REQ-ROO-163: Shared package exports attendance statuses, composition tab helpers, raid cycle 
+TITLE: REQ-VAL-163: Shared package exports attendance statuses, composition tab helpers, raid cycle 
 STATEMENT: >>>
 Shared package exports attendance statuses, composition tab helpers, raid cycle helpers, in-game alias helpers for FE/BE parity.
 <<<
@@ -4113,12 +4113,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-040
+  VALUE: USR-VAL-040
 
 [REQUIREMENT]
-UID: REQ-ROO-164
+UID: REQ-VAL-164
 STATUS: Active
-TITLE: REQ-ROO-164: Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
+TITLE: REQ-VAL-164: Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
 STATEMENT: >>>
 Backend `npm run test:isolation` exists for tenant A/B isolation check (README).
 <<<
@@ -4134,12 +4134,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-040
+  VALUE: USR-VAL-040
 
 [REQUIREMENT]
-UID: REQ-ROO-165
+UID: REQ-VAL-165
 STATUS: Active
-TITLE: REQ-ROO-165: Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use t
+TITLE: REQ-VAL-165: Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use t
 STATEMENT: >>>
 Default workspace timezone seed is `Asia/Manila`; guild wall-clock helpers use tenant timezone.
 <<<
@@ -4155,12 +4155,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-040
+  VALUE: USR-VAL-040
 
 [REQUIREMENT]
-UID: REQ-ROO-166
+UID: REQ-VAL-166
 STATUS: Active
-TITLE: REQ-ROO-166: Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxC
+TITLE: REQ-VAL-166: Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxC
 STATEMENT: >>>
 Default RO config seeds: items/events empty, defaultLeaveCredits=3, liveRaidMaxConfigs=5, liveRaidMaxWarRooms=2, specialEventCategories, warRooms/jobs/roles placeholders, help embed URLs empty.
 <<<
@@ -4176,17 +4176,17 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-040
+  VALUE: USR-VAL-040
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Frontend shell/UX (REQ-ROO-167 .. REQ-ROO-172)
+TITLE: Frontend shell/UX (REQ-VAL-167 .. REQ-VAL-172)
 
 [REQUIREMENT]
-UID: REQ-ROO-167
+UID: REQ-VAL-167
 STATUS: Active
-TITLE: REQ-ROO-167: Landing is public full-bleed; authenticated users on `/landing` redirect to post
+TITLE: REQ-VAL-167: Landing is public full-bleed; authenticated users on `/landing` redirect to post
 STATEMENT: >>>
 Landing is public full-bleed; authenticated users on `/landing` redirect to post-login path.
 <<<
@@ -4202,12 +4202,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-041
+  VALUE: USR-VAL-041
 
 [REQUIREMENT]
-UID: REQ-ROO-168
+UID: REQ-VAL-168
 STATUS: Active
-TITLE: REQ-ROO-168: MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auctio
+TITLE: REQ-VAL-168: MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auctio
 STATEMENT: >>>
 MainLayout wraps game pages; LeftNavBar modules come from game manifests (Auction + Raid for RO; Hall for AG).
 <<<
@@ -4223,12 +4223,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-041
+  VALUE: USR-VAL-041
 
 [REQUIREMENT]
-UID: REQ-ROO-169
+UID: REQ-VAL-169
 STATUS: Active
-TITLE: REQ-ROO-169: Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens 
+TITLE: REQ-VAL-169: Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens 
 STATEMENT: >>>
 Help Guide modal loads auction/raid embed URLs from settings/help; mobile opens external tab.
 <<<
@@ -4244,12 +4244,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-041
+  VALUE: USR-VAL-041
 
 [REQUIREMENT]
-UID: REQ-ROO-170
+UID: REQ-VAL-170
 STATUS: Active
-TITLE: REQ-ROO-170: Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Bill
+TITLE: REQ-VAL-170: Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Bill
 STATEMENT: >>>
 Workspace Settings page at `/workspace`; Choose Game at `/workspace/games`; Billing at `/workspace/billing`; RO setup at `/games/ragnarok-origin/setup`.
 <<<
@@ -4265,12 +4265,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-041
+  VALUE: USR-VAL-041
 
 [REQUIREMENT]
-UID: REQ-ROO-171
+UID: REQ-VAL-171
 STATUS: Active
-TITLE: REQ-ROO-171: apiFetch on 402 redirects browser to `/workspace/billing`.
+TITLE: REQ-VAL-171: apiFetch on 402 redirects browser to `/workspace/billing`.
 STATEMENT: >>>
 apiFetch on 402 redirects browser to `/workspace/billing`.
 <<<
@@ -4286,12 +4286,12 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-042
+  VALUE: USR-VAL-042
 
 [REQUIREMENT]
-UID: REQ-ROO-172
+UID: REQ-VAL-172
 STATUS: Active
-TITLE: REQ-ROO-172: Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components 
+TITLE: REQ-VAL-172: Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components 
 STATEMENT: >>>
 Officer Role Picker / Discord Sign-In button / Valhalla brand lockup components support onboard and landing flows.
 <<<
@@ -4307,7 +4307,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-042
+  VALUE: USR-VAL-042
 
 [[/SECTION]]
 
@@ -4380,12 +4380,12 @@ RELATIONS:
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Data isolation (REQ-ROO-205 .. REQ-ROO-210)
+TITLE: Data isolation (REQ-VAL-205 .. REQ-VAL-210)
 
 [REQUIREMENT]
-UID: REQ-ROO-205
+UID: REQ-VAL-205
 STATUS: Active
-TITLE: REQ-ROO-205: Each game's records are stored and read only as that game, and no-game code is r
+TITLE: REQ-VAL-205: Each game's records are stored and read only as that game, and no-game code is r
 STATEMENT: >>>
 Each game's records are stored and read only as that game, and no-game code is refused
 <<<
@@ -4401,12 +4401,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [REQUIREMENT]
-UID: REQ-ROO-206
+UID: REQ-VAL-206
 STATUS: Active
-TITLE: REQ-ROO-206: Same Discord member can be on each game's roster, changed independently both way
+TITLE: REQ-VAL-206: Same Discord member can be on each game's roster, changed independently both way
 STATEMENT: >>>
 Same Discord member can be on each game's roster, changed independently both ways
 <<<
@@ -4422,12 +4422,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [REQUIREMENT]
-UID: REQ-ROO-207
+UID: REQ-VAL-207
 STATUS: Active
-TITLE: REQ-ROO-207: Game settings saved apart from shared workspace settings
+TITLE: REQ-VAL-207: Game settings saved apart from shared workspace settings
 STATEMENT: >>>
 Game settings saved apart from shared workspace settings
 <<<
@@ -4443,12 +4443,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [REQUIREMENT]
-UID: REQ-ROO-208
+UID: REQ-VAL-208
 STATUS: Active
-TITLE: REQ-ROO-208: Existing Origin settings carry over on upgrade
+TITLE: REQ-VAL-208: Existing Origin settings carry over on upgrade
 STATEMENT: >>>
 Existing Origin settings carry over on upgrade
 <<<
@@ -4464,12 +4464,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [REQUIREMENT]
-UID: REQ-ROO-209
+UID: REQ-VAL-209
 STATUS: Active
-TITLE: REQ-ROO-209: Login adds a roster entry only when Origin is enabled
+TITLE: REQ-VAL-209: Login adds a roster entry only when Origin is enabled
 STATEMENT: >>>
 Login adds a roster entry only when Origin is enabled
 <<<
@@ -4485,12 +4485,12 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [REQUIREMENT]
-UID: REQ-ROO-210
+UID: REQ-VAL-210
 STATUS: Active
-TITLE: REQ-ROO-210: Origin automation runs only for workspaces with Origin enabled
+TITLE: REQ-VAL-210: Origin automation runs only for workspaces with Origin enabled
 STATEMENT: >>>
 Origin automation runs only for workspaces with Origin enabled
 <<<
@@ -4506,17 +4506,17 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-044
+  VALUE: USR-VAL-044
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord (REQ-ROO-211)
+TITLE: Discord (REQ-VAL-211)
 
 [REQUIREMENT]
-UID: REQ-ROO-211
+UID: REQ-VAL-211
 STATUS: Active
-TITLE: REQ-ROO-211: Origin card deploys are gated to Origin
+TITLE: REQ-VAL-211: Origin card deploys are gated to Origin
 STATEMENT: >>>
 Origin card deploys are gated to Origin
 <<<
@@ -4532,7 +4532,7 @@ sot: xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-019
+  VALUE: USR-VAL-019
 
 [[/SECTION]]
 
@@ -4555,7 +4555,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
 UID: REQ-R3-002
@@ -4573,7 +4573,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-039
+  VALUE: USR-VAL-039
 
 [REQUIREMENT]
 UID: REQ-R3-003
@@ -4591,7 +4591,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
 UID: REQ-R3-004
@@ -4609,7 +4609,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
 UID: REQ-R3-005
@@ -4627,7 +4627,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-012
+  VALUE: USR-VAL-012
 
 [REQUIREMENT]
 UID: REQ-R3-006
@@ -4645,7 +4645,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
 UID: REQ-R3-007
@@ -4663,7 +4663,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [REQUIREMENT]
 UID: REQ-R3-008
@@ -4681,6 +4681,6 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: USR-ROO-011
+  VALUE: USR-VAL-011
 
 [[/SECTION]]

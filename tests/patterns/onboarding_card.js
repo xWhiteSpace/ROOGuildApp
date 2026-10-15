@@ -1,6 +1,7 @@
 import { ButtonStyle } from 'discord.js';
 import { patterns } from './registry.js';
 import { isRagnarokSetupComplete } from '../../backend/src/games/catalog.js';
+import { resolveDiscordCardCopy } from '../../backend/src/games/ragnarok-origin/defaults.js';
 import {
   buildHubPayload,
   buildTopicPayload,
@@ -65,6 +66,42 @@ export function websiteTopic() {
     description: payload.embeds?.[0]?.data?.description || '',
     url: buttons.find((b) => b.style === ButtonStyle.Link)?.url,
     back: buttons.some((b) => b.custom_id === 'onboard:back'),
+  };
+}
+
+export function mappedMessageTopic() {
+  const payload = buildTopicPayload('message', {
+    messageChannelId: 'chan-msg',
+    guildId: 'guild-1',
+  }, { guildId: 'guild-1' });
+  const buttons = flattenButtons(payload);
+  return {
+    title: payload.embeds?.[0]?.data?.title,
+    description: payload.embeds?.[0]?.data?.description || '',
+    mention: '<#chan-msg>',
+    jumpUrl: buttons.find((b) => b.style === ButtonStyle.Link)?.url,
+    back: buttons.some((b) => b.custom_id === 'onboard:back'),
+  };
+}
+
+export function customAuctionPurpose() {
+  const payload = buildTopicPayload('auction', {
+    aucreqChannelId: 'chan-aucreq',
+    guildId: 'guild-1',
+  }, {
+    guildId: 'guild-1',
+    copy: { onboarding: { auction: 'Custom auction blurb' } },
+  });
+  return payload.embeds?.[0]?.data?.description || '';
+}
+
+export function blankCopyFallsBack() {
+  const resolved = resolveDiscordCardCopy({
+    discordCardCopy: { onboarding: { message: '   ' }, request: '' },
+  });
+  return {
+    message: resolved.onboarding.message,
+    request: resolved.request,
   };
 }
 

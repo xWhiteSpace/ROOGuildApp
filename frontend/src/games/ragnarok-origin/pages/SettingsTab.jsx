@@ -1,9 +1,11 @@
 // frontend/src/pages/SettingsTab.jsx
 import { useState, useEffect, useRef } from 'react';
+import { Pencil, Send } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
 import { invalidateSettings, useCompositionsList, useDiscordRoles, useSettingsAdmin } from '../../../query/hooks';
 import { productTitle } from '../../../brand';
 import { defaultRaidSubtree, findOverlappingRaidCyclePair, phaseAnnouncementEnabled } from '@guildname/shared/raidCycle';
+import { CARD_COPY_MAX, resolveDiscordCardCopy } from '@guildname/shared/discordCardCopy';
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -61,6 +63,7 @@ const EMPTY_DISCORD_CHANNELS = {
   warAnnounceChannelId: '',
   raidScreenshotChannelId: '',
   onboardingChannelId: '',
+  messageChannelId: '',
   warRooms: {
     DISCORD_WARROOM_ID_1: '',
     DISCORD_WARROOM_ID_2: '',
@@ -78,27 +81,102 @@ const EMPTY_WAR_ROOMS = {
   room_005: { name: 'War room 5', envKey: 'DISCORD_WARROOM_ID_5' },
 };
 
-const DISCORD_DEPLOY_BTN_CLASS =
-  'w-full sm:w-24 h-9 shrink-0 inline-flex items-center justify-center px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer shadow-md disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap';
+const DISCORD_ICON_BTN =
+  'h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-xl transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
+
+const DISCORD_CARD_EDITORS = [
+  {
+    id: 'request',
+    title: 'Request Card',
+    postsTo: 'Posted to the auction request channel.',
+    fields: [{ key: 'request', label: 'Message' }],
+  },
+  {
+    id: 'gvg',
+    title: 'GVG Readiness',
+    postsTo: 'Posted to the war-announce channel.',
+    fields: [{ key: 'gvg', label: 'Message' }],
+  },
+  {
+    id: 'party',
+    title: 'Party card',
+    postsTo: 'Posted to the war-announce channel.',
+    fields: [{ key: 'party', label: 'Message' }],
+  },
+  {
+    id: 'ocr',
+    title: 'Party OCR',
+    postsTo: 'Posted to the war-announce channel.',
+    fields: [{ key: 'ocr', label: 'Message' }],
+  },
+  {
+    id: 'onboarding',
+    title: 'Onboarding',
+    postsTo: 'Posted to the onboarding channel.',
+    fields: [
+      { key: 'onboarding.hub', label: 'Welcome' },
+      { key: 'onboarding.auction', label: 'Auction' },
+      { key: 'onboarding.gvg', label: 'GvG' },
+      { key: 'onboarding.general', label: 'General Chat' },
+      { key: 'onboarding.website', label: 'Website' },
+      { key: 'onboarding.message', label: 'Message' },
+    ],
+  },
+];
+
+function copyField(resolved, key) {
+  if (key.startsWith('onboarding.')) return resolved.onboarding?.[key.slice('onboarding.'.length)] || '';
+  return resolved[key] || '';
+}
+
+function firstLine(text) {
+  const line = String(text || '').split('\n').map((part) => part.trim()).find(Boolean) || '';
+  return line.replace(/\*\*/g, '');
+}
 
 function DiscordDeployButton({ onClick, disabled, busy }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={DISCORD_DEPLOY_BTN_CLASS}>
-      {busy ? 'Sending…' : 'Send'}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={busy ? 'Sending' : 'Send'}
+      title={busy ? 'Sending' : 'Send'}
+      className={`${DISCORD_ICON_BTN} bg-indigo-600 hover:bg-indigo-500 text-white shadow-md`}
+    >
+      <Send size={14} />
     </button>
   );
 }
 
-function DiscordCardRow({ title, description, onClick, disabled, busy }) {
+function DiscordEditButton({ onClick }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 py-3 first:pt-0 last:pb-0">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Edit message"
+      title="Edit message"
+      className={`${DISCORD_ICON_BTN} border border-slate-700 bg-slate-950 text-slate-300 hover:text-white`}
+    >
+      <Pencil size={14} />
+    </button>
+  );
+}
+
+function DiscordCardRow({ title, postsTo, preview, onSend, onEdit, disabled, busy }) {
+  return (
+    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium text-slate-200">{title}</div>
-        {description ? (
-          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{description}</p>
-        ) : null}
+        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+          {postsTo}
+          {preview ? <span className="block text-slate-400 mt-0.5">{preview}</span> : null}
+        </p>
       </div>
-      <DiscordDeployButton onClick={onClick} disabled={disabled} busy={busy} />
+      <div className="flex items-center gap-1.5 shrink-0">
+        <DiscordDeployButton onClick={onSend} disabled={disabled} busy={busy} />
+        <DiscordEditButton onClick={onEdit} />
+      </div>
     </div>
   );
 }
@@ -113,6 +191,8 @@ export default function SettingsTab({ user, onSessionUser }) {
   const [deployingPartyCard, setDeployingPartyCard] = useState(false);
   const [deployingOcrCard, setDeployingOcrCard] = useState(false);
   const [deployingOnboardingCard, setDeployingOnboardingCard] = useState(false);
+  const [editingCardId, setEditingCardId] = useState(null);
+  const [cardDraft, setCardDraft] = useState({});
   const [discordCardMsg, setDiscordCardMsg] = useState(null);
   const discordCardMsgTimerRef = useRef(null);
   const [discordChannels, setDiscordChannels] = useState(EMPTY_DISCORD_CHANNELS);
@@ -309,6 +389,35 @@ export default function SettingsTab({ user, onSessionUser }) {
     setDiscordCardMsg(msg);
     if (discordCardMsgTimerRef.current) clearTimeout(discordCardMsgTimerRef.current);
     discordCardMsgTimerRef.current = setTimeout(() => setDiscordCardMsg(null), 8000);
+  };
+
+  const resolvedCardCopy = resolveDiscordCardCopy(config);
+  const editingCard = DISCORD_CARD_EDITORS.find((card) => card.id === editingCardId) || null;
+
+  const openCardEditor = (cardId) => {
+    const card = DISCORD_CARD_EDITORS.find((row) => row.id === cardId);
+    if (!card) return;
+    const resolved = resolveDiscordCardCopy(config);
+    const draft = {};
+    for (const field of card.fields) draft[field.key] = copyField(resolved, field.key);
+    setCardDraft(draft);
+    setEditingCardId(cardId);
+  };
+
+  const applyCardEditor = () => {
+    setConfig((prev) => {
+      const current = prev.discordCardCopy && typeof prev.discordCardCopy === 'object' ? prev.discordCardCopy : {};
+      const onboarding = { ...(current.onboarding || {}) };
+      const next = { ...current, onboarding };
+      for (const [key, value] of Object.entries(cardDraft)) {
+        const clipped = String(value || '').slice(0, CARD_COPY_MAX);
+        if (key.startsWith('onboarding.')) onboarding[key.slice('onboarding.'.length)] = clipped;
+        else next[key] = clipped;
+      }
+      next.onboarding = onboarding;
+      return { ...prev, discordCardCopy: next };
+    });
+    setEditingCardId(null);
   };
 
   // Posts the Request Card (item cart + live claim) into DISCORD_AUCREQ_CHANNEL_ID.
@@ -776,41 +885,27 @@ export default function SettingsTab({ user, onSessionUser }) {
             </div>
 
             <div className="divide-y divide-slate-800/80">
-              <DiscordCardRow
-                title="Request Card"
-                description="Request loot items during Bid Open, Claim or Take Extra Slots during Live Auction. Open Request — Apply for Requests, Cancel Bid Requests. Open Live Dashboard — Claim or Take Extra slots. Use Drop down to take extra slots."
-                onClick={handleDeployAuctionCard}
-                disabled={deployingCard}
-                busy={deployingCard}
-              />
-              <DiscordCardRow
-                title="GVG Readiness"
-                description="War-announce board with deadline bar, Master List, and Available / Unavailable. My status, Change class, and Change Alias stay private."
-                onClick={handleDeployAttendanceCard}
-                disabled={deployingAttendanceCard}
-                busy={deployingAttendanceCard}
-              />
-              <DiscordCardRow
-                title="Party card"
-                description="War-announce party viewer for the active raid."
-                onClick={handleDeployPartyCard}
-                disabled={deployingPartyCard}
-                busy={deployingPartyCard}
-              />
-              <DiscordCardRow
-                title="Party OCR"
-                description="Officers scan Team Party screenshots here, or upload on VALHALLA (Raid → GVG Attendance). Review, O/X, and Commit swords happen on the website. After Commit, images may post to the Raid Screenshot channel."
-                onClick={handleDeployOcrCard}
-                disabled={deployingOcrCard}
-                busy={deployingOcrCard}
-              />
-              <DiscordCardRow
-                title="Onboarding"
-                description="Welcome hub: Auction, GvG, General Chat, and Website open a private explainer with a jump to the mapped channel or site."
-                onClick={handleDeployOnboardingCard}
-                disabled={deployingOnboardingCard}
-                busy={deployingOnboardingCard}
-              />
+              {DISCORD_CARD_EDITORS.map((card) => {
+                const deploy = {
+                  request: { onSend: handleDeployAuctionCard, busy: deployingCard },
+                  gvg: { onSend: handleDeployAttendanceCard, busy: deployingAttendanceCard },
+                  party: { onSend: handleDeployPartyCard, busy: deployingPartyCard },
+                  ocr: { onSend: handleDeployOcrCard, busy: deployingOcrCard },
+                  onboarding: { onSend: handleDeployOnboardingCard, busy: deployingOnboardingCard },
+                }[card.id];
+                return (
+                  <DiscordCardRow
+                    key={card.id}
+                    title={card.title}
+                    postsTo={card.postsTo}
+                    preview={firstLine(copyField(resolvedCardCopy, card.fields[0].key))}
+                    onSend={deploy.onSend}
+                    onEdit={() => openCardEditor(card.id)}
+                    disabled={deploy.busy}
+                    busy={deploy.busy}
+                  />
+                );
+              })}
             </div>
             {discordCardMsg && (
               <p className={`text-[10px] font-mono font-semibold ${discordCardMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{discordCardMsg.text}</p>
@@ -828,6 +923,7 @@ export default function SettingsTab({ user, onSessionUser }) {
               ['warAnnounceChannelId', 'War announce (one text channel for cards)'],
               ['raidScreenshotChannelId', 'Raid Screenshot (gallery after OCR Commit)'],
               ['onboardingChannelId', 'Onboarding hub card'],
+              ['messageChannelId', 'Message board'],
             ].map(([key, label]) => (
               <label key={key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
                 {label}
@@ -1834,6 +1930,67 @@ export default function SettingsTab({ user, onSessionUser }) {
               className="w-20 bg-slate-900 border border-slate-800 rounded-lg py-1.5 text-xs text-amber-500 font-mono font-bold text-center outline-none focus:border-slate-700"
             />
             <span className="text-[11px] text-slate-400">per member / month</span>
+          </div>
+        </div>
+      )}
+
+      {editingCard && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close"
+            onClick={() => setEditingCardId(null)}
+          />
+          <div className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <h2 className="text-sm font-semibold tracking-wider uppercase text-slate-200">{editingCard.title}</h2>
+                <p className="text-[11px] text-slate-400 mt-1">Done keeps this on the form. Save settings stores it. Send again to update the card in Discord.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCardId(null)}
+                aria-label="Close"
+                className="p-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <IconX />
+              </button>
+            </div>
+            {editingCard.fields.map((field) => (
+              <label key={field.key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                {field.label}
+                <textarea
+                  value={cardDraft[field.key] || ''}
+                  maxLength={CARD_COPY_MAX}
+                  rows={field.key.startsWith('onboarding.') ? 3 : 6}
+                  onChange={(e) => setCardDraft((prev) => ({
+                    ...prev,
+                    [field.key]: e.target.value.slice(0, CARD_COPY_MAX),
+                  }))}
+                  className="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-sans normal-case tracking-normal leading-relaxed outline-none focus:border-slate-700"
+                />
+                <span className="mt-1 block text-right font-sans normal-case tracking-normal text-slate-600">
+                  {(cardDraft[field.key] || '').length}/{CARD_COPY_MAX}
+                </span>
+              </label>
+            ))}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditingCardId(null)}
+                className="px-4 py-2 border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyCardEditor}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
