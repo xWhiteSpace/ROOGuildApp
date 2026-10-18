@@ -658,7 +658,7 @@ async function endLiveRaidSessionInternal(s) {
     effectiveMonitoringEndsAt: effectiveMonitoringEndsAt || null,
     endedEarly,
     endedAt: now,
-    ...(pendingInGame ? { inGameStatus: pendingInGame } : {}),
+    inGameStatus: pendingInGame || {},
   };
 
   atomicUpdates['attendance/live_session'] = null;

@@ -30,15 +30,15 @@ TITLE: FNC — Functional specs
 [TEXT]
 STATEMENT: >>>
 Published count: 212
-ID span: FNC-ROO-001 .. FNC-ROO-212
+ID span: FNC-VAL-001 .. FNC-ROO-212
 Next tip: FNC-ROO-213
 
 Domain map:
-- Platform/Auth: count=6; range=FNC-ROO-001 .. FNC-ROO-006
-- Tenant/Workspace: count=9; range=FNC-ROO-007 .. FNC-ROO-015
-- Games catalog: count=8; range=FNC-ROO-016 .. FNC-ROO-023
-- Billing/Capacity: count=13; range=FNC-ROO-024 .. FNC-ROO-036
-- Discord bot/Channels: count=23; range=FNC-ROO-037 .. FNC-ROO-052, FNC-ROO-191, FNC-ROO-195, FNC-ROO-198 .. FNC-ROO-202
+- Platform/Auth: count=6; range=FNC-VAL-001 .. FNC-VAL-006
+- Tenant/Workspace: count=9; range=FNC-VAL-007 .. FNC-VAL-015
+- Games catalog: count=8; range=FNC-VAL-016 .. FNC-VAL-023
+- Billing/Capacity: count=13; range=FNC-VAL-024 .. FNC-VAL-036
+- Discord bot/Channels: count=23; range=FNC-VAL-037 .. FNC-VAL-052, FNC-VAL-191, FNC-VAL-195, FNC-VAL-198 .. FNC-VAL-202
 - Auction/Requests: count=28; range=FNC-ROO-053 .. FNC-ROO-075, FNC-ROO-175, FNC-ROO-180 .. FNC-ROO-182, FNC-ROO-186
 - Attendance/Roster: count=16; range=FNC-ROO-076 .. FNC-ROO-089, FNC-ROO-174, FNC-ROO-188
 - Scheduler/RSVP: count=17; range=FNC-ROO-090 .. FNC-ROO-101, FNC-ROO-177 .. FNC-ROO-179, FNC-ROO-184, FNC-ROO-190
@@ -46,8 +46,8 @@ Domain map:
 - Live Raid/Voice: count=20; range=FNC-ROO-126 .. FNC-ROO-141, FNC-ROO-185, FNC-ROO-189, FNC-ROO-194, FNC-ROO-196
 - OCR/GVG Attendance: count=9; range=FNC-ROO-142 .. FNC-ROO-150
 - Adventurer Guild: count=9; range=FNC-ROO-151 .. FNC-ROO-158, FNC-ROO-197
-- Data isolation/Storage: count=9; range=FNC-ROO-159 .. FNC-ROO-167
-- Frontend shell/UX: count=6; range=FNC-ROO-168 .. FNC-ROO-173
+- Data isolation/Storage: count=9; range=FNC-VAL-159 .. FNC-VAL-167
+- Frontend shell/UX: count=6; range=FNC-VAL-168 .. FNC-VAL-173
 - (none): count=10; range=FNC-ROO-203 .. FNC-ROO-212
 <<<
 
@@ -59,15 +59,15 @@ TITLE: API — Interfaces
 [TEXT]
 STATEMENT: >>>
 Published count: 118
-ID span: API-ROO-001 .. API-ROO-118
+ID span: API-VAL-001 .. API-VAL-118 (VAL platform and ROO Origin)
 Next tip: API-ROO-119
 
 Domain map:
-- Platform/Auth: count=5; range=API-ROO-001 .. API-ROO-005
-- Tenant/Workspace: count=9; range=API-ROO-006 .. API-ROO-014
-- Games catalog: count=3; range=API-ROO-015 .. API-ROO-017
-- Billing/Capacity: count=6; range=API-ROO-018 .. API-ROO-023
-- Discord bot/Channels: count=8; range=API-ROO-024 .. API-ROO-030, API-ROO-118
+- Platform/Auth: count=5; range=API-VAL-001 .. API-VAL-005
+- Tenant/Workspace: count=9; range=API-VAL-006 .. API-VAL-014
+- Games catalog: count=3; range=API-VAL-015 .. API-VAL-017
+- Billing/Capacity: count=6; range=API-VAL-018 .. API-VAL-023
+- Discord bot/Channels: count=8; range=API-VAL-024 .. API-VAL-030, API-VAL-118
 - Auction/Requests: count=18; range=API-ROO-031 .. API-ROO-047, API-ROO-115
 - Attendance/Roster: count=13; range=API-ROO-048 .. API-ROO-059, API-ROO-116
 - Scheduler/RSVP: count=9; range=API-ROO-060 .. API-ROO-068
@@ -85,15 +85,15 @@ TITLE: CMP — Components
 [TEXT]
 STATEMENT: >>>
 Published count: 29
-ID span: CMP-ROO-001 .. CMP-ROO-029
+ID span: CMP-VAL-001 .. CMP-ROO-029
 Next tip: CMP-ROO-030
 
 Domain map:
-- Platform/Auth: count=4; range=CMP-ROO-001 .. CMP-ROO-004
-- Tenant/Workspace: count=2; range=CMP-ROO-005 .. CMP-ROO-006
-- Games catalog: count=2; range=CMP-ROO-007 .. CMP-ROO-008
-- Billing/Capacity: count=1; range=CMP-ROO-009
-- Discord bot/Channels: count=2; range=CMP-ROO-010 .. CMP-ROO-011
+- Platform/Auth: count=4; range=CMP-VAL-001 .. CMP-VAL-004
+- Tenant/Workspace: count=2; range=CMP-VAL-005 .. CMP-VAL-006
+- Games catalog: count=2; range=CMP-VAL-007 .. CMP-VAL-008
+- Billing/Capacity: count=1; range=CMP-VAL-009
+- Discord bot/Channels: count=2; range=CMP-VAL-010 .. CMP-VAL-011
 - Auction/Requests: count=2; range=CMP-ROO-012 .. CMP-ROO-013
 - Attendance/Roster: count=3; range=CMP-ROO-014 .. CMP-ROO-016
 - Scheduler/RSVP: count=2; range=CMP-ROO-017 .. CMP-ROO-018
@@ -101,7 +101,7 @@ Domain map:
 - Live Raid/Voice: count=3; range=CMP-ROO-022 .. CMP-ROO-023, CMP-ROO-029
 - OCR/GVG Attendance: count=1; range=CMP-ROO-024
 - Adventurer Guild: count=2; range=CMP-ROO-025 .. CMP-ROO-026
-- Data isolation/Storage: count=2; range=CMP-ROO-027 .. CMP-ROO-028
+- Data isolation/Storage: count=2; range=CMP-VAL-027 .. CMP-VAL-028
 <<<
 
 [[/SECTION]]
@@ -112,15 +112,15 @@ TITLE: INT — Integration seams
 [TEXT]
 STATEMENT: >>>
 Published count: 121
-ID span: INT-ROO-001 .. INT-ROO-121
+ID span: INT-VAL-001 .. INT-ROO-121
 Next tip: INT-ROO-122
 
 Domain map:
-- Platform/Auth: count=5; range=INT-ROO-001 .. INT-ROO-005
-- Tenant/Workspace: count=9; range=INT-ROO-006 .. INT-ROO-014
-- Games catalog: count=3; range=INT-ROO-015 .. INT-ROO-017
-- Billing/Capacity: count=6; range=INT-ROO-018 .. INT-ROO-023
-- Discord bot/Channels: count=8; range=INT-ROO-024 .. INT-ROO-030, INT-ROO-118
+- Platform/Auth: count=5; range=INT-VAL-001 .. INT-VAL-005
+- Tenant/Workspace: count=9; range=INT-VAL-006 .. INT-VAL-014
+- Games catalog: count=3; range=INT-VAL-015 .. INT-VAL-017
+- Billing/Capacity: count=6; range=INT-VAL-018 .. INT-VAL-023
+- Discord bot/Channels: count=8; range=INT-VAL-024 .. INT-VAL-030, INT-VAL-118
 - Auction/Requests: count=18; range=INT-ROO-031 .. INT-ROO-047, INT-ROO-115
 - Attendance/Roster: count=13; range=INT-ROO-048 .. INT-ROO-059, INT-ROO-116
 - Scheduler/RSVP: count=9; range=INT-ROO-060 .. INT-ROO-068
@@ -139,15 +139,15 @@ TITLE: UNT — Units
 [TEXT]
 STATEMENT: >>>
 Published count: 223
-ID span: UNT-ROO-001 .. UNT-ROO-223
+ID span: UNT-VAL-001 .. UNT-ROO-223
 Next tip: UNT-ROO-224
 
 Domain map:
-- Platform/Auth: count=17; range=UNT-ROO-001 .. UNT-ROO-017
-- Tenant/Workspace: count=9; range=UNT-ROO-018 .. UNT-ROO-026
-- Games catalog: count=10; range=UNT-ROO-027 .. UNT-ROO-035, UNT-ROO-213
-- Billing/Capacity: count=12; range=UNT-ROO-036 .. UNT-ROO-047
-- Discord bot/Channels: count=16; range=UNT-ROO-048 .. UNT-ROO-063
+- Platform/Auth: count=17; range=UNT-VAL-001 .. UNT-VAL-017
+- Tenant/Workspace: count=9; range=UNT-VAL-018 .. UNT-VAL-026
+- Games catalog: count=10; range=UNT-VAL-027 .. UNT-VAL-035, UNT-VAL-213
+- Billing/Capacity: count=12; range=UNT-VAL-036 .. UNT-VAL-047
+- Discord bot/Channels: count=16; range=UNT-VAL-048 .. UNT-VAL-063
 - Auction/Requests: count=22; range=UNT-ROO-064 .. UNT-ROO-085
 - Attendance/Roster: count=14; range=UNT-ROO-086 .. UNT-ROO-099
 - Scheduler/RSVP: count=12; range=UNT-ROO-100 .. UNT-ROO-111
@@ -155,8 +155,8 @@ Domain map:
 - Live Raid/Voice: count=16; range=UNT-ROO-136 .. UNT-ROO-151
 - OCR/GVG Attendance: count=9; range=UNT-ROO-152 .. UNT-ROO-160
 - Adventurer Guild: count=8; range=UNT-ROO-161 .. UNT-ROO-168
-- Data isolation/Storage: count=11; range=UNT-ROO-169 .. UNT-ROO-177, UNT-ROO-218 .. UNT-ROO-219
-- Frontend shell/UX: count=6; range=UNT-ROO-178 .. UNT-ROO-183
+- Data isolation/Storage: count=11; range=UNT-VAL-169 .. UNT-VAL-177, UNT-VAL-218 .. UNT-VAL-219
+- Frontend shell/UX: count=6; range=UNT-VAL-178 .. UNT-VAL-183
 - ROO delta 2026-10-03: count=24; range=UNT-ROO-184 .. UNT-ROO-207
 - Discord onboarding: count=5; range=UNT-ROO-208 .. UNT-ROO-212
 - Auction/Mimic Book: count=2; range=UNT-ROO-214, UNT-ROO-216

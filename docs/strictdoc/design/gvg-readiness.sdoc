@@ -9,7 +9,7 @@ OPTIONS:
 TITLE: FNC — Functional specs
 
 [REQUIREMENT]
-UID: FNC-ROO-191
+UID: FNC-VAL-191
 STATUS: Active
 TITLE: Phase1GetReadyLine appends a war-announce jump when mapped
 STATEMENT: >>>
@@ -21,10 +21,10 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-190
+  VALUE: REQ-VAL-190
 
 [REQUIREMENT]
-UID: FNC-ROO-201
+UID: FNC-VAL-201
 STATUS: Active
 TITLE: PrepStartReadinessSync rematerializes the war-announce card once per cycle
 STATEMENT: >>>
@@ -36,7 +36,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-200
+  VALUE: REQ-VAL-200
 
 [[/SECTION]]
 
@@ -56,7 +56,7 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: REQ-ROO-200
+  VALUE: REQ-VAL-200
 
 [[/SECTION]]
 
@@ -76,10 +76,10 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: FNC-ROO-191
+  VALUE: FNC-VAL-191
 
 [REQUIREMENT]
-UID: UNT-ROO-213
+UID: UNT-VAL-213
 STATUS: Active
 TITLE: GvgReadinessSyncMode chooses rematerialize, ifMissing, or skip
 STATEMENT: >>>
@@ -91,6 +91,6 @@ ssot_status: published
 <<<
 RELATIONS:
 - TYPE: Parent
-  VALUE: FNC-ROO-201
+  VALUE: FNC-VAL-201
 
 [[/SECTION]]

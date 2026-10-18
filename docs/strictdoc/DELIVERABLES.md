@@ -7,7 +7,19 @@
 | **Production SoT** | `Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07` |
 | **Export generated** | 2026-09-26T23:12:34+09:00 (JST) |
 | **Copy onto Staging at** | `docs/strictdoc/` |
-| **SSOT source** | published registries under `/workspace/ssot` (read-only at export) |
+| **SSOT source** | [`trace/ssot.json`](trace/ssot.json) (in-repo published census) |
+
+---
+
+## In-repo SSOT
+
+[`trace/ssot.json`](trace/ssot.json) is the gym published node/edge census. DebugPage V, World, and `npm run debug:graph` read this file.
+
+- `.sdoc` files are narrative and test plans, not the published census.
+- `Requirements/Requirements.md` is not SoT.
+- Published ≠ proven; no EVD.
+
+If the JSON is missing, `npm run debug:graph` extracts it from [`trace/neighborhood.html`](trace/neighborhood.html).
 
 ---
 
@@ -17,18 +29,21 @@ Regenerated from the published SSOT store (graph 91; tests index 26, units 26, s
 
 | Project | Published nodes in SSOT |
 | --- | --- |
-| ROO (Ragnarok Origin) | USR 44 / REQ 211 / FNC 212 / API 118 / CMP 29 / INT 121 / UNT 223 / TST 258 |
+| VAL (Valhalla platform) | USR 27 / REQ 106 / FNC 74 / API 31 / CMP 13 / INT 31 / UNT 81 / TST 124 |
+| ROO (Ragnarok Origin) | USR 17 / REQ 105 / FNC 138 / API 87 / CMP 16 / INT 90 / UNT 142 / TST 134 |
+| Combined gym census | USR 44 / REQ 211 / FNC 212 / API 118 / CMP 29 / INT 121 / UNT 223 / TST 258 |
 | RO3 (Ragnarok 3) | USR 9 / REQ 22 / FNC 24 / API 51 / CMP 11 / INT 40 / UNT 41 / TST 46 |
 
 | Path | What it is |
 | --- | --- |
-| [`requirements/usr.sdoc`](requirements/usr.sdoc) / [`requirements/req.sdoc`](requirements/req.sdoc) | ROO USR / REQ (REQ → Parent USR) |
-| [`verification/tests.sdoc`](verification/tests.sdoc) | ROO TST plans (TST-ROO-001 .. TST-ROO-260; 248 and 250 not minted in SSOT) |
+| [`requirements/usr.sdoc`](requirements/usr.sdoc) / [`requirements/req.sdoc`](requirements/req.sdoc) | VAL platform + ROO Origin USR / REQ (REQ → Parent USR) |
+| [`verification/tests.sdoc`](verification/tests.sdoc) | VAL + ROO TST plans (258 published; 248 and 250 not minted in SSOT) |
 | [`design/summary.sdoc`](design/summary.sdoc) | ROO left-side counts and next free ids |
 | [`requirements/ro3_usr.sdoc`](requirements/ro3_usr.sdoc) / [`requirements/ro3_req.sdoc`](requirements/ro3_req.sdoc) | RO3 USR / REQ |
 | [`verification/ro3_tests.sdoc`](verification/ro3_tests.sdoc) | RO3 TST plans (TST-RO3-001 .. TST-RO3-046) |
 | [`design/ro3_summary.sdoc`](design/ro3_summary.sdoc) | RO3 left-side counts and next free ids |
-| [`trace/neighborhood.html`](trace/neighborhood.html) | ROO standing map (V landing, focus, World) |
+| [`trace/ssot.json`](trace/ssot.json) | VAL + ROO published census (nodes + edges) |
+| [`trace/neighborhood.html`](trace/neighborhood.html) | VAL + ROO standing map (V landing, focus, World) |
 | [`trace/RO3/neighborhood.html`](trace/RO3/neighborhood.html) | RO3 standing map |
 | [`trace/interfaces.sqlite`](trace/interfaces.sqlite) | Interface variables, ROO + RO3 rows with a `project` column |
 
@@ -71,15 +86,16 @@ It is a historical Firebase RTDB SRS. Policy quarantine (`poison-srs-firebase-re
 | 0 | [`README.md`](README.md) | HOW TO OPEN (short) | points here |
 | 1 | **`DELIVERABLES.md`** (this file) | Single openable deliverables index | **start here** |
 | 2 | [`deep_learn.sdoc`](deep_learn.sdoc) | Overview: V-model, phases, honesty, gaps | P1–P4 narrative |
-| 3 | [`requirements/usr.sdoc`](requirements/usr.sdoc) | All published USR | **42** (`USR-ROO-001`..`042`) |
-| 4 | [`requirements/req.sdoc`](requirements/req.sdoc) | All published REQ + Parent→USR | **172** (`REQ-ROO-001`..`172`) |
+| 3 | [`requirements/usr.sdoc`](requirements/usr.sdoc) | All published USR | **42** (numeric `001`..`042`; VAL or ROO by domain) |
+| 4 | [`requirements/req.sdoc`](requirements/req.sdoc) | All published REQ + Parent→USR | **172** (numeric `001`..`172`; VAL or ROO by domain) |
 | 5 | [`design/summary.sdoc`](design/summary.sdoc) | Lean left-side summary by domain | FNC 173 / API 114 / CMP 28 / INT 114 / UNT 183 |
-| 6 | [`verification/tests.sdoc`](verification/tests.sdoc) | Published TST plans + honesty | **65** (`TST-ROO-001`..`065`); tip `TST-ROO-066` |
+| 6 | [`verification/tests.sdoc`](verification/tests.sdoc) | Published TST plans + honesty | **65** (numeric `001`..`065`; VAL or ROO by domain); tip `TST-ROO-066` |
 | 7 | [`tools/tol.sdoc`](tools/tol.sdoc) | Tool catalog present vs greenfield | **11** (`TOL-ROO-001`..`011`); tip `TOL-ROO-012` |
 | 8 | [`strictdoc.toml`](strictdoc.toml) | Minimal StrictDoc project config | include `*.sdoc` |
 | 9 | [`MANIFEST.json`](MANIFEST.json) | Machine-readable file list + counts | generated_at ISO |
-| 10 | [`trace/neighborhood.html`](trace/neighborhood.html) | 3D neighborhood knowledge graph | open in browser |
-| 11 | [`trace/interfaces.sqlite`](trace/interfaces.sqlite) | Interface traceability database | open in DB Browser for SQLite |
+| 10 | [`trace/ssot.json`](trace/ssot.json) | In-repo published census | DebugPage + `npm run debug:graph` |
+| 11 | [`trace/neighborhood.html`](trace/neighborhood.html) | 3D neighborhood knowledge graph | open in browser |
+| 12 | [`trace/interfaces.sqlite`](trace/interfaces.sqlite) | Interface traceability database | open in DB Browser for SQLite |
 
 ---
 
@@ -107,8 +123,8 @@ It is a historical Firebase RTDB SRS. Policy quarantine (`poison-srs-firebase-re
 
 ### Open must gaps
 
-**Auth:** `REQ-ROO-008`, `REQ-ROO-015`, `REQ-ROO-017`  
-**Tenant live Discord:** `REQ-ROO-026`, `REQ-ROO-029`, `REQ-ROO-030`
+**Auth:** `REQ-VAL-008`, `REQ-VAL-015`, `REQ-VAL-017`  
+**Tenant live Discord:** `REQ-VAL-026`, `REQ-VAL-029`, `REQ-VAL-030`
 
 Greenfield TOL blocking execution: `TOL-ROO-006` Vitest, `TOL-ROO-007` MSW, `TOL-ROO-008` Playwright, `TOL-ROO-011` @vitest/coverage-v8 (catalogued; not pinned for runs).
 

@@ -14,18 +14,18 @@ Project: ROO (gym = ROOGuildApp / live product VALHALLA).
 SoT: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07.
 Source: SSOT requirements/usr (published only).
 Poison: Requirements/Requirements.md is NOT SoT — Firebase historical SRS; refused by policy quarantine.
-Phase 1 complete: USR-ROO-001 .. USR-ROO-042 (42 nodes).
+Phase 1 complete: 42 USR nodes (numeric 001 .. 042). Platform domains use VAL; Origin game domains stay ROO.
 STATUS Active means published in SSOT registry, not proven by evidence.
-SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. ROO USR published: 44 (USR-ROO-001 .. USR-ROO-044). Ragnarok 3 lives in its own project: requirements/ro3_usr.sdoc (no cross-project links). Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
+SSOT sync 2026-10-10 (JST): graph 91; source xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8. Published USR: 44 (VAL 27, ROO 17). Ragnarok 3 lives in its own project: requirements/ro3_usr.sdoc (no cross-project links). Published in SSOT ≠ proven; no EVD; every TST is execution_status blocked_on_tooling, evidence_status none.
 <<<
 
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Platform/Auth (USR-ROO-001 .. USR-ROO-005)
+TITLE: Platform/Auth (USR-VAL-001 .. USR-VAL-005)
 
 [REQUIREMENT]
-UID: USR-ROO-001
+UID: USR-VAL-001
 STATUS: Active
 TITLE: Platform health and safe boot
 STATEMENT: >>>
@@ -44,7 +44,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-002
+UID: USR-VAL-002
 STATUS: Active
 TITLE: Discord OAuth sign-in and callback routing
 STATEMENT: >>>
@@ -63,7 +63,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-003
+UID: USR-VAL-003
 STATUS: Active
 TITLE: Session identity and logout
 STATEMENT: >>>
@@ -82,7 +82,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-004
+UID: USR-VAL-004
 STATUS: Active
 TITLE: SPA session restore and credentialed API client
 STATEMENT: >>>
@@ -101,7 +101,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-005
+UID: USR-VAL-005
 STATUS: Active
 TITLE: Cookie, CORS, and unauthenticated routing
 STATEMENT: >>>
@@ -122,10 +122,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Tenant/Workspace (USR-ROO-006 .. USR-ROO-010)
+TITLE: Tenant/Workspace (USR-VAL-006 .. USR-VAL-010)
 
 [REQUIREMENT]
-UID: USR-ROO-006
+UID: USR-VAL-006
 STATUS: Active
 TITLE: Tenant identity is Discord guild
 STATEMENT: >>>
@@ -144,7 +144,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-007
+UID: USR-VAL-007
 STATUS: Active
 TITLE: Discover and select workspace
 STATEMENT: >>>
@@ -163,7 +163,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-008
+UID: USR-VAL-008
 STATUS: Active
 TITLE: Onboard new Discord guild workspace
 STATEMENT: >>>
@@ -182,7 +182,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-009
+UID: USR-VAL-009
 STATUS: Active
 TITLE: Officer model and workspace settings
 STATEMENT: >>>
@@ -201,7 +201,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-010
+UID: USR-VAL-010
 STATUS: Active
 TITLE: Post-login tenant routing
 STATEMENT: >>>
@@ -222,10 +222,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Games catalog (USR-ROO-011 .. USR-ROO-012)
+TITLE: Games catalog (USR-VAL-011 .. USR-VAL-012)
 
 [REQUIREMENT]
-UID: USR-ROO-011
+UID: USR-VAL-011
 STATUS: Active
 TITLE: Known games and enable/disable
 STATEMENT: >>>
@@ -244,7 +244,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-012
+UID: USR-VAL-012
 STATUS: Active
 TITLE: Game setup and API gating
 STATEMENT: >>>
@@ -265,10 +265,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Billing/Capacity (USR-ROO-013 .. USR-ROO-016)
+TITLE: Billing/Capacity (USR-VAL-013 .. USR-VAL-016)
 
 [REQUIREMENT]
-UID: USR-ROO-013
+UID: USR-VAL-013
 STATUS: Active
 TITLE: Seat access and SPA billing gate
 STATEMENT: >>>
@@ -287,7 +287,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-014
+UID: USR-VAL-014
 STATUS: Active
 TITLE: Capacity and billing status APIs
 STATEMENT: >>>
@@ -306,7 +306,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-015
+UID: USR-VAL-015
 STATUS: Active
 TITLE: Stripe checkout, portal, invite redeem
 STATEMENT: >>>
@@ -325,7 +325,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-016
+UID: USR-VAL-016
 STATUS: Active
 TITLE: Stripe webhooks and billing permanence
 STATEMENT: >>>
@@ -346,10 +346,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Discord bot/Channels (USR-ROO-017 .. USR-ROO-020, USR-ROO-043)
+TITLE: Discord bot/Channels (USR-VAL-017 .. USR-VAL-020, USR-VAL-043)
 
 [REQUIREMENT]
-UID: USR-ROO-017
+UID: USR-VAL-017
 STATUS: Active
 TITLE: Bot boot intents and slash cleanup
 STATEMENT: >>>
@@ -368,7 +368,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-018
+UID: USR-VAL-018
 STATUS: Active
 TITLE: Interactions, ticker, rate-limit circuit
 STATEMENT: >>>
@@ -387,7 +387,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-019
+UID: USR-VAL-019
 STATUS: Active
 TITLE: Officer deploy Discord cards
 STATEMENT: >>>
@@ -406,7 +406,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-020
+UID: USR-VAL-020
 STATUS: Active
 TITLE: Discord debug and member nickname cache
 STATEMENT: >>>
@@ -425,7 +425,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-043
+UID: USR-VAL-043
 STATUS: Active
 TITLE: Discord public Onboarding hub
 STATEMENT: >>>
@@ -438,7 +438,7 @@ COMMENT: >>>
 domain: Discord bot/Channels
 who: Guild members in Discord
 why: New members and returning members need a single Discord card that explains Auction, GvG, General Chat, and the website without mixing that with HTTP workspace onboard.
-spoken_constraints: Distinct from HTTP tenant onboard (USR-ROO-008).; Topic jumps use tenant discord channel map fields; website uses the VALHALLA frontend origin.
+spoken_constraints: Distinct from HTTP tenant onboard (USR-VAL-008).; Topic jumps use tenant discord channel map fields; website uses the VALHALLA frontend origin.
 ssot_status: published
 sot: Develop@9237b35321389ccfef3ca0768305caa8ba345152
 <<<
@@ -804,10 +804,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Data isolation/Storage (USR-ROO-038 .. USR-ROO-040)
+TITLE: Data isolation/Storage (USR-VAL-038 .. USR-VAL-040)
 
 [REQUIREMENT]
-UID: USR-ROO-038
+UID: USR-VAL-038
 STATUS: Active
 TITLE: Tenant isolation middleware
 STATEMENT: >>>
@@ -826,7 +826,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-039
+UID: USR-VAL-039
 STATUS: Active
 TITLE: Postgres schema and json_docs store
 STATEMENT: >>>
@@ -845,7 +845,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-040
+UID: USR-VAL-040
 STATUS: Active
 TITLE: Shared packages, isolation test, defaults
 STATEMENT: >>>
@@ -866,10 +866,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Frontend shell/UX (USR-ROO-041 .. USR-ROO-042)
+TITLE: Frontend shell/UX (USR-VAL-041 .. USR-VAL-042)
 
 [REQUIREMENT]
-UID: USR-ROO-041
+UID: USR-VAL-041
 STATUS: Active
 TITLE: Landing, layout, help, workspace routes
 STATEMENT: >>>
@@ -888,7 +888,7 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 <<<
 
 [REQUIREMENT]
-UID: USR-ROO-042
+UID: USR-VAL-042
 STATUS: Active
 TITLE: Billing redirect and onboard/landing components
 STATEMENT: >>>
@@ -909,10 +909,10 @@ sot: Develop@a8a1edd713d6db6db61d42ed4eacf6a9e8737d07
 [[/SECTION]]
 
 [[SECTION]]
-TITLE: Data isolation (USR-ROO-044)
+TITLE: Data isolation (USR-VAL-044)
 
 [REQUIREMENT]
-UID: USR-ROO-044
+UID: USR-VAL-044
 STATUS: Active
 TITLE: Keep each game's data and settings apart in one workspace
 STATEMENT: >>>

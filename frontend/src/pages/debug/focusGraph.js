@@ -1,7 +1,8 @@
-const RING_ORDER = ['REQ', 'FNC', 'API', 'CMP', 'UNT', 'TST'];
+const RING_ORDER = ['USR', 'REQ', 'FNC', 'API', 'CMP', 'UNT', 'TST'];
 
 export const FOCUS_TABS = [
   { id: 'Connections', kind: null },
+  { id: 'USR', kind: 'USR' },
   { id: 'REQ', kind: 'REQ' },
   { id: 'FNC', kind: 'FNC' },
   { id: 'API', kind: 'API' },
@@ -9,6 +10,15 @@ export const FOCUS_TABS = [
   { id: 'UNT', kind: 'UNT' },
   { id: 'Tests', kind: 'TST' },
 ];
+
+function ringKind(kind) {
+  if (kind === 'INT') return 'API';
+  return kind;
+}
+
+function parentOf(nodes, node) {
+  return node?.linked_from && nodes[node.linked_from]?.kind === 'USR' ? node.linked_from : null;
+}
 
 function mentions(fn, id) {
   if (fn.id === id) return true;
@@ -40,10 +50,32 @@ export function focusGraph(index, id) {
       if (other === id || seen.has(other)) continue;
       const node = nodes[other];
       if (!node) continue;
-      const kind = RING_ORDER.includes(node.kind) ? node.kind : null;
+      const kind = RING_ORDER.includes(ringKind(node.kind)) ? ringKind(node.kind) : null;
       if (!kind) continue;
       seen.add(other);
       rings[kind].push(node);
+    }
+  }
+
+  if (center.kind === 'USR') {
+    for (const node of Object.values(nodes)) {
+      if (node.kind !== 'REQ' || node.linked_from !== id || seen.has(node.id)) continue;
+      seen.add(node.id);
+      rings.REQ.push(node);
+    }
+  }
+  if (center.kind === 'REQ') {
+    const parent = parentOf(nodes, center);
+    if (parent && !seen.has(parent)) {
+      seen.add(parent);
+      rings.USR.push(nodes[parent]);
+    }
+  }
+  for (const req of rings.REQ) {
+    const parent = parentOf(nodes, req);
+    if (parent && !seen.has(parent)) {
+      seen.add(parent);
+      rings.USR.push(nodes[parent]);
     }
   }
 
@@ -56,6 +88,14 @@ export function focusGraph(index, id) {
     for (const target of test.links || nodes[test.id]?.links || []) {
       if (target === id || seen.has(target)) links.push([test.id, target]);
     }
+  }
+  if (center.kind === 'REQ') {
+    const parent = parentOf(nodes, center);
+    if (parent) links.push([center.id, parent]);
+  }
+  for (const req of rings.REQ) {
+    const parent = parentOf(nodes, req);
+    if (parent && (parent === id || seen.has(parent))) links.push([req.id, parent]);
   }
 
   return { center, rings, links, RING_ORDER };

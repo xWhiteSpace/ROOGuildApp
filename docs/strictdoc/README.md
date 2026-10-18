@@ -15,7 +15,8 @@
 | Tools present vs greenfield | [`tools/tol.sdoc`](tools/tol.sdoc) |
 | Ragnarok 3 (RO3) requirements | [`requirements/ro3_usr.sdoc`](requirements/ro3_usr.sdoc), [`requirements/ro3_req.sdoc`](requirements/ro3_req.sdoc) |
 | Ragnarok 3 (RO3) design / tests | [`design/ro3_summary.sdoc`](design/ro3_summary.sdoc), [`verification/ro3_tests.sdoc`](verification/ro3_tests.sdoc) |
-| Standing maps + variables | [`trace/neighborhood.html`](trace/neighborhood.html) (ROO), [`trace/RO3/neighborhood.html`](trace/RO3/neighborhood.html) (RO3), [`trace/interfaces.sqlite`](trace/interfaces.sqlite) |
+| Published census (SSOT) | [`trace/ssot.json`](trace/ssot.json) |
+| Standing maps + variables | [`trace/neighborhood.html`](trace/neighborhood.html) (VAL + ROO), [`trace/RO3/neighborhood.html`](trace/RO3/neighborhood.html) (RO3), [`trace/interfaces.sqlite`](trace/interfaces.sqlite) |
 
 ## Install location (Staging)
 
@@ -37,5 +38,6 @@ strictdoc export . --config strictdoc.toml --output-dir output
 - **`Requirements/Requirements.md` is NOT SoT** (Firebase poison SRS)
 - published ≠ proven; **zero EVD** at export
 - Do not invent requirements; SSOT JSON only
+- Platform domains use `VAL` ids; Ragnarok Origin game domains stay `ROO`; Ragnarok 3 stays `RO3` / `R3`
 
 Generated: 2026-09-26T23:12:34+09:00 (JST)

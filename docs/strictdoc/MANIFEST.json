@@ -28,14 +28,14 @@
   },
   "open_must": {
     "auth": [
-      "REQ-ROO-008",
-      "REQ-ROO-015",
-      "REQ-ROO-017"
+      "REQ-VAL-008",
+      "REQ-VAL-015",
+      "REQ-VAL-017"
     ],
     "tenant_live_discord": [
-      "REQ-ROO-026",
-      "REQ-ROO-029",
-      "REQ-ROO-030"
+      "REQ-VAL-026",
+      "REQ-VAL-029",
+      "REQ-VAL-030"
     ]
   },
   "honesty": {
@@ -101,15 +101,25 @@
     "graph_version": 91,
     "source": "xWhiteSpace/ROOGuildApp@f38e1378c7cca457fbf8de8e8355d59994f77fc8",
     "counts": {
+      "VAL": {
+        "USR": 27,
+        "REQ": 106,
+        "FNC": 74,
+        "API": 31,
+        "CMP": 13,
+        "INT": 31,
+        "UNT": 81,
+        "TST": 124
+      },
       "ROO": {
-        "USR": 44,
-        "REQ": 211,
-        "FNC": 212,
-        "API": 118,
-        "CMP": 29,
-        "INT": 121,
-        "UNT": 223,
-        "TST": 258
+        "USR": 17,
+        "REQ": 105,
+        "FNC": 138,
+        "API": 87,
+        "CMP": 16,
+        "INT": 90,
+        "UNT": 142,
+        "TST": 134
       },
       "RO3": {
         "USR": 9,
@@ -126,13 +136,15 @@
     "evidence_status": "none",
     "evd_count": 0,
     "cross_project_links": 0,
+    "file": "trace/ssot.json",
     "files_added": [
       "requirements/ro3_usr.sdoc",
       "requirements/ro3_req.sdoc",
       "design/ro3_summary.sdoc",
       "verification/ro3_tests.sdoc",
-      "trace/RO3/neighborhood.html"
+      "trace/RO3/neighborhood.html",
+      "trace/ssot.json"
     ],
-    "note": "Top-level counts/tips above are the 2026-09-26 export; see this block for current SSOT counts."
+    "note": "In-repo published census is trace/ssot.json. Platform domains use VAL; Origin game domains stay ROO. Combined gym census remains USR 44 / REQ 211 / FNC 212 / API 118 / CMP 29 / INT 121 / UNT 223 / TST 258. Top-level counts/tips above are the 2026-09-26 export and are not current."
   }
 }

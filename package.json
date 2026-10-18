@@ -13,7 +13,8 @@
     "install:all": "npm install --workspaces",
     "test": "node tests/support/runVitest.js",
     "test:e2e": "node tests/support/runPlaywright.js",
-    "test:debug": "node tests/support/debugV.js"
+    "test:debug": "node tests/support/debugV.js",
+    "debug:graph": "node frontend/dev/neighborhoodGraph.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

@@ -3,6 +3,7 @@ import { Globe } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ValhallaLockup from '../components/ValhallaLockup';
 import FocusSpace from './debug/FocusSpace';
+import ReviewQueue from './debug/ReviewQueue';
 
 const STATUS_COLOR = {
   passed: '#34d399',
@@ -18,10 +19,12 @@ const STATUS_LABEL = {
   notRun: 'Not run',
 };
 
-const V_VIEW = { w: 1000, h: 820 };
+const V_VIEW = { x: -160, y: -72, w: 1160, h: 892 };
+
+const USR_HUB = { level: 'needs', left: 'USR', right: '', lx: -90, ly: 70, z: 80, leftOnly: true };
 
 const V_ROWS = [
-  { level: 'acceptance', left: 'Requirements', right: 'Acceptance test', lx: 120, ly: 70, rx: 880, ry: 70, z: 64 },
+  { level: 'acceptance', left: 'Requirements', right: 'Acceptance test', lx: 120, ly: 70, rx: 880, ry: 70, z: 64, labelAbove: true },
   { level: 'system', left: 'Functional', right: 'System test', lx: 220, ly: 230, rx: 780, ry: 230, z: 16 },
   { level: 'integration', left: 'System', right: 'Integration', lx: 320, ly: 390, rx: 680, ry: 390, z: -28 },
   { level: 'unit', left: 'Unit', right: 'Unit test', lx: 400, ly: 550, rx: 600, ry: 550, z: -76 },
@@ -32,27 +35,27 @@ const RAIL_CYAN = '#22d3ee';
 const DOLLY_MS = 600;
 const DOLLY_EASE = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 const LEFT_KINDS = {
-  acceptance: ['USR', 'REQ'],
+  needs: ['USR'],
+  acceptance: ['REQ'],
   system: ['FNC', 'API'],
   integration: ['INT', 'CMP'],
   unit: ['UNT'],
 };
 
-function kindOf(id) {
-  return String(id || '').split('-')[0];
+function publishedFor(graph, kinds) {
+  return Object.values(graph?.nodes || {})
+    .filter((node) => kinds.includes(node.kind))
+    .sort((a, b) => a.id.localeCompare(b.id, 'en'));
 }
 
-function tracesFor(level, kinds) {
-  const map = new Map();
+function withChecks(nodes, level) {
+  const byId = new Map(nodes.map((node) => [node.id, { id: node.id, kind: node.kind, checks: [] }]));
   for (const check of level?.checks || []) {
     for (const id of check.verifies || []) {
-      const kind = kindOf(id);
-      if (!kinds.includes(kind)) continue;
-      if (!map.has(id)) map.set(id, { id, kind, checks: [] });
-      map.get(id).checks.push(check);
+      if (byId.has(id)) byId.get(id).checks.push(check);
     }
   }
-  return [...map.values()].sort((a, b) => a.id.localeCompare(b.id, 'en'));
+  return [...byId.values()];
 }
 
 function countByKind(traces, kinds) {
@@ -62,15 +65,17 @@ function countByKind(traces, kinds) {
 }
 
 function pctX(x) {
-  return `${(x / V_VIEW.w) * 100}%`;
+  return `${((x - V_VIEW.x) / V_VIEW.w) * 100}%`;
 }
 
 function pctY(y) {
-  return `${(y / V_VIEW.h) * 100}%`;
+  return `${((y - V_VIEW.y) / V_VIEW.h) * 100}%`;
 }
 
 function railPoints(side) {
+  const start = side === 'left' ? [`${USR_HUB.lx},${USR_HUB.ly}`] : [];
   return [
+    ...start,
     ...V_ROWS.map((row) => (side === 'left' ? `${row.lx},${row.ly}` : `${row.rx},${row.ry}`)),
     `${CODING.x},${CODING.y}`,
   ].join(' ');
@@ -315,16 +320,30 @@ function LevelView({ level, row, onBack, onShowSpec }) {
   );
 }
 
-function SpecView({ level, row, artifacts, onBack, onShowTests, onOpenFocus }) {
+function SpecView({ level, row, artifacts, items, graph, onBack, onShowTests, onOpenFocus }) {
   const kinds = LEFT_KINDS[row.level] || [];
-  const traces = tracesFor(level, kinds);
+  const traces = items || [];
   const [kind, setKind] = useState('All');
+  const [reviewing, setReviewing] = useState(false);
   const listRef = useRef(null);
   const shown = kind === 'All' ? traces : traces.filter((item) => item.kind === kind);
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0;
   }, [kind]);
+
+  if (reviewing) {
+    return (
+      <ReviewQueue
+        items={shown}
+        artifacts={artifacts}
+        graph={graph}
+        kinds={kind === 'All' ? kinds : [kind]}
+        onClose={() => setReviewing(false)}
+        onOpenFocus={onOpenFocus}
+      />
+    );
+  }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3">
@@ -340,15 +359,27 @@ function SpecView({ level, row, artifacts, onBack, onShowTests, onOpenFocus }) {
             </button>
             <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-slate-500">{row.left}</p>
             <h1 className="text-lg font-semibold text-white">{row.left}</h1>
+            {row.right ? (
+              <button
+                type="button"
+                onClick={onShowTests}
+                className="mt-1 text-sm text-slate-400 hover:text-cyan-200"
+              >
+                {row.right}
+              </button>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="font-mono text-xs text-slate-500">{traces.length}</span>
             <button
               type="button"
-              onClick={onShowTests}
-              className="mt-1 text-sm text-slate-400 hover:text-cyan-200"
+              onClick={() => setReviewing(true)}
+              disabled={shown.length === 0}
+              className="rounded-full border border-cyan-500/40 px-3 py-1 text-[11px] uppercase tracking-wider text-cyan-100 hover:border-cyan-200 hover:text-white disabled:opacity-40"
             >
-              {row.right}
+              Review
             </button>
           </div>
-          <span className="font-mono text-xs text-slate-500">{traces.length}</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {['All', ...kinds].map((name) => {
@@ -372,7 +403,7 @@ function SpecView({ level, row, artifacts, onBack, onShowTests, onOpenFocus }) {
       <ul ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pb-4">
         {shown.length === 0 && (
           <li className="px-1 py-6 text-sm text-slate-400">
-            {traces.length === 0 ? 'No traced items at this level.' : `No ${kind} items.`}
+            {traces.length === 0 ? 'No published items at this level.' : `No ${kind} items.`}
           </li>
         )}
         {shown.map((item) => {
@@ -491,8 +522,8 @@ export default function DebugPage() {
   function pickTarget(clientX, clientY) {
     let best = null;
     let bestScore = Infinity;
-    for (const row of V_ROWS) {
-      for (const side of ['spec', 'tests']) {
+    for (const row of [USR_HUB, ...V_ROWS]) {
+      for (const side of row.leftOnly ? ['spec'] : ['spec', 'tests']) {
         const el = nodeRefs.current[nodeKey(row.level, side)];
         if (!el) continue;
         const box = el.getBoundingClientRect();
@@ -583,7 +614,7 @@ export default function DebugPage() {
   }
 
   const totals = report?.totals || emptyTotals();
-  const activeRow = V_ROWS.find((row) => row.level === active) || null;
+  const activeRow = [USR_HUB, ...V_ROWS].find((row) => row.level === active) || null;
   const activeLevel = active ? levelOf(report, active) : null;
   const sceneStyle = !dolly ? undefined : {
     transformOrigin: `${dolly.originX}px ${dolly.originY}px`,
@@ -612,8 +643,14 @@ export default function DebugPage() {
           height: 160%;
           transform: translateX(-50%) rotateX(74deg);
           transform-origin: center top;
-          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, rgba(0,0,0,0.7) 62%, transparent 96%);
-          mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, rgba(0,0,0,0.7) 62%, transparent 96%);
+        }
+        .dbg-v-floor-near {
+          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 28%, #000 48%, #000 90%, transparent 98%);
+          mask-image: linear-gradient(to bottom, transparent 0%, transparent 28%, #000 48%, #000 90%, transparent 98%);
+        }
+        .dbg-v-floor-far {
+          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 10%, #000 22%, transparent 40%);
+          mask-image: linear-gradient(to bottom, transparent 0%, #000 10%, #000 22%, transparent 40%);
         }
         .dbg-v-floor-snakes {
           position: absolute;
@@ -624,8 +661,13 @@ export default function DebugPage() {
         }
         .dbg-v-floor-grid {
           fill: none;
-          stroke: rgba(21, 94, 117, 0.35);
-          stroke-width: 1;
+          stroke-width: 1.15;
+        }
+        .dbg-v-floor-near .dbg-v-floor-grid {
+          stroke: rgba(34, 211, 238, 0.38);
+        }
+        .dbg-v-floor-far .dbg-v-floor-grid {
+          stroke: rgba(22, 101, 52, 0.7);
         }
         .dbg-v-snake-trail,
         .dbg-v-snake-core {
@@ -666,8 +708,8 @@ export default function DebugPage() {
           right: 0;
           top: 26%;
           height: 1px;
-          background: linear-gradient(to right, transparent, rgba(34, 211, 238, 0.28), transparent);
-          box-shadow: 0 0 12px rgba(8, 145, 178, 0.25);
+          background: linear-gradient(to right, transparent, rgba(22, 101, 52, 0.7), transparent);
+          box-shadow: 0 0 12px rgba(20, 83, 45, 0.4);
         }
         .dbg-v-camera {
           position: relative;
@@ -761,6 +803,17 @@ export default function DebugPage() {
           right: calc(100% + 12px);
           text-align: right;
         }
+        .dbg-v-label-above {
+          left: 50%;
+          right: auto;
+          bottom: calc(100% + 10px);
+          top: auto;
+          text-align: center;
+          transform: translateX(-50%);
+        }
+        .dbg-v-label-above p {
+          justify-content: center;
+        }
         .dbg-v-label-right {
           left: calc(100% + 12px);
           text-align: left;
@@ -813,6 +866,8 @@ export default function DebugPage() {
             level={activeLevel}
             row={activeRow}
             artifacts={report?.artifacts}
+            items={withChecks(publishedFor(graph, LEFT_KINDS[activeRow.level] || []), activeLevel)}
+            graph={graph}
             onBack={back}
             onShowTests={() => setPane('tests')}
             onOpenFocus={setFocusId}
@@ -863,13 +918,13 @@ export default function DebugPage() {
                 <Globe className="h-5 w-5" strokeWidth={1.75} />
               </button>
               <div className="dbg-v-world" aria-hidden="true">
-                <div className="dbg-v-floor">
+                <div className="dbg-v-floor dbg-v-floor-near">
                   <svg className="dbg-v-floor-snakes" viewBox={`0 0 ${FLOOR.w} ${FLOOR.h}`} preserveAspectRatio="none" aria-hidden="true">
-                    <path className="dbg-v-floor-grid" d={FLOOR_GRID_PATH} />
                     <defs>
                       <path id="dbg-v-path-a" d="M112 336 H560 V672 H1008 V224 H1512 V784 H1792 V448 H1232 V1008 H448 V336 H112" />
                       <path id="dbg-v-path-b" d="M280 168 H840 V504 H392 V952 H1288 V392 H1904 V840 H1456 V168 H280" />
                     </defs>
+                    <path className="dbg-v-floor-grid" d={FLOOR_GRID_PATH} />
                     <g className="dbg-v-run-a">
                       <use href="#dbg-v-path-a" className="dbg-v-snake-trail" />
                       <use href="#dbg-v-path-a" className="dbg-v-snake-core" />
@@ -878,6 +933,11 @@ export default function DebugPage() {
                       <use href="#dbg-v-path-b" className="dbg-v-snake-trail" />
                       <use href="#dbg-v-path-b" className="dbg-v-snake-core" />
                     </g>
+                  </svg>
+                </div>
+                <div className="dbg-v-floor dbg-v-floor-far">
+                  <svg className="dbg-v-floor-snakes" viewBox={`0 0 ${FLOOR.w} ${FLOOR.h}`} preserveAspectRatio="none" aria-hidden="true">
+                    <path className="dbg-v-floor-grid" d={FLOOR_GRID_PATH} />
                   </svg>
                 </div>
                 <div className="dbg-v-world-shade" />
@@ -896,13 +956,13 @@ export default function DebugPage() {
               >
                 <div
                   ref={sceneRef}
-                  className="dbg-v-scene mx-auto w-full max-w-5xl px-40 py-6"
+                  className="dbg-v-scene mx-auto w-full max-w-5xl px-40 pb-6 pt-12"
                   style={sceneStyle}
                 >
                   <div className="dbg-v-stage">
                     <svg
                       className="dbg-v-svg"
-                      viewBox={`0 0 ${V_VIEW.w} ${V_VIEW.h}`}
+                      viewBox={`${V_VIEW.x} ${V_VIEW.y} ${V_VIEW.w} ${V_VIEW.h}`}
                       preserveAspectRatio="xMidYMid meet"
                       aria-hidden="true"
                     >
@@ -920,6 +980,20 @@ export default function DebugPage() {
                       <polyline className="dbg-v-rail" points={RIGHT_RAIL} />
                       <polyline className="dbg-v-pulse" points={LEFT_RAIL} />
                       <polyline className="dbg-v-pulse" points={RIGHT_RAIL} />
+                      {(() => {
+                        const usrHot = sameHot(hot, USR_HUB.level, 'spec');
+                        return (
+                          <g key={USR_HUB.level}>
+                            {usrHot && (
+                              <>
+                                <circle className="dbg-v-bloom" cx={USR_HUB.lx} cy={USR_HUB.ly} r="28" fill={RAIL_CYAN} />
+                                <circle className="dbg-v-halo" cx={USR_HUB.lx} cy={USR_HUB.ly} r="22" stroke={RAIL_CYAN} />
+                              </>
+                            )}
+                            <circle className="dbg-v-dot" cx={USR_HUB.lx} cy={USR_HUB.ly} r="8" fill={RAIL_CYAN} />
+                          </g>
+                        );
+                      })()}
                       {V_ROWS.map((row) => {
                         const counts = levelOf(report, row.level)?.counts || emptyTotals();
                         const tone = toneOf(counts);
@@ -954,11 +1028,35 @@ export default function DebugPage() {
                       })}
                       <circle className="dbg-v-dot" cx={CODING.x} cy={CODING.y} r="10" fill={RAIL_CYAN} />
                     </svg>
+                    {(() => {
+                      const kinds = LEFT_KINDS[USR_HUB.level];
+                      const traces = publishedFor(graph, kinds);
+                      return (
+                        <button
+                          ref={(node) => { nodeRefs.current[nodeKey(USR_HUB.level, 'spec')] = node; }}
+                          type="button"
+                          onClick={() => openLevel(USR_HUB.level, 'spec')}
+                          onFocus={() => setHot({ level: USR_HUB.level, side: 'spec' })}
+                          onBlur={() => setHot(null)}
+                          data-hot={sameHot(hot, USR_HUB.level, 'spec') ? 'true' : 'false'}
+                          style={{ left: pctX(USR_HUB.lx), top: pctY(USR_HUB.ly) }}
+                          aria-label={`${USR_HUB.left}. ${traces.length} published items.`}
+                          className="dbg-v-node"
+                        >
+                          <span className="dbg-v-label-left dbg-v-label-above">
+                            <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100/90">
+                              {USR_HUB.left}
+                            </span>
+                            <TraceLine traces={traces} kinds={kinds} />
+                          </span>
+                        </button>
+                      );
+                    })()}
                     {V_ROWS.map((row) => {
                       const level = levelOf(report, row.level);
                       const counts = level?.counts || emptyTotals();
                       const kinds = LEFT_KINDS[row.level] || [];
-                      const traces = tracesFor(level, kinds);
+                      const traces = publishedFor(graph, kinds);
                       return (
                         <Fragment key={row.level}>
                           <button
@@ -969,10 +1067,10 @@ export default function DebugPage() {
                             onBlur={() => setHot(null)}
                             data-hot={sameHot(hot, row.level, 'spec') ? 'true' : 'false'}
                             style={{ left: pctX(row.lx), top: pctY(row.ly) }}
-                            aria-label={`${row.left}. ${traces.length} traced items.`}
+                            aria-label={`${row.left}. ${traces.length} published items.`}
                             className="dbg-v-node"
                           >
-                            <span className="dbg-v-label-left">
+                            <span className={`dbg-v-label-left${row.labelAbove ? ' dbg-v-label-above' : ''}`}>
                               <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-100/90">
                                 {row.left}
                               </span>
@@ -990,7 +1088,7 @@ export default function DebugPage() {
                             aria-label={`${row.right}. ${counts.passed} passed, ${counts.failed} failed, ${counts.skipped} skipped, ${counts.notRun} not run.`}
                             className="dbg-v-node"
                           >
-                            <span className="dbg-v-label-right">
+                            <span className={`dbg-v-label-right${row.labelAbove ? ' dbg-v-label-above' : ''}`}>
                               <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-white">
                                 {row.right}
                               </span>

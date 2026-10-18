@@ -5,7 +5,7 @@ Published plans stay in `docs/strictdoc/verification/tests.sdoc`. Executable wor
 ## Where files go
 
 - `tests/patterns/` — reusable steps. Names are listed in `tests/patterns/registry.js`. Add a module when the first case needs that name, and import it from the case. Do not copy the helper into the case.
-- `tests/cases/unit/` — `level: unit`. File name is the plan id: `TST-ROO-001.test.js`.
+- `tests/cases/unit/` — `level: unit`. File name is the plan id: `TST-VAL-001.test.js` / `TST-ROO-078.test.js`.
 - `tests/cases/integration/` — `level: integration`.
 - `tests/cases/system/` — `level: system`. Call `createApp()` from `backend/src/createApp.js` and `listen()` / `getText()` from `tests/support/listen.js`. Use `getText` for loopback HTTP. Do not import `backend/src/index.js`. That file runs the env gate, migrate, and the Discord bot.
 - `tests/cases/acceptance/` — `level: acceptance`. Playwright specs that drive local Chromium.
@@ -32,4 +32,4 @@ npm run test:e2e
 
 ## Honesty
 
-Pinned runners do not prove a plan. A passing smoke file is not evidence. Open musts stay open: `REQ-ROO-008`, `REQ-ROO-015`, `REQ-ROO-017`, and live Discord `REQ-ROO-026`, `REQ-ROO-029`, `REQ-ROO-030`.
+Pinned runners do not prove a plan. A passing smoke file is not evidence. Open musts stay open: `REQ-VAL-008`, `REQ-VAL-015`, `REQ-VAL-017`, and live Discord `REQ-VAL-026`, `REQ-VAL-029`, `REQ-VAL-030`.

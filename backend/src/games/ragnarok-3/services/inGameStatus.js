@@ -25,8 +25,18 @@ export function inGameStatusMapFromPresent(presentUids, rosterUids) {
 }
 
 export async function setInGameStatusFlag(db, sessionId, userId, confirmed) {
+  const uid = String(userId || '').trim();
   const flagValue = confirmed === true ? true : null;
-  await db.ref(`attendance/session_archive/${sessionId}/inGameStatus/${userId}`).set(flagValue);
+  if (!sessionId || !uid) return flagValue === true;
+  const statusRef = db.ref(`attendance/session_archive/${sessionId}/inGameStatus`);
+  const snap = await statusRef.once('value');
+  const current = snap.exists() && snap.val() && typeof snap.val() === 'object' && !Array.isArray(snap.val())
+    ? snap.val()
+    : {};
+  const next = { ...current };
+  if (flagValue === true) next[uid] = true;
+  else delete next[uid];
+  await statusRef.set(Object.keys(next).length ? next : null);
   return flagValue === true;
 }
 

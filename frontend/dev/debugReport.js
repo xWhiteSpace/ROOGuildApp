@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ssotArtifacts } from './neighborhoodGraph.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -63,6 +64,8 @@ function parseCatalog(relPath) {
       title,
       statement: String(current.statement || '').trim(),
       domain: field(current.comment, 'domain'),
+      acceptance: field(current.comment, 'acceptance_criteria'),
+      linked_from: '',
     };
     current = null;
   }
@@ -227,14 +230,21 @@ export function buildDebugReport() {
     if (!LEVELS.includes(id)) levels.push(bucket);
   }
 
+  const artifacts = ssotArtifacts();
+  for (const extra of [
+    parseCatalog('docs/strictdoc/requirements/usr.sdoc'),
+    parseCatalog('docs/strictdoc/requirements/req.sdoc'),
+  ]) {
+    for (const [id, meta] of Object.entries(extra)) {
+      artifacts[id] = { ...artifacts[id], ...meta, linked_from: artifacts[id]?.linked_from || meta.linked_from || '' };
+    }
+  }
+
   return {
     commit: latest.commit,
     time: latest.time,
     totals,
     levels,
-    artifacts: {
-      ...parseCatalog('docs/strictdoc/requirements/usr.sdoc'),
-      ...parseCatalog('docs/strictdoc/requirements/req.sdoc'),
-    },
+    artifacts,
   };
 }

@@ -174,6 +174,8 @@ function memberListProjectionSql() {
     'roleCode', COALESCE(data->>'roleCode', ''),
     'groupTag', COALESCE(data->>'groupTag', ''),
     'joinedAt', COALESCE(data->>'joinedAt', ''),
+    'inGameName', COALESCE(data->>'inGameName', ''),
+    'status', COALESCE(data->>'status', ''),
     'isRaidRoster', COALESCE((data->>'isRaidRoster')::boolean, false),
     'isDummy', COALESCE((data->>'isDummy')::boolean, false),
     'leaveCreditsRemaining', CASE
@@ -1078,15 +1080,38 @@ async function loadDocKey(tenantId, docPath, keyPath) {
   return rows[0].data;
 }
 
+function jsonbMergeKeySql(baseSql, keyCount) {
+  const pathArr = `(${JSON_KEY_ARRAY})`;
+  const parentLen = Math.max(0, keyCount - 1);
+  let ensured = `COALESCE((${baseSql}), '{}'::jsonb)`;
+  for (let i = 1; i <= Math.max(0, parentLen - 1); i += 1) {
+    const prefix = `${pathArr}[1:${i}]`;
+    ensured = `(CASE WHEN jsonb_typeof((${ensured}) #> ${prefix}) = 'object' THEN (${ensured}) ELSE jsonb_set((${ensured}), ${prefix}, '{}'::jsonb, true) END)`;
+  }
+  if (parentLen === 0) {
+    return `(${ensured}) || jsonb_build_object(${pathArr}[1], $5::jsonb)`;
+  }
+  const parentPath = `${pathArr}[1:${parentLen}]`;
+  const mergedParent = `COALESCE((${ensured}) #> ${parentPath}, '{}'::jsonb) || jsonb_build_object(${pathArr}[${keyCount}], $5::jsonb)`;
+  return `jsonb_set((${ensured}), ${parentPath}, (${mergedParent}), true)`;
+}
+
 async function upsertDocKey(tenantId, docPath, keyPath, value) {
+  const keys = (keyPath || []).map(String);
   const payload = JSON.stringify(value ?? null);
   const gameId = currentGameId();
+  if (!keys.length) {
+    await saveDoc(tenantId, docPath, value);
+    return;
+  }
+  const insertExpr = jsonbMergeKeySql(`'{}'::jsonb`, keys.length);
+  const updateExpr = jsonbMergeKeySql('json_docs.data', keys.length);
   await query(
     `INSERT INTO json_docs (tenant_id, game_id, path, data)
-     VALUES ($1, $2, $3, jsonb_set('{}'::jsonb, ${JSON_KEY_ARRAY}, $5::jsonb, true))
+     VALUES ($1, $2, $3, ${insertExpr})
      ON CONFLICT (tenant_id, game_id, path) DO UPDATE
-     SET data = jsonb_set(COALESCE(json_docs.data, '{}'::jsonb), ${JSON_KEY_ARRAY}, $5::jsonb, true)`,
-    [tenantId, gameId, docPath, jsonKeyPath(keyPath), payload]
+     SET data = ${updateExpr}`,
+    [tenantId, gameId, docPath, jsonKeyPath(keys), payload]
   );
 }
 

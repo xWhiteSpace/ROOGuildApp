@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FOCUS_TABS, focusGraph } from './focusGraph';
 
 const KIND_COLOR = {
+  USR: '#a5f3fc',
   REQ: '#67e8f9',
   FNC: '#22d3ee',
   API: '#818cf8',
+  INT: '#93c5fd',
   CMP: '#c084fc',
   UNT: '#34d399',
   TST: '#fbbf24',
@@ -12,10 +14,10 @@ const KIND_COLOR = {
 
 const VIEW = { w: 1100, h: 720, cx: 550, cy: 360 };
 const V_SCALE = 1.65;
-const V_OX = 90;
+const V_OX = 340;
 const V_OY = 70;
-const WORLD = { w: 1840, h: 1440, cx: 920, cy: 720 };
-const WORLD_ORDER = ['REQ', 'FNC', 'API', 'CMP', 'UNT', 'TST'];
+const WORLD = { w: 1960, h: 1440, cx: 980, cy: 720 };
+const WORLD_ORDER = ['USR', 'REQ', 'FNC', 'API', 'CMP', 'UNT', 'TST'];
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 8;
@@ -61,6 +63,7 @@ function vxy(x, y) {
 }
 
 const WORLD_LEFT = [
+  { key: 'USR', kind: 'USR', ...vxy(-180, 70), label: 'USR' },
   { key: 'REQ', kind: 'REQ', ...vxy(120, 70), label: 'REQ' },
   { key: 'FNC', kind: 'FNC', ...vxy(220, 230), label: 'FNC' },
   { key: 'API', kind: 'API', ...vxy(290, 370), label: 'API' },
@@ -74,7 +77,7 @@ const WORLD_RIGHT = [
   { key: 'TST-unit', kind: 'TST', level: 'unit', ...vxy(600, 550), label: 'Unit' },
 ];
 const WORLD_CODING = { ...vxy(500, 720), label: 'Coding' };
-const WORLD_RAIL_L = [vxy(120, 70), vxy(220, 230), vxy(320, 390), vxy(400, 550), WORLD_CODING];
+const WORLD_RAIL_L = [vxy(-180, 70), vxy(120, 70), vxy(220, 230), vxy(320, 390), vxy(400, 550), WORLD_CODING];
 const WORLD_RAIL_R = [vxy(880, 70), vxy(780, 230), vxy(680, 390), vxy(600, 550), WORLD_CODING];
 const WORLD_RAIL_L_PTS = WORLD_RAIL_L.map((point) => `${point.x},${point.y}`).join(' ');
 const WORLD_RAIL_R_PTS = WORLD_RAIL_R.map((point) => `${point.x},${point.y}`).join(' ');
@@ -100,12 +103,32 @@ function testLevelOf(report, id) {
   return 'unit';
 }
 
+function hubKind(kind) {
+  if (kind === 'INT') return 'API';
+  return kind;
+}
+
 function hubOf(node, report) {
   if (node.kind === 'TST') {
-    const level = testLevelOf(report, node.id);
+    const level = node.level || testLevelOf(report, node.id);
     return WORLD_RIGHT.find((hub) => hub.level === level) || WORLD_RIGHT[3];
   }
-  return WORLD_LEFT.find((hub) => hub.kind === node.kind);
+  return WORLD_LEFT.find((hub) => hub.kind === hubKind(node.kind));
+}
+
+function worldRings(nodes) {
+  const rings = Object.fromEntries(
+    FOCUS_TABS.filter((item) => item.kind).map((item) => [item.kind, []]),
+  );
+  for (const node of Object.values(nodes || {})) {
+    const kind = hubKind(node.kind);
+    if (!rings[kind]) continue;
+    rings[kind].push(node);
+  }
+  for (const kind of Object.keys(rings)) {
+    rings[kind].sort((a, b) => a.id.localeCompare(b.id, 'en'));
+  }
+  return rings;
 }
 
 function placeWorld(nodes, report) {
@@ -123,7 +146,8 @@ function placeWorld(nodes, report) {
   const byId = {};
   for (const hub of WORLD_HUBS) {
     groups[hub.key].forEach((node, i) => {
-      const radius = 22 + 9 * Math.sqrt(i);
+      const compact = hub.kind === 'USR';
+      const radius = (compact ? 14 : 22) + (compact ? 5 : 9) * Math.sqrt(i);
       const spin = i * GOLDEN;
       const placed = {
         ...node,
@@ -160,7 +184,23 @@ const EMPTY_LINEAGE = {
   files: [],
 };
 
-function LineageRow({ caption, empty, items, onPick }) {
+function makePage(id, extras = {}) {
+  return {
+    focusId: id,
+    peekId: null,
+    world: false,
+    blankWorld: false,
+    section: 'Connections',
+    linkId: null,
+    ...extras,
+  };
+}
+
+function kindOfId(id) {
+  return String(id || '').split('-')[0];
+}
+
+function LineageRow({ caption, empty, items, onPick, onOpen }) {
   return (
     <div className="mt-6">
       <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan-200/80">{caption}</p>
@@ -174,7 +214,11 @@ function LineageRow({ caption, empty, items, onPick }) {
               key={item.id}
               type="button"
               onClick={() => onPick(item.id)}
-              className="rounded-full border border-slate-700 px-2 py-0.5 text-left font-mono text-[10px] text-slate-300 hover:border-cyan-400 hover:text-white"
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                onOpen?.(item.id);
+              }}
+              className="select-none rounded-full border border-slate-700 px-2 py-0.5 text-left font-mono text-[10px] text-slate-300 hover:border-cyan-400 hover:text-white"
             >
               {item.label && item.label !== item.id ? item.label : item.id}
             </button>
@@ -185,12 +229,11 @@ function LineageRow({ caption, empty, items, onPick }) {
   );
 }
 
-export default function FocusSpace({ focusId, index, report, artifacts, startWorld = false, onFocus, onClose }) {
-  const [tab, setTab] = useState('Connections');
-  const [world, setWorld] = useState(() => Boolean(startWorld));
-  const [blankWorld, setBlankWorld] = useState(() => Boolean(startWorld));
-  const [peekId, setPeekId] = useState(null);
-  const [linkId, setLinkId] = useState(null);
+export default function FocusSpace({ focusId: rootId, index, report, artifacts, startWorld = false, onClose }) {
+  const [pages, setPages] = useState(() => [
+    makePage(rootId, { world: Boolean(startWorld), blankWorld: Boolean(startWorld) }),
+  ]);
+  const [active, setActive] = useState(0);
   const [hot, setHot] = useState(null);
   const [cam, setCam] = useState({ x: 0, y: 0, k: 1 });
   const [cursor, setCursor] = useState(null);
@@ -205,11 +248,22 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
   const fieldRef = useRef(null);
   const svgRef = useRef(null);
   const dragRef = useRef(null);
+  const lastTapRef = useRef({ t: 0, id: null });
   const resizeRef = useRef(null);
   const camRef = useRef(cam);
+  const activeRef = useRef(0);
   camRef.current = cam;
+  activeRef.current = active;
+  const page = pages[active] || pages[0];
+  const focusId = page?.focusId || rootId;
+  const tab = page?.section || 'Connections';
+  const world = Boolean(page?.world);
+  const blankWorld = Boolean(page?.blankWorld);
+  const peekId = page?.peekId || null;
+  const linkId = page?.linkId || null;
   const graph = useMemo(() => focusGraph(index, focusId), [index, focusId]);
   const worldMap = useMemo(() => placeWorld(index?.nodes, report), [index, report]);
+  const censusRings = useMemo(() => worldRings(index?.nodes), [index]);
   const center = graph.center;
   const previewId = hot || peekId || (world ? null : focusId);
   const previewNode = previewId ? (index?.nodes?.[previewId] || { id: previewId, kind: String(previewId).split('-')[0], label: previewId }) : null;
@@ -251,7 +305,9 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
   }, [activeKinds, center, graph.rings]);
 
   const listKind = FOCUS_TABS.find((item) => item.id === tab)?.kind;
-  const list = listKind ? graph.rings[listKind] || [] : [];
+  const listRings = world ? censusRings : graph.rings;
+  const list = listKind ? listRings[listKind] || [] : [];
+  const showTabs = pages.length > 1 || !(world && blankWorld);
   const field = world ? worldMap : local;
   const camera = world ? WORLD : VIEW;
   const hotNode = hot ? field.byId[hot] : null;
@@ -262,6 +318,12 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
   const viewBox = world
     ? `${cam.x} ${cam.y} ${camera.w / cam.k} ${camera.h / cam.k}`
     : `0 0 ${camera.w} ${camera.h}`;
+
+  useEffect(() => {
+    setPages([makePage(rootId, { world: Boolean(startWorld), blankWorld: Boolean(startWorld) })]);
+    setActive(0);
+    setHot(null);
+  }, [rootId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -288,6 +350,59 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
       });
     return () => { cancelled = true; };
   }, [previewId]);
+
+  function patchActive(patch) {
+    const index = activeRef.current;
+    setPages((list) => list.map((item, i) => {
+      if (i !== index) return item;
+      const next = typeof patch === 'function' ? patch(item) : patch;
+      return { ...item, ...next };
+    }));
+  }
+
+  function setPeekId(id) {
+    patchActive({ peekId: id });
+  }
+
+  function clearPeek() {
+    patchActive({ peekId: null, linkId: null });
+    setHot(null);
+  }
+
+  function setLinkId(next) {
+    patchActive((item) => ({
+      linkId: typeof next === 'function' ? next(item.linkId) : next,
+    }));
+  }
+
+  function setSection(id) {
+    patchActive({ section: id });
+  }
+
+  function openTab(id) {
+    if (!id) return;
+    const current = pages[active];
+    if (current && !current.blankWorld && current.focusId === id) return;
+    const existing = pages.findIndex((item) => !item.blankWorld && item.focusId === id);
+    setHot(null);
+    if (existing >= 0) {
+      setActive(existing);
+      return;
+    }
+    setPages((list) => [...list, makePage(id)]);
+    setActive(pages.length);
+  }
+
+  function closeTab(index) {
+    if (index <= 0) return;
+    setPages((list) => list.filter((_, i) => i !== index));
+    setActive((current) => {
+      if (current === index) return Math.max(0, index - 1);
+      if (current > index) return current - 1;
+      return current;
+    });
+    setHot(null);
+  }
 
   function openSource(file) {
     setOpenFile(file);
@@ -320,28 +435,30 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
   }, [world]);
 
   function toggleWorld() {
-    if (world) {
-      setWorld(false);
-      setLinkId(null);
-    } else {
-      setWorld(true);
-      setPeekId(peekId);
-      camRef.current = { x: 0, y: 0, k: 1 };
-      setCam(camRef.current);
-      setTab('Connections');
-    }
+    patchActive((item) => {
+      if (item.world) return { world: false, linkId: null };
+      return { world: true, section: 'Connections' };
+    });
+    camRef.current = { x: 0, y: 0, k: 1 };
+    setCam(camRef.current);
     setHot(null);
   }
 
   function goToPeek() {
     const id = peekId || previewId;
     if (!id) return;
-    onFocus(id);
-    setBlankWorld(false);
-    setWorld(false);
-    setPeekId(null);
-    setLinkId(null);
-    setTab('Connections');
+    if (active === 0) {
+      openTab(id);
+      return;
+    }
+    patchActive({
+      focusId: id,
+      peekId: null,
+      world: false,
+      blankWorld: false,
+      linkId: null,
+      section: 'Connections',
+    });
     setHot(null);
   }
 
@@ -455,7 +572,20 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
     if (drag?.moved) return;
     const point = clientToSvg(event.clientX, event.clientY);
     const near = nearestNode(point, field.points);
-    if (near) setPeekId(near.id);
+    if (!near) {
+      clearPeek();
+      lastTapRef.current = { t: 0, id: null };
+      return;
+    }
+    const now = Date.now();
+    const last = lastTapRef.current;
+    if (last.id === near.id && now - last.t < 400) {
+      lastTapRef.current = { t: 0, id: null };
+      openTab(near.id);
+      return;
+    }
+    lastTapRef.current = { t: now, id: near.id };
+    setPeekId(near.id);
   }
 
   function onFieldPointerLeave() {
@@ -504,45 +634,95 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
           .dbg-focus-field { animation: none !important; }
         }
       `}</style>
-      <header className="flex shrink-0 items-start justify-between gap-4 px-5 py-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-700 px-3 py-1 text-[11px] uppercase tracking-wider text-slate-300 hover:border-slate-500 hover:text-white"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            aria-pressed={world}
-            onClick={toggleWorld}
-            className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-wider ${world
-              ? 'border-cyan-100 bg-cyan-100 text-slate-900'
-              : 'border-cyan-500/40 text-cyan-100 hover:border-cyan-200 hover:text-white'}`}
-          >
-            World
-          </button>
+      <header className="flex shrink-0 flex-col gap-2 px-5 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-slate-700 px-3 py-1 text-[11px] uppercase tracking-wider text-slate-300 hover:border-slate-500 hover:text-white"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              aria-pressed={world}
+              onClick={toggleWorld}
+              className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-wider ${world
+                ? 'border-cyan-100 bg-cyan-100 text-slate-900'
+                : 'border-cyan-500/40 text-cyan-100 hover:border-cyan-200 hover:text-white'}`}
+            >
+              World
+            </button>
+          </div>
+          <div className="flex max-w-[70%] flex-wrap justify-end gap-1.5 rounded-full border border-cyan-500/20 bg-slate-950/80 px-2 py-1.5">
+            {FOCUS_TABS.map((item) => {
+              const count = item.kind ? listRings[item.kind]?.length || 0 : null;
+              const on = tab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setSection(item.id)}
+                  className={`rounded-full px-3 py-1 text-[11px] uppercase tracking-wider ${on
+                    ? 'bg-cyan-100 text-slate-900'
+                    : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  {item.id}{count != null ? ` ${count}` : ''}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex max-w-[70%] flex-wrap justify-end gap-1.5 rounded-full border border-cyan-500/20 bg-slate-950/80 px-2 py-1.5">
-          {FOCUS_TABS.map((item) => {
-            const count = item.kind ? graph.rings[item.kind]?.length || 0 : null;
-            const on = tab === item.id;
+        {showTabs && (
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {pages.map((item, index) => {
+            const kind = kindOfId(item.focusId);
+            const on = index === active;
+            const label = index === 0 && item.blankWorld ? 'World' : item.focusId;
             return (
               <button
-                key={item.id}
+                key={`${item.focusId}-${index}`}
                 type="button"
                 aria-pressed={on}
-                onClick={() => setTab(item.id)}
-                className={`rounded-full px-3 py-1 text-[11px] uppercase tracking-wider ${on
-                  ? 'bg-cyan-100 text-slate-900'
-                  : 'text-slate-400 hover:text-slate-200'}`}
+                onClick={() => {
+                  setActive(index);
+                  setHot(null);
+                }}
+                className={`flex max-w-[14rem] items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] ${on
+                  ? 'border-cyan-100 bg-cyan-100 text-slate-900'
+                  : 'border-slate-700 text-slate-300 hover:border-cyan-400 hover:text-white'}`}
               >
-                {item.id}{count != null ? ` ${count}` : ''}
+                <span className="truncate" style={on || label === 'World' ? undefined : { color: KIND_COLOR[kind] || undefined }}>
+                  {label}
+                </span>
+                {index > 0 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Close ${item.focusId}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeTab(index);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.stopPropagation();
+                      closeTab(index);
+                    }}
+                    className={`grid h-4 w-4 place-items-center rounded-full text-[11px] leading-none ${on
+                      ? 'text-slate-700 hover:bg-slate-900/10'
+                      : 'text-slate-500 hover:bg-slate-800 hover:text-white'}`}
+                  >
+                    ×
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -577,7 +757,7 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
                 : 'No statement on this node. Goto opens its neighborhood.'}
             </p>
           )}
-          {(canGoto || (world && peekId)) && (
+          {(canGoto || peekId) && (
             <div className="mt-6 flex flex-wrap gap-2">
               {canGoto && (
                 <button
@@ -586,6 +766,15 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
                   className="w-fit rounded-full bg-cyan-100 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-slate-900 hover:bg-white"
                 >
                   Goto
+                </button>
+              )}
+              {peekId && (
+                <button
+                  type="button"
+                  onClick={clearPeek}
+                  className="w-fit rounded-full border border-slate-600 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-slate-300 hover:border-slate-400 hover:text-white"
+                >
+                  Clear
                 </button>
               )}
               {world && peekId && (
@@ -617,27 +806,28 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
               empty="No functions allocated to this need."
               items={lineage.functions}
               onPick={setPeekId}
+              onOpen={openTab}
             />
           )}
           {previewNode && lineage.grain === 'allocation' && (
             <>
-              <LineageRow caption="Allocated to" empty="No component allocated." items={lineage.components} onPick={setPeekId} />
-              <LineageRow caption="Refined by" empty="No units refine this function." items={lineage.units} onPick={setPeekId} />
-              <LineageRow caption="Satisfies" empty="No requirements on this function." items={lineage.requirements} onPick={setPeekId} />
+              <LineageRow caption="Allocated to" empty="No component allocated." items={lineage.components} onPick={setPeekId} onOpen={openTab} />
+              <LineageRow caption="Refined by" empty="No units refine this function." items={lineage.units} onPick={setPeekId} onOpen={openTab} />
+              <LineageRow caption="Satisfies" empty="No requirements on this function." items={lineage.requirements} onPick={setPeekId} onOpen={openTab} />
             </>
           )}
           {previewNode && lineage.grain === 'architecture' && (
             <>
               <p className="mt-8 font-mono text-[11px] uppercase tracking-[0.22em] text-cyan-200/80">Architecture</p>
-              <LineageRow caption="Functions" empty="No functions allocated to this block." items={lineage.functions} onPick={setPeekId} />
-              <LineageRow caption="Ports" empty="No interfaces on this block." items={lineage.interfaces} onPick={setPeekId} />
-              <LineageRow caption="Parts" empty="No units in this block." items={lineage.units} onPick={setPeekId} />
+              <LineageRow caption="Functions" empty="No functions allocated to this block." items={lineage.functions} onPick={setPeekId} onOpen={openTab} />
+              <LineageRow caption="Ports" empty="No interfaces on this block." items={lineage.interfaces} onPick={setPeekId} onOpen={openTab} />
+              <LineageRow caption="Parts" empty="No units in this block." items={lineage.units} onPick={setPeekId} onOpen={openTab} />
             </>
           )}
           {previewNode && lineage.grain === 'contract' && (
             <>
-              <LineageRow caption="Connects" empty="No components on this contract." items={lineage.components} onPick={setPeekId} />
-              <LineageRow caption="Used by" empty="No functions use this contract." items={lineage.functions} onPick={setPeekId} />
+              <LineageRow caption="Connects" empty="No components on this contract." items={lineage.components} onPick={setPeekId} onOpen={openTab} />
+              <LineageRow caption="Used by" empty="No functions use this contract." items={lineage.functions} onPick={setPeekId} onOpen={openTab} />
             </>
           )}
           {previewNode && lineage.grain === 'unit' && (
@@ -759,7 +949,7 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
                       fill={KIND_COLOR[hub.kind]}
                       fontSize="13"
                       fontFamily="ui-monospace, monospace"
-                      opacity="0.4"
+                      opacity="0.7"
                       className="pointer-events-none"
                     >
                       {hub.label}
@@ -945,7 +1135,11 @@ export default function FocusSpace({ focusId, index, report, artifacts, startWor
                     onMouseEnter={() => setHot(node.id)}
                     onMouseLeave={() => setHot((id) => (id === node.id ? null : id))}
                     onClick={() => setPeekId(node.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left ${node.id === peekId
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      openTab(node.id);
+                    }}
+                    className={`w-full select-none rounded-2xl border px-4 py-3 text-left ${node.id === peekId
                       ? 'border-cyan-300 bg-slate-900/70'
                       : node.id === hot
                         ? 'border-cyan-500/40 bg-slate-900/50'

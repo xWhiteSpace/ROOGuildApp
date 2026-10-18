@@ -114,15 +114,16 @@ export default function MasterListTab({ user }) {
   };
 
   useEffect(() => {
-    if (membersQuery.data) {
-      setDbMembers(membersQuery.data);
-      setStagedMembers(JSON.parse(JSON.stringify(membersQuery.data)));
-    }
-    if (settingsQuery.data) {
-      setJobsCatalog(settingsQuery.data.jobs || {});
-      setRolesCatalog(settingsQuery.data.roles || {});
-    }
-  }, [membersQuery.data, settingsQuery.data]);
+    if (!membersQuery.data) return;
+    setDbMembers(membersQuery.data);
+    setStagedMembers(JSON.parse(JSON.stringify(membersQuery.data)));
+  }, [membersQuery.data]);
+
+  useEffect(() => {
+    if (!settingsQuery.data) return;
+    setJobsCatalog(settingsQuery.data.jobs || {});
+    setRolesCatalog(settingsQuery.data.roles || {});
+  }, [settingsQuery.data]);
 
   const loading = refreshing
     || (membersQuery.isLoading && !membersQuery.data)

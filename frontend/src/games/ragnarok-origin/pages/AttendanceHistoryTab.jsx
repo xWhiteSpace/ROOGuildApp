@@ -24,9 +24,8 @@ import {
   normalizeCommitmentStatus,
 } from '@guildname/shared/attendanceStatus';
 import { apiFetch } from '../../../services/apiClient';
-import { invalidateRaidHistory, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
-
-const backendUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5001';
+import { queryClient } from '../../../query/client';
+import { invalidateRaidHistory, queryKeys, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
 
 function CalendarRsvpIcon({ status, size = 15 }) {
   const normalized = normalizeCommitmentStatus(status);
@@ -57,18 +56,25 @@ export default function AttendanceHistoryTab({ user }) {
   const [selectedSessionId, setSelectedSessionId] = useState(null);
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
 
-  const getRequestHeaders = () => {
-    const savedUserSession = localStorage.getItem('guild_raid_session');
-    const headers = { 'Content-Type': 'application/json' };
-    if (savedUserSession) {
-      headers['x-user-profile'] = encodeURIComponent(savedUserSession);
-    }
-    return headers;
-  };
-
   useEffect(() => {
     if (historyQuery.data) setSessions(historyQuery.data);
   }, [historyQuery.data]);
+
+  const applyInGameFlag = (sessionId, uid, confirmed) => {
+    const nextSessions = (prev) => {
+      const session = prev?.[sessionId];
+      if (!session) return prev;
+      const nextInGame = { ...(session.inGameStatus || {}) };
+      if (confirmed) nextInGame[uid] = true;
+      else delete nextInGame[uid];
+      return {
+        ...prev,
+        [sessionId]: { ...session, inGameStatus: nextInGame },
+      };
+    };
+    setSessions(nextSessions);
+    queryClient.setQueryData(queryKeys.raidHistory(12), nextSessions);
+  };
 
   const loadHistoryData = async () => {
     await invalidateRaidHistory();
@@ -81,11 +87,8 @@ export default function AttendanceHistoryTab({ user }) {
     const session = sessions[sessionId];
     if (!window.confirm(`Delete session "${session?.eventTitle || 'Raid'}" (${session?.eventDate})?\nThis cannot be undone.`)) return;
     try {
-      const headers = getRequestHeaders();
-      const res = await fetch(`${backendUrl}/api/live-raid/history/${sessionId}`, {
+      const res = await apiFetch(`/api/live-raid/history/${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
-        headers,
-        credentials: 'include',
       });
       const data = await res.json();
       if (data.success) {
@@ -110,54 +113,23 @@ export default function AttendanceHistoryTab({ user }) {
     const prevConfirmed = sessions[sessionId]?.inGameStatus?.[uid] === true;
     const nextConfirmed = !prevConfirmed;
 
-    setSessions((prev) => {
-      const session = prev[sessionId];
-      if (!session) return prev;
-      const nextInGame = { ...(session.inGameStatus || {}) };
-      if (nextConfirmed) nextInGame[uid] = true;
-      else delete nextInGame[uid];
-      return {
-        ...prev,
-        [sessionId]: { ...session, inGameStatus: nextInGame },
-      };
-    });
+    await queryClient.cancelQueries({ queryKey: ['raid-history'] });
+    applyInGameFlag(sessionId, uid, nextConfirmed);
 
     try {
-      const headers = getRequestHeaders();
-      const res = await fetch(`${backendUrl}/api/live-raid/history/${sessionId}/in-game`, {
+      const res = await apiFetch(`/api/live-raid/history/${encodeURIComponent(sessionId)}/in-game`, {
         method: 'PATCH',
-        headers,
-        credentials: 'include',
         body: JSON.stringify({ userId: uid, confirmed: nextConfirmed }),
       });
-      const data = await res.json();
-      if (!data.success) {
-        // Revert optimistic update
-        setSessions((prev) => {
-          const session = prev[sessionId];
-          if (!session) return prev;
-          const nextInGame = { ...(session.inGameStatus || {}) };
-          if (prevConfirmed) nextInGame[uid] = true;
-          else delete nextInGame[uid];
-          return {
-            ...prev,
-            [sessionId]: { ...session, inGameStatus: nextInGame },
-          };
-        });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        applyInGameFlag(sessionId, uid, prevConfirmed);
         alert(data.error || 'Failed to update in-game status.');
+        return;
       }
+      await invalidateRaidHistory();
     } catch (err) {
-      setSessions((prev) => {
-        const session = prev[sessionId];
-        if (!session) return prev;
-        const nextInGame = { ...(session.inGameStatus || {}) };
-        if (prevConfirmed) nextInGame[uid] = true;
-        else delete nextInGame[uid];
-        return {
-          ...prev,
-          [sessionId]: { ...session, inGameStatus: nextInGame },
-        };
-      });
+      applyInGameFlag(sessionId, uid, prevConfirmed);
       alert(`Error: ${err.message}`);
     }
   };
