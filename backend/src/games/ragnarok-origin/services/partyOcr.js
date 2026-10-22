@@ -378,9 +378,9 @@ function detectTeamWindow(data, width, height) {
   return { left, top, right, bot };
 }
 
-function plateForSlot(slot, fraction = 0.46) {
+function plateForSlot(slot, fraction = 0.70) {
   const top = slot.top + Math.round(slot.height * fraction);
-  const height = Math.max(8, slot.top + slot.height - top - 1);
+  const height = Math.max(4, slot.top + slot.height - top - 1);
   return {
     left: slot.left + 3,
     top,
@@ -404,48 +404,17 @@ function cellIsEmpty(data, width, height, slot) {
   return seen > 0 && white / seen > 0.75;
 }
 
-function greenHeaderBands(data, width, win) {
-  const rowCounts = new Array(win.bot + 1).fill(0);
-  const span = Math.max(1, win.right - win.left);
-  for (let y = win.top; y <= win.bot; y += 1) {
-    for (let x = win.left; x <= win.right; x += 2) {
-      const [r, g, b] = pixelAt(data, width, x, y);
-      if (isPresentGreen(r, g, b)) rowCounts[y] += 1;
-    }
-  }
-  const thresh = Math.max(8, Math.round((span / 8) * 0.25));
-  return projectionRuns(rowCounts, win.top, win.bot, thresh, 10);
-}
-
-function headerPitch(bands) {
-  if (!bands || bands.length < 3) return null;
-  const gaps = [];
-  for (let i = 1; i < bands.length; i += 1) gaps.push(bands[i].start - bands[i - 1].start);
-  const small = gaps.filter((gap) => gap >= 28 && gap <= 80);
-  if (!small.length) return null;
-  const pitch = median(small);
-  const aligned = gaps.every((gap) => {
-    const steps = Math.round(gap / pitch);
-    return steps >= 1 && steps <= 3 && Math.abs(gap - steps * pitch) <= 12;
-  });
-  if (!aligned) return null;
-  return { top: bands[0].start, pitch };
-}
-
 function layoutFromWindow(data, width, height, win) {
   const ww = win.right - win.left;
   const wh = win.bot - win.top;
-  const snapped = headerPitch(greenHeaderBands(data, width, win));
   const grid = {
     left: Math.round(win.left + ww * 0.012),
     right: Math.round(win.left + ww * 0.975),
-    top: snapped ? snapped.top : Math.round(win.top + wh * 0.20),
-    bottom: snapped
-      ? snapped.top + Math.round(snapped.pitch * 5)
-      : Math.round(win.top + wh * 0.78),
+    top: Math.round(win.top + wh * 0.244),
+    bottom: Math.round(win.top + wh * 0.774),
   };
   const cellW = (grid.right - grid.left) / 8;
-  const cellH = snapped ? snapped.pitch : (grid.bottom - grid.top) / 5;
+  const cellH = (grid.bottom - grid.top) / 5;
   const cells = [];
   for (let row = 0; row < 5; row += 1) {
     for (let col = 0; col < 8; col += 1) {
@@ -466,7 +435,7 @@ function layoutFromWindow(data, width, height, win) {
         empty,
         text: '',
         slot,
-        plate: empty ? null : plateForSlot(slot, snapped ? 0.46 : 0.58),
+        plate: empty ? null : plateForSlot(slot),
       });
     }
   }
