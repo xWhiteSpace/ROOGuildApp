@@ -9,9 +9,11 @@ import { checkOfficer } from '../auth/officer.js';
 import {
   loadReview,
   saveReview,
+  saveReviewFields,
   deleteReview,
   applyPresentUids,
   assignUnmatched,
+  linkOcrReading,
   finalizeOcrCommit,
   refreshReviewMessage,
   reviewRosterUids,
@@ -66,6 +68,7 @@ function slimMember(uid, member) {
     uid,
     displayName: member?.displayName || member?.name || uid,
     inGameName: member?.inGameName || '',
+    ocrCorrections: Array.isArray(member?.ocrCorrections) ? member.ocrCorrections : [],
   };
 }
 
@@ -79,6 +82,7 @@ function rosterRows(review, members) {
       ocrState: hit ? 'match' : 'unmatch',
       ocrConfidence: hit ? ocrConfidencePct(hit) : 0,
       ocrText: hit?.ocrText || '',
+      ocrSource: hit?.source || '',
       imageSource: hit?.imageSource || '',
       imageIndex: Number.isInteger(hit?.imageIndex) ? hit.imageIndex : null,
       ocrCol: hit?.ocrCol ?? null,
@@ -203,6 +207,7 @@ router.get('/:id', async (req, res) => {
         ...summarizeReview(review, members),
         unmatched: Array.isArray(review.unmatched) ? review.unmatched : [],
         slotGaps: reviewSlotGaps(review),
+        overlays: Array.isArray(review.overlays) ? review.overlays : [],
         occupied: Number.isFinite(review.occupied) ? review.occupied : null,
         screenshotUrl: screenshotUrls[0] || '',
         screenshotUrls,
@@ -231,8 +236,35 @@ router.patch('/:id', async (req, res) => {
     if (req.body?.unmatchedId && req.body?.uid) {
       assignUnmatched(review, req.body.unmatchedId, req.body.uid);
     }
-    await saveReview(review);
-    await refreshReviewMessage(review, members, null).catch(() => {});
+    const correction = req.body?.correction;
+    if (correction && typeof correction === 'object') {
+      const uid = String(correction.uid || '');
+      const text = String(correction.text || '').trim();
+      if (!uid || !text) {
+        return res.status(400).json({ success: false, error: 'Choose a member for this OCR reading.' });
+      }
+      if (!members[uid]) {
+        return res.status(400).json({ success: false, error: 'Member not on the roster.' });
+      }
+      linkOcrReading(review, {
+        unmatchedId: correction.unmatchedId ? String(correction.unmatchedId) : '',
+        fromUid: correction.fromUid ? String(correction.fromUid) : '',
+        toUid: uid,
+        text,
+      });
+    }
+    const fields = new Set();
+    if (Array.isArray(req.body?.presentUids)) {
+      fields.add('present');
+      fields.add('absent');
+    }
+    if ((req.body?.unmatchedId && req.body?.uid) || correction?.uid) {
+      ['ocrMatches', 'present', 'unmatched', 'slotGaps', 'pendingUnmatchedId'].forEach((field) => fields.add(field));
+    }
+    if (fields.size) await saveReviewFields(review, [...fields]);
+    else await saveReview(review);
+    const linkedOnly = Boolean(correction?.uid) && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
+    if (!linkedOnly) await refreshReviewMessage(review, members, null).catch(() => {});
     return res.json({ success: true, id: review.id, presentCount: Object.keys(review.present || {}).length });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

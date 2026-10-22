@@ -175,6 +175,10 @@ function memberListProjectionSql() {
     'groupTag', COALESCE(data->>'groupTag', ''),
     'joinedAt', COALESCE(data->>'joinedAt', ''),
     'inGameName', COALESCE(data->>'inGameName', ''),
+    'ocrCorrections', CASE
+      WHEN jsonb_typeof(data->'ocrCorrections') = 'array' THEN data->'ocrCorrections'
+      ELSE '[]'::jsonb
+    END,
     'status', COALESCE(data->>'status', ''),
     'isRaidRoster', COALESCE((data->>'isRaidRoster')::boolean, false),
     'isDummy', COALESCE((data->>'isDummy')::boolean, false),

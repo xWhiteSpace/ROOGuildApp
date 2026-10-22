@@ -9,6 +9,7 @@ import { getCurrentTenantId } from '../../../db/tenantContext.js';
 export const OCR_STAGING_BUCKET = 'ocr-staging';
 export const OCR_STAGING_TTL_MS = 24 * 60 * 60 * 1000;
 const SIGNED_TTL_SEC = 24 * 60 * 60;
+const signedUrlCache = new Map();
 
 let bucketReady = null;
 
@@ -89,13 +90,35 @@ export async function signStagedOcrShots(paths) {
   const supabase = getSupabaseAdmin();
   const list = (paths || []).map(String).filter(Boolean);
   if (!supabase || !list.length) return [];
+  const now = Date.now();
+  const urls = new Array(list.length).fill('');
+  const missing = [];
+  list.forEach((objectPath, index) => {
+    const cached = signedUrlCache.get(objectPath);
+    if (cached && cached.exp > now + 5 * 60 * 1000) {
+      urls[index] = cached.url;
+      return;
+    }
+    missing.push({ objectPath, index });
+  });
+  if (!missing.length) return urls;
   await ensureBucket(supabase).catch(() => {});
-  const { data, error } = await supabase.storage.from(OCR_STAGING_BUCKET).createSignedUrls(list, SIGNED_TTL_SEC);
+  const { data, error } = await supabase.storage.from(OCR_STAGING_BUCKET).createSignedUrls(
+    missing.map((row) => row.objectPath),
+    SIGNED_TTL_SEC,
+  );
   if (error) {
     console.warn('OCR staging sign failed:', error.message);
-    return [];
+    return urls.filter(Boolean);
   }
-  return (data || []).map((row) => String(row?.signedUrl || '')).filter(Boolean);
+  const exp = now + SIGNED_TTL_SEC * 1000;
+  missing.forEach((row, index) => {
+    const url = String(data?.[index]?.signedUrl || '');
+    if (!url) return;
+    signedUrlCache.set(row.objectPath, { url, exp });
+    urls[row.index] = url;
+  });
+  return urls.filter(Boolean);
 }
 
 export async function downloadStagedOcrShots(paths) {

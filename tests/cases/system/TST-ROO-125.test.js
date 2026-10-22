@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   inGameFlagSet,
   inGameFlagClear,
+  inGameMapReplace,
   missingArchiveIs404,
   nonOfficerDoesNotCount,
   activeSessionUntouched,
@@ -33,6 +34,17 @@ describe('TST-ROO-125 PatchArchivedInGameFlags stores or clears an archived in-g
     const r = await nonOfficerDoesNotCount();
     expect(r.status).toBe(403);
     expect(r.flag).toBeNull();
+  });
+
+  it('replaces the archived in-game map in one write', async () => {
+    const r = await inGameMapReplace();
+    expect(r.status).toBe(200);
+    expect(r.body?.success).toBe(true);
+    expect(r.body?.inGameStatus).toEqual({ '200000000000000001': true });
+    expect(r.previous).toBeNull();
+    expect(r.next).toBe(true);
+    expect(r.beforeStatus).toBe('Active');
+    expect(r.liveStatus).toBe('Active');
   });
 
   it('The Active live_session is not mutated', async () => {

@@ -41,6 +41,23 @@ function CalendarRsvpIcon({ status, size = 15 }) {
   return <XCircle size={size} className="text-slate-600 opacity-40" title="Unanswered" />;
 }
 
+function confirmedInGameMap(status) {
+  const next = {};
+  if (!status || typeof status !== 'object' || Array.isArray(status)) return next;
+  for (const [uid, flag] of Object.entries(status)) {
+    if (flag === true) next[String(uid)] = true;
+  }
+  return next;
+}
+
+function sameInGameMap(left, right) {
+  const saved = confirmedInGameMap(left);
+  const staged = confirmedInGameMap(right);
+  const savedIds = Object.keys(saved);
+  if (savedIds.length !== Object.keys(staged).length) return false;
+  return savedIds.every((uid) => staged[uid] === true);
+}
+
 export default function AttendanceHistoryTab({ user }) {
   const isOfficer = user?.isOfficer === true;
   const membersQuery = useMembers('card');
@@ -55,26 +72,32 @@ export default function AttendanceHistoryTab({ user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSessionId, setSelectedSessionId] = useState(null);
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
+  const [savingInGame, setSavingInGame] = useState(false);
+
+  const inGameDirty = useMemo(() => {
+    if (!selectedSessionId) return false;
+    return !sameInGameMap(
+      historyQuery.data?.[selectedSessionId]?.inGameStatus,
+      sessions[selectedSessionId]?.inGameStatus,
+    );
+  }, [historyQuery.data, selectedSessionId, sessions]);
 
   useEffect(() => {
-    if (historyQuery.data) setSessions(historyQuery.data);
-  }, [historyQuery.data]);
-
-  const applyInGameFlag = (sessionId, uid, confirmed) => {
-    const nextSessions = (prev) => {
-      const session = prev?.[sessionId];
-      if (!session) return prev;
-      const nextInGame = { ...(session.inGameStatus || {}) };
-      if (confirmed) nextInGame[uid] = true;
-      else delete nextInGame[uid];
+    if (!historyQuery.data) return;
+    setSessions((prev) => {
+      if (!selectedSessionId || !prev?.[selectedSessionId]) return historyQuery.data;
+      const staged = prev[selectedSessionId]?.inGameStatus;
+      if (sameInGameMap(historyQuery.data[selectedSessionId]?.inGameStatus, staged)) {
+        return historyQuery.data;
+      }
+      const incoming = historyQuery.data[selectedSessionId];
+      if (!incoming) return historyQuery.data;
       return {
-        ...prev,
-        [sessionId]: { ...session, inGameStatus: nextInGame },
+        ...historyQuery.data,
+        [selectedSessionId]: { ...incoming, inGameStatus: staged || {} },
       };
-    };
-    setSessions(nextSessions);
-    queryClient.setQueryData(queryKeys.raidHistory(12), nextSessions);
-  };
+    });
+  }, [historyQuery.data, selectedSessionId]);
 
   const loadHistoryData = async () => {
     await invalidateRaidHistory();
@@ -107,30 +130,64 @@ export default function AttendanceHistoryTab({ user }) {
     }
   };
 
-  // Officer toggle: confirm/unconfirm in-game presence for a member on an archived session (+1 raid score).
-  const handleToggleInGameStatus = async (sessionId, uid) => {
+  const discardInGameEdits = () => {
+    if (historyQuery.data) setSessions(historyQuery.data);
+  };
+
+  const leaveInGameEdits = () => {
+    if (!inGameDirty) return true;
+    if (!window.confirm('In-game changes are not saved. Leave without saving?')) return false;
+    discardInGameEdits();
+    return true;
+  };
+
+  const handleToggleInGameStatus = (sessionId, uid) => {
     if (!isOfficer || !sessionId || !uid) return;
-    const prevConfirmed = sessions[sessionId]?.inGameStatus?.[uid] === true;
-    const nextConfirmed = !prevConfirmed;
+    setSessions((prev) => {
+      const session = prev?.[sessionId];
+      if (!session) return prev;
+      const nextInGame = confirmedInGameMap(session.inGameStatus);
+      if (nextInGame[uid] === true) delete nextInGame[uid];
+      else nextInGame[uid] = true;
+      return {
+        ...prev,
+        [sessionId]: { ...session, inGameStatus: nextInGame },
+      };
+    });
+  };
 
-    await queryClient.cancelQueries({ queryKey: ['raid-history'] });
-    applyInGameFlag(sessionId, uid, nextConfirmed);
-
+  const handleSaveInGame = async () => {
+    if (!isOfficer || !selectedSessionId || !inGameDirty || savingInGame) return;
+    const sessionId = selectedSessionId;
+    const inGameStatus = confirmedInGameMap(sessions[sessionId]?.inGameStatus);
+    setSavingInGame(true);
     try {
       const res = await apiFetch(`/api/live-raid/history/${encodeURIComponent(sessionId)}/in-game`, {
-        method: 'PATCH',
-        body: JSON.stringify({ userId: uid, confirmed: nextConfirmed }),
+        method: 'PUT',
+        body: JSON.stringify({ inGameStatus }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        applyInGameFlag(sessionId, uid, prevConfirmed);
-        alert(data.error || 'Failed to update in-game status.');
+        alert(data.error || 'Failed to save in-game status.');
         return;
       }
-      await invalidateRaidHistory();
+      const savedMap = confirmedInGameMap(data.inGameStatus);
+      setSessions((prev) => {
+        const session = prev?.[sessionId];
+        if (!session) return prev;
+        return { ...prev, [sessionId]: { ...session, inGameStatus: savedMap } };
+      });
+      queryClient.setQueryData(queryKeys.raidHistory(12), (prev) => {
+        if (!prev?.[sessionId]) return prev;
+        return {
+          ...prev,
+          [sessionId]: { ...prev[sessionId], inGameStatus: savedMap },
+        };
+      });
     } catch (err) {
-      applyInGameFlag(sessionId, uid, prevConfirmed);
       alert(`Error: ${err.message}`);
+    } finally {
+      setSavingInGame(false);
     }
   };
 
@@ -181,8 +238,10 @@ export default function AttendanceHistoryTab({ user }) {
 
   const sessionPlayerTally = useMemo(() => {
     const total = sessionRosterTableRows.length;
-    const played = sessionRosterTableRows.filter((row) => row.presentTicks > 0).length;
-    return { played, total };
+    const discord = sessionRosterTableRows.filter((row) => row.presentTicks > 0).length;
+    const calendar = sessionRosterTableRows.filter((row) => row.commitment === COMMITMENT_CONFIRMED).length;
+    const inGame = sessionRosterTableRows.filter((row) => row.inGameConfirmed).length;
+    return { played: discord, total, calendar, discord, inGame };
   }, [sessionRosterTableRows]);
 
   // --- VIEW B: MEMBER TRENDS TRACKER ---
@@ -256,13 +315,25 @@ export default function AttendanceHistoryTab({ user }) {
 
         <div className="flex bg-slate-950 border border-slate-850 p-0.5 rounded-xl shrink-0">
           <button
-            onClick={() => { setActiveTabMode('events'); setSelectedSessionId(null); setSelectedMemberUid(null); setSearchQuery(''); }}
+            onClick={() => {
+              if (!leaveInGameEdits()) return;
+              setActiveTabMode('events');
+              setSelectedSessionId(null);
+              setSelectedMemberUid(null);
+              setSearchQuery('');
+            }}
             className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${activeTabMode === 'events' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <Layers size={13} /> Raid Log Ledger
           </button>
           <button
-            onClick={() => { setActiveTabMode('trends'); setSelectedSessionId(null); setSelectedMemberUid(null); setSearchQuery(''); }}
+            onClick={() => {
+              if (!leaveInGameEdits()) return;
+              setActiveTabMode('trends');
+              setSelectedSessionId(null);
+              setSelectedMemberUid(null);
+              setSearchQuery('');
+            }}
             className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5 ${activeTabMode === 'trends' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <TrendingUp size={13} /> Member Trend Card
@@ -301,7 +372,11 @@ export default function AttendanceHistoryTab({ user }) {
                     return (
                       <div
                         key={s.id}
-                        onClick={() => setSelectedSessionId(s.id)}
+                        onClick={() => {
+                          if (s.id === selectedSessionId) return;
+                          if (!leaveInGameEdits()) return;
+                          setSelectedSessionId(s.id);
+                        }}
                         className={`p-3.5 rounded-xl border transition-all cursor-pointer group ${isSelected ? 'bg-slate-900 border-indigo-500 shadow' : 'bg-slate-950/40 border-slate-900 hover:border-slate-800'}`}
                       >
                         <div className="flex justify-between items-center gap-2">
@@ -334,7 +409,14 @@ export default function AttendanceHistoryTab({ user }) {
                 <div className="col-span-12 xl:col-span-9 bg-slate-950/60 border border-slate-800 rounded-3xl p-4 shadow-xl space-y-4 animate-fadeIn">
                   <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setSelectedSessionId(null)} className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!leaveInGameEdits()) return;
+                          setSelectedSessionId(null);
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                      >
                         <ArrowLeft size={14} />
                       </button>
                       <div>
@@ -345,12 +427,28 @@ export default function AttendanceHistoryTab({ user }) {
                         <p className="text-[9px] font-mono text-slate-600 mt-0.5">Calendar RSVP is copied when Live Raid ends.</p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-black font-mono text-slate-100 tracking-tight">
-                        {sessionPlayerTally.played}
-                        <span className="text-slate-500 font-bold">/{sessionPlayerTally.total}</span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {isOfficer && (
+                        <button
+                          type="button"
+                          onClick={handleSaveInGame}
+                          disabled={!inGameDirty || savingInGame}
+                          className={`rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
+                            inGameDirty && !savingInGame
+                              ? 'bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer'
+                              : 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed'
+                          }`}
+                        >
+                          {savingInGame ? 'Saving...' : 'Save'}
+                        </button>
+                      )}
+                      <div className="text-right">
+                        <div className="text-sm font-black font-mono text-slate-100 tracking-tight">
+                          {sessionPlayerTally.played}
+                          <span className="text-slate-500 font-bold">/{sessionPlayerTally.total}</span>
+                        </div>
+                        <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-500">Players</div>
                       </div>
-                      <div className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-500">Players</div>
                     </div>
                   </div>
 
@@ -359,9 +457,27 @@ export default function AttendanceHistoryTab({ user }) {
                       <thead className="bg-slate-900/45 text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 select-none">
                         <tr>
                           <th className="px-4 py-2.5 text-left">Character Name</th>
-                          <th className="px-4 py-2.5 text-center w-24">Calendar RSVP</th>
-                          <th className="px-4 py-2.5 text-center w-24">Discord Voice</th>
-                          <th className="px-4 py-2.5 text-center w-24" title="Officer flag on this archive — not Discord Available">In-game</th>
+                          <th className="px-4 py-2.5 text-center w-24">
+                            <span className="block">Calendar RSVP</span>
+                            <span
+                              className="mt-0.5 block text-[11px] font-black normal-case tracking-normal text-emerald-400"
+                              title="Available only. Leave, No Confirm, and unanswered are not included."
+                            >
+                              ({sessionPlayerTally.calendar})
+                            </span>
+                          </th>
+                          <th className="px-4 py-2.5 text-center w-24">
+                            <span className="block">Discord Voice</span>
+                            <span className="mt-0.5 block text-[11px] font-black normal-case tracking-normal text-indigo-400">
+                              ({sessionPlayerTally.discord})
+                            </span>
+                          </th>
+                          <th className="px-4 py-2.5 text-center w-24" title="Officer flag on this archive — not Discord Available">
+                            <span className="block">In-game</span>
+                            <span className="mt-0.5 block text-[11px] font-black normal-case tracking-normal text-cyan-400">
+                              ({sessionPlayerTally.inGame})
+                            </span>
+                          </th>
                           <th className="px-4 py-2.5 text-center w-28">Duration pulse</th>
                           <th className="px-4 py-2.5 text-right w-28">Raid Score</th>
                         </tr>

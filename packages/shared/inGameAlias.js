@@ -6,6 +6,8 @@
 
 export const IN_GAME_NAME_MAX_LEN = 100;
 export const OCR_MATCH_THRESHOLD = 0.70;
+export const OCR_CORRECTION_LIMIT = 30;
+export const OCR_CORRECTION_TOKEN_MAX = 24;
 const MIN_LATIN_CORE = 3;
 
 export function sanitizeInGameName(raw) {
@@ -150,6 +152,57 @@ export function isOcrRaidRosterMember(member) {
   return member?.isRaidRoster === true && member?.status !== 'Ghost';
 }
 
+export function correctionFold(value) {
+  return foldConfusable(value) || normalizeNameToken(value);
+}
+
+export function sanitizeOcrCorrections(raw) {
+  const out = [];
+  const seen = new Set();
+  const list = Array.isArray(raw) ? raw : [];
+  for (const item of list) {
+    const text = String(item || '').trim().slice(0, OCR_CORRECTION_TOKEN_MAX);
+    if (!text) continue;
+    const key = correctionFold(text);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= OCR_CORRECTION_LIMIT) break;
+  }
+  return out;
+}
+
+export function claimOcrCorrection(members, uid, rawText) {
+  const text = String(rawText || '').trim().slice(0, OCR_CORRECTION_TOKEN_MAX);
+  const key = correctionFold(text);
+  if (!text || !key || !members?.[uid]) return null;
+  const changed = {};
+  for (const [id, member] of Object.entries(members)) {
+    const current = sanitizeOcrCorrections(member?.ocrCorrections);
+    const without = current.filter((item) => correctionFold(item) !== key);
+    const next = id === String(uid)
+      ? sanitizeOcrCorrections([...without, text])
+      : without;
+    const same = next.length === current.length && next.every((item, i) => item === current[i]);
+    if (!same) changed[id] = next;
+  }
+  return changed;
+}
+
+function dictionaryOwners(roster) {
+  const owners = new Map();
+  for (const [uid, member] of roster) {
+    for (const token of sanitizeOcrCorrections(member?.ocrCorrections)) {
+      const key = correctionFold(token);
+      if (!key) continue;
+      const list = owners.get(key) || [];
+      if (!list.includes(uid)) list.push(uid);
+      owners.set(key, list);
+    }
+  }
+  return owners;
+}
+
 export function bestRosterMatch(ocrText, members) {
   let best = null;
   for (const [uid, member] of Object.entries(members || {})) {
@@ -185,8 +238,31 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
     uniqueRecords.push({ ...rec, text });
   }
 
+  const owners = dictionaryOwners(roster);
   const scored = [];
   for (const rec of uniqueRecords) {
+    const meta = {
+      col: rec.col ?? null,
+      row: rec.row ?? null,
+      imageSource: rec.imageSource || '',
+      imageIndex: Number.isInteger(rec.imageIndex) ? rec.imageIndex : null,
+    };
+    const key = correctionFold(rec.text);
+    const claimed = key ? (owners.get(key) || []) : [];
+    if (claimed.length > 1) {
+      unmatched.push({ text: rec.text, ...meta });
+      continue;
+    }
+    if (claimed.length === 1) {
+      scored.push({
+        uid: claimed[0],
+        ocrText: rec.text,
+        score: 1,
+        via: 'dictionary',
+        ...meta,
+      });
+      continue;
+    }
     let best = null;
     for (const [uid, member] of roster) {
       for (const candidate of memberMatchCandidates(member)) {
@@ -197,22 +273,14 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
             ocrText: rec.text,
             score,
             candidate,
-            col: rec.col ?? null,
-            row: rec.row ?? null,
-            imageSource: rec.imageSource || '',
-            imageIndex: Number.isInteger(rec.imageIndex) ? rec.imageIndex : null,
+            via: 'fuzzy',
+            ...meta,
           };
         }
       }
     }
     if (best) scored.push(best);
-    else unmatched.push({
-      text: rec.text,
-      col: rec.col ?? null,
-      row: rec.row ?? null,
-      imageSource: rec.imageSource || '',
-      imageIndex: Number.isInteger(rec.imageIndex) ? rec.imageIndex : null,
-    });
+    else unmatched.push({ text: rec.text, ...meta });
   }
 
   scored.sort((a, b) => b.score - a.score);
@@ -232,6 +300,7 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
       uid: hit.uid,
       ocrText: hit.ocrText,
       score: hit.score,
+      via: hit.via || 'fuzzy',
       col: hit.col ?? null,
       row: hit.row ?? null,
       imageSource: hit.imageSource || '',

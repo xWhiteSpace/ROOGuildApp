@@ -20,7 +20,8 @@ import { isTenantOfficer, roleTokensFromMember } from '../../../auth/officer.js'
 import { listUpcomingInstances } from './attendanceDecision.js';
 import { parseCompositeKey } from '../../../utils/guildTime.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
-import { enqueueOcrJob, ocrPartyImages } from './partyOcr.js';
+import { annotateShotBuffer, enqueueOcrJob, ocrPartyImages } from './partyOcr.js';
+import { claimOcrCorrection } from '@guildname/shared/inGameAlias';
 import { downloadStagedOcrShots, purgeReviewStaging, stageOcrShots } from './ocrShotStaging.js';
 import {
   commitInGameForEvent,
@@ -155,6 +156,15 @@ export async function saveReview(review) {
   await db.ref(`attendance/ocr_reviews/${review.id}`).set(review);
 }
 
+export async function saveReviewFields(review, fields) {
+  const db = getTenantStore();
+  const updates = {};
+  for (const field of fields) {
+    updates[`attendance/ocr_reviews/${review.id}/${field}`] = review[field];
+  }
+  if (Object.keys(updates).length) await db.ref().update(updates);
+}
+
 export async function deleteReview(review, members = {}) {
   if (!review?.id) return false;
   clearWebsiteShots(review.id);
@@ -269,7 +279,7 @@ export function buildDraftReview({ members, event, ocrResult, createdBy, created
     const row = {
       ocrText: hit.ocrText,
       score: hit.score,
-      source: 'ocr',
+      source: hit.via === 'dictionary' ? 'dictionary' : 'ocr',
       imageSource: hit.imageSource || '',
       imageIndex: Number.isInteger(hit.imageIndex) ? hit.imageIndex : null,
       ocrCol: hit.col ?? null,
@@ -303,6 +313,7 @@ export function buildDraftReview({ members, event, ocrResult, createdBy, created
     unmatched: slotGaps.filter((gap) => gap.category === 'unmatch'),
     slotGaps,
     occupied: Number.isFinite(ocrResult?.occupied) ? ocrResult.occupied : null,
+    overlays: Array.isArray(ocrResult?.overlays) ? ocrResult.overlays : [],
     source,
   };
 }
@@ -391,7 +402,11 @@ export function assignUnmatched(review, unmatchedId, uid) {
   const hit = {
     ocrText: unmatched?.text || '',
     score: 1,
-    source: 'officer',
+    source: 'dictionary',
+    imageSource: unmatched?.imageSource || '',
+    imageIndex: Number.isInteger(unmatched?.imageIndex) ? unmatched.imageIndex : null,
+    ocrCol: unmatched?.ocrCol ?? unmatched?.col ?? null,
+    ocrRow: unmatched?.ocrRow ?? unmatched?.row ?? null,
   };
   review.ocrMatches = review.ocrMatches || {};
   review.ocrMatches[uid] = hit;
@@ -404,8 +419,72 @@ export function assignUnmatched(review, unmatchedId, uid) {
   return true;
 }
 
+export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text }) {
+  if (!toUid) return false;
+  const unmatched = unmatchedId
+    ? (review.unmatched || []).find((row) => row.id === unmatchedId)
+      || (review.slotGaps || []).find((row) => row.id === unmatchedId)
+    : null;
+  const previous = fromUid ? (review.ocrMatches?.[fromUid] || null) : null;
+  const hit = {
+    ocrText: text || unmatched?.text || previous?.ocrText || '',
+    score: 1,
+    source: 'dictionary',
+    imageSource: unmatched?.imageSource || previous?.imageSource || '',
+    imageIndex: Number.isInteger(unmatched?.imageIndex)
+      ? unmatched.imageIndex
+      : (Number.isInteger(previous?.imageIndex) ? previous.imageIndex : null),
+    ocrCol: unmatched?.ocrCol ?? unmatched?.col ?? previous?.ocrCol ?? null,
+    ocrRow: unmatched?.ocrRow ?? unmatched?.row ?? previous?.ocrRow ?? null,
+  };
+  review.ocrMatches = review.ocrMatches || {};
+  if (fromUid && fromUid !== toUid) {
+    delete review.ocrMatches[fromUid];
+    if (review.present?.[fromUid]?.ocrText) {
+      review.present[fromUid] = { ocrText: '', score: 0, source: 'officer' };
+    }
+  }
+  review.ocrMatches[toUid] = hit;
+  if (unmatchedId) {
+    review.unmatched = (review.unmatched || []).filter((row) => row.id !== unmatchedId);
+    review.slotGaps = (review.slotGaps || []).filter((gap) => gap.id !== unmatchedId);
+    review.pendingUnmatchedId = null;
+  }
+  return true;
+}
+
+export async function persistOcrClaim(db, members, uid, text) {
+  const changed = claimOcrCorrection(members, uid, text);
+  if (!changed) return false;
+  const updates = {};
+  for (const [id, list] of Object.entries(changed)) {
+    updates[`auction/members/${id}/ocrCorrections`] = list;
+    if (members[id]) members[id] = { ...members[id], ocrCorrections: list };
+  }
+  if (Object.keys(updates).length) await db.ref().update(updates);
+  return true;
+}
+
+export async function persistReviewDictionary(db, review, members) {
+  const seen = new Set();
+  const rows = [
+    ...Object.entries(review?.ocrMatches || {}),
+    ...Object.entries(review?.present || {}),
+  ];
+  for (const [uid, hit] of rows) {
+    if (hit?.source !== 'dictionary') continue;
+    const text = String(hit?.ocrText || '').trim();
+    if (!text) continue;
+    const key = `${uid}:${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await persistOcrClaim(db, members, uid, text);
+  }
+}
+
 export async function finalizeOcrCommit(review, members, committedBy) {
   const db = getTenantStore();
+  await persistReviewDictionary(db, review, members);
   const roster = raidRosterUids(members);
   const statusMap = inGameStatusMapFromPresent([...presentSet(review)], roster);
   const result = await commitInGameForEvent(db, {
@@ -612,7 +691,9 @@ async function postGallery(review, committedBy) {
   try {
     for (let i = 0; i < urls.length; i += 1) {
       try {
-        const buf = await fetchAttachmentBuffer(urls[i]);
+        const raw = await fetchAttachmentBuffer(urls[i]);
+        const overlay = (review.overlays || []).find((row) => row.imageIndex === i) || (review.overlays || [])[i];
+        const buf = overlay ? await annotateShotBuffer(raw, overlay) : raw;
         files.push({ attachment: buf, name: `raid-${review.eventDate || 'shot'}-${i + 1}.png` });
       } catch {
         /* skip a dead CDN url */
@@ -620,15 +701,19 @@ async function postGallery(review, committedBy) {
     }
     if (!files.length) {
       const stashed = peekWebsiteShots(review.id);
-      stashed.forEach((buf, i) => {
+      for (let i = 0; i < stashed.length; i += 1) {
+        const overlay = (review.overlays || []).find((row) => row.imageIndex === i) || (review.overlays || [])[i];
+        const buf = overlay ? await annotateShotBuffer(stashed[i], overlay) : stashed[i];
         files.push({ attachment: buf, name: `raid-${review.eventDate || 'shot'}-${i + 1}.png` });
-      });
+      }
     }
     if (!files.length) {
       const staged = await downloadStagedOcrShots(review.source?.stagingPaths);
-      staged.forEach((buf, i) => {
+      for (let i = 0; i < staged.length; i += 1) {
+        const overlay = (review.overlays || []).find((row) => row.imageIndex === i) || (review.overlays || [])[i];
+        const buf = overlay ? await annotateShotBuffer(staged[i], overlay) : staged[i];
         files.push({ attachment: buf, name: `raid-${review.eventDate || 'shot'}-${i + 1}.png` });
-      });
+      }
     }
     if (!files.length) return { posted: false, reason: 'download-failed' };
     await enqueueDiscordCall(() => channel.send({ embeds: [embed], files }));

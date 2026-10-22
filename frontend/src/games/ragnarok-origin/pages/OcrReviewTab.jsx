@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
+import { foldConfusable } from '@guildname/shared/inGameAlias';
 import { apiFetch } from '../../../services/apiClient';
-import { invalidateOcrReviews, useOcrReview, useOcrReviewEvents, useOcrReviews } from '../../../query/hooks';
+import { invalidateMembers, invalidateOcrReviews, useOcrReview, useOcrReviewEvents, useOcrReviews } from '../../../query/hooks';
 import {
   cacheReviewShots,
   clearCachedReviewShots,
@@ -53,10 +54,164 @@ function slotGapsFromReview(review) {
   return (review?.unmatched || []).map((row) => ({ ...row, category: 'unmatch' }));
 }
 
+function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId }) {
+  const gaps = slotGapsFromReview(review);
+  const gap = unmatchedId ? gaps.find((row) => row.id === unmatchedId) : null;
+  const fromRow = fromUid ? (roster || []).find((row) => row.uid === fromUid) : null;
+  const col = gap?.ocrCol ?? fromRow?.ocrCol ?? null;
+  const ocrRow = gap?.ocrRow ?? fromRow?.ocrRow ?? null;
+  const imageIndex = Number.isInteger(gap?.imageIndex)
+    ? gap.imageIndex
+    : (Number.isInteger(fromRow?.imageIndex) ? fromRow.imageIndex : null);
+  const nextRoster = (roster || []).map((row) => {
+    if (fromUid && row.uid === fromUid && fromUid !== uid) {
+      return {
+        ...row,
+        ocrText: '',
+        ocrSource: 'officer',
+        ocrState: 'unmatch',
+        ocrConfidence: 0,
+        imageSource: '',
+        imageIndex: null,
+        ocrCol: null,
+        ocrRow: null,
+        ocrPosition: '',
+      };
+    }
+    if (row.uid !== uid) return row;
+    return {
+      ...row,
+      ocrText: text,
+      ocrSource: 'dictionary',
+      ocrState: 'match',
+      ocrConfidence: 100,
+      imageSource: gap?.imageSource || fromRow?.imageSource || '',
+      imageIndex,
+      ocrCol: col,
+      ocrRow,
+      ocrPosition: formatOcrPosition(col, ocrRow),
+    };
+  });
+  return {
+    review: {
+      ...review,
+      slotGaps: gaps.filter((row) => row.id !== unmatchedId),
+      unmatched: (review?.unmatched || []).filter((row) => row.id !== unmatchedId),
+    },
+    roster: nextRoster,
+  };
+}
+
 function slotGapValue(row) {
   if (row.category === 'empty') return '+';
-  if (row.category === 'missing') return '—';
+  if (row.category === 'missing') return row.text || '—';
   return row.text || '—';
+}
+
+function readingText(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '—' || text === '+') return '';
+  return text;
+}
+
+function correctionOwner(text, roster) {
+  const key = foldConfusable(text);
+  if (!key) return null;
+  const owners = (roster || []).filter((row) => (
+    (row.ocrCorrections || []).some((item) => foldConfusable(item) === key)
+  ));
+  return owners.length === 1 ? owners[0] : null;
+}
+
+function correctionLabel(text, roster, pendingOwner) {
+  const saved = correctionOwner(text, roster);
+  const owner = saved || (pendingOwner?.ocrSource === 'dictionary' ? pendingOwner : null);
+  if (!owner) return '';
+  const list = [...(saved?.ocrCorrections || owner.ocrCorrections || [])];
+  const reading = readingText(text);
+  if (reading && !list.some((item) => foldConfusable(item) === foldConfusable(reading))) list.push(reading);
+  return `${memberName(owner)}: {${list.join(', ')}}`;
+}
+
+function MemberLink({ text, fromUid, unmatchedId, roster, disabled, onLink }) {
+  const reading = readingText(text);
+  if (!reading) return null;
+  return (
+    <select
+      aria-label={`Link ${reading} to a member`}
+      disabled={disabled}
+      value=""
+      onChange={(event) => {
+        const uid = event.target.value;
+        if (!uid) return;
+        onLink({ text: reading, uid, fromUid, unmatchedId });
+      }}
+      className="mt-0.5 max-w-full bg-slate-950 border border-slate-800 rounded-md px-1 py-0.5 text-[10px] text-slate-300"
+    >
+      <option value="">Link member</option>
+      {[...(roster || [])]
+        .sort((a, b) => memberName(a).localeCompare(memberName(b), undefined, { sensitivity: 'base' }))
+        .map((row) => (
+          <option key={row.uid} value={row.uid}>{memberName(row)}</option>
+        ))}
+    </select>
+  );
+}
+
+function labelChip(plate, text) {
+  const fontSize = Math.max(10, plate.height * 0.55) / 2;
+  const pad = 1;
+  const width = Math.min(plate.width, Math.ceil(String(text).length * fontSize * 0.62) + pad * 2);
+  const height = fontSize + pad * 2;
+  const y = Math.max(0, plate.top - height - 1);
+  return {
+    fontSize,
+    x: plate.left,
+    y,
+    width,
+    height,
+    textX: plate.left + pad,
+    textY: y + fontSize,
+  };
+}
+
+function DetectionOverlay({ overlay }) {
+  if (!overlay?.width || !overlay?.height) return null;
+  const win = overlay.window;
+  return (
+    <svg
+      className="absolute inset-0 h-full w-full pointer-events-none"
+      viewBox={`0 0 ${overlay.width} ${overlay.height}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label="OCR detection boxes"
+    >
+      {win && (
+        <rect x={win.left} y={win.top} width={win.width} height={win.height} fill="none" stroke="#aa28be" strokeWidth="3" />
+      )}
+      {(overlay.cells || []).map((cell) => {
+        const chip = cell.plate && cell.text ? labelChip(cell.plate, cell.text) : null;
+        return (
+          <g key={`${cell.col}-${cell.row}`}>
+            {cell.slot && (
+              <rect x={cell.slot.left} y={cell.slot.top} width={cell.slot.width} height={cell.slot.height} fill="none" stroke="#145ae0" strokeWidth="2" />
+            )}
+            {cell.plate && (
+              <rect x={cell.plate.left} y={cell.plate.top} width={cell.plate.width} height={cell.plate.height} fill="none" stroke="#d23c14" strokeWidth="2" />
+            )}
+            {chip && (
+              <>
+                <rect x={chip.x} y={chip.y} width={chip.width} height={chip.height} fill="#ffe14a" />
+                <text x={chip.textX} y={chip.textY} fontSize={chip.fontSize} fill="#1a1a1a" fontFamily="sans-serif">
+                  {cell.text}
+                </text>
+              </>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 function slotGapCategory(row) {
@@ -179,6 +334,9 @@ export default function OcrReviewTab({ user }) {
   const [stateFilter, setStateFilter] = useState(() => (savedSession.reviewId === reviewId && savedSession.stateFilter) || 'all');
   const [markFilter, setMarkFilter] = useState(() => (savedSession.reviewId === reviewId && savedSession.markFilter) || 'all');
   const [busy, setBusy] = useState(false);
+  const reviewRef = useRef(null);
+  const linkQueue = useRef(Promise.resolve());
+  const keptShots = useRef({ id: '', urls: [] });
   const [scanning, setScanning] = useState(false);
   const [deletingId, setDeletingId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState(pendingUpload.files || []);
@@ -188,6 +346,7 @@ export default function OcrReviewTab({ user }) {
   const [shotIndex, setShotIndex] = useState(() => (
     savedSession.reviewId === reviewId && Number.isFinite(savedSession.shotIndex) ? savedSession.shotIndex : 0
   ));
+  const [showDetection, setShowDetection] = useState(false);
   const rosterRef = useRef([]);
   const persistTimer = useRef(null);
   const persistPresentRef = useRef(async () => {});
@@ -214,9 +373,11 @@ export default function OcrReviewTab({ user }) {
 
   useEffect(() => {
     if (!oneQuery.data) return;
-    setReview(oneQuery.data.review || null);
+    const nextReview = oneQuery.data.review || null;
     const nextRoster = oneQuery.data.roster || [];
+    reviewRef.current = nextReview;
     rosterRef.current = nextRoster;
+    setReview(nextReview);
     setRoster(nextRoster);
   }, [oneQuery.data]);
 
@@ -301,11 +462,20 @@ export default function OcrReviewTab({ user }) {
   }, [roster, search, sortKey, sortDir, imageFilter, stateFilter, markFilter]);
 
   const presentCount = roster.filter((row) => row.present).length;
-  const screenshotUrls = (review?.screenshotUrls || []).filter(Boolean);
+  const incomingShots = (review?.screenshotUrls || []).filter(Boolean);
+  if (keptShots.current.id !== (reviewId || '')) {
+    keptShots.current = { id: reviewId || '', urls: incomingShots };
+  } else if (!keptShots.current.urls.length && incomingShots.length) {
+    keptShots.current = { id: reviewId || '', urls: incomingShots };
+  }
+  const screenshotUrls = keptShots.current.urls.length ? keptShots.current.urls : incomingShots;
   const shots = screenshotUrls.length
     ? screenshotUrls
     : (review?.screenshotUrl ? [review.screenshotUrl] : localPreviews);
   const safeShotIndex = shots.length ? Math.min(shotIndex, shots.length - 1) : 0;
+  const overlayHere = (review?.overlays || []).find((row) => row.imageIndex === safeShotIndex)
+    || (review?.overlays || [])[safeShotIndex]
+    || null;
 
   useEffect(() => {
     if (!reviewId) return undefined;
@@ -375,6 +545,36 @@ export default function OcrReviewTab({ user }) {
     return persistPresent(rosterRef.current);
   };
 
+  const linkReading = ({ text, uid, fromUid, unmatchedId }) => {
+    const currentReview = reviewRef.current || review;
+    if (!reviewId || currentReview?.status !== 'draft') return;
+    const payload = { text, uid, fromUid: fromUid || '', unmatchedId: unmatchedId || '' };
+    const previousReview = currentReview;
+    const previousRoster = rosterRef.current;
+    const next = applyLinkedReading(currentReview, previousRoster, payload);
+    reviewRef.current = next.review;
+    rosterRef.current = next.roster;
+    setReview(next.review);
+    setRoster(next.roster);
+    setError('');
+    linkQueue.current = linkQueue.current.then(async () => {
+      const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ correction: payload }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not save that reading.');
+    }).catch((err) => {
+      if (reviewRef.current === next.review) {
+        reviewRef.current = previousReview;
+        rosterRef.current = previousRoster;
+        setReview(previousReview);
+        setRoster(previousRoster);
+      }
+      setError(err.message);
+    });
+  };
+
   const setPresent = (uid, present) => {
     if (review?.status !== 'draft' || busy) return;
     const prev = rosterRef.current;
@@ -405,7 +605,7 @@ export default function OcrReviewTab({ user }) {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Commit failed.');
-      await invalidateOcrReviews();
+      await Promise.all([invalidateOcrReviews(), invalidateMembers()]);
       clearCachedReviewShots(reviewId);
       writeOcrUiSession({ stayOnList: true, reviewId: null });
       navigate('/attendance/ocr-review', {
@@ -718,6 +918,14 @@ export default function OcrReviewTab({ user }) {
                   alt={`Team Party screenshot ${safeShotIndex + 1}`}
                   className="w-full h-full object-contain"
                 />
+                {showDetection && <DetectionOverlay overlay={overlayHere} />}
+                <button
+                  type="button"
+                  onClick={() => setShowDetection((on) => !on)}
+                  className={`absolute left-3 top-3 h-8 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${showDetection ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200' : 'bg-slate-950/80 border-slate-700 text-slate-300'}`}
+                >
+                  {showDetection ? 'Hide boxes' : 'Show boxes'}
+                </button>
                 {shots.length > 1 && (
                   <>
                     <button
@@ -827,13 +1035,24 @@ export default function OcrReviewTab({ user }) {
                         <tr
                           key={row.id || `${row.category}-${row.ocrCol}-${row.ocrRow}-${row.text}`}
                           title={unmatchedMeta(row)}
-                          className="h-8"
+                          className="align-top"
                         >
-                          <td className="pl-1 pr-2 text-[10px] font-mono text-slate-500 text-right tabular-nums">
+                          <td className="pl-1 pr-2 py-1 text-[10px] font-mono text-slate-500 text-right tabular-nums">
                             {idx + 1}
                           </td>
-                          <td className={`px-1.5 text-xs font-mono truncate max-w-0 ${row.category === 'empty' ? 'text-slate-500' : 'text-slate-100'}`}>
-                            {slotGapValue(row)}
+                          <td className={`px-1.5 py-1 max-w-0 ${row.category === 'empty' ? 'text-slate-500' : 'text-slate-100'}`}>
+                            <div className="text-xs font-mono truncate">{slotGapValue(row)}</div>
+                            {correctionLabel(slotGapValue(row), roster) && (
+                              <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(slotGapValue(row), roster)}</div>
+                            )}
+                            {draft && (
+                              <MemberLink
+                                text={slotGapValue(row)}
+                                unmatchedId={row.id}
+                                roster={roster}
+                                onLink={linkReading}
+                              />
+                            )}
                           </td>
                           <td className={`px-1.5 text-[10px] truncate ${slotGapTone(row)}`}>
                             {slotGapCategory(row)}
@@ -1017,7 +1236,20 @@ export default function OcrReviewTab({ user }) {
                       <td className="p-3 font-mono text-slate-300 truncate">
                         {row.ocrPosition || formatOcrPosition(row.ocrCol, row.ocrRow)}
                       </td>
-                      <td className="p-3 font-mono text-slate-300 truncate">{row.ocrText || '—'}</td>
+                      <td className="p-3 align-top">
+                        <div className="font-mono text-slate-300 truncate">{row.ocrText || '—'}</div>
+                        {correctionLabel(row.ocrText, roster, row) && (
+                          <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(row.ocrText, roster, row)}</div>
+                        )}
+                        {draft && (
+                          <MemberLink
+                            text={row.ocrText}
+                            fromUid={row.uid}
+                            roster={roster}
+                            onLink={linkReading}
+                          />
+                        )}
+                      </td>
                       <td className="p-3 overflow-hidden">
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${row.ocrState === 'match' ? 'text-cyan-400' : 'text-amber-400'}`}>
                           {row.ocrState}
@@ -1025,6 +1257,7 @@ export default function OcrReviewTab({ user }) {
                       </td>
                       <td className="p-3 font-mono text-slate-300 truncate">
                         {row.ocrState === 'match' ? `${row.ocrConfidence}%` : '0%'}
+                        {row.ocrSource === 'dictionary' ? ' saved' : ''}
                       </td>
                       <td className="p-3 text-center">
                         <button

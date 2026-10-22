@@ -15,6 +15,7 @@ const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentC
 const IconEdit = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
 const IconChevronLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>;
 const IconChevronRight = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>;
+const IconBook = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 016.5 3H20v16H6.5A2.5 2.5 0 004 21.5V5.5zM4 19h16M12 3v16" /></svg>;
 
 const ROSTER_CAP = 200;
 const ROSTER_SLIDES = [
@@ -81,6 +82,7 @@ export default function MasterListTab({ user }) {
   const [dummyDraft, setDummyDraft] = useState(emptyDummyDraft);
   const [creatingDummy, setCreatingDummy] = useState(false);
   const [editingNameUid, setEditingNameUid] = useState(null);
+  const [dictionaryUid, setDictionaryUid] = useState(null);
   const [slideIndex, setSlideIndex] = useState(0);
 
   const membersQuery = useMembers('list');
@@ -548,6 +550,15 @@ export default function MasterListTab({ user }) {
                             {m.displayName}
                           </Link>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setDictionaryUid(uid)}
+                          className="text-slate-500 hover:text-cyan-300 transition cursor-pointer shrink-0"
+                          title="OCR dictionary"
+                          aria-label={`OCR dictionary for ${m.displayName || 'member'}`}
+                        >
+                          <IconBook />
+                        </button>
                         {m.isDummy && (
                           <>
                             {user?.isOfficer && editingNameUid !== uid && (
@@ -1059,6 +1070,51 @@ export default function MasterListTab({ user }) {
               >
                 {vanishing ? 'Executing...' : vanishCount > 1 ? `Execute ${vanishCount}` : 'Execute Eviction'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dictionaryUid && stagedMembers[dictionaryUid] && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setDictionaryUid(null)}>
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ocr-dictionary-title"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="ocr-dictionary-title" className="font-sans font-bold text-slate-100 truncate">
+                {stagedMembers[dictionaryUid].displayName || 'Member'}
+              </h2>
+              <button type="button" onClick={() => setDictionaryUid(null)} className="text-slate-500 hover:text-white" aria-label="Close">
+                <IconX />
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">Saved OCR readings. Remove a wrong link, then save the roster.</p>
+            <div className="mt-4 flex flex-wrap gap-2 min-h-8">
+              {(stagedMembers[dictionaryUid].ocrCorrections || []).length === 0 && (
+                <span className="text-xs text-slate-500">No saved readings.</span>
+              )}
+              {(stagedMembers[dictionaryUid].ocrCorrections || []).map((token) => (
+                <span key={token} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-mono text-slate-200">
+                  {token}
+                  {user?.isOfficer && (
+                    <button
+                      type="button"
+                      className="text-slate-500 hover:text-rose-400"
+                      aria-label={`Remove ${token}`}
+                      onClick={() => {
+                        const next = (stagedMembers[dictionaryUid].ocrCorrections || []).filter((item) => item !== token);
+                        handleStageLocalUpdate(dictionaryUid, 'ocrCorrections', next);
+                      }}
+                    >
+                      <IconX />
+                    </button>
+                  )}
+                </span>
+              ))}
             </div>
           </div>
         </div>

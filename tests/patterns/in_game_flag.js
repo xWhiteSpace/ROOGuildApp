@@ -158,6 +158,35 @@ export async function nonOfficerDoesNotCount() {
   });
 }
 
+async function putInGameMap(body, session) {
+  const app = createApp();
+  return dispatch(app, {
+    method: 'PUT',
+    path: `/api/live-raid/history/${SESSION_ID}/in-game`,
+    session: session || officerSession(),
+    body,
+  });
+}
+
+export async function inGameMapReplace() {
+  return withEnv({}, async () => {
+    seedArchive({ includeInGame: true, live: true });
+    const other = '200000000000000001';
+    const before = await liveSession();
+    const res = await putInGameMap({
+      inGameStatus: { [other]: true, [MEMBER_UID]: false, skip: 'no' },
+    });
+    return {
+      status: res.status,
+      body: res.body,
+      previous: await flagAt(),
+      next: await flagAt(other),
+      liveStatus: (await liveSession())?.status,
+      beforeStatus: before?.status,
+    };
+  });
+}
+
 export async function activeSessionUntouched() {
   return withEnv({}, async () => {
     seedArchive({ includeInGame: false, live: true });

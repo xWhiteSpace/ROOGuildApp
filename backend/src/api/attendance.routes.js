@@ -23,6 +23,7 @@ import { discordChannel } from '../db/channels.js';
 import { checkOfficer } from '../auth/officer.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import { aggregatePeakHours, normalizePlaySchedule } from '../games/ragnarok-origin/services/peakHours.js';
+import { sanitizeOcrCorrections } from '@guildname/shared/inGameAlias';
 
 const router = Router();
 
@@ -990,6 +991,9 @@ router.post('/roster/save-batch', async (req, res) => {
       batchAtomicUpdates[`auction/members/${uid}/groupTag`] = m.groupTag || "";
       batchAtomicUpdates[`auction/members/${uid}/joinedAt`] = m.joinedAt || "";
       batchAtomicUpdates[`auction/members/${uid}/inGameName`] = String(m.inGameName || "").trim().slice(0, 100);
+      if (Array.isArray(m.ocrCorrections)) {
+        batchAtomicUpdates[`auction/members/${uid}/ocrCorrections`] = sanitizeOcrCorrections(m.ocrCorrections);
+      }
       
       if (m.status) {
         batchAtomicUpdates[`auction/members/${uid}/status`] = m.status;

@@ -272,54 +272,6 @@ function detectSlotBoxes(data, width, height) {
   return boxes.slice(0, MAX_CELLS);
 }
 
-function nameBand(box) {
-  const short = box.height < 50;
-  const insetX = Math.max(2, Math.round(box.width * 0.06));
-  const insetTop = Math.round(box.height * (short ? 0.40 : 0.54));
-  const insetBot = Math.max(1, Math.round(box.height * 0.06));
-  const left = box.left + insetX;
-  const top = box.top + insetTop;
-  const width = Math.max(8, box.width - insetX - Math.round(box.width * 0.06));
-  const height = Math.max(8, box.height - insetTop - insetBot);
-  return { left, top, width, height };
-}
-
-async function cropNameStrip(rgb, box, { binary = true, threshold = 155 } = {}) {
-  const band = nameBand(box);
-  const extract = {
-    left: Math.min(band.left, rgb.width - 8),
-    top: Math.min(band.top, rgb.height - 8),
-    width: Math.min(band.width, rgb.width - band.left),
-    height: Math.min(band.height, rgb.height - band.top),
-  };
-  if (extract.width < 8 || extract.height < 8) return null;
-  const targetH = 72;
-  const scale = Math.max(3, Math.ceil(targetH / Math.max(1, extract.height)));
-  let sum = 0;
-  let n = 0;
-  for (let y = extract.top; y < extract.top + extract.height; y += 1) {
-    for (let x = extract.left; x < extract.left + extract.width; x += 1) {
-      const i = (y * rgb.width + x) * 3;
-      sum += (rgb.data[i] + rgb.data[i + 1] + rgb.data[i + 2]) / 3;
-      n += 1;
-    }
-  }
-  const mean = n ? sum / n : 255;
-  let pipeline = sharp(rgb.data, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
-    .extract(extract)
-    .resize({ height: Math.max(targetH, extract.height * scale), withoutEnlargement: false })
-    .grayscale()
-    .normalize();
-  if (mean < 130) {
-    pipeline = pipeline.negate({ alpha: false }).linear(1.25, -8);
-  } else if (binary) {
-    pipeline = pipeline.linear(1.3, -10).threshold(threshold);
-  } else {
-    pipeline = pipeline.linear(1.25, -8);
-  }
-  return pipeline.png({ density: 300 }).toBuffer();
-}
-
 async function fullPageForFallback(buffer) {
   return sharp(buffer)
     .rotate()
@@ -376,16 +328,220 @@ function asOcrInputs(buffers) {
   });
 }
 
-async function readOccupiedName(worker, rgb, box) {
-  const strip = await cropNameStrip(rgb, box);
+function pixelAt(data, width, x, y) {
+  const i = (y * width + x) * 3;
+  return [data[i], data[i + 1], data[i + 2]];
+}
+
+function isPanelPixel(r, g, b) {
+  if (g > r + 25 && g > b + 15 && g > 70 && r < 200) return false;
+  const avg = (r + g + b) / 3;
+  const spread = Math.max(r, g, b) - Math.min(r, g, b);
+  return avg > 185 && spread < 90;
+}
+
+function isWhitePixel(r, g, b) {
+  return r > 230 && g > 230 && b > 220;
+}
+
+function detectTeamWindow(data, width, height) {
+  const verts = [];
+  for (let x = 0; x < width; x += 1) {
+    let bestStart = 0;
+    let bestLen = 0;
+    let start = -1;
+    for (let y = 0; y <= height; y += 1) {
+      let on = false;
+      if (y < height) {
+        const [r, g, b] = pixelAt(data, width, x, y);
+        on = isPanelPixel(r, g, b);
+      }
+      if (on && start < 0) start = y;
+      if (!on && start >= 0) {
+        if (y - start > bestLen) {
+          bestLen = y - start;
+          bestStart = start;
+        }
+        start = -1;
+      }
+    }
+    if (bestLen > height * 0.45) verts.push({ x, top: bestStart, bot: bestStart + bestLen - 1 });
+  }
+  if (verts.length < 8) return null;
+  const starts = verts.map((row) => row.top).sort((a, b) => a - b);
+  const ends = verts.map((row) => row.bot).sort((a, b) => a - b);
+  const left = verts[0].x;
+  const right = verts[verts.length - 1].x;
+  const top = starts[Math.floor((starts.length - 1) * 0.15)];
+  const bot = ends[Math.floor((ends.length - 1) * 0.8)];
+  if (right - left < 80 || bot - top < 80) return null;
+  return { left, top, right, bot };
+}
+
+function plateForSlot(slot, fraction = 0.46) {
+  const top = slot.top + Math.round(slot.height * fraction);
+  const height = Math.max(8, slot.top + slot.height - top - 1);
+  return {
+    left: slot.left + 3,
+    top,
+    width: Math.max(8, slot.width - 6),
+    height,
+  };
+}
+
+function cellIsEmpty(data, width, height, slot) {
+  const y1 = slot.top + Math.round(slot.height * 0.45);
+  let seen = 0;
+  let white = 0;
+  for (let y = slot.top + 2; y < y1; y += 2) {
+    for (let x = slot.left + 6; x < slot.left + slot.width - 4; x += 3) {
+      if (x < 0 || y < 0 || x >= width || y >= height) continue;
+      seen += 1;
+      const [r, g, b] = pixelAt(data, width, x, y);
+      if (isWhitePixel(r, g, b)) white += 1;
+    }
+  }
+  return seen > 0 && white / seen > 0.75;
+}
+
+function greenHeaderBands(data, width, win) {
+  const rowCounts = new Array(win.bot + 1).fill(0);
+  const span = Math.max(1, win.right - win.left);
+  for (let y = win.top; y <= win.bot; y += 1) {
+    for (let x = win.left; x <= win.right; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      if (isPresentGreen(r, g, b)) rowCounts[y] += 1;
+    }
+  }
+  const thresh = Math.max(8, Math.round((span / 8) * 0.25));
+  return projectionRuns(rowCounts, win.top, win.bot, thresh, 10);
+}
+
+function headerPitch(bands) {
+  if (!bands || bands.length < 3) return null;
+  const gaps = [];
+  for (let i = 1; i < bands.length; i += 1) gaps.push(bands[i].start - bands[i - 1].start);
+  const small = gaps.filter((gap) => gap >= 28 && gap <= 80);
+  if (!small.length) return null;
+  const pitch = median(small);
+  const aligned = gaps.every((gap) => {
+    const steps = Math.round(gap / pitch);
+    return steps >= 1 && steps <= 3 && Math.abs(gap - steps * pitch) <= 12;
+  });
+  if (!aligned) return null;
+  return { top: bands[0].start, pitch };
+}
+
+function layoutFromWindow(data, width, height, win) {
+  const ww = win.right - win.left;
+  const wh = win.bot - win.top;
+  const snapped = headerPitch(greenHeaderBands(data, width, win));
+  const grid = {
+    left: Math.round(win.left + ww * 0.012),
+    right: Math.round(win.left + ww * 0.975),
+    top: snapped ? snapped.top : Math.round(win.top + wh * 0.20),
+    bottom: snapped
+      ? snapped.top + Math.round(snapped.pitch * 5)
+      : Math.round(win.top + wh * 0.78),
+  };
+  const cellW = (grid.right - grid.left) / 8;
+  const cellH = snapped ? snapped.pitch : (grid.bottom - grid.top) / 5;
+  const cells = [];
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 8; col += 1) {
+      const left = Math.round(grid.left + col * cellW);
+      const top = Math.round(grid.top + row * cellH);
+      const right = Math.round(grid.left + (col + 1) * cellW) - 2;
+      const bottom = Math.round(grid.top + (row + 1) * cellH) - 2;
+      const slot = {
+        left,
+        top,
+        width: Math.max(8, right - left),
+        height: Math.max(8, bottom - top),
+      };
+      const empty = cellIsEmpty(data, width, height, slot);
+      cells.push({
+        col: col + 1,
+        row: row + 1,
+        empty,
+        text: '',
+        slot,
+        plate: empty ? null : plateForSlot(slot, snapped ? 0.46 : 0.58),
+      });
+    }
+  }
+  return {
+    width,
+    height,
+    window: {
+      left: win.left,
+      top: win.top,
+      width: win.right - win.left,
+      height: win.bot - win.top,
+    },
+    cells,
+  };
+}
+
+function layoutFromLegacyBoxes(boxes, width, height) {
+  return {
+    width,
+    height,
+    window: null,
+    cells: boxes.map((box) => {
+      const slot = { left: box.left, top: box.top, width: box.width, height: box.height };
+      const empty = Boolean(box.empty);
+      return {
+        col: box.col,
+        row: box.row,
+        empty,
+        text: '',
+        slot,
+        plate: empty ? null : plateForSlot(slot),
+      };
+    }),
+  };
+}
+
+export function layoutTeamSlots(data, width, height) {
+  const win = detectTeamWindow(data, width, height);
+  if (win) return layoutFromWindow(data, width, height, win);
+  return layoutFromLegacyBoxes(detectSlotBoxes(data, width, height), width, height);
+}
+
+async function cropRect(rgb, rect, { binary = true, threshold = 155 } = {}) {
+  if (!rect) return null;
+  const left = Math.max(0, Math.min(rect.left, rgb.width - 8));
+  const top = Math.max(0, Math.min(rect.top, rgb.height - 8));
+  const extract = {
+    left,
+    top,
+    width: Math.min(rect.width, rgb.width - left),
+    height: Math.min(rect.height, rgb.height - top),
+  };
+  if (extract.width < 8 || extract.height < 8) return null;
+  const targetH = 72;
+  const scale = Math.max(3, Math.ceil(targetH / Math.max(1, extract.height)));
+  let pipeline = sharp(rgb.data, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
+    .extract(extract)
+    .resize({ height: Math.max(targetH, extract.height * scale), withoutEnlargement: false })
+    .grayscale()
+    .normalize();
+  if (binary) pipeline = pipeline.linear(1.3, -10).threshold(threshold);
+  else pipeline = pipeline.linear(1.25, -8);
+  return pipeline.png({ density: 300 }).toBuffer();
+}
+
+async function readPlate(worker, rgb, rect) {
+  const strip = await cropRect(rgb, rect);
   if (!strip) return '';
   let got = tokenizeOcrText(await recognizeText(worker, strip, PSM.SINGLE_LINE));
   if (!got.length) {
-    const softer = await cropNameStrip(rgb, box, { binary: true, threshold: 140 });
+    const softer = await cropRect(rgb, rect, { binary: true, threshold: 140 });
     if (softer) got = tokenizeOcrText(await recognizeText(worker, softer, PSM.SINGLE_LINE));
   }
   if (!got.length) {
-    const retry = await cropNameStrip(rgb, box, { binary: false });
+    const retry = await cropRect(rgb, rect, { binary: false });
     if (retry) got = tokenizeOcrText(await recognizeText(worker, retry, PSM.SINGLE_LINE));
   }
   return got[0] || '';
@@ -395,9 +551,17 @@ function tidyCellName(text) {
   return tidyOcrToken(String(text || '').replace(/\bAFK\b/gi, ''));
 }
 
+function keepCellReading(token) {
+  const text = tidyCellName(token);
+  if (!text) return '';
+  if (/^(away|afk|lv\d+|party\d+)$/i.test(text)) return '';
+  if (CHROME_LINE.test(text) || CHROME_PHRASE.test(text)) return '';
+  return text;
+}
+
 export async function ocrImageBuffer(buffer) {
   const rgb = await loadRgb(buffer);
-  const boxes = detectSlotBoxes(rgb.data, rgb.width, rgb.height);
+  const laid = layoutTeamSlots(rgb.data, rgb.width, rgb.height);
   const worker = await createWorker('eng', 1, {
     cachePath: TESSDATA_PATH,
     logger: () => {},
@@ -405,27 +569,28 @@ export async function ocrImageBuffer(buffer) {
   try {
     const cellRecords = [];
     const gaps = [];
-    for (const box of boxes) {
-      const loc = { col: box.col || null, row: box.row || null };
-      if (box.empty) {
+    for (const cell of laid.cells) {
+      const loc = { col: cell.col || null, row: cell.row || null };
+      if (cell.empty) {
         gaps.push({ category: 'empty', text: '', ...loc });
         continue;
       }
-      const token = tidyCellName(await readOccupiedName(worker, rgb, box));
-      if (!looksLikePlayerName(token)) {
-        gaps.push({ category: 'missing', text: token || '', ...loc });
+      const reading = keepCellReading(await readPlate(worker, rgb, cell.plate || cell.slot));
+      cell.text = reading;
+      if (!reading) {
+        gaps.push({ category: 'missing', text: '', ...loc });
         continue;
       }
-      cellRecords.push({ text: token, ...loc });
+      cellRecords.push({ text: reading, ...loc });
     }
     let records = uniqueTokenRecords(cellRecords);
-    const occupied = boxes.filter((box) => !box.empty).length;
+    const occupied = laid.cells.filter((cell) => !cell.empty).length;
     if (records.length < 16 && occupied < 18) {
       const page = await fullPageForFallback(buffer);
       const sparse = await recognizeText(worker, page, PSM.SPARSE_TEXT);
       records = uniqueTokenRecords([...records, ...tokenizeOcrText(sparse).map((text) => ({ text }))]);
     }
-    return { records, cellRecords, gaps, occupied };
+    return { records, cellRecords, gaps, occupied, overlay: laid };
   } finally {
     await worker.terminate().catch(() => {});
   }
@@ -448,6 +613,7 @@ export async function ocrPartyImages(buffers, members) {
   const allRecords = [];
   const allCells = [];
   const slotGaps = [];
+  const overlays = [];
   let occupied = 0;
   for (let i = 0; i < inputs.length; i += 1) {
     const { buffer, name } = inputs[i];
@@ -457,9 +623,11 @@ export async function ocrPartyImages(buffers, members) {
     for (const rec of result.records || []) allRecords.push({ ...rec, ...image });
     for (const rec of result.cellRecords || []) allCells.push({ ...rec, ...image });
     for (const gap of result.gaps || []) slotGaps.push({ ...gap, ...image });
+    if (result.overlay) overlays.push({ ...result.overlay, imageIndex: i, imageSource: name });
   }
   const unique = uniqueTokenRecords(allRecords);
-  const matchedResult = matchOcrTokensToRoster(unique, members);
+  const shortCells = allCells.filter((row) => row.text && !looksLikePlayerName(row.text));
+  const matchedResult = matchOcrTokensToRoster([...unique, ...shortCells], members);
   const matchedFolds = matchedResult.matched.map((hit) => foldConfusable(hit.ocrText));
   const unmatched = matchedResult.unmatched.filter((row) => keepUnmatchedName(row, matchedFolds));
   const matchedKeys = new Set(matchedResult.matched.map(slotKey));
@@ -493,5 +661,66 @@ export async function ocrPartyImages(buffers, members) {
     unmatched,
     slotGaps,
     occupied,
+    overlays,
   };
+}
+
+function escapeXml(value) {
+  return String(value || '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&apos;',
+  }[ch]));
+}
+
+function labelChip(plate, text) {
+  const fontSize = Math.max(10, Math.round(plate.height * 0.55)) / 2;
+  const pad = 1;
+  const width = Math.min(plate.width, Math.ceil(String(text).length * fontSize * 0.62) + pad * 2);
+  const height = fontSize + pad * 2;
+  const y = Math.max(0, plate.top - height - 1);
+  return {
+    fontSize,
+    x: plate.left,
+    y,
+    width,
+    height,
+    textX: plate.left + pad,
+    textY: y + fontSize,
+  };
+}
+
+export function detectionOverlaySvg(overlay) {
+  const width = Number(overlay?.width) || 1;
+  const height = Number(overlay?.height) || 1;
+  const parts = [];
+  const win = overlay?.window;
+  if (win && win.width > 0 && win.height > 0) {
+    parts.push(`<rect x="${win.left}" y="${win.top}" width="${win.width}" height="${win.height}" fill="none" stroke="#aa28be" stroke-width="3"/>`);
+  }
+  for (const cell of overlay?.cells || []) {
+    const slot = cell.slot;
+    if (!slot) continue;
+    parts.push(`<rect x="${slot.left}" y="${slot.top}" width="${slot.width}" height="${slot.height}" fill="none" stroke="#145ae0" stroke-width="2"/>`);
+    if (!cell.plate) continue;
+    const plate = cell.plate;
+    parts.push(`<rect x="${plate.left}" y="${plate.top}" width="${plate.width}" height="${plate.height}" fill="none" stroke="#d23c14" stroke-width="2"/>`);
+    if (!cell.text) continue;
+    const chip = labelChip(plate, cell.text);
+    parts.push(`<rect x="${chip.x}" y="${chip.y}" width="${chip.width}" height="${chip.height}" fill="#ffe14a"/>`);
+    parts.push(`<text x="${chip.textX}" y="${chip.textY}" font-size="${chip.fontSize}" font-family="sans-serif" fill="#1a1a1a">${escapeXml(cell.text)}</text>`);
+  }
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${parts.join('')}</svg>`);
+}
+
+export async function annotateShotBuffer(buffer, overlay) {
+  if (!buffer || !overlay?.width || !overlay?.height) return buffer;
+  const base = await sharp(buffer)
+    .rotate()
+    .resize({ width: overlay.width, withoutEnlargement: false })
+    .png()
+    .toBuffer();
+  return sharp(base).composite([{ input: detectionOverlaySvg(overlay), top: 0, left: 0 }]).png().toBuffer();
 }

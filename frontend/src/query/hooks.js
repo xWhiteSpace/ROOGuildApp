@@ -402,7 +402,8 @@ export function useOcrReview(id, options = {}) {
       return readSuccess(res, 'Failed to load review');
     },
     enabled: Boolean(id),
-    staleTime: TWO_MIN,
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
     ...options,
   });
 }

@@ -23,7 +23,7 @@ import {
 import { isArchivedRsvp, normalizeCommitmentStatus } from '@guildname/shared/attendanceStatus';
 import { checkOfficer } from '../auth/officer.js';
 import { buildCompositeKey } from '../utils/guildTime.js';
-import { consumePendingInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
+import { consumePendingInGameStatus, replaceArchiveInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
 
 const router = Router();
 
@@ -966,6 +966,46 @@ router.patch('/history/:sessionId/in-game', async (req, res) => {
 
     const confirmedFlag = await setInGameStatusFlag(db, sessionId, userId, confirmed === true);
     return res.json({ success: true, confirmed: confirmedFlag });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+function inGameMapFromBody(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const next = {};
+  for (const [uid, flag] of Object.entries(value)) {
+    const id = String(uid || '').trim();
+    if (!id || flag !== true) continue;
+    next[id] = true;
+  }
+  return next;
+}
+
+/**
+ * PUT /api/live-raid/history/:sessionId/in-game
+ * Officer batch: replace attendance/session_archive/{sessionId}/inGameStatus in one write.
+ */
+router.put('/history/:sessionId/in-game', async (req, res) => {
+  const { user, ok } = await checkOfficer(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+  if (!ok) return res.status(403).json({ success: false, error: 'Officer access required' });
+
+  const { sessionId } = req.params;
+  const inGameStatus = inGameMapFromBody(req.body?.inGameStatus);
+  if (!sessionId || !inGameStatus) {
+    return res.status(400).json({ success: false, error: 'sessionId and inGameStatus are required' });
+  }
+
+  try {
+    const db = getTenantStore();
+    const sessionSnap = await db.ref(`attendance/session_archive/${sessionId}`).once('value');
+    if (!sessionSnap.exists()) {
+      return res.status(404).json({ success: false, error: 'Session archive not found' });
+    }
+
+    await replaceArchiveInGameStatus(db, sessionId, inGameStatus);
+    return res.json({ success: true, inGameStatus });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
