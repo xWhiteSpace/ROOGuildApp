@@ -166,6 +166,53 @@ export function useSettingsAdmin(options = {}) {
   });
 }
 
+function gvgSheetQuery(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value == null || value === '') continue;
+    search.set(key, String(value));
+  }
+  return search.toString();
+}
+
+export function gvgSheetOptions(params, options = {}) {
+  return {
+    queryKey: ['gvg-sheet', params],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/live-raid/history/sheet?${gvgSheetQuery(params)}`);
+      return readSuccess(res, 'Failed to load GvG sheet');
+    },
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    ...options,
+  };
+}
+
+export function useGvgSheet(params, options = {}) {
+  return useQuery(gvgSheetOptions(params, options));
+}
+
+export function invalidateGvgSheet() {
+  return queryClient.invalidateQueries({ queryKey: ['gvg-sheet'] });
+}
+
+export function invalidateGvgSheetWar(sessionId) {
+  const id = String(sessionId || '');
+  return queryClient.invalidateQueries({
+    predicate: (query) => {
+      if (query.queryKey?.[0] !== 'gvg-sheet') return false;
+      const params = query.queryKey[1] || {};
+      if (params.view === 'catalog' || params.view === 'rows') return false;
+      if (params.sessionId === id) return true;
+      const data = query.state?.data;
+      if (data?.scores && Object.prototype.hasOwnProperty.call(data.scores, id)) return true;
+      return Array.isArray(data?.dates) && data.dates.some((date) => date?.id === id);
+    },
+  });
+}
+
 export function useRaidHistory(limit = 12, options = {}) {
   return useQuery({
     queryKey: queryKeys.raidHistory(limit),

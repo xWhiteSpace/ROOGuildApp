@@ -33,7 +33,6 @@ export const RAGNAROK_ORIGIN = {
         { label: 'War Room', path: '/attendance/war-room', icon: 'swords' },
         { label: 'GVG Attendance', path: '/attendance/ocr-review', icon: 'gallery' },
         { label: 'GVG History', path: '/attendance/history', icon: 'history' },
-        { label: 'Attendance', path: '/attendance/statistics', icon: 'stats' },
         { label: 'Calendar', path: '/attendance/scheduler', icon: 'scheduler' },
       ],
     },

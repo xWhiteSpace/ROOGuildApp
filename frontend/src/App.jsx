@@ -16,7 +16,6 @@ import RaidPartyTab from './games/ragnarok-origin/pages/RaidPartyTab';
 import WarRoomTab from './games/ragnarok-origin/pages/WarRoomTab';
 import OcrReviewTab from './games/ragnarok-origin/pages/OcrReviewTab';
 import Profile from './games/ragnarok-origin/pages/Profile';
-import StatisticsTab from './games/ragnarok-origin/pages/StatisticsTab';
 import AttendanceHistoryTab from './games/ragnarok-origin/pages/AttendanceHistoryTab';
 
 import Scheduler from './games/ragnarok-origin/pages/Scheduler';
@@ -399,7 +398,7 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/attendance/compose" element={<Navigate to="/attendance/war-room" replace />} />
         <Route path="/attendance/liveraid" element={<Navigate to="/attendance/war-room" replace />} />
         <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
-        <Route path="/attendance/statistics" element={<StatisticsTab user={authUser} />} />
+        <Route path="/attendance/statistics" element={<Navigate to="/attendance/history?slide=graph" replace />} />
         <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
       </Routes>
     </MainLayout>

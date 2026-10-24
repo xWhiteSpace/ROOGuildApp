@@ -318,23 +318,43 @@ export function buildDraftReview({ members, event, ocrResult, createdBy, created
   };
 }
 
+function eventFromInstance(key, inst) {
+  const parsed = parseCompositeKey(key);
+  return {
+    key,
+    ...(inst && typeof inst === 'object' ? inst : {}),
+    date: inst?.date || parsed?.dateStr || '',
+    eventId: inst?.eventId || parsed?.eventId || '',
+    title: inst?.title || inst?.eventId || parsed?.eventId || key,
+    timeStart: inst?.timeStart || '',
+  };
+}
+
 export async function listOcrEvents() {
-  const upcoming = await listUpcomingInstances({ includePreviousWeek: true });
-  return upcoming
-    .slice()
+  const db = getTenantStore();
+  const snap = await db.ref('scheduler/instances').once('value');
+  const map = snap.exists() ? snap.val() || {} : {};
+  return Object.entries(map)
+    .map(([key, inst]) => eventFromInstance(key, inst))
+    .filter((ev) => ev.key && ev.isCancelled !== true)
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(a.title || '').localeCompare(String(b.title || '')))
     .map((ev) => ({
       key: ev.key,
       date: ev.date || '',
-      title: ev.title || ev.eventId || ev.key,
+      title: ev.title || ev.key,
       timeStart: ev.timeStart || '',
-    }))
-    .filter((ev) => ev.key);
+    }));
 }
 
 export async function resolveOcrEvent(eventKey) {
-  const upcoming = await listUpcomingInstances({ includePreviousWeek: true });
-  return parseEventFromKey(upcoming, eventKey);
+  const key = String(eventKey || '').trim();
+  if (!key) return null;
+  const db = getTenantStore();
+  const snap = await db.ref(`scheduler/instances/${key}`).once('value');
+  if (!snap.exists()) return null;
+  const event = eventFromInstance(key, snap.val());
+  if (event.isCancelled === true) return null;
+  return event;
 }
 
 export async function createReviewFromBuffers({ buffers, fileNames = [], event, createdBy, createdByName, source = {} }) {

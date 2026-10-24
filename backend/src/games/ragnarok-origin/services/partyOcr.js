@@ -1,7 +1,7 @@
 /**
  * Render-safe party-screenshot OCR.
  * Detect green/AFK roster cells, OCR each name strip (PSM single-line), then
- * dictionary-match. Full-page sparse OCR is only a fallback. Worker is created
+ * dictionary-match. Worker is created
  * once per job and always terminated. Image buffers are never persisted.
  */
 import sharp from 'sharp';
@@ -28,8 +28,6 @@ export function enqueueOcrJob(fn) {
 function tidyOcrToken(token) {
   return String(token || '')
     .replace(/\s+/g, '')
-    .replace(/[0o]{2,}$/gi, '')
-    .replace(/[0o]$/i, (m, offset, src) => (src.length > 5 ? '' : m))
     .replace(/[^a-zA-Z0-9]/g, '')
     .trim();
 }
@@ -272,16 +270,6 @@ function detectSlotBoxes(data, width, height) {
   return boxes.slice(0, MAX_CELLS);
 }
 
-async function fullPageForFallback(buffer) {
-  return sharp(buffer)
-    .rotate()
-    .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-    .grayscale()
-    .normalize()
-    .png()
-    .toBuffer();
-}
-
 async function recognizeText(worker, image, psm) {
   await worker.setParameters({
     tessedit_pageseg_mode: psm,
@@ -333,59 +321,121 @@ function pixelAt(data, width, x, y) {
   return [data[i], data[i + 1], data[i + 2]];
 }
 
-function isPanelPixel(r, g, b) {
-  if (g > r + 25 && g > b + 15 && g > 70 && r < 200) return false;
-  const avg = (r + g + b) / 3;
-  const spread = Math.max(r, g, b) - Math.min(r, g, b);
-  return avg > 185 && spread < 90;
-}
-
 function isWhitePixel(r, g, b) {
   return r > 230 && g > 230 && b > 220;
 }
 
-function detectTeamWindow(data, width, height) {
-  const verts = [];
-  for (let x = 0; x < width; x += 1) {
-    let bestStart = 0;
-    let bestLen = 0;
-    let start = -1;
-    for (let y = 0; y <= height; y += 1) {
-      let on = false;
-      if (y < height) {
-        const [r, g, b] = pixelAt(data, width, x, y);
-        on = isPanelPixel(r, g, b);
-      }
-      if (on && start < 0) start = y;
-      if (!on && start >= 0) {
-        if (y - start > bestLen) {
-          bestLen = y - start;
-          bestStart = start;
-        }
-        start = -1;
-      }
-    }
-    if (bestLen > height * 0.45) verts.push({ x, top: bestStart, bot: bestStart + bestLen - 1 });
+function isWindowWhite(r, g, b) {
+  const min = Math.min(r, g, b);
+  const max = Math.max(r, g, b);
+  return min > 205 && max - min < 42;
+}
+
+function isWindowHeader(r, g, b) {
+  return b > 140 && b > r + 20 && g > 80 && r < 190;
+}
+
+function closeWindowGaps(on) {
+  const height = on.length;
+  for (let y = 0; y < height; y += 1) {
+    if (on[y]) continue;
+    let above = y - 1;
+    let below = y + 1;
+    while (above >= 0 && !on[above] && y - above <= 10) above -= 1;
+    while (below < height && !on[below] && below - y <= 10) below += 1;
+    if (above >= 0 && on[above] && below < height && on[below] && below - above <= 12) on[y] = true;
   }
-  if (verts.length < 8) return null;
-  const starts = verts.map((row) => row.top).sort((a, b) => a - b);
-  const ends = verts.map((row) => row.bot).sort((a, b) => a - b);
-  const left = verts[0].x;
-  const right = verts[verts.length - 1].x;
-  const top = starts[Math.floor((starts.length - 1) * 0.15)];
-  const bot = ends[Math.floor((ends.length - 1) * 0.8)];
-  if (right - left < 80 || bot - top < 80) return null;
+}
+
+function longestRun(on) {
+  let best = null;
+  let start = -1;
+  for (let y = 0; y <= on.length; y += 1) {
+    if (y < on.length && on[y]) {
+      if (start < 0) start = y;
+    } else if (start >= 0) {
+      const len = y - start;
+      if (!best || len > best.len) best = { top: start, bot: y - 1, len };
+      start = -1;
+    }
+  }
+  return best;
+}
+
+function detectTeamWindow(data, width, height) {
+  const rowCount = new Array(height).fill(0);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      if (isWindowWhite(r, g, b)) rowCount[y] += 2;
+    }
+  }
+  const rowOn = rowCount.map((count) => count > width * 0.12);
+  closeWindowGaps(rowOn);
+  const band = longestRun(rowOn);
+  if (!band || band.len < height * 0.28) return null;
+
+  let { top, bot } = band;
+  const step = 2;
+  const colCount = new Array(width).fill(0);
+  for (let y = top; y <= bot; y += step) {
+    for (let x = 0; x < width; x += 1) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      if (isWindowWhite(r, g, b)) colCount[x] += 1;
+    }
+  }
+  const samples = Math.ceil((bot - top + 1) / step);
+  const colThresh = Math.max(6, Math.round(samples * 0.12));
+  let left = -1;
+  let right = -1;
+  for (let x = 0; x < width; x += 1) {
+    if (colCount[x] >= colThresh) {
+      left = x;
+      break;
+    }
+  }
+  for (let x = width - 1; x >= 0; x -= 1) {
+    if (colCount[x] >= colThresh) {
+      right = x;
+      break;
+    }
+  }
+  if (left < 0 || right - left < width * 0.4) return null;
+
+  let y = top - 1;
+  let miss = 0;
+  while (y > 2 && miss < 8) {
+    let hit = 0;
+    let seen = 0;
+    for (let x = left + 8; x < right - 8; x += 3) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      seen += 1;
+      if (isWindowHeader(r, g, b) || isWindowWhite(r, g, b)) hit += 1;
+    }
+    if (seen && hit / seen > 0.3) {
+      top = y;
+      miss = 0;
+    } else miss += 1;
+    y -= 1;
+  }
+
+  const ww = right - left;
+  const wh = bot - top;
+  const aspect = ww / wh;
+  if (ww < 80 || wh < 80 || aspect < 1.35 || aspect > 2.2) return null;
   return { left, top, right, bot };
 }
 
 function plateForSlot(slot, fraction = 0.70) {
-  const top = slot.top + Math.round(slot.height * fraction);
-  const height = Math.max(4, slot.top + slot.height - top - 1);
+  const insetTop = slot.top + Math.round(slot.height * fraction);
+  const insetBottom = slot.top + slot.height - 1;
+  const top = insetTop - 4;
+  const bottom = insetBottom + 8;
   return {
     left: slot.left + 3,
     top,
     width: Math.max(8, slot.width - 6),
-    height,
+    height: Math.max(4, bottom - top),
   };
 }
 
@@ -478,7 +528,101 @@ export function layoutTeamSlots(data, width, height) {
   return layoutFromLegacyBoxes(detectSlotBoxes(data, width, height), width, height);
 }
 
-async function cropRect(rgb, rect, { binary = true, threshold = 155 } = {}) {
+function nameBand(height) {
+  const y0 = Math.floor(height * 0.25);
+  const y1 = Math.max(y0 + 1, Math.ceil(height * 0.75));
+  return { y0, y1 };
+}
+
+function barLevel(gray, width, height) {
+  const { y0, y1 } = nameBand(height);
+  const hist = new Uint32Array(32);
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      hist[Math.min(31, gray[y * width + x] >> 3)] += 1;
+    }
+  }
+  let mode = 0;
+  for (let i = 1; i < hist.length; i += 1) {
+    if (hist[i] > hist[mode]) mode = i;
+  }
+  return mode * 8 + 4;
+}
+
+function lettersAreLight(gray, width, height) {
+  const bar = barLevel(gray, width, height);
+  const { y0, y1 } = nameBand(height);
+  let lighter = 0;
+  let darker = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = gray[y * width + x];
+      if (bar < 180 && value >= 200) continue;
+      if (value > bar + 24) lighter += 1;
+      else if (value < bar - 24) darker += 1;
+    }
+  }
+  return lighter > darker;
+}
+
+function letterRows(gray, width, height) {
+  const bar = barLevel(gray, width, height);
+  const cut = Math.round(bar * 0.65);
+  const minInk = Math.max(3, Math.round(width * 0.04));
+  const counts = [];
+  for (let y = 0; y < height; y += 1) {
+    let n = 0;
+    for (let x = 2; x < width - 2; x += 1) {
+      if (gray[y * width + x] < cut) n += 1;
+    }
+    counts.push(n);
+  }
+  const runs = [];
+  let start = -1;
+  for (let y = 0; y <= height; y += 1) {
+    const on = y < height && counts[y] >= minInk;
+    if (on && start < 0) start = y;
+    if (!on && start >= 0) {
+      const rows = y - start;
+      if (rows >= 6) {
+        let ink = 0;
+        for (let i = start; i < y; i += 1) ink += counts[i];
+        runs.push({
+          y0: Math.max(0, start - 1),
+          y1: Math.min(height, y + 1),
+          ink,
+          rows,
+        });
+      }
+      start = -1;
+    }
+  }
+  if (!runs.length) return null;
+  const best = runs.reduce((a, b) => (b.ink > a.ink ? b : a));
+  if (best.y1 - best.y0 >= height - 2) return null;
+  if (runs.length < 2 && best.rows >= height * 0.7) return null;
+  return best;
+}
+
+function liftGrayBar(gray, width, height) {
+  const bar = barLevel(gray, width, height);
+  if (bar >= 200) return false;
+  const bg = 236;
+  const edge = 36;
+  for (let i = 0; i < gray.length; i += 1) {
+    const value = gray[i];
+    if (value >= bar) {
+      const t = (value - bar) / Math.max(1, 255 - bar);
+      gray[i] = Math.round(bg + t * (255 - bg));
+    } else if (value > bar - edge) {
+      const t = (value - (bar - edge)) / edge;
+      gray[i] = Math.round(value + (bg - bar) * t);
+    }
+  }
+  return true;
+}
+
+async function nameLinePng(rgb, rect) {
   if (!rect) return null;
   const left = Math.max(0, Math.min(rect.left, rgb.width - 8));
   const top = Math.max(0, Math.min(rect.top, rgb.height - 8));
@@ -489,29 +633,48 @@ async function cropRect(rgb, rect, { binary = true, threshold = 155 } = {}) {
     height: Math.min(rect.height, rgb.height - top),
   };
   if (extract.width < 8 || extract.height < 8) return null;
-  const targetH = 72;
-  const scale = Math.max(3, Math.ceil(targetH / Math.max(1, extract.height)));
-  let pipeline = sharp(rgb.data, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
+  const raw = await sharp(rgb.data, { raw: { width: rgb.width, height: rgb.height, channels: 3 } })
     .extract(extract)
-    .resize({ height: Math.max(targetH, extract.height * scale), withoutEnlargement: false })
     .grayscale()
-    .normalize();
-  if (binary) pipeline = pipeline.linear(1.3, -10).threshold(threshold);
-  else pipeline = pipeline.linear(1.25, -8);
-  return pipeline.png({ density: 300 }).toBuffer();
+    .raw()
+    .toBuffer();
+  const gray = Buffer.from(raw);
+  if (lettersAreLight(gray, extract.width, extract.height)) {
+    for (let i = 0; i < gray.length; i += 1) gray[i] = 255 - gray[i];
+  }
+  const lifted = liftGrayBar(gray, extract.width, extract.height);
+  const band = letterRows(gray, extract.width, extract.height);
+  let source = gray;
+  let width = extract.width;
+  let height = extract.height;
+  let heightOut = Math.max(64, height * 3);
+  let pad = { top: 12, bottom: 12, left: 16, right: 16 };
+  let kernel;
+  if (band) {
+    height = band.y1 - band.y0;
+    source = Buffer.alloc(width * height);
+    for (let y = 0; y < height; y += 1) {
+      source.set(gray.subarray((band.y0 + y) * width, (band.y0 + y) * width + width), y * width);
+    }
+    heightOut = 80;
+    pad = { top: 16, bottom: 16, left: 20, right: 20 };
+    kernel = 'lanczos3';
+  }
+  let pipeline = sharp(source, { raw: { width, height, channels: 1 } });
+  if (!lifted) pipeline = pipeline.normalize();
+  return pipeline
+    .resize(kernel ? { height: heightOut, kernel } : { height: heightOut })
+    .extend({ ...pad, background: { r: 255, g: 255, b: 255 } })
+    .png({ density: 300 })
+    .toBuffer();
 }
 
 async function readPlate(worker, rgb, rect) {
-  const strip = await cropRect(rgb, rect);
+  const strip = await nameLinePng(rgb, rect);
   if (!strip) return '';
   let got = tokenizeOcrText(await recognizeText(worker, strip, PSM.SINGLE_LINE));
   if (!got.length) {
-    const softer = await cropRect(rgb, rect, { binary: true, threshold: 140 });
-    if (softer) got = tokenizeOcrText(await recognizeText(worker, softer, PSM.SINGLE_LINE));
-  }
-  if (!got.length) {
-    const retry = await cropRect(rgb, rect, { binary: false });
-    if (retry) got = tokenizeOcrText(await recognizeText(worker, retry, PSM.SINGLE_LINE));
+    got = tokenizeOcrText(await recognizeText(worker, strip, PSM.RAW_LINE));
   }
   return got[0] || '';
 }
@@ -552,13 +715,8 @@ export async function ocrImageBuffer(buffer) {
       }
       cellRecords.push({ text: reading, ...loc });
     }
-    let records = uniqueTokenRecords(cellRecords);
+    const records = uniqueTokenRecords(cellRecords);
     const occupied = laid.cells.filter((cell) => !cell.empty).length;
-    if (records.length < 16 && occupied < 18) {
-      const page = await fullPageForFallback(buffer);
-      const sparse = await recognizeText(worker, page, PSM.SPARSE_TEXT);
-      records = uniqueTokenRecords([...records, ...tokenizeOcrText(sparse).map((text) => ({ text }))]);
-    }
     return { records, cellRecords, gaps, occupied, overlay: laid };
   } finally {
     await worker.terminate().catch(() => {});

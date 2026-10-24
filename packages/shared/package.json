@@ -6,6 +6,7 @@
     "./compositionTabs": "./compositionTabs.js",
     "./raidCycle": "./raidCycle.js",
     "./attendanceStatus": "./attendanceStatus.js",
+    "./gvgCell": "./gvgCell.js",
     "./inGameAlias": "./inGameAlias.js",
     "./allocatePreview": "./allocatePreview.js",
     "./mimicBookRoster": "./mimicBookRoster.js",

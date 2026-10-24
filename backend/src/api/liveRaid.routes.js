@@ -24,6 +24,18 @@ import { isArchivedRsvp, normalizeCommitmentStatus } from '@guildname/shared/att
 import { checkOfficer } from '../auth/officer.js';
 import { buildCompositeKey } from '../utils/guildTime.js';
 import { consumePendingInGameStatus, replaceArchiveInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
+import {
+  GVG_SHEET_PATH,
+  appendRows,
+  readGvgAttendance,
+  readGvgCatalog,
+  readGvgDetails,
+  readGvgEvent,
+  readGvgMember,
+  readGvgRows,
+  readGvgStats,
+  warSheetFromRoster,
+} from '../games/ragnarok-origin/services/gvgSheet.js';
 
 const router = Router();
 
@@ -654,6 +666,13 @@ async function endLiveRaidSessionInternal(s) {
 
   const { inGameStatus: pendingInGame, clearPath: pendingClearPath } = await consumePendingInGameStatus(db, s.eventDate, s.eventKey);
 
+  const warSheet = warSheetFromRoster(membersData, {
+    commitments,
+    userTallies: s.userTallies || {},
+    totalPulses,
+    inGameStatus: pendingInGame || {},
+  });
+
   atomicUpdates[`attendance/session_archive/${sessionHistoryId}`] = {
     id: sessionHistoryId,
     eventDate: s.eventDate,
@@ -674,11 +693,15 @@ async function endLiveRaidSessionInternal(s) {
     endedEarly,
     endedAt: now,
     inGameStatus: pendingInGame || {},
+    sheet: warSheet.sheet,
   };
 
   atomicUpdates['attendance/live_session'] = null;
   if (pendingClearPath) atomicUpdates[pendingClearPath] = null;
   await db.ref().update(atomicUpdates);
+  await db.ref(GVG_SHEET_PATH).transaction((current) => ({
+    rows: appendRows(current?.rows, warSheet.rows),
+  }));
   await touchSessionArchiveIndex({ id: sessionHistoryId, endedAt: now });
   noteLiveSessionCleared();
 }
@@ -1006,6 +1029,46 @@ router.put('/history/:sessionId/in-game', async (req, res) => {
 
     await replaceArchiveInGameStatus(db, sessionId, inGameStatus);
     return res.json({ success: true, inGameStatus });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/history/sheet', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Authentication missing' });
+
+  const view = String(req.query.view || 'attendance');
+  const offset = parseInt(req.query.offset, 10) || 0;
+
+  try {
+    const db = getTenantStore();
+    if (view === 'catalog') {
+      return res.json({ success: true, ...(await readGvgCatalog(db)) });
+    }
+    if (view === 'rows') {
+      return res.json({ success: true, ...(await readGvgRows(db)) });
+    }
+    if (view === 'event') {
+      const event = await readGvgEvent(db, req.query.sessionId);
+      if (!event) return res.status(404).json({ success: false, error: 'Session archive not found' });
+      return res.json({ success: true, ...event });
+    }
+    if (view === 'member') {
+      const member = await readGvgMember(db, req.query.uid, offset);
+      if (!member) return res.status(400).json({ success: false, error: 'uid is required' });
+      return res.json({ success: true, ...member });
+    }
+    if (view === 'details') {
+      const details = await readGvgDetails(db, req.query.sessionId);
+      if (!details) return res.status(404).json({ success: false, error: 'Session archive not found' });
+      return res.json({ success: true, ...details });
+    }
+    if (view === 'stats') {
+      const limit = parseInt(req.query.limit, 10) || 12;
+      return res.json({ success: true, ...(await readGvgStats(db, limit)) });
+    }
+    return res.json({ success: true, ...(await readGvgAttendance(db, offset)) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

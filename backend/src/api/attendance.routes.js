@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { getTenantStore, listCommitmentKeysForEventId, loadCommitmentsForWeek, loadMembersProjected, sqlFingerprint, touchSessionArchiveIndex } from '../db/database.js';
 import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
 import { DEFAULT_TZ, getWeekMonday } from '../utils/guildTime.js';
+import { appendVanishStays, listMemberHistory, updateMemberHistoryChanges, updateStayDates } from '../games/ragnarok-origin/services/memberHistory.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
 import { isDiscordCircuitOpen, enqueueDiscordCall } from '../utils/discordRateLimit.js';
@@ -70,6 +71,9 @@ router.post('/vanish', async (req, res) => {
     const failed = [];
     const purgeUpdates = {};
     const kickUids = [];
+    const config = configSnap.exists() ? configSnap.val() : {};
+
+    await appendVanishStays(db, targetUids, config.timezone || DEFAULT_TZ);
 
     for (const targetUid of targetUids) {
       const isDummyTarget = targetUid.startsWith('dummy_');
@@ -130,6 +134,54 @@ router.post('/vanish', async (req, res) => {
       failed,
       message,
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/member-history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const stays = await listMemberHistory(getTenantStore());
+    return res.json({ success: true, stays });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/member-history', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  const changes = Array.isArray(req.body?.changes) ? req.body.changes : [];
+  if (!changes.length) return res.status(400).json({ success: false, error: 'No date changes.' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const stays = await updateMemberHistoryChanges(db, changes);
+    return res.json({ success: true, stays });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.patch('/member-history/:stayId', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
+    if (!await verifyDiscordOfficerRole(req, roles)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const stay = await updateStayDates(db, req.params.stayId, req.body || {});
+    if (!stay) return res.status(404).json({ success: false, error: 'Stay not found.' });
+    return res.json({ success: true, stay });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

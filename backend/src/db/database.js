@@ -709,6 +709,27 @@ const ARCHIVE_TREND_OBJECT = `jsonb_build_object(
   'commitments', COALESCE(blob->'commitments', '{}'::jsonb),
   'inGameStatus', COALESCE(blob->'inGameStatus', '{}'::jsonb)
 )`;
+const ARCHIVE_SHEET_OBJECT = `jsonb_build_object(
+  'id', COALESCE(blob->>'id', k),
+  'eventTitle', COALESCE(blob->>'eventTitle', ''),
+  'eventDate', COALESCE(blob->>'eventDate', blob->>'date', ''),
+  'endedAt', COALESCE((NULLIF(blob->>'endedAt', ''))::bigint, 0),
+  'totalPulses', COALESCE((NULLIF(blob->>'totalPulses', ''))::int, 0),
+  'sheet', blob->'sheet'
+)`;
+
+function sessionArchiveSheet(row, sessionId) {
+  if (!row || typeof row !== 'object') return { id: sessionId, sheet: null };
+  const sheet = row.sheet && typeof row.sheet === 'object' ? row.sheet : null;
+  return {
+    id: row.id || sessionId,
+    eventTitle: row.eventTitle || '',
+    eventDate: row.eventDate || row.date || '',
+    endedAt: Number(row.endedAt) || 0,
+    totalPulses: Number(row.totalPulses) || 0,
+    sheet,
+  };
+}
 
 export async function touchSessionArchiveIndex({ id, endedAt, remove = false } = {}, tenantId) {
   const storeId = requireTenant(tenantId);
@@ -747,16 +768,17 @@ async function rebuildArchiveIndex(tenantId, limit) {
   return entries;
 }
 
-async function loadArchiveSessionsByIds(tenantId, ids, full) {
+async function loadArchiveSessionsByIds(tenantId, ids, mode = 'trend') {
   const keys = [...new Set((ids || []).map((key) => String(key || '').trim()).filter(Boolean))];
   if (!keys.length) return {};
+  const objectSql = mode === 'sheet' ? ARCHIVE_SHEET_OBJECT : ARCHIVE_TREND_OBJECT;
   const { rows } = await query(
-    full
+    mode === 'full'
       ? `SELECT k AS id, d.data -> k AS data
          FROM json_docs d
          CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
          WHERE d.tenant_id = $1 AND d.game_id = $3 AND d.path = 'attendance/session_archive'`
-      : `SELECT k AS id, ${ARCHIVE_TREND_OBJECT} AS data
+      : `SELECT k AS id, ${objectSql} AS data
          FROM json_docs d
          CROSS JOIN unnest(${ARCHIVE_KEYS_SQL}) AS k
          CROSS JOIN LATERAL (SELECT d.data -> k AS blob) sliced
@@ -768,7 +790,7 @@ async function loadArchiveSessionsByIds(tenantId, ids, full) {
 
 export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } = {}, tenantId) {
   const id = requireTenant(tenantId);
-  const full = fields === 'full';
+  const mode = fields === 'full' ? 'full' : fields === 'sheet' ? 'sheet' : 'trend';
   if (sessionId) {
     const { rows } = await query(
       `SELECT data -> $3 AS data FROM json_docs
@@ -777,7 +799,9 @@ export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } 
     );
     const data = rows[0]?.data;
     if (data == null) return {};
-    return { [sessionId]: full ? data : sessionArchiveTrend(data, sessionId) };
+    if (mode === 'full') return { [sessionId]: data };
+    if (mode === 'sheet') return { [sessionId]: sessionArchiveSheet(data, sessionId) };
+    return { [sessionId]: sessionArchiveTrend(data, sessionId) };
   }
   const n = Math.min(ARCHIVE_INDEX_MAX, Math.max(1, parseInt(limit, 10) || 12));
   let entries = await readArchiveIndexEntries(id);
@@ -785,11 +809,11 @@ export async function loadSessionArchive({ limit, sessionId, fields = 'trend' } 
     entries = await rebuildArchiveIndex(id, ARCHIVE_INDEX_MAX);
   }
   const ids = entries.slice(0, n).map((row) => row.id);
-  const mapped = await loadArchiveSessionsByIds(id, ids, full);
-  if (full) return mapped;
+  const mapped = await loadArchiveSessionsByIds(id, ids, mode);
+  if (mode === 'full') return mapped;
   const slim = {};
-  for (const [key, row] of Object.entries(mapped)) {
-    slim[key] = sessionArchiveTrend(row, key);
+  for (const [key, row] of Object.entries(mapped || {})) {
+    slim[key] = mode === 'sheet' ? sessionArchiveSheet(row, key) : sessionArchiveTrend(row, key);
   }
   return slim;
 }

@@ -2,8 +2,63 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../services/apiClient';
+import { queryClient } from '../../../query/client';
 import { invalidateMembers, invalidateSettings, setMembersCaches, upsertMemberCaches, useMembers, useSettings } from '../../../query/hooks';
 import RosterInsightsPanels from '../components/RosterInsightsPanels';
+
+function displayDay(iso) {
+  const [year, month, day] = String(iso || '').split('-');
+  if (!year || !month || !day) return '';
+  return `${day}/${month}/${year}`;
+}
+
+function HistoryDate({ value, disabled, onCommit }) {
+  const filled = Boolean(value);
+  return (
+    <label className={`relative inline-flex w-[9.5rem] items-center rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs font-normal ${disabled ? 'cursor-default' : 'cursor-pointer'}`}>
+      <span className={filled ? 'text-slate-300' : 'text-slate-500/40'}>{filled ? displayDay(value) : 'DD/MM/YYYY'}</span>
+      <input
+        type="date"
+        value={value || ''}
+        disabled={disabled}
+        onChange={(event) => {
+          onCommit(event.target.value);
+          event.target.blur();
+        }}
+        className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-default"
+        aria-label={filled ? displayDay(value) : 'DD/MM/YYYY'}
+      />
+    </label>
+  );
+}
+
+function historyChanges(saved, draft) {
+  const base = new Map((saved || []).map((stay) => [stay.id, stay]));
+  const changes = [];
+  for (const stay of draft || []) {
+    const previous = base.get(stay.id);
+    if (!previous) continue;
+    const patch = { id: stay.id };
+    if ((stay.joinedAt || '') !== (previous.joinedAt || '')) patch.joinedAt = stay.joinedAt || '';
+    if (!stay.current && (stay.leftAt || '') !== (previous.leftAt || '')) patch.leftAt = stay.leftAt || '';
+    if (patch.joinedAt !== undefined || patch.leftAt !== undefined) changes.push(patch);
+  }
+  return changes;
+}
+
+function sortHistoryStays(stays) {
+  const nameOf = (stay) => String(stay.displayName || stay.snowflake || '');
+  const current = stays.filter((stay) => stay.current).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const past = stays.filter((stay) => !stay.current).sort((a, b) => {
+    const leftA = a.leftAt || '';
+    const leftB = b.leftAt || '';
+    if (!leftA && leftB) return 1;
+    if (leftA && !leftB) return -1;
+    if (leftA !== leftB) return leftB.localeCompare(leftA);
+    return nameOf(a).localeCompare(nameOf(b));
+  });
+  return [...current, ...past];
+}
 
 const IconUser = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z" /></svg>;
 const IconShield = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>;
@@ -20,6 +75,7 @@ const IconBook = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentC
 const ROSTER_CAP = 200;
 const ROSTER_SLIDES = [
   { id: 'roster', title: 'True Guild Roster' },
+  { id: 'history', title: 'Guild Member History' },
   { id: 'balancing', title: 'Composition Balancing' },
   { id: 'density', title: 'Class Density' },
   { id: 'byJob', title: 'Roster by Job Class' },
@@ -77,13 +133,17 @@ export default function MasterListTab({ user }) {
   const [confirmKeyword, setConfirmKeyword] = useState('');
   const [vanishing, setVanishing] = useState(false);
 
-  const emptyDummyDraft = { displayName: '', jobCode: '', roleCode: '', groupTag: '', joinedAt: new Date().toISOString().slice(0, 10) };
+  const emptyDummyDraft = { displayName: '', jobCode: '', roleCode: '', groupTag: '', joinedAt: '' };
   const [showCreateDummy, setShowCreateDummy] = useState(false);
   const [dummyDraft, setDummyDraft] = useState(emptyDummyDraft);
   const [creatingDummy, setCreatingDummy] = useState(false);
   const [editingNameUid, setEditingNameUid] = useState(null);
   const [dictionaryUid, setDictionaryUid] = useState(null);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [historySaved, setHistorySaved] = useState(null);
+  const [historyStays, setHistoryStays] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySaving, setHistorySaving] = useState(false);
 
   const membersQuery = useMembers('list');
   const settingsQuery = useSettings('jobs,roles');
@@ -126,6 +186,69 @@ export default function MasterListTab({ user }) {
     setJobsCatalog(settingsQuery.data.jobs || {});
     setRolesCatalog(settingsQuery.data.roles || {});
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (ROSTER_SLIDES[slideIndex]?.id !== 'history' || historySaved) return undefined;
+    let cancel = false;
+    setHistoryLoading(true);
+    apiFetch('/api/attendance/member-history')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancel) return;
+        const stays = data?.success ? (data.stays || []) : [];
+        setHistorySaved(stays);
+        setHistoryStays(stays);
+      })
+      .catch(() => {
+        if (cancel) return;
+        setHistorySaved([]);
+        setHistoryStays([]);
+      })
+      .finally(() => { if (!cancel) setHistoryLoading(false); });
+    return () => { cancel = true; };
+  }, [slideIndex, historySaved]);
+
+  const stageHistoryDate = (stay, field, value) => {
+    setHistoryStays((prev) => prev.map((row) => (row.id === stay.id ? { ...row, [field]: value } : row)));
+  };
+
+  const saveHistoryDates = async () => {
+    const changes = historyChanges(historySaved || [], historyStays);
+    if (!changes.length || historySaving) return;
+    setHistorySaving(true);
+    try {
+      const res = await apiFetch('/api/attendance/member-history', {
+        method: 'PUT',
+        body: JSON.stringify({ changes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Failed to save the dates.');
+        return;
+      }
+      const returned = new Map((data.stays || []).map((stay) => [stay.id, stay]));
+      const next = sortHistoryStays(historyStays.map((row) => (returned.has(row.id) ? { ...row, ...returned.get(row.id) } : row)));
+      setHistoryStays(next);
+      setHistorySaved(next);
+      const memberWrites = {};
+      for (const change of changes) {
+        if (!String(change.id).startsWith('live:') || change.joinedAt === undefined) continue;
+        const uid = String(change.id).slice('live:'.length);
+        const member = { ...(stagedMembers[uid] || dbMembers[uid] || {}), joinedAt: change.joinedAt || '' };
+        memberWrites[uid] = member;
+        upsertMemberCaches(uid, member);
+      }
+      if (Object.keys(memberWrites).length) {
+        setDbMembers((prev) => ({ ...prev, ...memberWrites }));
+        setStagedMembers((prev) => ({ ...prev, ...memberWrites }));
+      }
+      queryClient.removeQueries({ queryKey: ['gvg-sheet'] });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setHistorySaving(false);
+    }
+  };
 
   const loading = refreshing
     || (membersQuery.isLoading && !membersQuery.data)
@@ -385,6 +508,8 @@ export default function MasterListTab({ user }) {
   const vanishAllDummy = vanishCount > 0 && vanishTargets.every((uid) => uid.startsWith('dummy_'));
 
   const isDirty = JSON.stringify(dbMembers) !== JSON.stringify(stagedMembers);
+  const pendingHistory = historyChanges(historySaved || [], historyStays);
+  const historyDirty = pendingHistory.length > 0;
   const stagingRowsCount = Math.min(ROSTER_CAP, Math.max(100, activeRaidRosterList.length + 5));
   const activeSlide = ROSTER_SLIDES[slideIndex];
   const rosterTitle = `True Guild Roster (${activeRaidRosterList.length} Active / Cap ${ROSTER_CAP})`;
@@ -486,9 +611,8 @@ export default function MasterListTab({ user }) {
                 </th>
                 <th className="p-3 w-[14%] bg-slate-950">Job Class</th>
                 <th className="p-3 w-[15%] bg-slate-950">Role Classification</th>
-                <th className="p-3 w-[13%] bg-slate-950">Group Assignment</th>
-                <th className="p-3 w-[16%] bg-slate-950">Date Joined</th>
-                <th className="p-3 w-[14%] bg-slate-950">SnowflakeID</th>
+                <th className="p-3 w-[16%] bg-slate-950">Group Assignment</th>
+                <th className="p-3 w-[18%] bg-slate-950">SnowflakeID</th>
                 <th className="p-3 w-[8%] bg-slate-950 text-center">Credits</th>
                 <th className="p-3 text-center w-[6%] bg-slate-950">Action</th>
               </tr>
@@ -513,7 +637,7 @@ export default function MasterListTab({ user }) {
                       }}
                       className="border-b border-slate-900/20 bg-slate-950/5 border-dashed transition-colors hover:bg-slate-900/5 select-none"
                     >
-                      <td colSpan="9" className="p-3 text-center text-[10px] text-slate-700 italic font-sans font-medium border border-dashed border-slate-900/30 m-1 rounded-xl">
+                      <td colSpan="8" className="p-3 text-center text-[10px] text-slate-700 italic font-sans font-medium border border-dashed border-slate-900/30 m-1 rounded-xl">
                         + Drop identity card here to allocate position slot #{idx + 1}
                       </td>
                     </tr>
@@ -641,16 +765,6 @@ export default function MasterListTab({ user }) {
                         placeholder="e.g. Team A"
                         onChange={(e) => handleStageLocalUpdate(uid, 'groupTag', e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-2.5 py-1 text-xs font-sans outline-none focus:border-slate-700 font-medium placeholder-slate-600/60"
-                      />
-                    </td>
-
-                    <td className="p-3">
-                      <input 
-                        type="date" 
-                        value={m.joinedAt || ''} 
-                        disabled={!user?.isOfficer}
-                        onChange={(e) => handleStageLocalUpdate(uid, 'joinedAt', e.target.value)}
-                        className="bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-2 py-1 text-center font-sans text-xs outline-none focus:border-slate-700 w-full cursor-pointer"
                       />
                     </td>
 
@@ -884,6 +998,57 @@ export default function MasterListTab({ user }) {
         </div>
       </div>
       </div>
+      ) : activeSlide.id === 'history' ? (
+        <div className="overflow-auto rounded-2xl border border-slate-800 bg-slate-950/40">
+          <table className="w-full text-left text-xs">
+            <thead className="text-[9px] font-normal uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-slate-800">
+                <th className="px-4 py-3 font-normal">Member</th>
+                <th className="px-4 py-3 font-normal">Snowflake</th>
+                <th className="px-4 py-3 font-normal">Joined</th>
+                <th className="px-4 py-3 font-normal">Left</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historyLoading && (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-[11px] text-slate-500">Loading history...</td></tr>
+              )}
+              {!historyLoading && historyStays.some((stay) => stay.current) && (
+                <tr><td colSpan={4} className="px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500">On the roster</td></tr>
+              )}
+              {!historyLoading && historyStays.filter((stay) => stay.current).map((stay) => (
+                <tr key={stay.id} className="border-t border-slate-900">
+                  <td className="px-4 py-2 text-slate-200">{stay.displayName || stay.snowflake}</td>
+                  <td className="px-4 py-2 font-mono text-[10px] text-slate-500">{stay.snowflake}</td>
+                  <td className="px-4 py-2">
+                    <HistoryDate value={stay.joinedAt} disabled={!user?.isOfficer} onCommit={(next) => stageHistoryDate(stay, 'joinedAt', next)} />
+                  </td>
+                  <td className="px-4 py-2">
+                    <HistoryDate value="" disabled onCommit={() => {}} />
+                  </td>
+                </tr>
+              ))}
+              {!historyLoading && historyStays.some((stay) => !stay.current) && (
+                <tr><td colSpan={4} className="px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500">Left the guild</td></tr>
+              )}
+              {!historyLoading && historyStays.filter((stay) => !stay.current).map((stay) => (
+                <tr key={stay.id} className="border-t border-slate-900">
+                  <td className="px-4 py-2 text-slate-200">{stay.displayName || stay.snowflake}</td>
+                  <td className="px-4 py-2 font-mono text-[10px] text-slate-500">{stay.snowflake}</td>
+                  <td className="px-4 py-2">
+                    <HistoryDate value={stay.joinedAt} disabled={!user?.isOfficer} onCommit={(next) => stageHistoryDate(stay, 'joinedAt', next)} />
+                  </td>
+                  <td className="px-4 py-2">
+                    <HistoryDate value={stay.leftAt} disabled={!user?.isOfficer} onCommit={(next) => stageHistoryDate(stay, 'leftAt', next)} />
+                  </td>
+                </tr>
+              ))}
+              {!historyLoading && !historyStays.length && (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-[11px] text-slate-500">No stays yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <RosterInsightsPanels
           panel={activeSlide.id}
@@ -899,15 +1064,17 @@ export default function MasterListTab({ user }) {
         <div className="mx-auto max-w-6xl flex items-center justify-end gap-4 select-none">
           <button
             type="button"
-            onClick={handleSaveRosterProgress}
-            disabled={!isDirty || saving || !user?.isOfficer}
+            onClick={activeSlide.id === 'history' ? saveHistoryDates : handleSaveRosterProgress}
+            disabled={activeSlide.id === 'history' ? (!historyDirty || historySaving || !user?.isOfficer) : (!isDirty || saving || !user?.isOfficer)}
             className={`flex items-center gap-1.5 rounded-xl px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white transition-all shadow-xl cursor-pointer ${
-              isDirty 
+              (activeSlide.id === 'history' ? historyDirty : isDirty)
                 ? 'bg-indigo-600 hover:bg-indigo-500' 
                 : 'bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed shadow-none'
             }`}
           >
-            <IconSave /> {saving ? 'Committing Batch Data...' : 'Save Roster Progress'}
+            <IconSave /> {activeSlide.id === 'history'
+              ? (historySaving ? 'Saving dates...' : 'Save dates')
+              : (saving ? 'Committing Batch Data...' : 'Save Roster Progress')}
           </button>
         </div>
       </div>
@@ -983,11 +1150,9 @@ export default function MasterListTab({ user }) {
 
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Date Joined</label>
-                <input
-                  type="date"
+                <HistoryDate
                   value={dummyDraft.joinedAt}
-                  onChange={(e) => setDummyDraft(prev => ({ ...prev, joinedAt: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-slate-700 cursor-pointer"
+                  onCommit={(next) => setDummyDraft((prev) => ({ ...prev, joinedAt: next }))}
                 />
               </div>
             </div>
@@ -1026,8 +1191,8 @@ export default function MasterListTab({ user }) {
                   ? 'This permanently purges the dummy placeholder record from your cloud database. No Discord server action is taken.'
                   : `This permanently purges ${vanishCount} dummy placeholder records from your cloud database. No Discord server action is taken.`
                 : vanishCount === 1
-                  ? 'This triggers a kick configuration command on the active Discord server and purges all related history rows completely out of your cloud database records.'
-                  : `This kicks up to ${vanishTargets.filter((uid) => !uid.startsWith('dummy_')).length} Discord member(s) (best effort) and purges all ${vanishCount} selected records from the cloud database.`}
+                  ? 'This removes the live member and queues a Discord kick. The stay is appended to Guild Member History.'
+                  : `This removes ${vanishCount} live records and queues Discord kicks where it can. Each stay is appended to Guild Member History.`}
             </p>
             {vanishCount > 1 && (
               <div className="max-h-32 overflow-y-auto scrollbar-thin rounded-xl border border-slate-800 bg-slate-950/60 p-2 space-y-1">

@@ -158,40 +158,50 @@ function MemberLink({ text, fromUid, unmatchedId, roster, disabled, onLink }) {
   );
 }
 
-function labelChip(plate, text) {
-  const fontSize = Math.max(10, plate.height * 0.55) / 2;
-  const pad = 1;
-  const width = Math.min(plate.width, Math.ceil(String(text).length * fontSize * 0.62) + pad * 2);
-  const height = fontSize + pad * 2;
-  const y = Math.max(0, plate.top - height - 1);
+const LABEL_PX = 12;
+
+function pictureFit(rect, viewW, viewH) {
+  const fit = Math.min(rect.width / viewW, rect.height / viewH);
+  const width = viewW * fit;
+  const height = viewH * fit;
   return {
-    fontSize,
-    x: plate.left,
-    y,
-    width,
-    height,
-    textX: plate.left + pad,
-    textY: y + fontSize,
+    fit,
+    left: (rect.width - width) / 2,
+    top: (rect.height - height) / 2,
   };
 }
 
 function DetectionOverlay({ overlay }) {
+  const frameRef = useRef(null);
+  const [fit, setFit] = useState(null);
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || !overlay?.width || !overlay?.height) return undefined;
+    const sync = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      setFit(pictureFit(rect, overlay.width, overlay.height));
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [overlay?.width, overlay?.height]);
   if (!overlay?.width || !overlay?.height) return null;
   const win = overlay.window;
   return (
-    <svg
-      className="absolute inset-0 h-full w-full pointer-events-none"
-      viewBox={`0 0 ${overlay.width} ${overlay.height}`}
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      aria-label="OCR detection boxes"
-    >
-      {win && (
-        <rect x={win.left} y={win.top} width={win.width} height={win.height} fill="none" stroke="#aa28be" strokeWidth="3" />
-      )}
-      {(overlay.cells || []).map((cell) => {
-        const chip = cell.plate && cell.text ? labelChip(cell.plate, cell.text) : null;
-        return (
+    <div ref={frameRef} className="absolute inset-0 pointer-events-none">
+      <svg
+        className="h-full w-full"
+        viewBox={`0 0 ${overlay.width} ${overlay.height}`}
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label="OCR detection boxes"
+      >
+        {win && (
+          <rect x={win.left} y={win.top} width={win.width} height={win.height} fill="none" stroke="#aa28be" strokeWidth="3" />
+        )}
+        {(overlay.cells || []).map((cell) => (
           <g key={`${cell.col}-${cell.row}`}>
             {cell.slot && (
               <rect x={cell.slot.left} y={cell.slot.top} width={cell.slot.width} height={cell.slot.height} fill="none" stroke="#145ae0" strokeWidth="2" />
@@ -199,18 +209,32 @@ function DetectionOverlay({ overlay }) {
             {cell.plate && (
               <rect x={cell.plate.left} y={cell.plate.top} width={cell.plate.width} height={cell.plate.height} fill="none" stroke="#d23c14" strokeWidth="2" />
             )}
-            {chip && (
-              <>
-                <rect x={chip.x} y={chip.y} width={chip.width} height={chip.height} fill="#ffe14a" />
-                <text x={chip.textX} y={chip.textY} fontSize={chip.fontSize} fill="#1a1a1a" fontFamily="sans-serif">
-                  {cell.text}
-                </text>
-              </>
-            )}
           </g>
+        ))}
+      </svg>
+      {fit && (overlay.cells || []).map((cell) => {
+        if (!cell.plate || !cell.text) return null;
+        const left = fit.left + cell.plate.left * fit.fit;
+        const top = fit.top + cell.plate.top * fit.fit - LABEL_PX / 2;
+        return (
+          <div
+            key={`label-${cell.col}-${cell.row}`}
+            className="absolute whitespace-nowrap bg-[#ffe14a] text-[#1a1a1a]"
+            style={{
+              left,
+              top: Math.max(0, top),
+              fontSize: LABEL_PX,
+              lineHeight: 1,
+              transform: 'scale(0.5)',
+              transformOrigin: 'top left',
+              padding: '0 2px',
+            }}
+          >
+            {cell.text}
+          </div>
         );
       })}
-    </svg>
+    </div>
   );
 }
 

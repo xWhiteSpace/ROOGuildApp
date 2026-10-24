@@ -4,6 +4,7 @@
  */
 import { buildCompositeKey } from '../../../utils/guildTime.js';
 import { isOcrRaidRosterMember } from '@guildname/shared/inGameAlias';
+import { syncSheetSwords } from './gvgSheet.js';
 
 export function raidRosterUids(members) {
   return Object.entries(members || {})
@@ -37,11 +38,14 @@ export async function setInGameStatusFlag(db, sessionId, userId, confirmed) {
   if (flagValue === true) next[uid] = true;
   else delete next[uid];
   await statusRef.set(Object.keys(next).length ? next : null);
+  await syncSheetSwords(db, sessionId, next);
   return flagValue === true;
 }
 
 export async function replaceArchiveInGameStatus(db, sessionId, statusMap) {
-  await db.ref(`attendance/session_archive/${sessionId}/inGameStatus`).set(statusMap && Object.keys(statusMap).length ? statusMap : null);
+  const map = statusMap && typeof statusMap === 'object' ? statusMap : {};
+  await db.ref(`attendance/session_archive/${sessionId}/inGameStatus`).set(Object.keys(map).length ? map : null);
+  await syncSheetSwords(db, sessionId, map);
 }
 
 export async function findLatestArchiveForEvent(db, eventDate, eventKey) {

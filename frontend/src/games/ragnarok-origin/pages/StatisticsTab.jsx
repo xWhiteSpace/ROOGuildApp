@@ -1,8 +1,8 @@
 // frontend/src/pages/StatisticsTab.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { apiFetch } from '../../../services/apiClient';
-import { invalidateSettings, useMembers, useRaidHistory, useSettings } from '../../../query/hooks';
-import { calculatePoints, MAX_RAID_SCORE } from '../../../utils/attendanceScore';
+import { invalidateSettings, useGvgSheet, useSettings } from '../../../query/hooks';
+import { MAX_RAID_SCORE } from '../../../utils/attendanceScore';
 import AttendanceTrendChart from '../components/AttendanceTrendChart';
 
 const IconTrend = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
@@ -12,13 +12,13 @@ const IconClose = () => <svg className="w-3.5 h-3.5" fill="none" stroke="current
 const DEFAULT_EXPECTED_RATE = 80;
 const MAX_TREND_SESSIONS = 12;
 
-export default function StatisticsTab({ user }) {
-  const membersQuery = useMembers('card');
-  const historyQuery = useRaidHistory(12);
+export default function StatisticsTab({ user, embedded = false }) {
+  const statsQuery = useGvgSheet({ view: 'stats', limit: MAX_TREND_SESSIONS });
   const settingsQuery = useSettings('expectedAttendanceRate');
-  const loading = (membersQuery.isLoading && !membersQuery.data) || (historyQuery.isLoading && !historyQuery.data);
-  const members = membersQuery.data || {};
-  const sessions = historyQuery.data || {};
+  const loading = statsQuery.isLoading && !statsQuery.data;
+  const rows = statsQuery.data?.rows || [];
+  const dates = statsQuery.data?.dates || [];
+  const scores = statsQuery.data?.scores || {};
   const [expectedRate, setExpectedRate] = useState(DEFAULT_EXPECTED_RATE);
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMemberUid, setSelectedMemberUid] = useState(null);
@@ -43,62 +43,42 @@ export default function StatisticsTab({ user }) {
     }
   };
 
-  // Raid-roster members for the guild-wide denominator (true attendance rate).
-  const rosterUids = useMemo(
-    () => Object.keys(members).filter((uid) => members[uid]?.isRaidRoster === true),
-    [members]
-  );
-
-  // Last N sessions ascending by eventDate (YYYY-MM-DD), with guild-wide + optional member attendance %.
   const trendPoints = useMemo(() => {
-    const ordered = Object.values(sessions)
-      .sort((a, b) => {
-        // Primary: chronological by eventDate (string compare is correct for YYYY-MM-DD)
-        const dateCmp = String(a.eventDate || '').localeCompare(String(b.eventDate || ''));
-        if (dateCmp !== 0) return dateCmp;
-        // Tiebreak: same-day sessions ordered by when they were archived
-        return (a.endedAt || 0) - (b.endedAt || 0);
-      })
-      .slice(-MAX_TREND_SESSIONS);
+    const ordered = dates.slice().sort((a, b) => {
+      const dateCmp = String(a.eventDate || '').localeCompare(String(b.eventDate || ''));
+      if (dateCmp !== 0) return dateCmp;
+      return (a.endedAt || 0) - (b.endedAt || 0);
+    });
 
-    return ordered.map((s) => {
-      const totalPulses = s.totalPulses || 0;
-
-      let guildScoreSum = 0;
-      rosterUids.forEach((uid) => {
-        const ticks = s.userTallies?.[uid] || 0;
-        const commitment = s.commitments?.[uid] || 'None';
-        const inGameConfirmed = s.inGameStatus?.[uid] === true;
-        guildScoreSum += calculatePoints(commitment, ticks, totalPulses, inGameConfirmed).total / MAX_RAID_SCORE;
-      });
-      const guildPct = rosterUids.length > 0 ? (guildScoreSum / rosterUids.length) * 100 : 0;
-
-      const point = { date: s.eventDate || '—', guildPct };
-
+    return ordered.map((session) => {
+      const point = { date: session.eventDate || '—', guildPct: Number(session.guildPct) || 0 };
       if (selectedMemberUid) {
-        const mTicks = s.userTallies?.[selectedMemberUid] || 0;
-        const mCommitment = s.commitments?.[selectedMemberUid] || 'None';
-        const mInGame = s.inGameStatus?.[selectedMemberUid] === true;
-        point.memberPct = (calculatePoints(mCommitment, mTicks, totalPulses, mInGame).total / MAX_RAID_SCORE) * 100;
+        const map = scores[session.id] || {};
+        if (Object.prototype.hasOwnProperty.call(map, selectedMemberUid)) {
+          point.memberPct = (Number(map[selectedMemberUid]) / MAX_RAID_SCORE) * 100;
+        }
       }
-
       return point;
     });
-  }, [sessions, rosterUids, selectedMemberUid]);
+  }, [dates, scores, selectedMemberUid]);
 
   const memberSearchResults = useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
     if (!q) return [];
-    return Object.entries(members)
-      .filter(([_, p]) => p.isRaidRoster === true)
-      .map(([uid, p]) => ({ uid, displayName: p.displayName || p.username || uid }))
-      .filter((m) => m.displayName.toLowerCase().includes(q))
+    return rows
+      .map((row) => ({
+        uid: row.uid,
+        displayName: row.displayName || row.alias || row.snowflake || row.uid,
+        alias: row.alias || '',
+      }))
+      .filter((row) => `${row.displayName} ${row.alias}`.toLowerCase().includes(q))
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
       .slice(0, 8);
-  }, [members, memberSearch]);
+  }, [rows, memberSearch]);
 
-  const selectedMemberName = selectedMemberUid
-    ? (members[selectedMemberUid]?.displayName || members[selectedMemberUid]?.username || 'Member')
+  const selectedMember = rows.find((row) => row.uid === selectedMemberUid);
+  const selectedMemberName = selectedMember
+    ? (selectedMember.displayName || selectedMember.alias || selectedMember.snowflake || 'Member')
     : null;
 
   if (loading) {
@@ -110,11 +90,13 @@ export default function StatisticsTab({ user }) {
   }
 
   return (
-    <div className="space-y-6 max-w-[98vw] mx-auto p-2 font-sans animate-fadeIn">
+    <div className={embedded ? 'space-y-4 font-sans' : 'space-y-6 max-w-[98vw] mx-auto p-2 font-sans animate-fadeIn'}>
+      {!embedded && (
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md select-none">
         <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Attendance</h1>
         <p className="text-[11px] font-mono text-slate-500 mt-1">GUILD COMMITMENT TREND AND EXPECTED RATE</p>
       </div>
+      )}
 
       {/* ================= ATTENDANCE TREND ================= */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
@@ -186,7 +168,13 @@ export default function StatisticsTab({ user }) {
           </div>
         </div>
 
-        <AttendanceTrendChart points={trendPoints} expectedRate={expectedRate} memberName={selectedMemberName} />
+        {statsQuery.error ? (
+          <div className="rounded-xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-[11px] font-mono text-rose-300">
+            {statsQuery.error.message || 'The attendance trend could not be loaded.'}
+          </div>
+        ) : (
+          <AttendanceTrendChart points={trendPoints} expectedRate={expectedRate} memberName={selectedMemberName} />
+        )}
       </div>
     </div>
   );
