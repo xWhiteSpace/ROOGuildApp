@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { getTenantStore, listCommitmentKeysForEventId, loadCommitmentsForWeek, loadMembersProjected, sqlFingerprint, touchSessionArchiveIndex } from '../db/database.js';
 import { normalizeEtag, sendNotModified, setEtag } from '../utils/httpCache.js';
-import { DEFAULT_TZ, getWeekMonday } from '../utils/guildTime.js';
+import { DEFAULT_TZ, buildCompositeKey, getWeekMonday } from '../utils/guildTime.js';
 import { appendVanishStays, listMemberHistory, updateMemberHistoryChanges, updateStayDates } from '../games/ragnarok-origin/services/memberHistory.js';
 import { getGateStatusDetails } from '../games/ragnarok-origin/timeWindow.js';
 import { discordClient } from '../discord-bot/client.js';
@@ -20,6 +20,7 @@ import {
   buildLiveGridsFromComposition,
 } from '@guildname/shared/compositionTabs';
 import { getCurrentTenantId } from '../db/tenantContext.js';
+import { getRaidCycleStatus } from '../games/ragnarok-origin/raidTimeWindow.js';
 import { discordChannel } from '../db/channels.js';
 import { checkOfficer } from '../auth/officer.js';
 import { resolveUserIdentity } from '../auth/identity.js';
@@ -1653,13 +1654,18 @@ router.post('/published/:id/announce-attendance', async (req, res) => {
     const {
       sendGenRoomMessage,
       buildAttendanceRaidAnnounce,
+      buildChainActionRow,
     } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
     const content = buildAttendanceRaidAnnounce({
       eventTitle: published.eventTitle || published.eventKey,
       eventDate: published.eventDate,
       timeStart: published.timeStart,
     });
-    await sendGenRoomMessage(content);
+    const eventKey = published.eventDate && published.eventKey
+      ? buildCompositeKey(published.eventDate, published.eventKey)
+      : '';
+    const sendOptions = eventKey ? { components: [buildChainActionRow(eventKey)] } : {};
+    await sendGenRoomMessage(content, sendOptions);
     return res.json({ success: true });
   } catch (err) {
     const msg = err.message || 'Failed to announce attendance.';
@@ -1703,6 +1709,37 @@ router.post('/published/:id/announce-party', async (req, res) => {
       : /not found/i.test(msg) ? 404
       : 500;
     return res.status(status).json({ success: false, error: msg });
+  }
+});
+
+// POST /api/attendance/published/:id/refresh-config
+router.post('/published/:id/refresh-config', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!await requireOfficer(req, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const cycle = getRaidCycleStatus();
+    const configId = String(cycle?.configId || '').trim();
+    if (!configId) {
+      return res.status(400).json({ success: false, error: 'No Raid Party config is assigned in Game Settings.' });
+    }
+    if (!cycle?.publishedId || id !== cycle.publishedId) {
+      return res.status(400).json({ success: false, error: 'That composition is not the current war.' });
+    }
+    const { refreshPublishedParty } = await import('../games/ragnarok-origin/services/publishedComposition.js');
+    const result = await refreshPublishedParty({ publishedId: id, configId });
+    if (!result.ok) {
+      const status = /not found/i.test(result.error) ? 404 : 400;
+      return res.status(status).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true, published: result.published });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

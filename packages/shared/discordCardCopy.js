@@ -6,7 +6,8 @@ export const DEFAULT_DISCORD_CARD_COPY = {
   request:
     'Request loot items during **Bid Open**, Claim or Take Extra Slots during **Live Auction**.\n\n' +
     '**Open Request** — Apply for Requests, Cancel Bid Requests\n' +
-    '**Open Live Dashboard** — Claim or Take Extra slots. Use Drop down to take extra slots.',
+    '**Open Live Auction** — See your placed coordinates and the book length.\n' +
+    '**Get Extra Slots** — Claim leftover empty slots. Use the dropdown to pick an item.',
   gvg:
     'Please confirm your availability for our upcoming GVG.\n' +
     'This will help our officers to build balanced parties. Your Response is greatly appreciated.',
@@ -20,7 +21,7 @@ export const DEFAULT_DISCORD_CARD_COPY = {
   onboarding: {
     hub: 'Welcome, Adventurer! This card shows where guild tools live. Pick a topic for a private explanation and a jump link.',
     auction:
-      'Request weekly auction items and claim vacant loot slots. Use **Open Request** and **Open Live Dashboard** on the Request Card.',
+      'Request weekly auction items and claim vacant loot slots. Use **Open Request**, **Open Live Auction**, and **Get Extra Slots** on the Request Card.',
     gvg: 'War-announce is the GvG board: mark Available / Unavailable, change in-game name or job, and view your party.',
     general: 'Guild-wide pings live here: loot allocation, raid-ready notices, RSVP lines.',
     website: 'VALHALLA is the full dashboard (requests, raid compose, live raid, history). Sign in with Discord.',

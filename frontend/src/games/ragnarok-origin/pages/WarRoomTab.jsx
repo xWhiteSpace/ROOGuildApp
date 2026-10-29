@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Radio, Timer, Users, Volume2 } from 'lucide-react';
 import PublishedPartyGrid from '../components/PublishedPartyGrid';
 import { apiFetch } from '../../../services/apiClient';
@@ -21,6 +22,8 @@ function phaseDotClass(currentPhase, n) {
 
 export default function WarRoomTab({ user }) {
   const isOfficer = user?.isOfficer === true;
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
   const initQuery = useWarRoomInit();
   const membersQuery = useMembers('card');
   const data = initQuery.data;
@@ -69,6 +72,45 @@ export default function WarRoomTab({ user }) {
 
   const canEdit = Boolean(cycle?.canEditGrid);
   const currentPhase = cycle?.currentPhase ?? 0;
+  const liveActive = session?.status === 'Active';
+  const canRefreshParty = isOfficer && Boolean(published?.id) && !liveActive;
+
+  const refreshParty = async () => {
+    if (!canRefreshParty || refreshing) return null;
+    setRefreshing(true);
+    setRefreshError('');
+    try {
+      const res = await apiFetch(`/api/attendance/published/${encodeURIComponent(published.id)}/refresh-config`, {
+        method: 'POST',
+      });
+      const body = await res.json();
+      if (!body.success) throw new Error(body.error || 'Failed to refresh party.');
+      queryClient.setQueryData(queryKeys.warRoomInit(), (prev) => {
+        if (!prev?.published) return prev;
+        return {
+          ...prev,
+          published: {
+            ...prev.published,
+            id: body.published.id,
+            grids: body.published.grids,
+            selectedGridIds: body.published.selectedGridIds,
+            configId: body.published.configId,
+            configTitle: body.published.configTitle,
+            lastUpdated: body.published.lastUpdated,
+          },
+          cycle: prev.cycle
+            ? { ...prev.cycle, configId: body.published.configId, configTitle: body.published.configTitle }
+            : prev.cycle,
+        };
+      });
+      return body.published;
+    } catch (err) {
+      setRefreshError(err.message || 'Failed to refresh party.');
+      return null;
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const eventCycleCard = (
     <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3.5 h-[17.5rem] overflow-y-auto">
@@ -176,6 +218,9 @@ export default function WarRoomTab({ user }) {
           {error && (
             <div className="text-xs text-rose-400">{error}</div>
           )}
+          {refreshError && (
+            <div className="text-xs text-rose-400">{refreshError}</div>
+          )}
         </div>
         {session && (
           <div className="flex flex-wrap items-center gap-2">
@@ -205,6 +250,8 @@ export default function WarRoomTab({ user }) {
           readOnly={!canEdit}
           liveVoiceUids={session ? liveVoiceUids : []}
           persistFn={session ? persistLiveGrids : null}
+          onRefreshParty={canRefreshParty ? refreshParty : null}
+          refreshingParty={refreshing}
           onPublishedChange={(next) => queryClient.setQueryData(queryKeys.warRoomInit(), (prev) => (prev ? { ...prev, published: next } : prev))}
           topRow={renderTopRow}
         />

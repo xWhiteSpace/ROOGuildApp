@@ -3,6 +3,7 @@ import { getTenantStore } from '../../../db/database.js';
 import { ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getGateStatusDetails } from '../timeWindow.js'; // ⏰ Timeline Intersector: Imports master clock calculations
 import { loadDiscordCardCopy } from './discordCardCopy.js';
+import { bookPageCount, formatTotalPagesLine } from './discordGenAnnounce.js';
 
 // Pure message text block formatting the in-game display alignment rule
 const IN_GAME_TAB_REMINDER = `🚩 **PLEASE READ!!**:\n` +
@@ -96,8 +97,12 @@ export async function sendPublicAuctionCard(channel) {
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('open_auction_panel')
-      .setLabel('Open Live Dashboard')
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel('Open Live Auction')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('open_extra_slots')
+      .setLabel('Get Extra Slots')
+      .setStyle(ButtonStyle.Success)
   );
 
   await channel.send({ embeds: [embed], components: [buttonRow] });
@@ -106,7 +111,28 @@ export async function sendPublicAuctionCard(channel) {
 /**
  * 🛰️ HELPER: Generates the Master Item Category Selection View (Step 2)
  */
-async function renderItemCategoryView(interaction, finalRosterName, prefixMessage = "") {
+async function renderLiveAuctionView(interaction, finalRosterName) {
+  const db = getTenantStore();
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const sessionSnap = await db.ref('auction/active_session').once('value');
+
+  if (!sessionSnap.exists() || !configSnap.exists()) {
+    return await interaction.editReply({ content: '❌ **ERROR**: No active allocation session is currently running on the officer dashboard.', components: [] });
+  }
+
+  const { items = [] } = configSnap.val();
+  const { categoryAllocations = {}, qtyPerPage = 4 } = sessionSnap.val();
+  const membersSnap = await db.ref('auction/members').once('value');
+  const membersMap = membersSnap.exists() ? membersSnap.val() : {};
+  const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage, membersMap);
+  const totalPages = bookPageCount(virtualMatrix.length, qtyPerPage);
+  const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, interaction.user.id, finalRosterName);
+  const content = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${formatTotalPagesLine(totalPages)}`;
+
+  await interaction.editReply({ content, components: [] });
+}
+
+async function renderExtraSlotsView(interaction, finalRosterName, prefixMessage = "") {
   const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
   const sessionSnap = await db.ref('auction/active_session').once('value');
@@ -150,6 +176,7 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
     }));
 
   const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, interaction.user.id, finalRosterName);
+  const pagesLine = formatTotalPagesLine(bookPageCount(virtualMatrix.length, qtyPerPage));
 
   if (Object.keys(activeLoots).length === 0) {
     return await interaction.editReply({
@@ -160,14 +187,14 @@ async function renderItemCategoryView(interaction, finalRosterName, prefixMessag
 
   if (menuOptions.length === 0) {
     return await interaction.editReply({ 
-      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available slots has been filled!`, 
+      content: `${prefixMessage}\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${pagesLine}\n\n🎉 **ALL OPEN SLOTS CLAIMED**: Every single available slots has been filled!`, 
       components: [] 
     });
   }
 
   const isGateOpen = sessionSnap.val().isDiscordGateOpen === true;
   
-  const baseContent = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${
+  const baseContent = `🔒 **USER INFORMATION**\n👤 Name: **${finalRosterName}**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${pagesLine}\n\n${
     !isGateOpen 
       ? "🚫 **AUCTION PAUSED**: Bidding controls are currently muted. Please stand by for management to broadcast the allocation sequence." 
       : "Please choose an Item category below to view open & available slots:"
@@ -209,6 +236,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const membersMap = membersSnap.exists() ? membersSnap.val() : {};
 
   const virtualMatrix = computeVirtualMatrix(items, categoryAllocations, qtyPerPage, membersMap);
+  const pagesLine = formatTotalPagesLine(bookPageCount(virtualMatrix.length, qtyPerPage));
   const userClaimedCount = virtualMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
 
   // Build functional buttons using the index location inside categoryAllocations list maps
@@ -227,11 +255,11 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const userClaimsSummaryText = compileUserClaimsSummary(virtualMatrix, interaction.user.id, finalRosterName);
 
   if (userClaimedCount >= maxAllowedLimit) {
-    return await renderItemCategoryView(interaction, finalRosterName, `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for **${selectedItemObj?.name}**.`);
+    return await renderExtraSlotsView(interaction, finalRosterName, `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for **${selectedItemObj?.name}**.`);
   }
 
   if (rawButtonsArray.length === 0) {
-    return await renderItemCategoryView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up!`);
+    return await renderExtraSlotsView(interaction, finalRosterName, `⚠️ **CATEGORY EXPIRED**: The remaining slots for **${selectedItemObj?.name}** were just snapped up!`);
   }
 
   // 🛡️ DYNAMIC CEILING GUARD: Self-calculates the maximum button capacity based on active navigation items
@@ -255,7 +283,7 @@ async function renderSpecificSlotView(interaction, itemId, finalRosterName, pref
   const utilityRow = new ActionRowBuilder().addComponents(backButton);
   totalComponentRows.push(utilityRow);
 
-  const baseContent = `📋 **Loot Target**: **${selectedItemObj?.name}**\n👤 Your Limit Status: **${userClaimedCount}/${maxAllowedLimit} Claimed**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\nTap any vacant grid coordinate button below to lock your claim instantly:`;
+  const baseContent = `📋 **Loot Target**: **${selectedItemObj?.name}**\n👤 Your Limit Status: **${userClaimedCount}/${maxAllowedLimit} Claimed**\n\n${IN_GAME_TAB_REMINDER}\n\n${userClaimsSummaryText}\n\n${pagesLine}\n\nTap any vacant grid coordinate button below to lock your claim instantly:`;
 
   await interaction.editReply({
     content: prefixMessage ? `${prefixMessage}\n\n${baseContent}` : baseContent,
@@ -274,7 +302,9 @@ export async function handleAuctionInteraction(interaction) {
   // and surface as "Unknown interaction" (10062). The public entry button opens
   // a fresh ephemeral panel (deferReply); every other control edits in place
   // (deferUpdate).
-  const opensNewPanel = interaction.isButton() && interaction.customId === 'open_auction_panel';
+  const opensNewPanel = interaction.isButton() && (
+    interaction.customId === 'open_auction_panel' || interaction.customId === 'open_extra_slots'
+  );
   if (opensNewPanel) {
     await interaction.deferReply({ ephemeral: true });
   } else {
@@ -293,17 +323,7 @@ export async function handleAuctionInteraction(interaction) {
   // 🛡️ SLASH SHIELD: Added forward slash to the regex catch to prevent directory folder breakages
   const sanitizedFirebaseKey = finalRosterName.replace(/[\.\#\$\/\[\]]/g, '_');
 
-    // ─── STEP 1: USER CLICKS THE PUBLIC ENTRY BUTTON ───
-  if (interaction.isButton() && interaction.customId === 'open_auction_panel') {
-    // (ack handled at top via deferReply)
-
-    // 🛡️ SECURE DISCORD INPUT INTERCEPTOR: Checks the manual override switch on your admin dashboard before accepting inputs
-    const sessionSnap = await db.ref('auction/active_session').once('value');
-    const isGateOpen = sessionSnap.exists() && sessionSnap.val().isDiscordGateOpen === true;
-
-    // Removed the hard-block check here so that renderItemCategoryView 
-    // can display the persistent view even when isGateOpen is false.
-
+  if (interaction.isButton() && (interaction.customId === 'open_auction_panel' || interaction.customId === 'open_extra_slots')) {
     const memberCheckSnap = await db.ref(`auction/members/${interaction.user.id}`).once('value');
     if (!memberCheckSnap.exists()) {
       return await interaction.editReply({
@@ -311,13 +331,17 @@ export async function handleAuctionInteraction(interaction) {
       });
     }
 
-    await renderItemCategoryView(interaction, finalRosterName);
+    if (interaction.customId === 'open_extra_slots') {
+      await renderExtraSlotsView(interaction, finalRosterName);
+    } else {
+      await renderLiveAuctionView(interaction, finalRosterName);
+    }
   }
 
   // ─── LOOPBACK JUMP: USER CLICKS THE BACK BUTTON INSIDE THE CORE WORKFLOW ───
   if (interaction.isButton() && interaction.customId === 'open_auction_panel_back') {
     // (ack handled at top via deferUpdate)
-    await renderItemCategoryView(interaction, finalRosterName);
+    await renderExtraSlotsView(interaction, finalRosterName);
   }
 
   // ─── STEP 2: USER SELECTS AN ITEM CATEGORY DROPDOWN ───
@@ -435,7 +459,7 @@ export async function handleAuctionInteraction(interaction) {
       if (userClaimedCount >= maxAllowedLimit) {
         // 🚪 LIMIT EXHAUSTED KICKBACK: Auto-transfer them back to categories menu with a comprehensive notice
         const limitReachedBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n\n🎉 **LIMIT COMPLETED**: You have fully filled your allocation quota (**${userClaimedCount}/${maxAllowedLimit}**) for this item category!...`;
-        await renderItemCategoryView(interaction, finalRosterName, limitReachedBanner);
+        await renderExtraSlotsView(interaction, finalRosterName, limitReachedBanner);
       } else {
         // 🕹️ STAY-AND-TAP CONTINUATION: Keep them locked on this exact grid view to rapid-fire their remaining bids
         const continuousBanner = `✅ **SUCCESSFULLY SECURED!**\n• Item Locked: **${resolvedSlot?.itemName} (Page ${resolvedSlot?.page}, Slot ${resolvedSlot?.slot})**\n• Running Total: **${userClaimedCount}/${maxAllowedLimit} Secured**\n\n*The ledger has updated. Tap another open item below to claim slot:*`;
@@ -459,7 +483,7 @@ export async function handleAuctionInteraction(interaction) {
         const membersMap = membersSnap.exists() ? membersSnap.val() : {};
         const limitMatrix = computeVirtualMatrix(finalItems, finalAllocations, finalQtyPerPage, membersMap);
         const userClaimedCount = limitMatrix.filter(s => s.itemType === itemId && s.uid === interaction.user.id).length;
-        await renderItemCategoryView(
+        await renderExtraSlotsView(
           interaction,
           finalRosterName,
           `❌ **CLAIM RESTRICTED**: You have reached your capacity limit (**${userClaimedCount}/${maxAllowedLimit}**) for this item category.`

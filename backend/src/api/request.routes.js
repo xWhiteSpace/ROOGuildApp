@@ -439,6 +439,8 @@ router.post('/announce-allocate', async (req, res) => {
     const { buildAllocateBidRows } = await import('@guildname/shared/allocatePreview');
     const {
       buildAllocateOpenAnnounceChunks,
+      formatUnclaimedPairs,
+      listUnclaimedCells,
       sendGenRoomMessage,
     } = await import('../games/ragnarok-origin/services/discordGenAnnounce.js');
 
@@ -450,7 +452,17 @@ router.post('/announce-allocate', async (req, res) => {
       requestsByItemDetails: lobby.requestsByItemDetails,
       members: lobby.members,
     });
-    const chunks = buildAllocateOpenAnnounceChunks({ selectedRows, notSelectedRows });
+    const layout = listUnclaimedCells(
+      lobby.items,
+      session.categoryAllocations,
+      session.qtyPerPage || 4,
+    );
+    const chunks = buildAllocateOpenAnnounceChunks({
+      selectedRows,
+      notSelectedRows,
+      totalPages: layout.totalPages,
+      unclaimedLine: formatUnclaimedPairs(layout.cells),
+    });
     const mentionOptions = { allowedMentions: { parse: ['everyone', 'users'] } };
     for (const chunk of chunks) {
       await sendGenRoomMessage(chunk, mentionOptions);

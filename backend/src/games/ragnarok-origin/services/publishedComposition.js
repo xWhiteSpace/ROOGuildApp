@@ -2,8 +2,8 @@
  * Published (sent) Raid Compose snapshots + Set Active anchor.
  * Party / Attendance Discord cards read the anchor; Live Raid starts from a snapshot.
  */
-import { getTenantStore, loadPublishedByIds } from '../../../db/database.js';
-import { buildLiveGridsFromComposition } from '@guildname/shared/compositionTabs';
+import { commitPublishedPartyRefresh, getTenantStore, loadPublishedByIds } from '../../../db/database.js';
+import { buildLiveGridsFromComposition, normalizeComposition } from '@guildname/shared/compositionTabs';
 
 export const PUBLISHED_PATH = 'attendance/published';
 export const ANCHOR_PATH = 'attendance/published_anchor';
@@ -88,6 +88,50 @@ export async function writePublishedSnapshot({ db, session, sessionId, sentBy })
     autoAnchored = true;
   }
   return { ok: true, id, autoAnchored, payload };
+}
+
+export function partyFromComposition(composition, configId) {
+  const normalized = normalizeComposition(composition, configId);
+  const { grids: builtGrids, selectedGridIds: builtIds } = buildLiveGridsFromComposition(normalized, configId);
+  const grids = {};
+  const selectedGridIds = [];
+  (builtIds || []).forEach((tabId) => {
+    if (!builtGrids[tabId]) return;
+    const gridKey = `${configId}__${tabId}`;
+    grids[gridKey] = { ...builtGrids[tabId], id: gridKey };
+    selectedGridIds.push(gridKey);
+  });
+  return {
+    grids,
+    selectedGridIds,
+    configId,
+    configTitle: normalized.title || configId,
+  };
+}
+
+export async function refreshPublishedParty({ publishedId, configId }) {
+  const id = String(publishedId || '').trim();
+  const targetConfigId = String(configId || '').trim();
+  if (!id) return { ok: false, error: 'Composition id is required.' };
+  if (!targetConfigId) return { ok: false, error: 'No Raid Party config is assigned in Game Settings.' };
+  const result = await commitPublishedPartyRefresh({
+    publishedId: id,
+    configId: targetConfigId,
+    buildParty: partyFromComposition,
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    id,
+    published: {
+      id,
+      grids: result.party.grids,
+      selectedGridIds: result.party.selectedGridIds,
+      configId: targetConfigId,
+      configTitle: result.party.configTitle,
+      lastUpdated: result.lastUpdated,
+    },
+  };
 }
 
 export async function addConfigToPublished({ db, id, configId, composition }) {

@@ -1,5 +1,8 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { postgresEnv } from '../config/postgresEnv.js';
 import pg from 'pg';
+
+const statementClient = new AsyncLocalStorage();
 
 const { Pool } = pg;
 
@@ -25,5 +28,29 @@ export function getPool() {
 }
 
 export async function query(text, params) {
+  const client = statementClient.getStore();
+  if (client) return client.query(text, params);
   return getPool().query(text, params);
+}
+
+export async function withTransaction(fn) {
+  if (statementClient.getStore()) return fn();
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    try {
+      const result = await statementClient.run(client, fn);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        /* ignore */
+      }
+      throw err;
+    }
+  } finally {
+    client.release();
+  }
 }

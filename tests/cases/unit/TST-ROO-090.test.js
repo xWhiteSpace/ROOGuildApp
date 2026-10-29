@@ -8,10 +8,22 @@ import {
   announceOffline503,
   announceRateLimited503,
   announceUnauthenticated,
+  allocateHeaderShowsPagesAndUnclaimed,
   confirmStoresNamedSessionFields,
 } from '../../patterns/announce_allocate.js';
 
 describe('TST-ROO-090 AnnounceAllocateConfirm posts empty body after session save', () => {
+  it('The allocate announce names total pages and uniform unclaimed pairs', () => {
+    const r = allocateHeaderShowsPagesAndUnclaimed();
+    expect(r.openPages).toBe(2);
+    expect(r.openText.match(/Total Pages:/g)).toHaveLength(1);
+    expect(r.openText).toMatch(/Total Pages: 02\/02/);
+    expect(r.openText).toMatch(/Unclaimed:\n01-02 \| 01-03 \| 02-01/);
+    expect(r.openPairs).toBe('01-02 | 01-03 | 02-01');
+    expect(r.fullText).toMatch(/Total Pages: 01\/01\nUnclaimed:\nnone/);
+    expect(r.widePair).toBe('100-04');
+  });
+
   it('Confirm stores the named Mimic session fields first', async () => {
     const { res, stored } = await confirmStoresNamedSessionFields();
     expect(res.status).toBe(200);

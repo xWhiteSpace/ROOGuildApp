@@ -61,8 +61,8 @@ vi.mock('../../backend/src/games/ragnarok-origin/services/discordGenAnnounce.js'
   const actual = await importOriginal();
   return {
     ...actual,
-    buildAllocateOpenAnnounceChunks: ({ selectedRows, notSelectedRows }) => {
-      harness.sentChunks.push({ selectedRows, notSelectedRows });
+    buildAllocateOpenAnnounceChunks: (payload) => {
+      harness.sentChunks.push(payload);
       return ['chunk-1'];
     },
     sendGenRoomMessage: (...args) => harness.sendImpl(...args),
@@ -90,6 +90,11 @@ vi.mock('../../backend/src/games/ragnarok-origin/timeWindow.js', async (importOr
 });
 
 const requestRoutes = (await import('../../backend/src/api/request.routes.js')).default;
+const {
+  buildAllocateOpenAnnounce,
+  formatUnclaimedPairs,
+  listUnclaimedCells,
+} = await import('../../backend/src/games/ragnarok-origin/services/discordGenAnnounce.js');
 
 function seed(session = {
   version: 1,
@@ -139,6 +144,43 @@ function memberSession() {
       roles: ['Member'],
     },
     currentTenantId: TENANT_ID,
+  };
+}
+
+export function allocateHeaderShowsPagesAndUnclaimed() {
+  const items = [{ id: 'puppet', name: 'Puppet' }, { id: 'armor', name: 'Armor' }];
+  const open = listUnclaimedCells(items, {
+    puppet: { selected: ['111', '', '', '222'] },
+    armor: { selected: ['', '333'] },
+  }, 4);
+  const full = listUnclaimedCells(
+    [{ id: 'puppet', name: 'Puppet' }],
+    { puppet: { selected: ['111', '222', '333', '444'] } },
+    4,
+  );
+  const wide = listUnclaimedCells(
+    [{ id: 'puppet', name: 'Puppet' }],
+    { puppet: { selected: [...Array(399).fill('111'), ''] } },
+    4,
+  );
+  const openText = buildAllocateOpenAnnounce({
+    selectedRows: [],
+    notSelectedRows: [],
+    totalPages: open.totalPages,
+    unclaimedLine: formatUnclaimedPairs(open.cells),
+  });
+  const fullText = buildAllocateOpenAnnounce({
+    selectedRows: [],
+    notSelectedRows: [],
+    totalPages: full.totalPages,
+    unclaimedLine: formatUnclaimedPairs(full.cells),
+  });
+  return {
+    openText,
+    fullText,
+    openPages: open.totalPages,
+    openPairs: formatUnclaimedPairs(open.cells),
+    widePair: formatUnclaimedPairs(wide.cells),
   };
 }
 

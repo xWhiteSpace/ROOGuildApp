@@ -29,6 +29,7 @@ import { discordChannel } from '../../../db/channels.js';
 import { loadDiscordCardCopy } from './discordCardCopy.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
 import {
+  buildChainActionRow,
   buildRsvpAnnounceLine,
   sendGenRoomMessage,
 } from './discordGenAnnounce.js';
@@ -730,7 +731,8 @@ export async function handleAttendanceCardInteraction(interaction) {
     return;
   }
 
-  if (customId.startsWith('attcard:set:')) {
+  if (customId.startsWith('attcard:set:') || customId.startsWith('attcard:chain:')) {
+    const chainClick = customId.startsWith('attcard:chain:');
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferUpdate();
     }
@@ -740,7 +742,14 @@ export async function handleAttendanceCardInteraction(interaction) {
     const lockKey = `${snowflakeId}:${compositeKey}`;
 
     return await withUserEventLock(lockKey, async () => {
-      if (await replyIfLocked(db, interaction)) return;
+      if (chainClick) {
+        if (await isForceLocked(db)) {
+          await interaction.followUp({ ...lockedReply(), ephemeral: true }).catch(() => {});
+          return;
+        }
+      } else if (await replyIfLocked(db, interaction)) {
+        return;
+      }
 
       const memberSnap = await db.ref(`auction/members/${snowflakeId}`).once('value');
       const member = memberSnap.exists() ? memberSnap.val() : {};
@@ -750,6 +759,7 @@ export async function handleAttendanceCardInteraction(interaction) {
       const existingSnap = await db.ref(`attendance/commitments/${compositeKey}/${snowflakeId}`).once('value');
       const current = existingSnap.exists() ? existingSnap.val().status : null;
       if (current === nextStatus) {
+        if (chainClick) return;
         if (fromEphemeral) {
           const payload = await buildPersonalPanel(snowflakeId);
           return await interaction.editReply(payload);
@@ -772,14 +782,20 @@ export async function handleAttendanceCardInteraction(interaction) {
 
       if (consumeAnnounceCooldown(lockKey)) {
         const cycle = getRaidCycleStatus();
+        const components = compositeKey ? [buildChainActionRow(compositeKey)] : [];
         sendGenRoomMessage(buildRsvpAnnounceLine({
           displayName,
           available: nextStatus === 'Confirmed',
           eventTitle: cycle?.activeEventTitle,
           eventDate: cycle?.warDate,
-        })).catch((err) => {
+        }), components.length ? { components } : {}).catch((err) => {
           console.error('⚠️ Attendance gen-room announce skipped:', err.message);
         });
+      }
+
+      if (chainClick) {
+        refreshGvgReadinessBoard().catch(() => {});
+        return;
       }
 
       if (fromEphemeral) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Ban, Check, ChevronLeft, Crown, Eraser, Flag, Save, Search, Settings, Trash2, UserPlus, Users, ShieldOff,
+  Ban, Check, ChevronLeft, Crown, Eraser, Flag, RefreshCw, Save, Search, Settings, Trash2, UserPlus, Users, ShieldOff,
 } from 'lucide-react';
 import RaidMemberCard from './RaidMemberCard';
 import RosterSidebar from './RosterSidebar';
@@ -18,6 +18,8 @@ export default function PublishedPartyGrid({
   persistFn = null,
   readOnly = false,
   topRow = null,
+  onRefreshParty = null,
+  refreshingParty = false,
 }) {
   const [localGrids, setLocalGrids] = useState(published?.grids || {});
   const [activeTabConfigId, setActiveTabConfigId] = useState('');
@@ -264,20 +266,54 @@ export default function PublishedPartyGrid({
     return emptyGrid;
   }
 
-  const toolbar = canEdit ? (
+  const applyPublishedGrids = (next) => {
+    const grids = next?.grids || {};
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
+    isDirtyRef.current = false;
+    setIsDirty(false);
+    setLocalGrids(grids);
+    localGridsRef.current = grids;
+    const orderedIds = Array.isArray(next?.selectedGridIds) ? next.selectedGridIds : Object.keys(grids);
+    const firstTab = orderedIds.find((id) => grids[id]) || Object.keys(grids)[0] || '';
+    setActiveTabConfigId((prev) => (prev && grids[prev] ? prev : firstTab));
+  };
+
+  const refreshFromConfig = async () => {
+    if (!onRefreshParty || refreshingParty) return;
+    const ok = window.confirm('Replace this war\'s party with the current Raid Config? Adjustments made in War Room will be replaced.');
+    if (!ok) return;
+    const next = await onRefreshParty();
+    if (!next?.grids) return;
+    applyPublishedGrids(next);
+  };
+
+  const toolButtonClass = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-[10px] font-mono font-bold text-slate-400 cursor-pointer disabled:opacity-50 disabled:cursor-default';
+  const toolbar = (canEdit || onRefreshParty) ? (
     <div className="flex flex-wrap gap-2">
-      <button type="button" onClick={() => mutateActiveGridSlots((s) => ({ ...s, userId: '' }))} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-[10px] font-mono font-bold text-slate-400 cursor-pointer">
-        <Users size={12} /> Clear Members
-      </button>
-      <button type="button" onClick={() => mutateActiveGridSlots((s) => ({ ...s, roleLock: '' }))} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-[10px] font-mono font-bold text-slate-400 cursor-pointer">
-        <ShieldOff size={12} /> Clear Job Class
-      </button>
-      <button type="button" onClick={() => mutateActiveGridSlots(() => ({ userId: '', roleLock: '' }))} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-[10px] font-mono font-bold text-slate-400 cursor-pointer">
-        <Eraser size={12} /> Clear All
-      </button>
-      <button type="button" onClick={() => persistGrids(localGridsRef.current)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-950 text-[10px] font-mono font-bold text-slate-400 cursor-pointer">
-        <Save size={12} /> Save
-      </button>
+      {canEdit && (
+        <>
+          <button type="button" onClick={() => mutateActiveGridSlots((s) => ({ ...s, userId: '' }))} className={toolButtonClass}>
+            <Users size={12} /> Clear Members
+          </button>
+          <button type="button" onClick={() => mutateActiveGridSlots((s) => ({ ...s, roleLock: '' }))} className={toolButtonClass}>
+            <ShieldOff size={12} /> Clear Job Class
+          </button>
+          <button type="button" onClick={() => mutateActiveGridSlots(() => ({ userId: '', roleLock: '' }))} className={toolButtonClass}>
+            <Eraser size={12} /> Clear All
+          </button>
+          <button type="button" onClick={() => persistGrids(localGridsRef.current)} className={toolButtonClass}>
+            <Save size={12} /> Save
+          </button>
+        </>
+      )}
+      {onRefreshParty && (
+        <button type="button" onClick={refreshFromConfig} disabled={refreshingParty} className={toolButtonClass}>
+          <RefreshCw size={12} className={refreshingParty ? 'animate-spin' : ''} /> Refresh party
+        </button>
+      )}
     </div>
   ) : null;
 

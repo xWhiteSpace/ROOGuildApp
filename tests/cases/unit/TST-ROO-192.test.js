@@ -8,6 +8,10 @@ import {
   lineUsesCycleTitleAndWarDate,
   fallbacksForMissingFields,
   confirmYoursClause,
+  chainSwordCommitsAndPostsButtons,
+  chainDoveCommitsUnavailable,
+  chainSameStatusStaysQuiet,
+  chainFailedDecisionLeavesMessage,
 } from '../../patterns/rsvp_announce.js';
 
 describe('TST-ROO-192 AttendanceCardRsvpAnnounceCooldown posts at most one GEN line per minute after a real status change', () => {
@@ -57,5 +61,42 @@ describe('TST-ROO-192 AttendanceCardRsvpAnnounceCooldown posts at most one GEN l
     const r = confirmYoursClause();
     expect(r.without).not.toMatch(/Confirm yours at/);
     expect(r.withCta).toMatch(/Confirm yours at <#999888777666555444>\./);
+  });
+
+  it('A sword button commits Confirmed and posts Available with both buttons', async () => {
+    const r = await chainSwordCommitsAndPostsButtons();
+    expect(r.calls).toHaveLength(1);
+    expect(r.line).toMatch(/Available/);
+    expect(r.status).toBe('Confirmed');
+    expect(r.compositeKey).toBe(r.key);
+    expect(r.edited).toBe(0);
+    expect(r.buttons.map((button) => button.id)).toEqual([
+      `attcard:chain:${r.key}:confirm`,
+      `attcard:chain:${r.key}:leave`,
+    ]);
+    expect(r.buttons.map((button) => button.emoji)).toEqual(['⚔️', '🕊️']);
+  });
+
+  it('A dove button commits Leave and posts Unavailable with both buttons', async () => {
+    const r = await chainDoveCommitsUnavailable();
+    expect(r.calls).toHaveLength(1);
+    expect(r.line).toMatch(/Unavailable/);
+    expect(r.status).toBe('Leave');
+    expect(r.edited).toBe(0);
+    expect(r.buttons.map((button) => button.emoji)).toEqual(['⚔️', '🕊️']);
+  });
+
+  it('The same chain status does not post again', async () => {
+    const r = await chainSameStatusStaysQuiet();
+    expect(r.calls).toHaveLength(0);
+    expect(r.seen).toBe(0);
+    expect(r.edited).toBe(0);
+  });
+
+  it('A failed chain decision posts nothing and leaves the source message', async () => {
+    const r = await chainFailedDecisionLeavesMessage();
+    expect(r.calls).toHaveLength(0);
+    expect(r.edited).toBe(0);
+    expect(r.followedUp).toBe(1);
   });
 });

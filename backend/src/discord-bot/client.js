@@ -220,6 +220,7 @@ async function withGuildTenant(guildId, fn) {
           (interaction.isButton() || interaction.isStringSelectMenu()) &&
           (
             interaction.customId === 'open_auction_panel' ||
+            interaction.customId === 'open_extra_slots' ||
             interaction.customId === 'open_auction_panel_back' ||
             interaction.customId === 'auction_select_item_type' ||
             interaction.customId?.startsWith('claim_slot_btn_')

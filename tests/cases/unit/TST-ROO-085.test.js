@@ -2,12 +2,29 @@ import { describe, expect, it } from 'vitest';
 import {
   closedGateDoesNotMutateViaOpenPanel,
   collisionDoesNotOverwrite,
+  extraSlotsOffersMenuAndClaimWrites,
+  liveAuctionShowsPagesWithoutMenu,
   missingMemberRosterDisconnect,
   openGateClaimUpdatesSession,
   perItemLimitDoesNotWriteExtra,
 } from '../../patterns/claim_panel.js';
 
 describe('TST-ROO-085 InteractiveClaimPanel updates claims only while the live-claim gate is open', () => {
+  it('Open Live Auction shows the page count and no empty-slot menu', async () => {
+    const r = await liveAuctionShowsPagesWithoutMenu();
+    expect(r.content).toMatch(/Total Pages: 01\/01/);
+    expect(r.content).not.toMatch(/Unclaimed:/);
+    expect(r.menuIds).not.toContain('auction_select_item_type');
+  });
+
+  it('Get Extra Slots offers the empty-slot menu and a claim writes the slot', async () => {
+    const r = await extraSlotsOffersMenuAndClaimWrites();
+    expect(r.paused).toBe(false);
+    expect(r.content).toMatch(/Total Pages: 01\/01/);
+    expect(r.menuIds).toContain('auction_select_item_type');
+    expect(r.selected[0]).toBe('111');
+  });
+
   it('Open gate and rostered member update the session claim', async () => {
     const { claimed, after, members } = await openGateClaimUpdatesSession();
     expect(claimed).toBe('111');

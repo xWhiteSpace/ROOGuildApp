@@ -111,6 +111,40 @@ export async function openGateClaimUpdatesSession() {
   });
 }
 
+function menuCustomIds(reply) {
+  const rows = reply?.components || [];
+  return rows.flatMap((row) => {
+    const json = typeof row?.toJSON === 'function' ? row.toJSON() : row;
+    return (json.components || []).map((component) => component.custom_id).filter(Boolean);
+  });
+}
+
+export async function liveAuctionShowsPagesWithoutMenu() {
+  return withEnv({}, async () => {
+    seed({ session: baseSession({ gateOpen: true, selected: ['111', '', '', ''] }) });
+    const { interaction, replies } = makeInteraction({ customId: 'open_auction_panel' });
+    await runWithTenant(TENANT_ID, () => handleAuctionInteraction(interaction));
+    const content = replies[0]?.content || '';
+    return { content, menuIds: menuCustomIds(replies[0]) };
+  });
+}
+
+export async function extraSlotsOffersMenuAndClaimWrites() {
+  return withEnv({}, async () => {
+    seed({ session: baseSession({ gateOpen: true, selected: ['', ''] }) });
+    const opened = makeInteraction({ customId: 'open_extra_slots' });
+    await runWithTenant(TENANT_ID, () => handleAuctionInteraction(opened.interaction));
+    const claimed = makeInteraction({ customId: 'claim_slot_btn_0_item_puppet' });
+    await runWithTenant(TENANT_ID, () => handleAuctionInteraction(claimed.interaction));
+    return {
+      content: opened.replies[0]?.content || '',
+      menuIds: menuCustomIds(opened.replies[0]),
+      paused: /AUCTION PAUSED/i.test(opened.replies[0]?.content || ''),
+      selected: storeHolder.store.activeSession()?.categoryAllocations?.puppet?.selected,
+    };
+  });
+}
+
 export async function closedGateDoesNotMutateViaOpenPanel() {
   return withEnv({}, async () => {
     seed({ session: baseSession({ gateOpen: false, selected: ['', ''] }) });

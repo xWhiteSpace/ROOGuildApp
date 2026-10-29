@@ -1,4 +1,4 @@
-import { query } from './pool.js';
+import { query, withTransaction } from './pool.js';
 import { getCurrentGameId, getCurrentTenantId, setCachedConfig } from './tenantContext.js';
 import { DEFAULT_CONFIGURATION } from '../config/defaultConfiguration.js';
 import { DEFAULT_TZ, formatGuildDate, getWeekMonday, weekKeyBounds } from '../utils/guildTime.js';
@@ -1150,6 +1150,71 @@ async function deleteDocKey(tenantId, docPath, keyPath) {
   );
 }
 
+const LIVE_SESSION_STATUS_SQL = `SELECT data->>'status' AS status
+  FROM json_docs
+  WHERE tenant_id = $1 AND game_id = $2 AND path = 'attendance/live_session'`;
+
+const PUBLISHED_PARTY_REPLACE_SQL = `UPDATE json_docs
+  SET data = jsonb_set(
+    jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          jsonb_set(data, ARRAY[$3::text, 'grids'], $4::jsonb, true),
+          ARRAY[$3::text, 'selectedGridIds'], $5::jsonb, true),
+        ARRAY[$3::text, 'configId'], to_jsonb($6::text), true),
+      ARRAY[$3::text, 'configTitle'], to_jsonb($7::text), true),
+    ARRAY[$3::text, 'lastUpdated'], to_jsonb($8::bigint), true)
+  WHERE tenant_id = $1 AND game_id = $2 AND path = 'attendance/published' AND data ? $3`;
+
+const PUBLISHED_ANCHOR_SQL = `SELECT data
+  FROM json_docs
+  WHERE tenant_id = $1 AND game_id = $2 AND path = 'attendance/published_anchor'`;
+
+const PUBLISHED_ANCHOR_UPSERT_SQL = `INSERT INTO json_docs (tenant_id, game_id, path, data)
+  VALUES ($1, $2, 'attendance/published_anchor', $3::jsonb)
+  ON CONFLICT (tenant_id, game_id, path) DO UPDATE SET data = EXCLUDED.data`;
+
+export async function commitPublishedPartyRefresh({ publishedId, configId, buildParty }) {
+  const tenantId = requireTenant(null);
+  const gameId = currentGameId();
+  const id = String(publishedId || '');
+  const targetConfigId = String(configId || '');
+  return withTransaction(async () => {
+    const statusResult = await query(LIVE_SESSION_STATUS_SQL, [tenantId, gameId]);
+    if (statusResult.rows[0]?.status === 'Active') {
+      return { ok: false, error: 'A live war is already running.' };
+    }
+    const compositionResult = await query(
+      `SELECT data #> ${JSON_KEY_ARRAY} AS data FROM json_docs WHERE tenant_id = $1 AND game_id = $2 AND path = $3`,
+      [tenantId, gameId, 'attendance/compositions', jsonKeyPath([targetConfigId])]
+    );
+    const composition = compositionResult.rows[0]?.data;
+    if (composition == null) {
+      return { ok: false, error: `Raid Party config ${targetConfigId} was not found.` };
+    }
+    const party = buildParty(composition, targetConfigId);
+    const lastUpdated = Date.now();
+    const updated = await query(PUBLISHED_PARTY_REPLACE_SQL, [
+      tenantId,
+      gameId,
+      id,
+      JSON.stringify(party.grids || {}),
+      JSON.stringify(party.selectedGridIds || []),
+      targetConfigId,
+      party.configTitle || targetConfigId,
+      String(lastUpdated),
+    ]);
+    if (!updated.rowCount) {
+      return { ok: false, error: 'Published composition not found.' };
+    }
+    const anchorResult = await query(PUBLISHED_ANCHOR_SQL, [tenantId, gameId]);
+    if (anchorResult.rows[0]?.data !== id) {
+      await query(PUBLISHED_ANCHOR_UPSERT_SQL, [tenantId, gameId, JSON.stringify(id)]);
+    }
+    return { ok: true, party, lastUpdated };
+  });
+}
+
 async function saveDoc(tenantId, docPath, data) {
   const gameId = currentGameId();
   if (data === null || data === undefined || (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0 && docPath.includes('/'))) {
@@ -1307,6 +1372,170 @@ async function writePath(tenantId, path, value) {
   await upsertDocKey(tenantId, docPath, rest, value);
 }
 
+const MAX_BINDS = 65535;
+
+function collectionRowTarget(path) {
+  const parts = pathParts(path);
+  if (parts.length < 3) return null;
+  const key = `${parts[0]}/${parts[1]}`;
+  const spec = COLLECTION_MAP[key];
+  if (!spec) return null;
+  return { key, spec, id: String(parts[2]), rest: parts.slice(3) };
+}
+
+export function idsNeedingRead(ops) {
+  const replaced = new Set();
+  const seen = new Set();
+  const read = [];
+  for (const op of ops || []) {
+    if (op.rest.length === 0) {
+      replaced.add(op.id);
+      continue;
+    }
+    if (replaced.has(op.id) || seen.has(op.id)) continue;
+    seen.add(op.id);
+    read.push(op.id);
+  }
+  return read;
+}
+
+function sliceChunks(items, bindsPerItem, fixedBinds = 2) {
+  const size = Math.max(1, Math.floor((MAX_BINDS - fixedBinds) / bindsPerItem));
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+function foldOps(existing, ops) {
+  const state = new Map();
+  for (const op of ops) {
+    if (!state.has(op.id)) {
+      if (Object.prototype.hasOwnProperty.call(existing, op.id)) {
+        const current = existing[op.id];
+        state.set(op.id, {
+          doc: current && typeof current === 'object' && !Array.isArray(current) ? cloneJson(current) : {},
+        });
+      } else {
+        state.set(op.id, { doc: undefined });
+      }
+    }
+    const cur = state.get(op.id);
+    if (op.rest.length === 0) {
+      cur.doc = op.value === null || op.value === undefined ? undefined : cloneJson(op.value);
+      continue;
+    }
+    const base = cur.doc && typeof cur.doc === 'object' && !Array.isArray(cur.doc) ? cur.doc : {};
+    cur.doc = setNested(base, op.rest, op.value);
+  }
+  const upserts = [];
+  const deletes = [];
+  for (const [id, cur] of state) {
+    if (cur.doc === undefined) deletes.push(id);
+    else upserts.push({ id, data: cur.doc });
+  }
+  return { upserts, deletes };
+}
+
+export function collectionUpsertSql(table, idCol) {
+  return `INSERT INTO ${table} (tenant_id, game_id, ${idCol}, data)
+   SELECT $1, $2, u.id, u.data::jsonb
+   FROM unnest($3::text[], $4::text[]) AS u(id, data)
+   ON CONFLICT (tenant_id, game_id, ${idCol})
+   DO UPDATE SET data = EXCLUDED.data`;
+}
+
+export function reduceCollectionEntries(existingByCollection, entries) {
+  const next = {};
+  for (const [key, rows] of Object.entries(existingByCollection || {})) {
+    next[key] = {};
+    for (const [id, data] of Object.entries(rows || {})) {
+      next[key][id] = cloneJson(data);
+    }
+  }
+  const grouped = new Map();
+  for (const [path, value] of entries || []) {
+    const target = collectionRowTarget(path);
+    if (!target) continue;
+    const list = grouped.get(target.key) || [];
+    list.push({ id: target.id, rest: target.rest, value });
+    grouped.set(target.key, list);
+  }
+  for (const [key, ops] of grouped) {
+    const existing = next[key] || {};
+    const { upserts, deletes } = foldOps(existing, ops);
+    if (!next[key]) next[key] = {};
+    for (const id of deletes) delete next[key][id];
+    for (const row of upserts) next[key][row.id] = row.data;
+  }
+  return next;
+}
+
+async function loadCollectionRowsByIds(tenantId, spec, ids) {
+  const existing = {};
+  if (!ids.length) return existing;
+  const gameId = currentGameId();
+  for (const chunk of sliceChunks(ids, 1)) {
+    const { rows } = await query(
+      `SELECT ${spec.idCol} AS id, data FROM ${spec.table}
+       WHERE tenant_id = $1 AND game_id = $2 AND ${spec.idCol} = ANY($3::text[])`,
+      [tenantId, gameId, chunk]
+    );
+    for (const row of rows) existing[String(row.id)] = row.data;
+  }
+  return existing;
+}
+
+async function writeCollectionOps(tenantId, spec, ops) {
+  const existing = await loadCollectionRowsByIds(tenantId, spec, idsNeedingRead(ops));
+  const { upserts, deletes } = foldOps(existing, ops);
+  const gameId = currentGameId();
+  for (const chunk of sliceChunks(deletes, 1)) {
+    await query(
+      `DELETE FROM ${spec.table}
+       WHERE tenant_id = $1 AND game_id = $2 AND ${spec.idCol} = ANY($3::text[])`,
+      [tenantId, gameId, chunk]
+    );
+  }
+  for (const chunk of sliceChunks(upserts, 2)) {
+    await query(
+      collectionUpsertSql(spec.table, spec.idCol),
+      [tenantId, gameId, chunk.map((row) => row.id), chunk.map((row) => JSON.stringify(row.data))]
+    );
+  }
+}
+
+async function updateRoot(tenantId, patch) {
+  const entries = Object.entries(patch || {});
+  if (!entries.length) return;
+  tenantId = requireTenant(tenantId);
+  await withTransaction(async () => {
+    let pending = [];
+    const flush = async () => {
+      if (!pending.length) return;
+      const grouped = new Map();
+      for (const op of pending) {
+        const list = grouped.get(op.key) || [];
+        list.push(op);
+        grouped.set(op.key, list);
+      }
+      pending = [];
+      for (const [key, ops] of grouped) {
+        await writeCollectionOps(tenantId, COLLECTION_MAP[key], ops);
+      }
+    };
+    for (const [path, value] of entries) {
+      const target = collectionRowTarget(path);
+      if (target) {
+        pending.push({ ...target, value });
+        continue;
+      }
+      await flush();
+      await writePath(tenantId, path, value);
+    }
+    await flush();
+  });
+}
+
 async function updateAtPath(tenantId, path, patch) {
   if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) {
     await writePath(tenantId, path, patch);
@@ -1375,10 +1604,7 @@ class QueryRef {
 
   async update(patch) {
     if (this.path === '' || this.path === '/') {
-      const entries = Object.entries(patch || {});
-      for (const [subPath, val] of entries) {
-        await writePath(this._tenantId, subPath, val);
-      }
+      await updateRoot(this._tenantId, patch);
       return;
     }
     await updateAtPath(this._tenantId, this.path, patch);

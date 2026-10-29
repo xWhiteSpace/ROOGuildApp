@@ -3,10 +3,11 @@
  * Isolated from auction eventAnnounce.js — never posts to the auction channel.
  */
 import { getTenantStore } from '../db/database.js';
-import { DEFAULT_TZ, getGuildWeekMinute } from '../utils/guildTime.js';
+import { DEFAULT_TZ, buildCompositeKey, getGuildWeekMinute } from '../utils/guildTime.js';
 import { isDiscordCircuitOpen, logDiscordRateLimit } from '../utils/discordRateLimit.js';
 import {
   buildAttendanceRaidAnnounce,
+  buildChainActionRow,
   buildRaidPhaseAnnounce,
   sendGenRoomMessage,
   sendWarAnnounceMessage,
@@ -61,7 +62,11 @@ async function dispatchRaidAnnouncement(phaseTag, cycle) {
     timeStart: cycle.warStartTime,
   };
   if (phaseTag === 'p1') {
-    await sendGenRoomMessage(buildAttendanceRaidAnnounce(payload));
+    const eventKey = cycle.warDate && cycle.eventId
+      ? buildCompositeKey(cycle.warDate, cycle.eventId)
+      : '';
+    const sendOptions = eventKey ? { components: [buildChainActionRow(eventKey)] } : {};
+    await sendGenRoomMessage(buildAttendanceRaidAnnounce(payload), sendOptions);
     return;
   }
   await sendWarAnnounceMessage(buildRaidPhaseAnnounce(phaseTag, payload));

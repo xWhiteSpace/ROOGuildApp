@@ -118,10 +118,12 @@ async function dispatchAnnouncement(phaseTag, eventName) {
 
   const { processAndPostDiscordSnapshot } = await import('../games/ragnarok-origin/services/discordSnapshot.js');
 
+  const requestChannelId = (discordChannel('DISCORD_AUCREQ_CHANNEL_ID') || '').trim();
+  const requestJump = requestChannelId ? `<#${requestChannelId}>` : 'the auction request channel';
   const messages = {
     p1: `📢 **${eventName} Registration Update**:\nBid requests are currently **OPEN**! Remember to check your basket modifications and confirm your item choices on the request deck.`,
     p2: `🔒 **${eventName} Registration Locked**:\nSubmissions are now closed! Bidding selections are frozen for list allocation processing by Management Officers.`,
-    p3: `⚡ **${eventName} Auction Arena LIVE**:\nThe raid session has commenced! Stand by for interactive live bidding controls.`,
+    p3: `⚡ **${eventName} Auction Arena LIVE**:\nThere are available slots open. Please go to ${requestJump} to grab them!`,
   };
   const text = messages[phaseTag];
   if (!text) return;

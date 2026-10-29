@@ -2,6 +2,7 @@
  * Officer GEN Room text pings (Attendance open / Party ready).
  * War-announce launchers stay separate; this only posts channel text.
  */
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { discordChannel } from '../../../db/channels.js';
 
@@ -47,6 +48,20 @@ export function buildRsvpAnnounceLine({ displayName, available, eventTitle, even
   return `⚔️ **${name}** will be **Available** for **${event}** this coming **${when}.** Locked in — see you there.${cta}`;
 }
 
+export function buildChainActionRow(eventKey) {
+  const key = String(eventKey || '').trim();
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`attcard:chain:${key}:confirm`)
+      .setEmoji('⚔️')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`attcard:chain:${key}:leave`)
+      .setEmoji('🕊️')
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
 export function buildPartyReadyAnnounce({ eventTitle, eventDate }) {
   const title = eventTitle || 'Raid';
   const date = eventDate || '—';
@@ -86,10 +101,68 @@ export function chunkDiscordMessages(text, limit = DISCORD_MESSAGE_LIMIT) {
   return chunks;
 }
 
-export function buildAllocateOpenAnnounce({ selectedRows, notSelectedRows }) {
+export function padBookNumber(value) {
+  const text = String(Math.max(0, Number(value) || 0));
+  return text.length >= 2 ? text : text.padStart(2, '0');
+}
+
+export function bookPageCount(slotCount, qtyPerPage = 4) {
+  const per = Number(qtyPerPage) > 0 ? Number(qtyPerPage) : 4;
+  const count = Number(slotCount) || 0;
+  if (count <= 0) return 1;
+  return Math.ceil(count / per);
+}
+
+export function formatTotalPagesLine(totalPages) {
+  const pages = padBookNumber(totalPages);
+  return `Total Pages: ${pages}/${pages}`;
+}
+
+export function formatBookPair(page, slot) {
+  return `${padBookNumber(page)}-${padBookNumber(slot)}`;
+}
+
+export function formatUnclaimedPairs(cells) {
+  if (!cells?.length) return 'none';
+  return cells.map((cell) => formatBookPair(cell.page, cell.slot)).join(' | ');
+}
+
+function asAllocationBoxes(raw) {
+  return Array.isArray(raw) ? raw : Object.values(raw || {});
+}
+
+export function listUnclaimedCells(items, categoryAllocations, qtyPerPage = 4) {
+  const per = Number(qtyPerPage) > 0 ? Number(qtyPerPage) : 4;
+  let page = 1;
+  let slot = 1;
+  let slotCount = 0;
+  const cells = [];
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    asAllocationBoxes(categoryAllocations?.[item?.id]?.selected).forEach((value) => {
+      slotCount += 1;
+      if (value === '') cells.push({ page, slot });
+      slot += 1;
+      if (slot > per) {
+        slot = 1;
+        page += 1;
+      }
+    });
+  });
+  return { cells, slotCount, totalPages: bookPageCount(slotCount, per) };
+}
+
+export function buildAllocateOpenAnnounce({
+  selectedRows,
+  notSelectedRows,
+  totalPages = 1,
+  unclaimedLine = 'none',
+} = {}) {
   return [
     '@everyone',
     'The Live Auction is now Open. The members whos request are selected are as follows:',
+    formatTotalPagesLine(totalPages),
+    'Unclaimed:',
+    unclaimedLine || 'none',
     formatAllocateBidBlock(selectedRows),
     '',
     'For members who were not selected by the system, dont worry, as your priority on the next Auction has increased.',
@@ -97,8 +170,18 @@ export function buildAllocateOpenAnnounce({ selectedRows, notSelectedRows }) {
   ].join('\n');
 }
 
-export function buildAllocateOpenAnnounceChunks({ selectedRows, notSelectedRows }) {
-  return chunkDiscordMessages(buildAllocateOpenAnnounce({ selectedRows, notSelectedRows }));
+export function buildAllocateOpenAnnounceChunks({
+  selectedRows,
+  notSelectedRows,
+  totalPages = 1,
+  unclaimedLine = 'none',
+} = {}) {
+  return chunkDiscordMessages(buildAllocateOpenAnnounce({
+    selectedRows,
+    notSelectedRows,
+    totalPages,
+    unclaimedLine,
+  }));
 }
 
 export async function sendGenRoomMessage(content, options = {}) {
@@ -131,6 +214,7 @@ export async function sendGenRoomMessage(content, options = {}) {
     }
     const payload = { content };
     if (options.allowedMentions) payload.allowedMentions = options.allowedMentions;
+    if (options.components?.length) payload.components = options.components;
     await channel.send(payload);
   });
 

@@ -191,6 +191,23 @@ function rowLabel(row, members) {
   return String(live?.displayName || row?.displayName || row?.alias || row?.snowflake || row?.uid || '').toLowerCase();
 }
 
+function finiteScore(value) {
+  const score = Number(value);
+  return Number.isFinite(score) ? score : null;
+}
+
+export function sortEventRows(rows, scores) {
+  return (rows || []).slice().sort((a, b) => {
+    const scoreA = finiteScore(scores?.[a?.uid]);
+    const scoreB = finiteScore(scores?.[b?.uid]);
+    if (scoreA == null && scoreB == null) return 0;
+    if (scoreA == null) return 1;
+    if (scoreB == null) return -1;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return 0;
+  });
+}
+
 async function arrangeSheetRows(db, sheetRows) {
   const snap = await db.ref('auction/members').once('value');
   const members = snap.exists() ? snap.val() || {} : {};
@@ -366,7 +383,10 @@ export async function readGvgEvent(db, sessionId) {
   if (!war?.id) return null;
   const rows = await arrangeSheetRows(db, await loadRows(db));
   const scores = scoresForWar(war, await membershipWindows(db), rows.map((row) => row.uid));
-  const visible = rows.filter((row) => Object.prototype.hasOwnProperty.call(scores, row.uid));
+  const visible = sortEventRows(
+    rows.filter((row) => Object.prototype.hasOwnProperty.call(scores, row.uid)),
+    scores,
+  );
   const cells = cellsForWar(war, scores);
   return {
     date: dateMeta(war),

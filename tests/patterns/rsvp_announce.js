@@ -16,7 +16,7 @@ const cycleHolder = vi.hoisted(() => ({ status: null }));
 const decision = vi.hoisted(() => ({
   impl: async () => ({ ok: true }),
 }));
-const genSend = vi.hoisted(() => ({ calls: [] }));
+const genSend = vi.hoisted(() => ({ calls: [], options: [] }));
 const keySeq = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock('../../backend/src/db/database.js', async (importOriginal) => {
@@ -53,8 +53,9 @@ vi.mock('../../backend/src/games/ragnarok-origin/services/discordGenAnnounce.js'
   const actual = await importOriginal();
   return {
     ...actual,
-    sendGenRoomMessage: async (content) => {
+    sendGenRoomMessage: async (content, options) => {
       genSend.calls.push(content);
+      genSend.options.push(options || {});
       return { posted: true };
     },
   };
@@ -95,7 +96,18 @@ function seed() {
     warDate: '2026-10-07',
   };
   genSend.calls = [];
+  genSend.options = [];
   decision.impl = async () => ({ ok: true });
+}
+
+function chainButtons(options) {
+  const row = options?.components?.[0];
+  const json = typeof row?.toJSON === 'function' ? row.toJSON() : {};
+  return (json.components || []).map((button) => ({
+    id: button.custom_id,
+    emoji: button.emoji?.name || '',
+    style: button.style,
+  }));
 }
 
 function makeIx(customId) {
@@ -123,7 +135,36 @@ async function press(action, { statusAlready = null, key = null } = {}) {
   await runWithTenant(TENANT, () => handleAttendanceCardInteraction(ix));
   await new Promise((r) => setImmediate(r));
   await new Promise((r) => setImmediate(r));
-  return { calls: [...genSend.calls], ix, key: compositeKey };
+  return {
+    calls: [...genSend.calls],
+    buttons: chainButtons(genSend.options[0]),
+    ix,
+    key: compositeKey,
+  };
+}
+
+async function pressChain(action, { statusAlready = null, key = null } = {}) {
+  seed();
+  const compositeKey = key || nextKey();
+  if (statusAlready) {
+    await storeHolder.store.ref(`attendance/commitments/${compositeKey}/${UID}`).set({ status: statusAlready });
+  }
+  const seen = [];
+  decision.impl = async (args) => {
+    seen.push(args);
+    return { ok: true };
+  };
+  const ix = makeIx(`attcard:chain:${compositeKey}:${action}`);
+  await runWithTenant(TENANT, () => handleAttendanceCardInteraction(ix));
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  return {
+    calls: [...genSend.calls],
+    buttons: chainButtons(genSend.options[0]),
+    seen,
+    ix,
+    key: compositeKey,
+  };
 }
 
 export async function confirmedAnnouncesAvailable() {
@@ -210,4 +251,57 @@ export function confirmYoursClause() {
     eventDate: '2026-10-07',
   }));
   return { without, withCta };
+}
+
+export async function chainSwordCommitsAndPostsButtons() {
+  const result = await pressChain('confirm');
+  return {
+    calls: result.calls,
+    line: result.calls[0],
+    buttons: result.buttons,
+    status: result.seen[0]?.status,
+    compositeKey: result.seen[0]?.compositeKey,
+    key: result.key,
+    edited: result.ix.editReply.mock.calls.length,
+  };
+}
+
+export async function chainDoveCommitsUnavailable() {
+  const result = await pressChain('leave');
+  return {
+    calls: result.calls,
+    line: result.calls[0],
+    buttons: result.buttons,
+    status: result.seen[0]?.status,
+    key: result.key,
+    edited: result.ix.editReply.mock.calls.length,
+  };
+}
+
+export async function chainSameStatusStaysQuiet() {
+  const result = await pressChain('confirm', { statusAlready: 'Confirmed' });
+  return {
+    calls: result.calls,
+    seen: result.seen.length,
+    edited: result.ix.editReply.mock.calls.length,
+  };
+}
+
+export async function chainFailedDecisionLeavesMessage() {
+  seed();
+  const compositeKey = nextKey();
+  const { AttendanceDecisionError } = await import(
+    '../../backend/src/games/ragnarok-origin/services/attendanceDecision.js'
+  );
+  decision.impl = async () => {
+    throw new AttendanceDecisionError('no_credits', 'No leave credits remaining.');
+  };
+  const ix = makeIx(`attcard:chain:${compositeKey}:leave`);
+  await runWithTenant(TENANT, () => handleAttendanceCardInteraction(ix));
+  await new Promise((r) => setImmediate(r));
+  return {
+    calls: [...genSend.calls],
+    edited: ix.editReply.mock.calls.length,
+    followedUp: ix.followUp.mock.calls.length,
+  };
 }

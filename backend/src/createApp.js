@@ -155,7 +155,7 @@ export function createApp() {
       const { sendPublicAuctionCard } = await import('./games/ragnarok-origin/services/discordInteractiveAuction.js');
       await sendPublicAuctionCard(targetChannel);
 
-      res.send("📟 SUCCESS: Request Card posted to the auction request channel (Open Request + Open Live Dashboard).");
+      res.send("📟 SUCCESS: Request Card posted to the auction request channel (Open Request + Open Live Auction + Get Extra Slots).");
     } catch (err) {
       console.error("Deployer Route Failure Exception Caught:", err.message);
       res.status(500).send(`❌ Server Exception: ${err.message}`);
