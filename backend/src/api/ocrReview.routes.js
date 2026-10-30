@@ -14,6 +14,8 @@ import {
   applyPresentUids,
   assignUnmatched,
   linkOcrReading,
+  unlinkOcrReading,
+  persistOcrRelease,
   finalizeOcrCommit,
   refreshReviewMessage,
   reviewRosterUids,
@@ -24,6 +26,7 @@ import {
   createReviewFromBuffers,
 } from '../games/ragnarok-origin/services/discordPartyOcr.js';
 import { resolveReviewShotUrls } from '../games/ragnarok-origin/services/ocrShotStaging.js';
+import { gvgResultValue } from '../games/ragnarok-origin/services/inGameStatus.js';
 
 const router = Router();
 const MAX_SHOT_BYTES = 8 * 1024 * 1024;
@@ -209,6 +212,7 @@ router.get('/:id', async (req, res) => {
         slotGaps: reviewSlotGaps(review),
         overlays: Array.isArray(review.overlays) ? review.overlays : [],
         occupied: Number.isFinite(review.occupied) ? review.occupied : null,
+        gvgResult: gvgResultValue(review.gvgResult),
         screenshotUrl: screenshotUrls[0] || '',
         screenshotUrls,
         fileNames: Array.isArray(review.source?.fileNames) ? review.source.fileNames : [],
@@ -240,31 +244,49 @@ router.patch('/:id', async (req, res) => {
     if (correction && typeof correction === 'object') {
       const uid = String(correction.uid || '');
       const text = String(correction.text || '').trim();
-      if (!uid || !text) {
+      const unmatchedId = correction.unmatchedId ? String(correction.unmatchedId) : '';
+      if (!uid || (!text && !unmatchedId)) {
         return res.status(400).json({ success: false, error: 'Choose a member for this OCR reading.' });
       }
       if (!members[uid]) {
         return res.status(400).json({ success: false, error: 'Member not on the roster.' });
       }
       linkOcrReading(review, {
-        unmatchedId: correction.unmatchedId ? String(correction.unmatchedId) : '',
+        unmatchedId,
         fromUid: correction.fromUid ? String(correction.fromUid) : '',
         toUid: uid,
         text,
+        remember: correction.remember !== false,
       });
+    }
+    const unlink = req.body?.unlink;
+    if (unlink && typeof unlink === 'object') {
+      const uid = String(unlink.uid || '');
+      if (!uid || !members[uid]) {
+        return res.status(400).json({ success: false, error: 'Member not on the roster.' });
+      }
+      const gap = unlinkOcrReading(review, uid);
+      if (!gap) return res.status(400).json({ success: false, error: 'That member has no OCR seat to unlink.' });
+      if (gap.text) await persistOcrRelease(ctx.db, members, uid, gap.text);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult')) {
+      review.gvgResult = gvgResultValue(req.body.gvgResult);
     }
     const fields = new Set();
     if (Array.isArray(req.body?.presentUids)) {
       fields.add('present');
       fields.add('absent');
     }
-    if ((req.body?.unmatchedId && req.body?.uid) || correction?.uid) {
-      ['ocrMatches', 'present', 'unmatched', 'slotGaps', 'pendingUnmatchedId'].forEach((field) => fields.add(field));
+    if ((req.body?.unmatchedId && req.body?.uid) || correction?.uid || unlink?.uid) {
+      ['ocrMatches', 'present', 'absent', 'unmatched', 'slotGaps', 'pendingUnmatchedId'].forEach((field) => fields.add(field));
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult')) fields.add('gvgResult');
     if (fields.size) await saveReviewFields(review, [...fields]);
     else await saveReview(review);
-    const linkedOnly = Boolean(correction?.uid) && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
-    if (!linkedOnly) await refreshReviewMessage(review, members, null).catch(() => {});
+    const linkedOnly = Boolean(correction?.uid) && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid) && !unlink?.uid;
+    const unlinkedOnly = Boolean(unlink?.uid) && !correction?.uid && !Array.isArray(req.body?.presentUids);
+    const resultOnly = Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult') && !linkedOnly && !unlinkedOnly && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
+    if (!linkedOnly && !unlinkedOnly && !resultOnly) await refreshReviewMessage(review, members, null).catch(() => {});
     return res.json({ success: true, id: review.id, presentCount: Object.keys(review.present || {}).length });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -283,6 +305,9 @@ router.post('/:id/commit', async (req, res) => {
     const members = membersSnap.exists() ? membersSnap.val() : {};
     if (Array.isArray(req.body?.presentUids)) {
       applyPresentUids(review, req.body.presentUids, members);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult')) {
+      review.gvgResult = gvgResultValue(req.body.gvgResult);
     }
     const committedBy = ctx.user.displayName || ctx.user.username || ctx.user.id;
     const { statusMap, swordNote, galleryNote } = await finalizeOcrCommit(review, members, committedBy);

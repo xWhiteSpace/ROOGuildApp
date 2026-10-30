@@ -92,7 +92,7 @@ vi.mock('../../backend/src/games/ragnarok-origin/timeWindow.js', async (importOr
 const requestRoutes = (await import('../../backend/src/api/request.routes.js')).default;
 const {
   buildAllocateOpenAnnounce,
-  formatUnclaimedPairs,
+  formatUnclaimedQty,
   listUnclaimedCells,
 } = await import('../../backend/src/games/ragnarok-origin/services/discordGenAnnounce.js');
 
@@ -158,29 +158,23 @@ export function allocateHeaderShowsPagesAndUnclaimed() {
     { puppet: { selected: ['111', '222', '333', '444'] } },
     4,
   );
-  const wide = listUnclaimedCells(
-    [{ id: 'puppet', name: 'Puppet' }],
-    { puppet: { selected: [...Array(399).fill('111'), ''] } },
-    4,
-  );
   const openText = buildAllocateOpenAnnounce({
     selectedRows: [],
     notSelectedRows: [],
     totalPages: open.totalPages,
-    unclaimedLine: formatUnclaimedPairs(open.cells),
+    unclaimedLine: formatUnclaimedQty(open.byItem),
   });
   const fullText = buildAllocateOpenAnnounce({
     selectedRows: [],
     notSelectedRows: [],
     totalPages: full.totalPages,
-    unclaimedLine: formatUnclaimedPairs(full.cells),
+    unclaimedLine: formatUnclaimedQty(full.byItem),
   });
   return {
     openText,
     fullText,
     openPages: open.totalPages,
-    openPairs: formatUnclaimedPairs(open.cells),
-    widePair: formatUnclaimedPairs(wide.cells),
+    openQty: formatUnclaimedQty(open.byItem),
   };
 }
 

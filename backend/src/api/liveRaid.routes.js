@@ -23,7 +23,7 @@ import {
 import { isArchivedRsvp, normalizeCommitmentStatus } from '@guildname/shared/attendanceStatus';
 import { checkOfficer } from '../auth/officer.js';
 import { buildCompositeKey } from '../utils/guildTime.js';
-import { consumePendingInGameStatus, replaceArchiveInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
+import { consumePendingInGameStatus, gvgResultValue, replaceArchiveInGameStatus, setInGameStatusFlag } from '../games/ragnarok-origin/services/inGameStatus.js';
 import {
   GVG_SHEET_PATH,
   appendRows,
@@ -664,7 +664,7 @@ async function endLiveRaidSessionInternal(s) {
     }
   });
 
-  const { inGameStatus: pendingInGame, clearPath: pendingClearPath } = await consumePendingInGameStatus(db, s.eventDate, s.eventKey);
+  const { inGameStatus: pendingInGame, gvgResult: pendingGvgResult, clearPath: pendingClearPath } = await consumePendingInGameStatus(db, s.eventDate, s.eventKey);
 
   const warSheet = warSheetFromRoster(membersData, {
     commitments,
@@ -693,6 +693,7 @@ async function endLiveRaidSessionInternal(s) {
     endedEarly,
     endedAt: now,
     inGameStatus: pendingInGame || {},
+    ...(pendingGvgResult ? { gvgResult: pendingGvgResult } : {}),
     sheet: warSheet.sheet,
   };
 
@@ -1028,7 +1029,13 @@ router.put('/history/:sessionId/in-game', async (req, res) => {
     }
 
     await replaceArchiveInGameStatus(db, sessionId, inGameStatus);
-    return res.json({ success: true, inGameStatus });
+    const body = { success: true, inGameStatus };
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult')) {
+      const gvgResult = gvgResultValue(req.body.gvgResult);
+      await db.ref(`attendance/session_archive/${sessionId}/gvgResult`).set(gvgResult || null);
+      body.gvgResult = gvgResult;
+    }
+    return res.json(body);
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

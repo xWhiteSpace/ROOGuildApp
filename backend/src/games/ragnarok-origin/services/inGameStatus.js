@@ -57,27 +57,39 @@ export function pendingOcrKey(eventDate, eventKey) {
   return buildCompositeKey(eventDate, eventKey);
 }
 
+export const GVG_RESULTS = ['Win', 'Lose', '1st', '2nd', '3rd', '4th', '5th', '↓5th'];
+
+export function gvgResultValue(value) {
+  const text = String(value || '').trim();
+  return GVG_RESULTS.includes(text) ? text : '';
+}
+
 export async function commitInGameForEvent(db, {
   eventDate,
   eventKey,
   statusMap,
   reviewId,
   committedBy,
+  gvgResult,
 } = {}) {
+  const result = gvgResultValue(gvgResult);
   const archive = await findLatestArchiveForEvent(db, eventDate, eventKey);
   if (archive?.id) {
     await replaceArchiveInGameStatus(db, archive.id, statusMap);
+    if (result) await db.ref(`attendance/session_archive/${archive.id}/gvgResult`).set(result);
     return { mode: 'archive', sessionId: archive.id };
   }
   const key = pendingOcrKey(eventDate, eventKey);
-  await db.ref(`attendance/ocr_pending/${key}`).set({
+  const pending = {
     inGameStatus: statusMap || {},
     reviewId: reviewId || '',
     committedAt: Date.now(),
     committedBy: committedBy || '',
     eventDate,
     eventKey,
-  });
+  };
+  if (result) pending.gvgResult = result;
+  await db.ref(`attendance/ocr_pending/${key}`).set(pending);
   return { mode: 'pending', pendingKey: key };
 }
 
@@ -88,6 +100,7 @@ export async function consumePendingInGameStatus(db, eventDate, eventKey) {
   const val = snap.val() || {};
   return {
     inGameStatus: val.inGameStatus && typeof val.inGameStatus === 'object' ? val.inGameStatus : null,
+    gvgResult: gvgResultValue(val.gvgResult),
     clearPath: `attendance/ocr_pending/${key}`,
   };
 }

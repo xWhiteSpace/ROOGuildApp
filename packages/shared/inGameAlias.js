@@ -189,6 +189,16 @@ export function claimOcrCorrection(members, uid, rawText) {
   return changed;
 }
 
+export function releaseOcrCorrection(members, uid, rawText) {
+  const text = String(rawText || '').trim().slice(0, OCR_CORRECTION_TOKEN_MAX);
+  const key = correctionFold(text);
+  if (!text || !key || !members?.[uid]) return null;
+  const current = sanitizeOcrCorrections(members[uid]?.ocrCorrections);
+  const next = current.filter((item) => correctionFold(item) !== key);
+  if (next.length === current.length) return null;
+  return next;
+}
+
 function dictionaryOwners(roster) {
   const owners = new Map();
   for (const [uid, member] of roster) {

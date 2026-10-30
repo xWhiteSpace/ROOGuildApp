@@ -668,7 +668,7 @@ export default function MasterListTab({ user }) {
                           />
                         ) : (
                           <Link
-                            to={`/attendance/profile/${uid}`}
+                            to={`/?member=${encodeURIComponent(uid)}`}
                             className={`${isFoundMatch ? 'bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30 shadow-sm' : 'text-slate-200 hover:text-indigo-300'} transition`}
                           >
                             {m.displayName}

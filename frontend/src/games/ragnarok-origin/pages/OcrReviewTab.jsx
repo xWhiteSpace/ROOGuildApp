@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
+import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, Bot, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
 import { foldConfusable } from '@guildname/shared/inGameAlias';
 import { apiFetch } from '../../../services/apiClient';
 import { invalidateMembers, invalidateOcrReviews, useOcrReview, useOcrReviewEvents, useOcrReviews } from '../../../query/hooks';
@@ -18,6 +18,14 @@ import {
 
 const MAX_SHOTS = 8;
 const BLANK_IMAGE = '';
+const GVG_RANKS = ['1st', '2nd', '3rd', '4th', '5th', '↓5th'];
+const GVG_FACES = ['win', 'lose', 'rank'];
+
+function gvgFaceFor(value) {
+  if (value === 'Lose') return 'lose';
+  if (GVG_RANKS.includes(value)) return 'rank';
+  return 'win';
+}
 
 function memberName(row) {
   return row.displayName || row.inGameName || row.uid;
@@ -54,7 +62,7 @@ function slotGapsFromReview(review) {
   return (review?.unmatched || []).map((row) => ({ ...row, category: 'unmatch' }));
 }
 
-function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId }) {
+function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, remember }) {
   const gaps = slotGapsFromReview(review);
   const gap = unmatchedId ? gaps.find((row) => row.id === unmatchedId) : null;
   const fromRow = fromUid ? (roster || []).find((row) => row.uid === fromUid) : null;
@@ -67,6 +75,7 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId })
     if (fromUid && row.uid === fromUid && fromUid !== uid) {
       return {
         ...row,
+        present: false,
         ocrText: '',
         ocrSource: 'officer',
         ocrState: 'unmatch',
@@ -81,8 +90,9 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId })
     if (row.uid !== uid) return row;
     return {
       ...row,
+      present: true,
       ocrText: text,
-      ocrSource: 'dictionary',
+      ocrSource: remember === false ? 'officer' : 'dictionary',
       ocrState: 'match',
       ocrConfidence: 100,
       imageSource: gap?.imageSource || fromRow?.imageSource || '',
@@ -97,6 +107,50 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId })
       ...review,
       slotGaps: gaps.filter((row) => row.id !== unmatchedId),
       unmatched: (review?.unmatched || []).filter((row) => row.id !== unmatchedId),
+    },
+    roster: nextRoster,
+  };
+}
+
+function applyUnlinkedReading(review, roster, { uid }) {
+  const seat = (roster || []).find((row) => row.uid === uid);
+  const text = readingText(seat?.ocrText);
+  const col = seat?.ocrCol ?? null;
+  const ocrRow = seat?.ocrRow ?? null;
+  if (!seat || (!text && col == null && ocrRow == null)) return { review, roster };
+  const gap = {
+    id: `u${Date.now().toString(36)}`,
+    text,
+    category: text ? 'unmatch' : 'missing',
+    imageSource: seat.imageSource || '',
+    imageIndex: Number.isInteger(seat.imageIndex) ? seat.imageIndex : null,
+    ocrCol: col,
+    ocrRow,
+  };
+  const nextRoster = (roster || []).map((row) => {
+    if (row.uid !== uid) return row;
+    const key = text ? foldConfusable(text) : '';
+    return {
+      ...row,
+      ocrText: '',
+      ocrSource: '',
+      ocrState: 'unmatch',
+      ocrConfidence: 0,
+      imageSource: '',
+      imageIndex: null,
+      ocrCol: null,
+      ocrRow: null,
+      ocrPosition: '',
+      ocrCorrections: key
+        ? (row.ocrCorrections || []).filter((item) => foldConfusable(item) !== key)
+        : row.ocrCorrections,
+    };
+  });
+  return {
+    review: {
+      ...review,
+      slotGaps: [...slotGapsFromReview(review), gap],
+      unmatched: text ? [...(review?.unmatched || []), gap] : (review?.unmatched || []),
     },
     roster: nextRoster,
   };
@@ -133,22 +187,22 @@ function correctionLabel(text, roster, pendingOwner) {
   return `${memberName(owner)}: {${list.join(', ')}}`;
 }
 
-function MemberLink({ text, fromUid, unmatchedId, roster, disabled, onLink }) {
+function MemberLink({ text, fromUid, unmatchedId, roster, disabled, onLink, allowBlank = false, label = 'OCR Register', remember = true }) {
   const reading = readingText(text);
-  if (!reading) return null;
+  if (!reading && !allowBlank) return null;
   return (
     <select
-      aria-label={`Link ${reading} to a member`}
+      aria-label={reading ? `${label} ${reading}` : `${label} this missing slot`}
       disabled={disabled}
       value=""
       onChange={(event) => {
         const uid = event.target.value;
         if (!uid) return;
-        onLink({ text: reading, uid, fromUid, unmatchedId });
+        onLink({ text: reading, uid, fromUid, unmatchedId, remember });
       }}
       className="mt-0.5 max-w-full bg-slate-950 border border-slate-800 rounded-md px-1 py-0.5 text-[10px] text-slate-300"
     >
-      <option value="">Link member</option>
+      <option value="">{label}</option>
       {[...(roster || [])]
         .sort((a, b) => memberName(a).localeCompare(memberName(b), undefined, { sensitivity: 'base' }))
         .map((row) => (
@@ -171,7 +225,43 @@ function pictureFit(rect, viewW, viewH) {
   };
 }
 
-function DetectionOverlay({ overlay }) {
+function sameShot(item, imageIndex) {
+  if (Number.isInteger(item?.imageIndex)) return item.imageIndex === imageIndex;
+  return imageIndex === 0;
+}
+
+function sameCell(item, cell, imageIndex) {
+  if (!sameShot(item, imageIndex)) return false;
+  return Number(item?.ocrCol) === Number(cell?.col) && Number(item?.ocrRow) === Number(cell?.row);
+}
+
+function aiMarkKind(cell, roster, gaps, imageIndex) {
+  if (!cell?.slot) return '';
+  if ((roster || []).some((row) => row.ocrState === 'match' && sameCell(row, cell, imageIndex))) return 'match';
+  const gap = (gaps || []).find((row) => sameCell(row, cell, imageIndex));
+  if (!gap || gap.category === 'empty') return '';
+  if (gap.category === 'missing') return 'missing';
+  return 'unmatch';
+}
+
+const AI_MARK = {
+  match: { text: 'AI(O)', color: '#4ade80' },
+  unmatch: { text: 'AI(△)', color: '#facc15' },
+  missing: { text: 'AI(X)', color: '#fb7185' },
+};
+
+function slotLit(cell, litGap) {
+  if (!litGap || !cell?.slot) return false;
+  return Number(litGap.ocrCol) === Number(cell.col) && Number(litGap.ocrRow) === Number(cell.row);
+}
+
+function gapLit(row, litGap) {
+  if (!litGap || !row) return false;
+  if (row.id && litGap.id) return row.id === litGap.id;
+  return Number(row.ocrCol) === Number(litGap.ocrCol) && Number(row.ocrRow) === Number(litGap.ocrRow);
+}
+
+function DetectionOverlay({ overlay, roster, gaps, imageIndex, litGap, showBoxes }) {
   const frameRef = useRef(null);
   const [fit, setFit] = useState(null);
   useEffect(() => {
@@ -198,21 +288,33 @@ function DetectionOverlay({ overlay }) {
         role="img"
         aria-label="OCR detection boxes"
       >
-        {win && (
+        {showBoxes && win && (
           <rect x={win.left} y={win.top} width={win.width} height={win.height} fill="none" stroke="#aa28be" strokeWidth="3" />
         )}
-        {(overlay.cells || []).map((cell) => (
+        {(overlay.cells || []).map((cell) => {
+          const lit = slotLit(cell, litGap);
+          if (!cell.slot || (!showBoxes && !lit)) return null;
+          return (
           <g key={`${cell.col}-${cell.row}`}>
             {cell.slot && (
-              <rect x={cell.slot.left} y={cell.slot.top} width={cell.slot.width} height={cell.slot.height} fill="none" stroke="#145ae0" strokeWidth="2" />
+              <rect
+                x={cell.slot.left}
+                y={cell.slot.top}
+                width={cell.slot.width}
+                height={cell.slot.height}
+                fill={lit ? 'rgba(56,189,248,0.45)' : 'none'}
+                stroke={lit ? '#e0f2fe' : '#145ae0'}
+                strokeWidth={lit ? 4 : 2}
+              />
             )}
-            {cell.plate && (
+            {showBoxes && cell.plate && (
               <rect x={cell.plate.left} y={cell.plate.top} width={cell.plate.width} height={cell.plate.height} fill="none" stroke="#d23c14" strokeWidth="2" />
             )}
           </g>
-        ))}
+          );
+        })}
       </svg>
-      {fit && (overlay.cells || []).map((cell) => {
+      {showBoxes && fit && (overlay.cells || []).map((cell) => {
         if (!cell.plate || !cell.text) return null;
         const left = fit.left + cell.plate.left * fit.fit;
         const top = fit.top + cell.plate.top * fit.fit - LABEL_PX / 2;
@@ -231,6 +333,31 @@ function DetectionOverlay({ overlay }) {
             }}
           >
             {cell.text}
+          </div>
+        );
+      })}
+      {showBoxes && fit && (overlay.cells || []).map((cell) => {
+        const mark = cell.slot ? AI_MARK[aiMarkKind(cell, roster, gaps, imageIndex)] : null;
+        if (!mark) return null;
+        const left = fit.left + (cell.slot.left + cell.slot.width) * fit.fit;
+        const top = fit.top + cell.slot.top * fit.fit;
+        return (
+          <div
+            key={`ai-${cell.col}-${cell.row}`}
+            className="absolute whitespace-nowrap font-bold"
+            style={{
+              left,
+              top,
+              fontSize: LABEL_PX,
+              lineHeight: 1,
+              color: mark.color,
+              background: '#ffffff',
+              transform: 'translateX(-100%) scale(0.5)',
+              transformOrigin: 'top right',
+              padding: '0 2px',
+            }}
+          >
+            {mark.text}
           </div>
         );
       })}
@@ -371,6 +498,8 @@ export default function OcrReviewTab({ user }) {
     savedSession.reviewId === reviewId && Number.isFinite(savedSession.shotIndex) ? savedSession.shotIndex : 0
   ));
   const [showDetection, setShowDetection] = useState(false);
+  const [litGap, setLitGap] = useState(null);
+  const [gvgFace, setGvgFace] = useState('win');
   const rosterRef = useRef([]);
   const persistTimer = useRef(null);
   const persistPresentRef = useRef(async () => {});
@@ -383,6 +512,10 @@ export default function OcrReviewTab({ user }) {
   useEffect(() => {
     rosterRef.current = roster;
   }, [roster]);
+
+  useEffect(() => {
+    setGvgFace(gvgFaceFor(review?.gvgResult));
+  }, [review?.id, review?.gvgResult]);
 
   useEffect(() => {
     if (reviewId || !listQuery.data) return;
@@ -535,6 +668,10 @@ export default function OcrReviewTab({ user }) {
   }, [location.state, reviewId]);
 
   useEffect(() => {
+    setLitGap(null);
+  }, [shotIndex, reviewId]);
+
+  useEffect(() => {
     if (!reviewId || shots.length < 2) return undefined;
     const onKey = (event) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
@@ -569,10 +706,16 @@ export default function OcrReviewTab({ user }) {
     return persistPresent(rosterRef.current);
   };
 
-  const linkReading = ({ text, uid, fromUid, unmatchedId }) => {
+  const linkReading = ({ text, uid, fromUid, unmatchedId, remember }) => {
     const currentReview = reviewRef.current || review;
     if (!reviewId || currentReview?.status !== 'draft') return;
-    const payload = { text, uid, fromUid: fromUid || '', unmatchedId: unmatchedId || '' };
+    const payload = {
+      text,
+      uid,
+      fromUid: fromUid || '',
+      unmatchedId: unmatchedId || '',
+      remember: remember !== false,
+    };
     const previousReview = currentReview;
     const previousRoster = rosterRef.current;
     const next = applyLinkedReading(currentReview, previousRoster, payload);
@@ -594,6 +737,68 @@ export default function OcrReviewTab({ user }) {
         rosterRef.current = previousRoster;
         setReview(previousReview);
         setRoster(previousRoster);
+      }
+      setError(err.message);
+    });
+  };
+
+  const unlinkReading = (uid) => {
+    const currentReview = reviewRef.current || review;
+    if (!reviewId || currentReview?.status !== 'draft' || !uid) return;
+    const previousReview = currentReview;
+    const previousRoster = rosterRef.current;
+    const next = applyUnlinkedReading(currentReview, previousRoster, { uid });
+    if (next.roster === previousRoster) return;
+    reviewRef.current = next.review;
+    rosterRef.current = next.roster;
+    setReview(next.review);
+    setRoster(next.roster);
+    setError('');
+    linkQueue.current = linkQueue.current.then(async () => {
+      const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ unlink: { uid } }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not unlink that seat.');
+      await invalidateMembers();
+    }).catch((err) => {
+      if (reviewRef.current === next.review) {
+        reviewRef.current = previousReview;
+        rosterRef.current = previousRoster;
+        setReview(previousReview);
+        setRoster(previousRoster);
+      }
+      setError(err.message);
+    });
+  };
+
+  const moveGvgFace = (direction) => {
+    const at = GVG_FACES.indexOf(gvgFace);
+    const next = GVG_FACES[(at + direction + GVG_FACES.length) % GVG_FACES.length];
+    setGvgFace(next);
+    if (next === 'win') saveGvgResult('Win');
+    else if (next === 'lose') saveGvgResult('Lose');
+  };
+
+  const saveGvgResult = (value) => {
+    const currentReview = reviewRef.current || review;
+    if (!reviewId || currentReview?.status !== 'draft') return;
+    const previousReview = currentReview;
+    const next = { ...currentReview, gvgResult: value };
+    reviewRef.current = next;
+    setReview(next);
+    setError('');
+    apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ gvgResult: value }),
+    }).then(async (res) => {
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not save the GvG result.');
+    }).catch((err) => {
+      if (reviewRef.current === next) {
+        reviewRef.current = previousReview;
+        setReview(previousReview);
       }
       setError(err.message);
     });
@@ -625,7 +830,10 @@ export default function OcrReviewTab({ user }) {
       const presentUids = rosterRef.current.filter((row) => row.present).map((row) => row.uid);
       const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}/commit`, {
         method: 'POST',
-        body: JSON.stringify({ presentUids }),
+        body: JSON.stringify({
+          presentUids,
+          gvgResult: reviewRef.current?.gvgResult || 'Win',
+        }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Commit failed.');
@@ -932,47 +1140,45 @@ export default function OcrReviewTab({ user }) {
         <div className="text-xs text-slate-500">This review is {review.status}. Upload a new screenshot to start another.</div>
       )}
 
-      <div className="flex flex-col gap-4 flex-1 min-h-0">
-        <div className="grid grid-cols-1 gap-4 items-stretch shrink-0 lg:grid-cols-[7fr_3fr]">
+      <div className={`grid grid-cols-1 gap-4 flex-1 min-h-0 ${shots.length ? 'lg:grid-cols-2 lg:grid-rows-2' : ''}`}>
           {shots.length > 0 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden flex flex-col h-[min(32rem,42vh)]">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden flex flex-col min-h-[16rem] h-[42vh] lg:h-full lg:min-h-0 lg:col-start-1 lg:row-start-1 lg:row-span-2">
               <div className="relative flex-1 min-h-0 bg-slate-950">
                 <img
                   src={shots[safeShotIndex]}
                   alt={`Team Party screenshot ${safeShotIndex + 1}`}
                   className="w-full h-full object-contain"
                 />
-                {showDetection && <DetectionOverlay overlay={overlayHere} />}
+                {(showDetection || litGap) && (
+                  <DetectionOverlay
+                    overlay={overlayHere}
+                    roster={roster}
+                    gaps={gapsHere}
+                    imageIndex={safeShotIndex}
+                    litGap={litGap}
+                    showBoxes={showDetection}
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => setShowDetection((on) => !on)}
-                  className={`absolute left-3 top-3 h-8 px-2 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${showDetection ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200' : 'bg-slate-950/80 border-slate-700 text-slate-300'}`}
+                  aria-label={showDetection ? 'Hide boxes' : 'Show boxes'}
+                  title={showDetection ? 'Hide boxes' : 'Show boxes'}
+                  className={`absolute left-3 top-3 w-8 h-8 rounded-lg border inline-flex items-center justify-center ${showDetection ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.65)]' : 'bg-slate-950/80 border-slate-700 text-slate-300'}`}
                 >
-                  {showDetection ? 'Hide boxes' : 'Show boxes'}
+                  <Bot size={16} />
                 </button>
-                {shots.length > 1 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setShotIndex((i) => (i - 1 + shots.length) % shots.length)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg bg-slate-950/80 border border-slate-700 text-slate-200 hover:text-white"
-                      aria-label="Previous screenshot"
-                    >
-                      <ChevronLeft size={18} className="mx-auto" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShotIndex((i) => (i + 1) % shots.length)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg bg-slate-950/80 border border-slate-700 text-slate-200 hover:text-white"
-                      aria-label="Next screenshot"
-                    >
-                      <ChevronRight size={18} className="mx-auto" />
-                    </button>
-                  </>
-                )}
               </div>
               {shots.length > 1 && (
-                <div className="flex items-center justify-center gap-2 px-3 h-8 border-t border-slate-800 shrink-0">
+                <div className="flex items-center justify-center gap-2 px-3 h-10 border-t border-slate-800 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShotIndex((i) => (i - 1 + shots.length) % shots.length)}
+                    className="w-7 h-7 rounded-lg border border-slate-700 text-slate-200 hover:text-white inline-flex items-center justify-center"
+                    aria-label="Previous screenshot"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
                   <span className="text-[10px] font-mono text-slate-500">
                     {safeShotIndex + 1}/{shots.length}
                   </span>
@@ -985,56 +1191,29 @@ export default function OcrReviewTab({ user }) {
                       aria-label={`Screenshot ${idx + 1}`}
                     />
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => setShotIndex((i) => (i + 1) % shots.length)}
+                    className="w-7 h-7 rounded-lg border border-slate-700 text-slate-200 hover:text-white inline-flex items-center justify-center"
+                    aria-label="Next screenshot"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
                 </div>
               )}
             </div>
           )}
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-3 flex flex-col h-[min(32rem,42vh)] overflow-hidden">
-              <div className="relative shrink-0">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search names"
-                  className="w-full h-[42px] pl-9 pr-3 rounded-xl border border-slate-800 bg-slate-950 text-sm text-slate-100 placeholder:text-slate-600"
-                />
+            <div className={`rounded-2xl border border-slate-800 bg-slate-900/40 p-3 flex flex-col min-h-[16rem] overflow-hidden ${shots.length ? 'lg:h-full lg:min-h-0 lg:col-start-2 lg:row-start-1' : ''}`}>
+              <div className="grid grid-cols-[3fr_2fr] gap-3 flex-1 min-h-0">
+              <div className="min-h-0 min-w-0 flex flex-col">
+              <div className="shrink-0 text-[11px] uppercase tracking-wider text-slate-400">
+                Review Board
               </div>
-              <div className="shrink-0 mt-3 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="text-[11px] uppercase tracking-wider text-slate-400">OCR Stats</div>
-                  <div className="text-[11px] font-mono text-slate-400 tabular-nums">
-                    {matchedHere.length}/{occupiedHere}
-                    <span className="ml-1.5">{occupiedHere ? `${matchRate}%` : '—'}</span>
-                  </div>
-                </div>
-                <div className="mt-1 text-[11px] font-mono text-cyan-400/90 truncate" title={shotFileName}>{shotFileName}</div>
-                <table className="mt-2 w-full table-fixed border-collapse">
-                  <thead>
-                    <tr className="text-[10px] text-slate-500">
-                      <th className="py-0.5 font-normal text-center">Match</th>
-                      <th className="py-0.5 font-normal text-center">Unmatch</th>
-                      <th className="py-0.5 font-normal text-center">Missing</th>
-                      <th className="py-0.5 font-normal text-center">Empty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="font-mono text-sm text-slate-200">
-                      <td className="py-0.5 text-center tabular-nums">{matchedHere.length}</td>
-                      <td className="py-0.5 text-center tabular-nums">{unmatchedHere.length}</td>
-                      <td className="py-0.5 text-center tabular-nums">{missingHere.length}</td>
-                      <td className="py-0.5 text-center tabular-nums">{emptyHere.length}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="shrink-0 mt-3 text-[11px] uppercase tracking-wider text-slate-400">
-                Slot gaps
-              </div>
-              <div className="mt-1 flex-1 min-h-0 overflow-y-auto scrollbar-thin overscroll-contain">
+              <div className="mt-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin overscroll-contain [scrollbar-gutter:stable]">
                 {gapsHere.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-[11px] text-slate-500">
-                    No slot gaps on this screenshot.
+                    Nothing to review on this screenshot.
                   </div>
                 ) : (
                   <table className="w-full table-fixed border-collapse">
@@ -1043,7 +1222,7 @@ export default function OcrReviewTab({ user }) {
                       <col />
                       <col className="w-[4.75rem]" />
                       <col className="w-8" />
-                      <col className="w-8" />
+                      <col className="w-11" />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-slate-900">
                       <tr className="text-[10px] text-slate-500">
@@ -1051,7 +1230,7 @@ export default function OcrReviewTab({ user }) {
                         <th className="px-1.5 py-1 font-normal text-left">OCR</th>
                         <th className="px-1.5 py-1 font-normal text-left">Category</th>
                         <th className="px-1 py-1 font-normal text-right">Col</th>
-                        <th className="pl-1 pr-1 py-1 font-normal text-right">Row</th>
+                        <th className="pl-1 pr-2 py-1 font-normal text-right">Row</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80">
@@ -1059,7 +1238,14 @@ export default function OcrReviewTab({ user }) {
                         <tr
                           key={row.id || `${row.category}-${row.ocrCol}-${row.ocrRow}-${row.text}`}
                           title={unmatchedMeta(row)}
-                          className="align-top"
+                          onClick={(event) => {
+                            if (event.target.closest('select')) {
+                              setLitGap(row);
+                              return;
+                            }
+                            setLitGap((current) => (gapLit(row, current) ? null : row));
+                          }}
+                          className={`align-top cursor-pointer ${gapLit(row, litGap) ? 'bg-sky-400/15' : 'hover:bg-slate-800/50'}`}
                         >
                           <td className="pl-1 pr-2 py-1 text-[10px] font-mono text-slate-500 text-right tabular-nums">
                             {idx + 1}
@@ -1069,11 +1255,14 @@ export default function OcrReviewTab({ user }) {
                             {correctionLabel(slotGapValue(row), roster) && (
                               <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(slotGapValue(row), roster)}</div>
                             )}
-                            {draft && (
+                            {draft && row.category !== 'empty' && (
                               <MemberLink
                                 text={slotGapValue(row)}
                                 unmatchedId={row.id}
                                 roster={roster}
+                                allowBlank={row.category === 'missing'}
+                                label="Link member"
+                                remember={false}
                                 onLink={linkReading}
                               />
                             )}
@@ -1084,7 +1273,7 @@ export default function OcrReviewTab({ user }) {
                           <td className="px-1 text-[10px] font-mono text-slate-400 text-right tabular-nums">
                             {row.ocrCol || '—'}
                           </td>
-                          <td className="pl-1 pr-1 text-[10px] font-mono text-slate-400 text-right tabular-nums">
+                          <td className="pl-1 pr-2 text-[10px] font-mono text-slate-400 text-right tabular-nums">
                             {row.ocrRow || '—'}
                           </td>
                         </tr>
@@ -1093,24 +1282,132 @@ export default function OcrReviewTab({ user }) {
                   </table>
                 )}
               </div>
+              </div>
+              <div className="min-h-0 min-w-0 flex flex-col gap-3 overflow-y-auto scrollbar-thin overscroll-contain">
+                <div className="shrink-0">
+                    <div className="text-[11px] uppercase tracking-wider text-slate-400">GvG Result</div>
+                    <div className="mt-2 flex items-center gap-1" role="group" aria-label="GvG Result">
+                      <button
+                        type="button"
+                        disabled={!draft}
+                        aria-label="Previous GvG result"
+                        onClick={() => moveGvgFace(-1)}
+                        className="h-16 w-9 shrink-0 rounded-lg border border-slate-700 text-slate-300 hover:text-white disabled:opacity-40 inline-flex items-center justify-center"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      {!draft && !review.gvgResult ? (
+                        <div className="flex-1 h-16 min-w-0 rounded-xl border border-slate-700 text-xs font-black text-slate-500 inline-flex items-center justify-center">
+                          —
+                        </div>
+                      ) : gvgFace === 'rank' ? (
+                        <select
+                          aria-label="GvG ranking"
+                          disabled={!draft}
+                          value={GVG_RANKS.includes(review.gvgResult) ? review.gvgResult : ''}
+                          onChange={(event) => saveGvgResult(event.target.value)}
+                          className="flex-1 h-16 min-w-0 appearance-none rounded-xl border border-amber-300 bg-amber-400/10 bg-[url('data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2712%27%20height=%2712%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27%23fde68a%27%20stroke-width=%272%27%3E%3Cpath%20d=%27M6%209l6%206%206-6%27/%3E%3C/svg%3E')] bg-[length:12px] bg-[position:right_0.75rem_center] bg-no-repeat px-2 pr-8 text-center text-xs font-black tracking-wider text-amber-100 shadow-[0_0_18px_rgba(251,191,36,0.8)] [text-shadow:0_0_8px_rgba(251,191,36,0.9)] disabled:opacity-40"
+                        >
+                          <option value="" disabled>Rank</option>
+                          {GVG_RANKS.map((item) => (
+                            <option key={item} value={item}>{item}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className={`flex-1 h-16 min-w-0 rounded-xl border text-xs font-black uppercase tracking-wider inline-flex items-center justify-center truncate px-2 ${gvgFace === 'lose' ? 'border-rose-300 bg-rose-400/10 text-rose-100 shadow-[0_0_18px_rgba(251,113,133,0.8)] [text-shadow:0_0_8px_rgba(251,113,133,0.9)]' : 'border-emerald-300 bg-emerald-400/10 text-emerald-100 shadow-[0_0_18px_rgba(52,211,153,0.8)] [text-shadow:0_0_8px_rgba(52,211,153,0.9)]'}`}>
+                          {gvgFace === 'lose' ? 'Lose' : 'Win'}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        disabled={!draft}
+                        aria-label="Next GvG result"
+                        onClick={() => moveGvgFace(1)}
+                        className="h-16 w-9 shrink-0 rounded-lg border border-slate-700 text-slate-300 hover:text-white disabled:opacity-40 inline-flex items-center justify-center"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                </div>
+                <div className="shrink-0 border-t border-slate-700" />
+                <div className="relative shrink-0">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search names"
+                    className="w-full h-9 pl-9 pr-3 rounded-xl border border-slate-800 bg-slate-950 text-sm text-slate-100 placeholder:text-slate-600"
+                  />
+                </div>
+                <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-[11px] uppercase tracking-wider text-slate-400">OCR Stats</div>
+                    <div className="text-[11px] font-mono text-slate-400 tabular-nums">
+                      {matchedHere.length}/{occupiedHere}
+                      <span className="ml-1.5">{occupiedHere ? `${matchRate}%` : '—'}</span>
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] font-mono text-cyan-400/90 truncate" title={shotFileName}>{shotFileName}</div>
+                  <table className="mt-2 w-full table-fixed border-collapse">
+                    <thead>
+                      <tr className="text-[10px] text-slate-500">
+                        <th className="py-0.5 font-normal text-center">Match</th>
+                        <th className="py-0.5 font-normal text-center">Unmatch</th>
+                        <th className="py-0.5 font-normal text-center">Missing</th>
+                        <th className="py-0.5 font-normal text-center">Empty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="font-mono text-sm text-slate-200">
+                        <td className="py-0.5 text-center tabular-nums">{matchedHere.length}</td>
+                        <td className="py-0.5 text-center tabular-nums">{unmatchedHere.length}</td>
+                        <td className="py-0.5 text-center tabular-nums">{missingHere.length}</td>
+                        <td className="py-0.5 text-center tabular-nums">{emptyHere.length}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              </div>
             </div>
-        </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div className={`rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden min-h-[16rem] flex flex-col ${shots.length ? 'lg:h-full lg:min-h-0 lg:col-start-2 lg:row-start-2' : ''}`}>
             <div className="flex-1 min-h-0 overflow-auto scrollbar-thin overscroll-contain">
               <table className="w-full table-fixed text-left border-collapse text-xs min-w-[980px]">
                 <colgroup>
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
                   <col className="w-[18%]" />
                   <col className="w-[16%]" />
-                  <col className="w-[9rem]" />
                   <col className="w-[16%]" />
+                  <col className="w-[9rem]" />
                   <col className="w-[8rem]" />
                   <col className="w-[8rem]" />
-                  <col className="w-[4.5rem]" />
-                  <col className="w-[4.5rem]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10">
                   <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="p-3 bg-slate-950 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setMarkFilter((current) => (current === 'O' ? 'all' : 'O'))}
+                        className={`inline-flex items-center justify-center gap-1 hover:text-slate-200 ${markFilter === 'O' ? 'text-emerald-400' : 'text-slate-400'}`}
+                        title={markFilter === 'O' ? 'Show all marks' : 'Filter O present'}
+                      >
+                        O
+                        <Filter size={12} />
+                      </button>
+                    </th>
+                    <th className="p-3 bg-slate-950 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setMarkFilter((current) => (current === 'X' ? 'all' : 'X'))}
+                        className={`inline-flex items-center justify-center gap-1 hover:text-slate-200 ${markFilter === 'X' ? 'text-rose-400' : 'text-slate-400'}`}
+                        title={markFilter === 'X' ? 'Show all marks' : 'Filter X absent'}
+                      >
+                        X
+                        <Filter size={12} />
+                      </button>
+                    </th>
                     <th className="p-3 bg-slate-950">
                       <button
                         type="button"
@@ -1122,6 +1419,7 @@ export default function OcrReviewTab({ user }) {
                         {sortKey === 'name' && sortDir === 'desc' ? <ArrowUpZA size={13} /> : <ArrowDownAZ size={13} />}
                       </button>
                     </th>
+                    <th className="p-3 bg-slate-950">OCR value</th>
                     <th className="p-3 bg-slate-950">
                       <button
                         ref={imageButtonRef}
@@ -1191,7 +1489,6 @@ export default function OcrReviewTab({ user }) {
                         {sortKey === 'position' && sortDir === 'desc' ? <ArrowUp10 size={13} /> : <ArrowDown01 size={13} />}
                       </button>
                     </th>
-                    <th className="p-3 bg-slate-950">OCR value</th>
                     <th className="p-3 bg-slate-950">
                       <button
                         type="button"
@@ -1206,28 +1503,6 @@ export default function OcrReviewTab({ user }) {
                       </button>
                     </th>
                     <th className="p-3 bg-slate-950">OCR confidence</th>
-                    <th className="p-3 bg-slate-950 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setMarkFilter((current) => (current === 'O' ? 'all' : 'O'))}
-                        className={`inline-flex items-center justify-center gap-1 hover:text-slate-200 ${markFilter === 'O' ? 'text-emerald-400' : 'text-slate-400'}`}
-                        title={markFilter === 'O' ? 'Show all marks' : 'Filter O present'}
-                      >
-                        O
-                        <Filter size={12} />
-                      </button>
-                    </th>
-                    <th className="p-3 bg-slate-950 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setMarkFilter((current) => (current === 'X' ? 'all' : 'X'))}
-                        className={`inline-flex items-center justify-center gap-1 hover:text-slate-200 ${markFilter === 'X' ? 'text-rose-400' : 'text-slate-400'}`}
-                        title={markFilter === 'X' ? 'Show all marks' : 'Filter X absent'}
-                      >
-                        X
-                        <Filter size={12} />
-                      </button>
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1237,52 +1512,6 @@ export default function OcrReviewTab({ user }) {
                     </tr>
                   ) : filteredRoster.map((row) => (
                     <tr key={row.uid} className={`border-t border-slate-800 ${row.present ? 'bg-emerald-950/15' : ''}`}>
-                      <td className="p-3 overflow-hidden">
-                        <div className="text-sm font-semibold text-slate-100 truncate">{memberName(row)}</div>
-                        {row.inGameName && row.inGameName !== memberName(row) && (
-                          <div className="text-[11px] text-slate-500 truncate">IGN {row.inGameName}</div>
-                        )}
-                      </td>
-                      <td className="p-3 overflow-hidden">
-                        {row.imageSource && Number.isInteger(row.imageIndex) ? (
-                          <button
-                            type="button"
-                            onClick={() => setShotIndex(row.imageIndex)}
-                            className="font-mono text-cyan-400/90 hover:text-cyan-300 truncate block w-full text-left"
-                            title="Show this screenshot"
-                          >
-                            {row.imageSource}
-                          </button>
-                        ) : (
-                          <span className="font-mono text-slate-500 truncate block">{row.imageSource || '—'}</span>
-                        )}
-                      </td>
-                      <td className="p-3 font-mono text-slate-300 truncate">
-                        {row.ocrPosition || formatOcrPosition(row.ocrCol, row.ocrRow)}
-                      </td>
-                      <td className="p-3 align-top">
-                        <div className="font-mono text-slate-300 truncate">{row.ocrText || '—'}</div>
-                        {correctionLabel(row.ocrText, roster, row) && (
-                          <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(row.ocrText, roster, row)}</div>
-                        )}
-                        {draft && (
-                          <MemberLink
-                            text={row.ocrText}
-                            fromUid={row.uid}
-                            roster={roster}
-                            onLink={linkReading}
-                          />
-                        )}
-                      </td>
-                      <td className="p-3 overflow-hidden">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${row.ocrState === 'match' ? 'text-cyan-400' : 'text-amber-400'}`}>
-                          {row.ocrState}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-slate-300 truncate">
-                        {row.ocrState === 'match' ? `${row.ocrConfidence}%` : '0%'}
-                        {row.ocrSource === 'dictionary' ? ' saved' : ''}
-                      </td>
                       <td className="p-3 text-center">
                         <button
                           type="button"
@@ -1302,6 +1531,61 @@ export default function OcrReviewTab({ user }) {
                         >
                           X
                         </button>
+                      </td>
+                      <td className="p-3 overflow-hidden">
+                        <div className="text-sm font-semibold text-slate-100 truncate">{memberName(row)}</div>
+                        {row.inGameName && row.inGameName !== memberName(row) && (
+                          <div className="text-[11px] text-slate-500 truncate">IGN {row.inGameName}</div>
+                        )}
+                      </td>
+                      <td className="p-3 align-top">
+                        <div className="font-mono text-slate-300 truncate">{row.ocrText || '—'}</div>
+                        {correctionLabel(row.ocrText, roster, row) && (
+                          <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(row.ocrText, roster, row)}</div>
+                        )}
+                        {draft && (
+                          <MemberLink
+                            text={row.ocrText}
+                            fromUid={row.uid}
+                            roster={roster}
+                            onLink={linkReading}
+                          />
+                        )}
+                        {draft && (readingText(row.ocrText) || row.ocrCol || row.ocrRow) && (
+                          <button
+                            type="button"
+                            onClick={() => unlinkReading(row.uid)}
+                            className="mt-0.5 block text-[10px] text-slate-400 hover:text-slate-200"
+                          >
+                            Unlink
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-3 overflow-hidden">
+                        {row.imageSource && Number.isInteger(row.imageIndex) ? (
+                          <button
+                            type="button"
+                            onClick={() => setShotIndex(row.imageIndex)}
+                            className="font-mono text-cyan-400/90 hover:text-cyan-300 truncate block w-full text-left"
+                            title="Show this screenshot"
+                          >
+                            {row.imageSource}
+                          </button>
+                        ) : (
+                          <span className="font-mono text-slate-500 truncate block">{row.imageSource || '—'}</span>
+                        )}
+                      </td>
+                      <td className="p-3 font-mono text-slate-300 truncate">
+                        {row.ocrPosition || formatOcrPosition(row.ocrCol, row.ocrRow)}
+                      </td>
+                      <td className="p-3 overflow-hidden">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${row.ocrState === 'match' ? 'text-cyan-400' : 'text-amber-400'}`}>
+                          {row.ocrState}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-slate-300 truncate">
+                        {row.ocrState === 'match' ? `${row.ocrConfidence}%` : '0%'}
+                        {row.ocrSource === 'dictionary' ? ' saved' : ''}
                       </td>
                     </tr>
                   ))}

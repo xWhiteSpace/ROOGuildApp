@@ -118,13 +118,9 @@ export function formatTotalPagesLine(totalPages) {
   return `Total Pages: ${pages}/${pages}`;
 }
 
-export function formatBookPair(page, slot) {
-  return `${padBookNumber(page)}-${padBookNumber(slot)}`;
-}
-
-export function formatUnclaimedPairs(cells) {
-  if (!cells?.length) return 'none';
-  return cells.map((cell) => formatBookPair(cell.page, cell.slot)).join(' | ');
+export function formatUnclaimedQty(byItem) {
+  if (!byItem?.length) return 'none';
+  return byItem.map((row) => `${row.name}: ${row.qty}`).join('\n');
 }
 
 function asAllocationBoxes(raw) {
@@ -133,22 +129,17 @@ function asAllocationBoxes(raw) {
 
 export function listUnclaimedCells(items, categoryAllocations, qtyPerPage = 4) {
   const per = Number(qtyPerPage) > 0 ? Number(qtyPerPage) : 4;
-  let page = 1;
-  let slot = 1;
   let slotCount = 0;
-  const cells = [];
+  const byItem = [];
   (Array.isArray(items) ? items : []).forEach((item) => {
+    let empty = 0;
     asAllocationBoxes(categoryAllocations?.[item?.id]?.selected).forEach((value) => {
       slotCount += 1;
-      if (value === '') cells.push({ page, slot });
-      slot += 1;
-      if (slot > per) {
-        slot = 1;
-        page += 1;
-      }
+      if (value === '') empty += 1;
     });
+    if (empty > 0) byItem.push({ name: item?.name || item?.id || 'Item', qty: empty });
   });
-  return { cells, slotCount, totalPages: bookPageCount(slotCount, per) };
+  return { byItem, slotCount, totalPages: bookPageCount(slotCount, per) };
 }
 
 export function buildAllocateOpenAnnounce({

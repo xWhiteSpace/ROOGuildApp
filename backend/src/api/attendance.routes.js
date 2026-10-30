@@ -431,30 +431,6 @@ router.get('/deploy-party-card', async (req, res) => {
   }
 });
 
-// GET /api/attendance/deploy-ocr-card
-router.get('/deploy-ocr-card', async (req, res) => {
-  const user = resolveUserIdentity(req);
-  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
-  try {
-    const db = getTenantStore();
-    const configSnap = await db.ref('settings/configuration').once('value');
-    const roles = configSnap.exists() ? (configSnap.val().adminRoles || []) : [];
-    if (!await verifyDiscordOfficerRole(req, roles)) {
-      return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
-    }
-    const { deployPublicOcrCardToWarAnnounce } = await import('../games/ragnarok-origin/services/discordPartyOcr.js');
-    const result = await deployPublicOcrCardToWarAnnounce();
-    return res.json({ success: true, result });
-  } catch (err) {
-    const msg = err.message || 'Failed to deploy OCR card.';
-    const status = /not configured/i.test(msg) ? 400
-      : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
-      : /locate the war-announce/i.test(msg) ? 404
-      : 500;
-    return res.status(status).json({ success: false, error: msg });
-  }
-});
-
 // GET /api/attendance/deploy-onboarding-card
 router.get('/deploy-onboarding-card', async (req, res) => {
   const user = resolveUserIdentity(req);

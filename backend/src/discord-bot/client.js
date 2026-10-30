@@ -276,6 +276,8 @@ async function withGuildTenant(guildId, fn) {
           await attendanceDecision.maybeRefreshMonthlyLeaveCredits();
           const { maybeRunWarRoomAutomation } = await import('../games/ragnarok-origin/services/warRoomAutomation.js');
           await maybeRunWarRoomAutomation();
+          const { maybeOpenPartyOcrThread } = await import('../games/ragnarok-origin/services/partyOcrPrompt.js');
+          await maybeOpenPartyOcrThread();
         });
       }).catch((err) => console.error('⚠️ Tenant scheduler warning:', err.message));
 

@@ -194,22 +194,6 @@ export function createApp() {
     }
   });
 
-  app.get('/api/deploy-ocr-card', requireOfficerTenant, async (req, res) => {
-    try {
-      const { deployPublicOcrCardToWarAnnounce } = await import('./games/ragnarok-origin/services/discordPartyOcr.js');
-      await deployPublicOcrCardToWarAnnounce();
-      res.send('📟 SUCCESS: Party OCR card posted to the war-announce channel.');
-    } catch (err) {
-      console.error('OCR card deploy failed:', err.message);
-      const msg = err.message || 'Unknown error';
-      const status = /not configured/i.test(msg) ? 400
-        : /offline|rate-limited|temporarily blocking/i.test(msg) ? 503
-        : /locate the war-announce/i.test(msg) ? 404
-        : 500;
-      res.status(status).send(`❌ Server Exception: ${msg}`);
-    }
-  });
-
   app.get('/api/deploy-onboarding-card', requireOfficerTenant, async (req, res) => {
     try {
       const { deployPublicOnboardingCard } = await import('./games/ragnarok-origin/services/discordOnboardingCard.js');

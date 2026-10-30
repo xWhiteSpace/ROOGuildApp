@@ -1,27 +1,22 @@
 /**
- * Officer Party OCR activity card: Scan → event → screenshot, then hand off to
- * VALHALLA. Review, O/X, and Commit live on the website. Image bytes are not
- * written to the tenant store. Website uploads stage on private Supabase until
- * Commit/Cancel (RAM stash remains a fallback). Discord scans keep CDN URLs.
+ * GVG Attendance drafts: website upload, O/X, and Commit. Discord scans keep CDN URLs.
+ * Website uploads stage on private Supabase until Commit/Cancel.
  */
 import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  StringSelectMenuBuilder,
 } from 'discord.js';
 import { getTenantStore } from '../../../db/database.js';
 import { discordChannel } from '../../../db/channels.js';
-import { loadDiscordCardCopy } from './discordCardCopy.js';
-import { getTenant, loadTenantSettings, mergeChannelFallback } from '../../../db/tenants.js';
-import { getCachedConfig, runWithTenant, setCachedConfig, setCachedChannels } from '../../../db/tenantContext.js';
+import { getTenant } from '../../../db/tenants.js';
+import { getCachedConfig } from '../../../db/tenantContext.js';
 import { isTenantOfficer, roleTokensFromMember } from '../../../auth/officer.js';
-import { listUpcomingInstances } from './attendanceDecision.js';
 import { parseCompositeKey } from '../../../utils/guildTime.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { annotateShotBuffer, enqueueOcrJob, ocrPartyImages } from './partyOcr.js';
-import { claimOcrCorrection } from '@guildname/shared/inGameAlias';
+import { claimOcrCorrection, releaseOcrCorrection } from '@guildname/shared/inGameAlias';
 import { downloadStagedOcrShots, purgeReviewStaging, stageOcrShots } from './ocrShotStaging.js';
 import {
   commitInGameForEvent,
@@ -31,41 +26,10 @@ import {
 import { valhallaEnv } from '../../../config/valhallaEnv.js';
 
 const EMBED_COLOR = '#0891b2';
-const CARD_PATH = 'attendance/ocr_card';
-const IMAGE_WAIT_MS = 90_000;
-const SELECT_LIMIT = 25;
 const MAX_ATTACHMENTS = 8;
-const LOOKBACK_MESSAGES = 30;
-/** Public activity-card sessions, keyed by the card message id. */
-const activitySessions = new Map();
 /** Website-upload screenshots held until Commit/Cancel. Never written to the store. */
 const websiteShots = new Map();
 const WEBSITE_SHOT_TTL_MS = 2 * 60 * 60 * 1000;
-
-function sessionFor(interaction) {
-  const id = interaction?.message?.id;
-  return id ? activitySessions.get(id) : null;
-}
-
-async function withInteractionTenant(interaction, fn) {
-  const guildId = interaction.guildId;
-  if (!guildId) return fn();
-  const tenant = await getTenant(guildId).catch(() => null);
-  if (tenant) {
-    const settings = await loadTenantSettings(guildId);
-    setCachedConfig(guildId, settings.configuration);
-    setCachedChannels(guildId, mergeChannelFallback(settings.discordChannels));
-  }
-  return runWithTenant(guildId, fn);
-}
-
-async function resolveScanChannel(interaction) {
-  const channelId = interaction.channelId;
-  if (interaction.channel?.createMessageCollector) return interaction.channel;
-  if (!channelId) return null;
-  const discordClient = await requireReadyClient();
-  return enqueueDiscordCall(() => discordClient.channels.fetch(channelId)).catch(() => null);
-}
 
 function newReviewId() {
   return `o${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -439,7 +403,7 @@ export function assignUnmatched(review, unmatchedId, uid) {
   return true;
 }
 
-export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text }) {
+export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, remember }) {
   if (!toUid) return false;
   const unmatched = unmatchedId
     ? (review.unmatched || []).find((row) => row.id === unmatchedId)
@@ -449,7 +413,7 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text }) {
   const hit = {
     ocrText: text || unmatched?.text || previous?.ocrText || '',
     score: 1,
-    source: 'dictionary',
+    source: remember === false ? 'officer' : 'dictionary',
     imageSource: unmatched?.imageSource || previous?.imageSource || '',
     imageIndex: Number.isInteger(unmatched?.imageIndex)
       ? unmatched.imageIndex
@@ -458,18 +422,55 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text }) {
     ocrRow: unmatched?.ocrRow ?? unmatched?.row ?? previous?.ocrRow ?? null,
   };
   review.ocrMatches = review.ocrMatches || {};
+  review.present = review.present || {};
   if (fromUid && fromUid !== toUid) {
     delete review.ocrMatches[fromUid];
-    if (review.present?.[fromUid]?.ocrText) {
-      review.present[fromUid] = { ocrText: '', score: 0, source: 'officer' };
-    }
+    delete review.present[fromUid];
+    const absent = (review.absent || []).filter((id) => id !== fromUid);
+    absent.push(fromUid);
+    review.absent = absent;
   }
   review.ocrMatches[toUid] = hit;
+  review.present[toUid] = hit;
+  review.absent = (review.absent || []).filter((id) => id !== toUid);
   if (unmatchedId) {
     review.unmatched = (review.unmatched || []).filter((row) => row.id !== unmatchedId);
     review.slotGaps = (review.slotGaps || []).filter((gap) => gap.id !== unmatchedId);
     review.pendingUnmatchedId = null;
   }
+  return true;
+}
+
+export function unlinkOcrReading(review, uid) {
+  const id = String(uid || '');
+  const hit = id ? review.ocrMatches?.[id] : null;
+  const text = String(hit?.ocrText || '').trim();
+  const col = hit?.ocrCol ?? null;
+  const ocrRow = hit?.ocrRow ?? null;
+  if (!hit || (!text && col == null && ocrRow == null)) return null;
+  delete review.ocrMatches[id];
+  if (review.present?.[id]) {
+    review.present[id] = { ocrText: '', score: 0, source: 'officer' };
+  }
+  const gap = {
+    id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+    text,
+    category: text ? 'unmatch' : 'missing',
+    imageSource: hit.imageSource || '',
+    imageIndex: Number.isInteger(hit.imageIndex) ? hit.imageIndex : null,
+    ocrCol: col,
+    ocrRow,
+  };
+  review.slotGaps = [...(review.slotGaps || []), gap];
+  if (text) review.unmatched = [...(review.unmatched || []), gap];
+  return gap;
+}
+
+export async function persistOcrRelease(db, members, uid, text) {
+  const next = releaseOcrCorrection(members, uid, text);
+  if (!next) return false;
+  if (members[uid]) members[uid] = { ...members[uid], ocrCorrections: next };
+  await db.ref(`auction/members/${uid}/ocrCorrections`).set(next.length ? next : null);
   return true;
 }
 
@@ -513,6 +514,7 @@ export async function finalizeOcrCommit(review, members, committedBy) {
     statusMap,
     reviewId: review.id,
     committedBy,
+    gvgResult: review.gvgResult,
   });
   review.status = 'committed';
   review.committedAt = Date.now();
@@ -562,134 +564,12 @@ export async function refreshReviewMessage(review, members, interaction) {
   await editOcrCard(interaction, payload, session);
 }
 
-function isImageAttachment(att) {
-  if (!att) return false;
-  const name = String(att.name || '').toLowerCase();
-  const type = String(att.contentType || '').toLowerCase();
-  if (type.startsWith('image/')) return true;
-  if (/\.(png|jpe?g|webp|gif|heic|heif|bmp)$/.test(name)) return true;
-  if (Number(att.width) > 0 && Number(att.height) > 0) return true;
-  return false;
-}
-
-function messageHasImage(message) {
-  try {
-    const atts = message?.attachments;
-    if (!atts || typeof atts.values !== 'function') return false;
-    return [...atts.values()].some(isImageAttachment);
-  } catch {
-    return false;
-  }
-}
-
-async function findLatestOfficerImage(channel, userId) {
-  if (!channel?.messages?.fetch) return null;
-  const fetched = await enqueueDiscordCall(() => channel.messages.fetch({ limit: LOOKBACK_MESSAGES }));
-  const messages = [...fetched.values()]
-    .filter((m) => String(m.author?.id) === String(userId) && messageHasImage(m))
-    .sort((a, b) => Number(b.createdTimestamp || 0) - Number(a.createdTimestamp || 0));
-  return messages[0] || null;
-}
 
 async function fetchAttachmentBuffer(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`Failed to download screenshot (${res.status}).`);
   const buf = Buffer.from(await res.arrayBuffer());
   return buf;
-}
-
-async function buildEventSelect(officerName) {
-  const upcoming = await listUpcomingInstances({ includePreviousWeek: true });
-  const options = upcoming
-    .slice()
-    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(a.title || '').localeCompare(String(b.title || '')))
-    .slice(0, SELECT_LIMIT)
-    .map((ev) => ({
-      label: `${ev.date || ''} ${ev.title || ev.eventId || ev.key}`.trim().slice(0, 100),
-      value: String(ev.key).slice(0, 100),
-      description: `${ev.timeStart || ''}`.slice(0, 100) || undefined,
-    }))
-    .filter((opt) => opt.value);
-  if (!options.length) {
-    return {
-      content: null,
-      embeds: [ocrCardEmbed({
-        authorName: officerName,
-        description: 'No calendar events found for last / this / next week.',
-        footer: 'Add a raid on the calendar, then Scan again.',
-      })],
-      components: [],
-    };
-  }
-  return {
-    content: null,
-    embeds: [ocrCardEmbed({
-      authorName: officerName,
-      description: 'Pick the raid event this Team Party screenshot belongs to.',
-      footer: 'This card stays in the channel. Next: drop the screenshot.',
-    })],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('ocr:event')
-          .setPlaceholder('Event date from calendar')
-          .addOptions(options)
-      ),
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ocr:cancelscan').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
-  };
-}
-
-async function publicOcrCard() {
-  const copy = await loadDiscordCardCopy();
-  const embed = new EmbedBuilder()
-    .setTitle('Party OCR')
-    .setColor(EMBED_COLOR)
-    .setDescription(copy.ocr);
-  return {
-    content: null,
-    embeds: [embed],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('ocr:open')
-          .setLabel('Scan Party Screenshot')
-          .setStyle(ButtonStyle.Primary)
-      ),
-    ],
-  };
-}
-
-async function persistCardPointer(channelId, messageId) {
-  const db = getTenantStore();
-  await db.ref(CARD_PATH).set({ channelId, messageId, updatedAt: Date.now() });
-}
-
-export async function deployPublicOcrCardToWarAnnounce() {
-  const channelId = discordChannel('DISCORD_WARANNOUNCE_CHANNEL_ID');
-  if (!channelId) throw new Error('DISCORD_WARANNOUNCE_CHANNEL_ID is not configured.');
-  const discordClient = await requireReadyClient();
-  const targetChannel = await enqueueDiscordCall(() => discordClient.channels.fetch(channelId));
-  if (!targetChannel) throw new Error('Discord gateway client failed to locate the war-announce channel.');
-  const payload = await publicOcrCard();
-  const db = getTenantStore();
-  const storedSnap = await db.ref(CARD_PATH).once('value');
-  const stored = storedSnap.exists() ? storedSnap.val() : null;
-  if (stored?.messageId && stored.channelId === channelId) {
-    try {
-      const existing = await enqueueDiscordCall(() => targetChannel.messages.fetch(stored.messageId));
-      await enqueueDiscordCall(() => existing.edit(payload));
-      await persistCardPointer(channelId, stored.messageId);
-      return { posted: false, edited: true, messageId: stored.messageId };
-    } catch {
-      /* replace */
-    }
-  }
-  const sent = await enqueueDiscordCall(() => targetChannel.send(payload));
-  await persistCardPointer(channelId, sent.id);
-  return { posted: true, edited: false, messageId: sent.id };
 }
 
 async function postGallery(review, committedBy) {
@@ -743,274 +623,18 @@ async function postGallery(review, committedBy) {
   }
 }
 
-async function runOcrAndPostReview({ interaction, event, sourceMessage, session }) {
-  const buffers = [];
-  try {
-    const db = getTenantStore();
-    const membersSnap = await db.ref('auction/members').once('value');
-    const members = membersSnap.exists() ? membersSnap.val() : {};
-    const attachments = [...sourceMessage.attachments.values()].filter(isImageAttachment).slice(0, MAX_ATTACHMENTS);
-    if (!attachments.length) {
-      await editOcrCard(interaction, waitingPayload(event, session, 'That message has no image attachments.'), session);
-      return;
-    }
-
-    const officerName = session?.officerName || interaction.user.displayName || interaction.user.username;
-    await editOcrCard(interaction, {
-      content: null,
-      embeds: [ocrCardEmbed({
-        authorName: officerName,
-        description: `Scanning ${attachments.length} screenshot(s) for **${event.title || event.eventId}** (${event.date})…`,
-        footer: 'Names are matched to the Masterlist. Review opens on VALHALLA.',
-      })],
-      components: [],
-    }, session);
-
-    for (const att of attachments) {
-      buffers.push({
-        buffer: await fetchAttachmentBuffer(att.url),
-        name: att.name || `screenshot-${buffers.length + 1}.png`,
-      });
-    }
-    const result = await enqueueOcrJob(() => ocrPartyImages(buffers, members));
-    const review = buildDraftReview({
-      members,
-      event,
-      ocrResult: result,
-      createdBy: interaction.user.id,
-      createdByName: officerName,
-      source: {
-        kind: 'discord',
-        channelId: sourceMessage.channelId,
-        messageId: sourceMessage.id,
-        attachmentUrls: attachments.map((a) => a.url),
-        fileNames: buffers.map((row) => row.name),
-      },
-    });
-    review.reviewChannelId = session?.activityChannelId || interaction.channelId;
-    review.reviewMessageId = session?.activityMessageId || interaction.message?.id;
-    await saveReview(review);
-    if (session) {
-      session.reviewId = review.id;
-      session.scanning = false;
-      activitySessions.set(review.reviewMessageId, session);
-    }
-    await editOcrCard(interaction, {
-      content: null,
-      embeds: [buildReviewEmbed(review, members)],
-      components: buildReviewComponents(review),
-    }, session);
-  } catch (err) {
-    console.error('[party-ocr] scan failed:', err.message);
-    await editOcrCard(interaction, {
-      content: null,
-      embeds: [ocrCardEmbed({
-        authorName: session?.officerName,
-        description: `OCR failed: ${err.message || 'unknown error'}`,
-        footer: 'Click Scan Party Screenshot on the launcher to try again.',
-      })],
-      components: [],
-    }, session).catch(() => {});
-  } finally {
-    buffers.length = 0;
-    if (session) session.scanning = false;
-  }
-}
-
-function parseEventFromKey(instances, key) {
-  return (instances || []).find((ev) => ev.key === key) || null;
-}
-
-async function startScanFromMessage(interaction, event, sourceMessage, session) {
-  if (!session || session.scanning) return;
-  session.scanning = true;
-  try {
-    await withInteractionTenant(interaction, () => runOcrAndPostReview({
-      interaction,
-      event,
-      sourceMessage,
-      session,
-    }));
-  } catch (err) {
-    session.scanning = false;
-    console.error('[party-ocr] scan failed:', err.message);
-    await editOcrCard(interaction, {
-      content: null,
-      embeds: [ocrCardEmbed({
-        authorName: session.officerName,
-        description: `OCR failed: ${err.message || 'unknown error'}`,
-        footer: 'Click Scan Party Screenshot on the launcher to try again.',
-      })],
-      components: [],
-    }, session).catch(() => {});
-  }
-}
-
-function waitingPayload(event, session, extra) {
-    const dropTarget = session?.threadId
-    ? `<#${session.threadId}>`
-    : (session?.activityChannelId ? `<#${session.activityChannelId}>` : 'this channel');
-  const description = [
-    `Event **${event.title || event.eventId}** (${event.date}).`,
-    `Post the Team Party screenshot in ${dropTarget}, then click **Use latest screenshot**.`,
-    extra,
-  ].filter(Boolean).join('\n');
-  return {
-    content: null,
-    embeds: [ocrCardEmbed({
-      authorName: session?.officerName,
-      description,
-      footer: 'This card stays in the channel — you can scroll back to it after posting the image.',
-    })],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ocr:grab').setLabel('Use latest screenshot').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('ocr:cancelscan').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
-  };
-}
-
-async function resolveDropChannel(interaction, session) {
-  if (session?.threadId) {
-    const discordClient = await requireReadyClient();
-    const thread = await enqueueDiscordCall(() => discordClient.channels.fetch(session.threadId)).catch(() => null);
-    if (thread?.messages?.fetch) return thread;
-  }
-  return resolveScanChannel(interaction);
-}
-
-async function maybeStartScreenshotThread(activityMessage, event) {
-  if (!activityMessage || typeof activityMessage.startThread !== 'function') return null;
-  try {
-    return await enqueueDiscordCall(() => activityMessage.startThread({
-      name: `OCR ${event.date || ''} ${event.title || 'Party'}`.trim().slice(0, 100),
-      autoArchiveDuration: 1440,
-      reason: 'Party OCR screenshot drop',
-    }));
-  } catch {
-    return null;
-  }
-}
-
-async function listenForScreenshot(interaction, event, session) {
-  const channel = await resolveDropChannel(interaction, session);
-  if (!channel?.createMessageCollector) return;
-  const collector = channel.createMessageCollector({
-    filter: (m) => String(m.author?.id) === String(session.officerId || interaction.user.id) && messageHasImage(m),
-    max: 1,
-    time: IMAGE_WAIT_MS,
-  });
-  collector.on('collect', (msg) => {
-    startScanFromMessage(interaction, event, msg, session);
-  });
-}
-
 export async function handlePartyOcrInteraction(interaction) {
   const customId = interaction.customId || '';
   if (await denyIfNotOfficer(interaction)) return;
 
-  if (customId === 'ocr:open') {
-    const officerName = interaction.user.displayName || interaction.user.username;
-    const payload = await buildEventSelect(officerName);
-    const channel = await resolveScanChannel(interaction);
-    if (!channel?.send) {
-      await interaction.followUp({
-        content: 'Could not post the Party OCR card in this channel.',
-        ephemeral: true,
-      }).catch(() => {});
-      return;
-    }
-    const sent = await enqueueDiscordCall(() => channel.send(payload));
-    activitySessions.set(sent.id, {
-      officerId: interaction.user.id,
-      officerName,
-      activityChannelId: sent.channelId,
-      activityMessageId: sent.id,
-      guildId: interaction.guildId,
-    });
+  const { partyOcrInteractionKind, RETIRED_OCR_CARD_TEXT, runCreateDraftFromThread } = await import('./partyOcrPrompt.js');
+  const kind = partyOcrInteractionKind(customId);
+  if (kind === 'retired') {
+    await interaction.followUp({ content: RETIRED_OCR_CARD_TEXT, ephemeral: true }).catch(() => {});
     return;
   }
-
-  if (customId === 'ocr:cancelscan') {
-    const session = sessionFor(interaction);
-    if (session) activitySessions.delete(session.activityMessageId);
-    await editOcrCard(interaction, {
-      content: null,
-      embeds: [ocrCardEmbed({
-        authorName: session?.officerName,
-        description: 'Scan cancelled. No swords were changed.',
-        footer: 'Click Scan Party Screenshot on the launcher to start again.',
-      })],
-      components: [],
-    }, session);
-    return;
-  }
-
-  if (customId === 'ocr:event') {
-    const key = interaction.values?.[0];
-    const upcoming = await listUpcomingInstances({ includePreviousWeek: true });
-    const event = parseEventFromKey(upcoming, key);
-    const session = sessionFor(interaction) || {
-      officerId: interaction.user.id,
-      officerName: interaction.user.displayName || interaction.user.username,
-      activityChannelId: interaction.channelId,
-      activityMessageId: interaction.message?.id,
-      guildId: interaction.guildId,
-    };
-    if (!session.activityMessageId) return;
-    activitySessions.set(session.activityMessageId, session);
-    if (!event) {
-      await editOcrCard(interaction, {
-        content: null,
-        embeds: [ocrCardEmbed({
-          authorName: session.officerName,
-          description: 'That event is no longer on the calendar.',
-          footer: 'Click Scan Party Screenshot on the launcher to pick another event.',
-        })],
-        components: [],
-      }, session);
-      return;
-    }
-    session.event = event;
-    if (interaction.message?.thread?.id) {
-      session.threadId = interaction.message.thread.id;
-    } else if (!session.threadId && interaction.message) {
-      const thread = await maybeStartScreenshotThread(interaction.message, event);
-      if (thread?.id) session.threadId = thread.id;
-    }
-    await editOcrCard(interaction, waitingPayload(event, session), session);
-    await listenForScreenshot(interaction, event, session);
-    return;
-  }
-
-  if (customId === 'ocr:grab') {
-    const session = sessionFor(interaction);
-    if (!session?.event) {
-      await editOcrCard(interaction, {
-        content: null,
-        embeds: [ocrCardEmbed({
-          description: 'This card is not waiting for a screenshot. Click **Scan Party Screenshot** on the launcher.',
-        })],
-        components: [],
-      }, session);
-      return;
-    }
-    const channel = await resolveDropChannel(interaction, session);
-    let msg = await findLatestOfficerImage(channel, session.officerId || interaction.user.id);
-    if (!msg && session.threadId) {
-      const parent = await resolveScanChannel(interaction);
-      msg = await findLatestOfficerImage(parent, session.officerId || interaction.user.id);
-    }
-    if (!msg) {
-      await editOcrCard(interaction, waitingPayload(
-        session.event,
-        session,
-        `No screenshot from you found yet. Post the image, then click **Use latest screenshot** again.`,
-      ), session);
-      return;
-    }
-    await startScanFromMessage(interaction, session.event, msg, session);
+  if (kind === 'create-draft') {
+    await runCreateDraftFromThread(interaction);
     return;
   }
 
@@ -1024,10 +648,9 @@ export async function handlePartyOcrInteraction(interaction) {
       content: null,
       embeds: [ocrCardEmbed({
         description: 'This OCR review is no longer active.',
-        footer: 'Click Scan Party Screenshot on the launcher to start a new scan.',
       })],
       components: [],
-    }, sessionFor(interaction));
+    }, null);
     return;
   }
   const db = getTenantStore();

@@ -526,7 +526,7 @@ export default function RequestHistoryTab({ user }) {
           
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/request')}
             className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition py-2 px-4 shadow cursor-pointer"
           >
             <IconUndo /> Return to Request

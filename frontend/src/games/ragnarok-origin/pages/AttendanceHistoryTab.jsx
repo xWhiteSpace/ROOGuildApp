@@ -22,13 +22,11 @@ import {
 } from '@guildname/shared/attendanceStatus';
 import { apiFetch } from '../../../services/apiClient';
 import { queryClient } from '../../../query/client';
-import { gvgSheetOptions, invalidateGvgSheet, invalidateGvgSheetWar, invalidateRaidHistory, useGvgSheet, useSettings } from '../../../query/hooks';
-import StatisticsTab from './StatisticsTab';
+import { gvgSheetOptions, invalidateGvgSheet, invalidateGvgSheetWar, invalidateRaidHistory, invalidateWinRate, useGvgSheet, useSettings } from '../../../query/hooks';
 
 const SLIDES = [
   { id: 'attendance', title: 'Attendance' },
   { id: 'event', title: 'GvG history by event' },
-  { id: 'graph', title: 'Attendance Graph' },
 ];
 
 function viewedAttendanceOffsets() {
@@ -104,6 +102,29 @@ function swordFlags(cells) {
   const flags = {};
   for (const [uid, cell] of Object.entries(cells || {})) flags[uid] = cell?.swords === true;
   return flags;
+}
+
+function gvgWordClass(value) {
+  if (value === 'Win') return 'text-emerald-300 [text-shadow:0_0_8px_rgba(52,211,153,0.9)]';
+  if (value === 'Lose') return 'text-rose-300 [text-shadow:0_0_8px_rgba(251,113,133,0.9)]';
+  if (value) return 'text-amber-200 [text-shadow:0_0_8px_rgba(251,191,36,0.9)]';
+  return 'text-slate-500';
+}
+
+function gvgSelectClass(value) {
+  if (value === 'Win') return 'border-emerald-300 text-emerald-100 shadow-[0_0_10px_rgba(52,211,153,0.7)]';
+  if (value === 'Lose') return 'border-rose-300 text-rose-100 shadow-[0_0_10px_rgba(251,113,133,0.7)]';
+  if (value) return 'border-amber-300 text-amber-100 shadow-[0_0_10px_rgba(251,191,36,0.7)]';
+  return 'border-slate-700 text-slate-400';
+}
+
+function GvgResultWord({ value }) {
+  if (!value) return null;
+  return (
+    <span className={`text-[9px] font-black uppercase leading-none ${gvgWordClass(value)}`}>
+      {value}
+    </span>
+  );
 }
 
 function stickyValue(row, key, roles) {
@@ -202,6 +223,7 @@ const COL_W = DETAIL_COLS[DETAIL_COLS.length - 1].width;
 const ROW_H = 36;
 const YEAR_H = 22;
 const DAY_H = 26;
+const GVG_RESULTS = ['Win', 'Lose', '1st', '2nd', '3rd', '4th', '5th', '↓5th'];
 const SUB_H = 28;
 const STACK_H = YEAR_H + DAY_H;
 const HEAD_H = STACK_H + SUB_H;
@@ -361,7 +383,14 @@ function frameStyle(open) {
   };
 }
 
-function SheetTable({ rows, dates, markFor, expandedId, details, swordDraft, isOfficer, jobs, roles, onToggleExpand, onToggleSword, ledger = false, ledgerSessionId = '', ledgerCells = null, scrollRef = null }) {
+function shownGvgResult(date, resultEdits) {
+  if (resultEdits && Object.prototype.hasOwnProperty.call(resultEdits, date.id)) {
+    return resultEdits[date.id] || '';
+  }
+  return date.gvgResult || '';
+}
+
+function SheetTable({ rows, dates, markFor, expandedId, details, swordDraft, resultEdits, isOfficer, jobs, roles, onToggleExpand, onToggleSword, onGvgResult, ledger = false, ledgerSessionId = '', ledgerCells = null, scrollRef = null }) {
   const [namesOpen, setNamesOpen] = useState(false);
   const [graphUid, setGraphUid] = useState('');
   const [graphBox, setGraphBox] = useState({ height: 280, width: 640 });
@@ -478,18 +507,38 @@ function SheetTable({ rows, dates, markFor, expandedId, details, swordDraft, isO
                 const open = date.id === expandedId;
                 return (
                   <th key={date.id} style={{ ...frameStyle(open), height: DAY_H }} className="box-border overflow-hidden border-l border-slate-700 bg-slate-950 p-0 text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => onToggleExpand(date.id)}
-                      className="flex h-full w-full cursor-pointer items-center text-[10px] font-normal normal-case tracking-normal hover:bg-slate-900 hover:text-white"
-                      aria-expanded={open}
-                      title={date.eventDate || date.eventTitle || 'War'}
-                    >
-                      <span className="inline-flex items-center justify-center gap-0.5" style={{ width: COL_W }}>
-                        <span>{label.day}</span>
-                        <ChevronRight size={10} className={`transition ${open ? 'rotate-90' : ''}`} />
-                      </span>
-                    </button>
+                    <div className="flex h-full w-full items-stretch">
+                      <button
+                        type="button"
+                        onClick={() => onToggleExpand(date.id)}
+                        className="flex h-full shrink-0 cursor-pointer items-center justify-center text-[10px] font-normal normal-case tracking-normal hover:bg-slate-900 hover:text-white"
+                        style={{ width: open ? COL_W : '100%' }}
+                        aria-expanded={open}
+                        title={date.eventDate || date.eventTitle || 'War'}
+                      >
+                        <span className="inline-flex items-center justify-center gap-0.5">
+                          <span>{label.day}</span>
+                          <ChevronRight size={10} className={`transition ${open ? 'rotate-90' : ''}`} />
+                        </span>
+                      </button>
+                      {open && (isOfficer ? (
+                        <select
+                          aria-label="GvG Result"
+                          value={shownGvgResult(date, resultEdits)}
+                          onChange={(event) => onGvgResult(date.id, event.target.value)}
+                          className={`my-1 mr-1 min-w-0 flex-1 rounded-md border bg-slate-950 px-1 text-[10px] font-black uppercase ${gvgSelectClass(shownGvgResult(date, resultEdits))}`}
+                        >
+                          <option value="">—</option>
+                          {GVG_RESULTS.map((item) => (
+                            <option key={item} value={item}>{item}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="flex min-w-0 flex-1 items-center justify-center">
+                          <GvgResultWord value={shownGvgResult(date, resultEdits)} />
+                        </div>
+                      ))}
+                    </div>
                   </th>
                 );
               })}
@@ -505,11 +554,15 @@ function SheetTable({ rows, dates, markFor, expandedId, details, swordDraft, isO
                     style={{ ...frameStyle(open), height: SUB_H }}
                     className="box-border overflow-hidden border-b border-l border-slate-600 border-l-slate-700 bg-slate-950 p-0"
                   >
-                    {open && (
+                    {open ? (
                       <div className="flex h-full items-center">
                         {DETAIL_COLS.map((col, index) => (
                           <div key={col.key} style={sliceStyle(col.width)} className={`text-center font-normal tracking-normal whitespace-nowrap ${index === 0 ? '' : 'border-l border-slate-800'}`}>{col.label}</div>
                         ))}
+                      </div>
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <GvgResultWord value={shownGvgResult(date, resultEdits)} />
                       </div>
                     )}
                   </th>
@@ -657,9 +710,11 @@ export default function AttendanceHistoryTab({ user }) {
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [expandedId, setExpandedId] = useState('');
   const [swordDraft, setSwordDraft] = useState(null);
+  const [resultEdits, setResultEdits] = useState({});
   const [saving, setSaving] = useState(false);
   const sheetScrollRef = useRef(null);
   const scrollOlder = useRef(false);
+  const acknowledgedResults = useRef({});
 
   const slide = SLIDES[slideIndex];
   const attendanceOpen = pages.length > 0;
@@ -693,25 +748,88 @@ export default function AttendanceHistoryTab({ user }) {
   useEffect(() => {
     const cells = attendanceCells[expandedId];
     if (!expandedId || !cells) return;
-    setSwordDraft((prev) => (prev?.sessionId === expandedId ? prev : { sessionId: expandedId, flags: swordFlags(cells) }));
-  }, [expandedId, attendanceCells]);
+    setSwordDraft((prev) => {
+      if (prev?.sessionId === expandedId) return prev;
+      if (prev?.sessionId) {
+        const prevCells = attendanceCells[prev.sessionId];
+        const prevDirty = prevCells && Object.keys(prevCells).some((uid) => (prevCells[uid]?.swords === true) !== (prev.flags?.[uid] === true));
+        if (prevDirty) return prev;
+      }
+      return { sessionId: expandedId, flags: swordFlags(cells) };
+    });
+  }, [expandedId, attendanceCells, pageQueries]);
 
-  const swordSessionId = slide.id === 'event' ? selectedSessionId : expandedId;
+  const swordSessionId = slide.id === 'event' ? selectedSessionId : (expandedId || swordDraft?.sessionId || '');
   const swordCells = slide.id === 'event'
     ? (eventQuery.data?.date?.id === selectedSessionId ? eventQuery.data?.cells : null)
-    : (attendanceCells[expandedId] || null);
+    : (attendanceCells[swordSessionId] || null);
 
-  const swordDirty = useMemo(() => {
-    if (!swordDraft || swordDraft.sessionId !== swordSessionId || !swordCells) return false;
-    return Object.keys(swordCells).some((uid) => (swordCells[uid]?.swords === true) !== (swordDraft.flags?.[uid] === true));
-  }, [swordDraft, swordSessionId, swordCells]);
+  const savedResultFor = (sessionId) => {
+    const fromSheet = pageQueries.flatMap((query) => query.data?.dates || []).find((date) => date.id === sessionId)?.gvgResult;
+    if (fromSheet) return fromSheet;
+    if (eventQuery.data?.date?.id === sessionId) return eventQuery.data.date.gvgResult || '';
+    return fromSheet || '';
+  };
+
+  const draftCells = swordDraft?.sessionId
+    ? (attendanceCells[swordDraft.sessionId] || (eventQuery.data?.date?.id === swordDraft.sessionId ? eventQuery.data.cells : null))
+    : null;
+  const flagsDirty = Boolean(
+    swordDraft && draftCells
+    && Object.keys(draftCells).some((uid) => (draftCells[uid]?.swords === true) !== (swordDraft.flags?.[uid] === true))
+  );
+  const dirtyResultId = Object.keys(resultEdits).find((id) => {
+    const value = resultEdits[id] || '';
+    if (acknowledgedResults.current[id] === value) return false;
+    return value !== savedResultFor(id);
+  }) || '';
+  const swordDirty = flagsDirty || Boolean(dirtyResultId);
 
   const leaveEdits = () => {
     if (!swordDirty) return true;
-    if (!window.confirm('Sword changes are not saved. Leave without saving?')) return false;
+    if (!window.confirm('Attendance changes are not saved. Leave without saving?')) return false;
     setSwordDraft(null);
+    setResultEdits({});
+    acknowledgedResults.current = {};
     return true;
   };
+
+  const leaveEditsRef = useRef(leaveEdits);
+  const swordDirtyRef = useRef(swordDirty);
+  leaveEditsRef.current = leaveEdits;
+  swordDirtyRef.current = swordDirty;
+
+  useEffect(() => {
+    const onBeforeUnload = (event) => {
+      if (!swordDirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const onClick = (event) => {
+      if (!swordDirtyRef.current) return;
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target?.closest?.('a[href]');
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      let url;
+      try {
+        url = new URL(anchor.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === '/attendance/history') return;
+      if (!leaveEditsRef.current()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onClick, true);
+    };
+  }, []);
 
   const goSlide = (next) => {
     if (!leaveEdits()) return;
@@ -737,44 +855,59 @@ export default function AttendanceHistoryTab({ user }) {
   }, []);
 
   const toggleExpand = (sessionId) => {
-    if (expandedId === sessionId) {
-      if (!leaveEdits()) return;
-      setExpandedId('');
-      return;
-    }
-    if (!leaveEdits()) return;
-    setSwordDraft(null);
-    setExpandedId(sessionId);
+    setExpandedId(expandedId === sessionId ? '' : sessionId);
   };
 
   const toggleSword = (uid) => {
     if (!isOfficer || !swordSessionId) return;
     setSwordDraft((prev) => {
-      const flags = { ...(prev?.sessionId === swordSessionId ? prev.flags : swordFlags(swordCells)) };
+      const same = prev?.sessionId === swordSessionId;
+      const flags = { ...(same ? prev.flags : swordFlags(swordCells)) };
       flags[uid] = flags[uid] !== true;
-      return { sessionId: swordSessionId, flags };
+      const next = { sessionId: swordSessionId, flags };
+      if (same && Object.prototype.hasOwnProperty.call(prev, 'gvgResult')) next.gvgResult = prev.gvgResult;
+      return next;
     });
   };
 
+  const setGvgResult = (sessionId, value) => {
+    if (!isOfficer) return;
+    if (acknowledgedResults.current[sessionId] !== value) delete acknowledgedResults.current[sessionId];
+    setResultEdits((prev) => ({ ...prev, [sessionId]: value }));
+  };
+
   const saveSwords = async () => {
-    if (!isOfficer || !swordSessionId || !swordDirty || saving) return;
+    const targetId = flagsDirty ? swordDraft.sessionId : (dirtyResultId || swordSessionId);
+    const cellsForTarget = attendanceCells[targetId] || (eventQuery.data?.date?.id === targetId ? eventQuery.data.cells : null);
+    if (!isOfficer || !targetId || !swordDirty || saving) return;
+    if (swordDraft?.sessionId !== targetId && !cellsForTarget) return;
+    const flags = swordDraft?.sessionId === targetId ? swordDraft.flags : swordFlags(cellsForTarget);
     const inGameStatus = {};
-    for (const [uid, on] of Object.entries(swordDraft?.flags || {})) {
+    for (const [uid, on] of Object.entries(flags || {})) {
       if (on) inGameStatus[uid] = true;
+    }
+    const body = { inGameStatus };
+    if (Object.prototype.hasOwnProperty.call(resultEdits, targetId)) {
+      body.gvgResult = resultEdits[targetId] || '';
     }
     setSaving(true);
     try {
-      const res = await apiFetch(`/api/live-raid/history/${encodeURIComponent(swordSessionId)}/in-game`, {
+      const res = await apiFetch(`/api/live-raid/history/${encodeURIComponent(targetId)}/in-game`, {
         method: 'PUT',
-        body: JSON.stringify({ inGameStatus }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
         alert(data.error || 'Failed to save in-game.');
         return;
       }
-      setSwordDraft({ sessionId: swordSessionId, flags: { ...(swordDraft?.flags || {}) } });
-      await Promise.all([invalidateGvgSheetWar(swordSessionId), invalidateRaidHistory()]);
+      if (swordDraft?.sessionId === targetId) {
+        setSwordDraft({ sessionId: targetId, flags: { ...(swordDraft.flags || {}) } });
+      }
+      if (Object.prototype.hasOwnProperty.call(resultEdits, targetId)) {
+        acknowledgedResults.current[targetId] = resultEdits[targetId] || '';
+      }
+      await Promise.all([invalidateGvgSheetWar(targetId), invalidateRaidHistory(), invalidateWinRate()]);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -793,8 +926,27 @@ export default function AttendanceHistoryTab({ user }) {
     }
     if (selectedSessionId === sessionId) setSelectedSessionId('');
     if (expandedId === sessionId) setExpandedId('');
-    await Promise.all([invalidateGvgSheet(), invalidateRaidHistory()]);
+    await Promise.all([invalidateGvgSheet(), invalidateRaidHistory(), invalidateWinRate()]);
   };
+
+  useEffect(() => {
+    setResultEdits((prev) => {
+      const ids = Object.keys(prev);
+      if (!ids.length) return prev;
+      const dates = pageQueries.flatMap((query) => query.data?.dates || []);
+      const next = { ...prev };
+      let changed = false;
+      for (const id of ids) {
+        const known = dates.find((date) => date.id === id)
+          || (eventQuery.data?.date?.id === id ? eventQuery.data.date : null);
+        if (!known || (known.gvgResult || '') !== (prev[id] || '')) continue;
+        delete next[id];
+        delete acknowledgedResults.current[id];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [pageQueries, eventQuery.data]);
 
   const attendanceDates = useMemo(() => pageQueries.flatMap((query) => query.data?.dates || []), [pageQueries]);
   const attendanceScores = useMemo(() => {
@@ -836,7 +988,7 @@ export default function AttendanceHistoryTab({ user }) {
       : null;
 
   return (
-    <div className={`flex min-h-0 w-full min-w-0 flex-col gap-3 font-sans ${slide.id === 'graph' ? 'h-[calc(100vh-8rem)]' : 'h-[calc(100vh-12rem)]'}`}>
+    <div className="flex h-[calc(100vh-12rem)] min-h-0 w-full min-w-0 flex-col gap-3 font-sans">
       <div className="grid shrink-0 grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
         <div className="hidden lg:block" />
         <div className="flex flex-col items-center gap-2">
@@ -922,11 +1074,13 @@ export default function AttendanceHistoryTab({ user }) {
           expandedId={expandedId}
           details={expandedId ? { id: expandedId, cells: attendanceCells[expandedId] || null } : null}
           swordDraft={swordDraft}
+          resultEdits={resultEdits}
           isOfficer={isOfficer}
           jobs={jobs}
           roles={roles}
           onToggleExpand={toggleExpand}
           onToggleSword={toggleSword}
+          onGvgResult={setGvgResult}
           scrollRef={sheetScrollRef}
         />
         </div>
@@ -980,6 +1134,7 @@ export default function AttendanceHistoryTab({ user }) {
               expandedId=""
               details={null}
               swordDraft={swordDraft}
+              resultEdits={resultEdits}
               isOfficer={isOfficer}
               jobs={jobs}
               roles={roles}
@@ -994,14 +1149,7 @@ export default function AttendanceHistoryTab({ user }) {
         </div>
       )}
 
-      {slide.id === 'graph' && (
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-          <StatisticsTab user={user} embedded />
-        </div>
-      )}
-
-      {slide.id !== 'graph' && (
-        <div className="fixed bottom-0 right-0 left-[var(--valhalla-sidebar-width,16rem)] border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 right-0 left-[var(--valhalla-sidebar-width,16rem)] border-t border-slate-900 bg-slate-950/90 backdrop-blur-md p-4 z-50 shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
           <div className="mx-auto flex max-w-6xl items-center justify-end">
             <button
               type="button"
@@ -1018,7 +1166,6 @@ export default function AttendanceHistoryTab({ user }) {
             </button>
           </div>
         </div>
-      )}
     </div>
   );
 }

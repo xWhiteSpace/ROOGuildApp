@@ -104,12 +104,6 @@ const DISCORD_CARD_EDITORS = [
     fields: [{ key: 'party', label: 'Message' }],
   },
   {
-    id: 'ocr',
-    title: 'Party OCR',
-    postsTo: 'Posted to the war-announce channel.',
-    fields: [{ key: 'ocr', label: 'Message' }],
-  },
-  {
     id: 'onboarding',
     title: 'Onboarding',
     postsTo: 'Posted to the onboarding channel.',
@@ -189,7 +183,6 @@ export default function SettingsTab({ user, onSessionUser }) {
   const [deployingCard, setDeployingCard] = useState(false);
   const [deployingAttendanceCard, setDeployingAttendanceCard] = useState(false);
   const [deployingPartyCard, setDeployingPartyCard] = useState(false);
-  const [deployingOcrCard, setDeployingOcrCard] = useState(false);
   const [deployingOnboardingCard, setDeployingOnboardingCard] = useState(false);
   const [editingCardId, setEditingCardId] = useState(null);
   const [cardDraft, setCardDraft] = useState({});
@@ -218,6 +211,7 @@ export default function SettingsTab({ user, onSessionUser }) {
     },
     liveRaidMaxConfigs: 5,
     liveRaidMaxWarRooms: 2,
+    partyOcrAutoDraft: false,
     defaultLeaveCredits: 3,
     warRooms: { ...EMPTY_WAR_ROOMS }
   });
@@ -457,19 +451,6 @@ export default function SettingsTab({ user, onSessionUser }) {
       flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
     } finally {
       setDeployingPartyCard(false);
-    }
-  };
-
-  const handleDeployOcrCard = async () => {
-    if (deployingOcrCard) return;
-    setDeployingOcrCard(true);
-    try {
-      const text = await postDeployRoute('/api/deploy-ocr-card');
-      flashDiscordCardMsg({ ok: true, text: text || 'Party OCR card deployed to Discord.' });
-    } catch (err) {
-      flashDiscordCardMsg({ ok: false, text: err.message || 'Request failed' });
-    } finally {
-      setDeployingOcrCard(false);
     }
   };
 
@@ -874,6 +855,22 @@ export default function SettingsTab({ user, onSessionUser }) {
                 <span className="text-[11px] text-slate-400 font-medium">Calendar Days</span>
               </div>
             </div>
+
+            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300">Party OCR auto compose draft</div>
+                <p className="text-[11px] text-slate-500 mt-1 font-normal">When on, War start opens a thread in Raid Screenshot. Create draft inside that thread builds the GVG Attendance review.</p>
+              </div>
+              <label className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl px-3 h-11 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(config.partyOcrAutoDraft)}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, partyOcrAutoDraft: e.target.checked }))}
+                  className="accent-indigo-500"
+                />
+                <span className="text-[11px] text-slate-400 font-medium">{config.partyOcrAutoDraft ? 'On' : 'Off'}</span>
+              </label>
+            </div>
           </div>
 
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-4">
@@ -890,7 +887,6 @@ export default function SettingsTab({ user, onSessionUser }) {
                   request: { onSend: handleDeployAuctionCard, busy: deployingCard },
                   gvg: { onSend: handleDeployAttendanceCard, busy: deployingAttendanceCard },
                   party: { onSend: handleDeployPartyCard, busy: deployingPartyCard },
-                  ocr: { onSend: handleDeployOcrCard, busy: deployingOcrCard },
                   onboarding: { onSend: handleDeployOnboardingCard, busy: deployingOnboardingCard },
                 }[card.id];
                 return (
