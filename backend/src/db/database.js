@@ -715,6 +715,7 @@ const ARCHIVE_SHEET_OBJECT = `jsonb_build_object(
   'eventDate', COALESCE(blob->>'eventDate', blob->>'date', ''),
   'endedAt', COALESCE((NULLIF(blob->>'endedAt', ''))::bigint, 0),
   'totalPulses', COALESCE((NULLIF(blob->>'totalPulses', ''))::int, 0),
+  'gvgResult', COALESCE(blob->>'gvgResult', ''),
   'sheet', blob->'sheet'
 )`;
 
@@ -727,6 +728,7 @@ function sessionArchiveSheet(row, sessionId) {
     eventDate: row.eventDate || row.date || '',
     endedAt: Number(row.endedAt) || 0,
     totalPulses: Number(row.totalPulses) || 0,
+    gvgResult: typeof row.gvgResult === 'string' ? row.gvgResult : '',
     sheet,
   };
 }

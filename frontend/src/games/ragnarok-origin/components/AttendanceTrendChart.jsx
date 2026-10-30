@@ -62,10 +62,10 @@ function LegendChip({ color, label, dashed }) {
   );
 }
 
-export default function AttendanceTrendChart({ points = [], expectedRate = 80, memberName = null }) {
+export default function AttendanceTrendChart({ points = [], expectedRate = 80, memberName = null, fill = false }) {
   if (!points || points.length < 2) {
     return (
-      <div className="text-center py-16 text-[11px] text-slate-500 font-mono italic">
+      <div className={`text-center text-[11px] text-slate-500 font-mono italic ${fill ? 'flex h-full items-center justify-center px-4' : 'py-16'}`}>
         Need at least 2 archived raid sessions to plot an attendance trend.
       </div>
     );
@@ -80,12 +80,13 @@ export default function AttendanceTrendChart({ points = [], expectedRate = 80, m
   const memberPath = hasMember ? buildPath(points, (p) => p.memberPct, count) : '';
 
   return (
-    <div className="w-full">
-      <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto min-w-[520px]" fill="none">
+    <div className={fill ? 'flex h-full min-h-0 flex-1 flex-col' : 'w-full'}>
+      <div className={fill ? 'relative min-h-[9rem] flex-1' : 'w-full overflow-x-auto'}>
+        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="xMidYMid meet" className={fill ? 'absolute inset-0 h-full w-full' : 'h-auto min-w-[520px] w-full'} fill="none">
           {/* Horizontal grid + Y labels */}
           {gridLevels.map((level) => {
             const y = pctToY(level);
+            const showLabel = !fill || level % 50 === 0;
             return (
               <g key={level}>
                 <line
@@ -97,15 +98,17 @@ export default function AttendanceTrendChart({ points = [], expectedRate = 80, m
                   strokeWidth="1"
                   strokeDasharray={level === 0 ? undefined : '3 3'}
                 />
-                <text
-                  x={PAD_LEFT - 8}
-                  y={y + 3}
-                  textAnchor="end"
-                  className="fill-slate-500"
-                  style={{ fontSize: '9px', fontFamily: 'monospace' }}
-                >
-                  {level}%
-                </text>
+                {showLabel && (
+                  <text
+                    x={PAD_LEFT - 8}
+                    y={y + 3}
+                    textAnchor="end"
+                    className="fill-slate-500"
+                    style={{ fontSize: '9px', fontFamily: 'monospace' }}
+                  >
+                    {level}%
+                  </text>
+                )}
               </g>
             );
           })}
@@ -169,7 +172,7 @@ export default function AttendanceTrendChart({ points = [], expectedRate = 80, m
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 mt-3 select-none">
+      <div className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-1 select-none ${fill ? 'shrink-0 pt-1' : 'mt-3'}`}>
         <LegendChip color={COLOR_GUILD} label="Guild Actual" />
         <LegendChip color={COLOR_EXPECTED} label={`Expected ${expectedRate}%`} dashed />
         {hasMember && <LegendChip color={COLOR_MEMBER} label={memberName || 'Member'} />}

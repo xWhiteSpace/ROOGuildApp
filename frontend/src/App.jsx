@@ -1,7 +1,8 @@
 // frontend/src/App.jsx
 import { useEffect, useState, createContext, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
+import WelcomePage from './games/ragnarok-origin/pages/WelcomePage';
 import RequestTab from './games/ragnarok-origin/pages/RequestTab';
 import MimicBookTab from './games/ragnarok-origin/pages/MimicBookTab';
 import RequestHistoryTab from './games/ragnarok-origin/pages/RequestHistoryTab';
@@ -15,11 +16,9 @@ import MasterListTab from './games/ragnarok-origin/pages/MasterListTab';
 import RaidPartyTab from './games/ragnarok-origin/pages/RaidPartyTab';
 import WarRoomTab from './games/ragnarok-origin/pages/WarRoomTab';
 import OcrReviewTab from './games/ragnarok-origin/pages/OcrReviewTab';
-import Profile from './games/ragnarok-origin/pages/Profile';
 import AttendanceHistoryTab from './games/ragnarok-origin/pages/AttendanceHistoryTab';
 
 import Scheduler from './games/ragnarok-origin/pages/Scheduler';
-import PeakHoursTab from './games/ragnarok-origin/pages/PeakHoursTab';
 import SelectGuildPage from './pages/SelectGuildPage';
 import OnboardGuildPage from './pages/OnboardGuildPage';
 import ChooseGamePage from './pages/ChooseGamePage';
@@ -43,6 +42,12 @@ import R3SettingsTab from './games/ragnarok-3/pages/SettingsTab';
 import R3HelpGuide from './games/ragnarok-3/pages/HelpGuide';
 
 export const MimicBookContext = createContext(null);
+
+function RedirectProfile() {
+  const { uid } = useParams();
+  const to = uid ? `/?member=${encodeURIComponent(uid)}` : '/';
+  return <Navigate to={to} replace />;
+}
 
 const SESSION_KEY = 'guild_raid_session';
 const LEGACY_SESSION_KEY = 'dynasty_raid_session';
@@ -329,7 +334,7 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
   if (pathname === '/landing' && !authUser) {
     return <LandingPage />;
   }
-  if (pathname === '/' && !authUser) {
+  if ((pathname === '/' || pathname === '/request') && !authUser) {
     return <Navigate to="/landing" replace />;
   }
 
@@ -365,11 +370,12 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
   return (
     <MainLayout user={authUser} onLogout={onLogout} onSessionUser={onSessionUser} activeGameId={effectiveGameId} setActiveGameId={setActiveGameId}>
       <Routes>
-        <Route path="/" element={<RequestTab user={authUser} />} />
+        <Route path="/" element={<WelcomePage user={authUser} />} />
+        <Route path="/request" element={<RequestTab user={authUser} />} />
         <Route path="/mimic-book" element={<MimicBookTab user={authUser} />} />
         <Route path="/request-history" element={<RequestHistoryTab user={authUser} />} />
         <Route path="/past-auction" element={<PastAuctionTab />} />
-        <Route path="/submit-evidence" element={<Navigate to="/" replace />} />
+        <Route path="/submit-evidence" element={<Navigate to="/request" replace />} />
         <Route path="/workspace" element={<WorkspaceSettingsPage user={authUser} onSessionUser={onSessionUser} />} />
         <Route path="/games/adventurer-guild" element={<HighlightsPage user={authUser} />} />
         <Route path="/games/adventurer-guild/highlights" element={<Navigate to="/games/adventurer-guild" replace />} />
@@ -388,9 +394,9 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/games/ragnarok-origin/settings" element={<SettingsTab user={authUser} onSessionUser={onSessionUser} />} />
         <Route path="/settings-configuration" element={<Navigate to="/games/ragnarok-origin/settings" replace />} />
         <Route path="/attendance/masterlist" element={<MasterListTab user={authUser} />} />
-        <Route path="/attendance/profile" element={<Profile user={authUser} />} />
-        <Route path="/attendance/profile/:uid" element={<Profile user={authUser} />} />
-        <Route path="/attendance/peak-hours" element={<PeakHoursTab user={authUser} />} />
+        <Route path="/attendance/profile" element={<Navigate to="/" replace />} />
+        <Route path="/attendance/profile/:uid" element={<RedirectProfile />} />
+        <Route path="/attendance/peak-hours" element={<Navigate to="/" replace />} />
         <Route path="/attendance/raidparty" element={<RaidPartyTab user={authUser} />} />
         <Route path="/attendance/war-room" element={<WarRoomTab user={authUser} />} />
         <Route path="/attendance/ocr-review" element={<OcrReviewTab user={authUser} />} />
@@ -398,7 +404,7 @@ function AppShell({ authUser, onLogout, onSessionUser, activeGameId, setActiveGa
         <Route path="/attendance/compose" element={<Navigate to="/attendance/war-room" replace />} />
         <Route path="/attendance/liveraid" element={<Navigate to="/attendance/war-room" replace />} />
         <Route path="/attendance/history" element={<AttendanceHistoryTab user={authUser} />} />
-        <Route path="/attendance/statistics" element={<Navigate to="/attendance/history?slide=graph" replace />} />
+        <Route path="/attendance/statistics" element={<Navigate to="/" replace />} />
         <Route path="/attendance/scheduler" element={<Scheduler user={authUser} />} />
       </Routes>
     </MainLayout>

@@ -21,6 +21,9 @@ export function firstEnabledGameId(enabledIds) {
 
 export function moduleForPath(pathname, game) {
   if (!game) return null;
+  if ((game.leading || []).some((item) => item.path === '/' ? pathname === '/' : pathname === item.path || pathname.startsWith(`${item.path}/`))) {
+    return null;
+  }
   for (const mod of game.modules) {
     const hit = mod.items.some((item) => {
       if (item.path === '/') return pathname === '/';

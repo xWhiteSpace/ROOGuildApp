@@ -12,7 +12,7 @@ const IconClose = () => <svg className="w-3.5 h-3.5" fill="none" stroke="current
 const DEFAULT_EXPECTED_RATE = 80;
 const MAX_TREND_SESSIONS = 12;
 
-export default function StatisticsTab({ user, embedded = false }) {
+export default function StatisticsTab({ user, embedded = false, compact = false, lockedMemberUid = null, lockedMemberName = '' }) {
   const statsQuery = useGvgSheet({ view: 'stats', limit: MAX_TREND_SESSIONS });
   const settingsQuery = useSettings('expectedAttendanceRate');
   const loading = statsQuery.isLoading && !statsQuery.data;
@@ -21,13 +21,17 @@ export default function StatisticsTab({ user, embedded = false }) {
   const scores = statsQuery.data?.scores || {};
   const [expectedRate, setExpectedRate] = useState(DEFAULT_EXPECTED_RATE);
   const [memberSearch, setMemberSearch] = useState('');
-  const [selectedMemberUid, setSelectedMemberUid] = useState(null);
+  const [selectedMemberUid, setSelectedMemberUid] = useState(() => (lockedMemberUid ? String(lockedMemberUid) : null));
 
   useEffect(() => {
     if (settingsQuery.data?.expectedAttendanceRate != null) {
       setExpectedRate(parseInt(settingsQuery.data.expectedAttendanceRate, 10) || DEFAULT_EXPECTED_RATE);
     }
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (lockedMemberUid) setSelectedMemberUid(String(lockedMemberUid));
+  }, [lockedMemberUid]);
 
   const handleUpdateExpectedRate = async (val) => {
     const clamped = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
@@ -77,20 +81,21 @@ export default function StatisticsTab({ user, embedded = false }) {
   }, [rows, memberSearch]);
 
   const selectedMember = rows.find((row) => row.uid === selectedMemberUid);
-  const selectedMemberName = selectedMember
-    ? (selectedMember.displayName || selectedMember.alias || selectedMember.snowflake || 'Member')
-    : null;
+  const selectedMemberName = lockedMemberName
+    || (selectedMember
+      ? (selectedMember.displayName || selectedMember.alias || selectedMember.snowflake || 'Member')
+      : null);
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-400 font-medium animate-pulse text-xs font-mono uppercase tracking-widest">
+      <div className={`flex items-center justify-center text-slate-400 font-medium animate-pulse text-xs font-mono uppercase tracking-widest ${compact ? 'h-full' : 'h-64'}`}>
         Compiling Attendance Trend Interfaces...
       </div>
     );
   }
 
   return (
-    <div className={embedded ? 'space-y-4 font-sans' : 'space-y-6 max-w-[98vw] mx-auto p-2 font-sans animate-fadeIn'}>
+    <div className={compact ? 'flex h-full min-h-0 flex-1 flex-col font-sans' : embedded ? 'space-y-4 font-sans' : 'space-y-6 max-w-[98vw] mx-auto p-2 font-sans animate-fadeIn'}>
       {!embedded && (
       <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-md select-none">
         <h1 className="text-lg font-bold tracking-wider text-slate-200 uppercase">Attendance</h1>
@@ -99,14 +104,14 @@ export default function StatisticsTab({ user, embedded = false }) {
       )}
 
       {/* ================= ATTENDANCE TREND ================= */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-2 border-b border-slate-900">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none">
-            <IconTrend /> Attendance Trend
+      <div className={compact ? 'flex min-h-0 flex-1 flex-col' : 'bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl'}>
+        <div className={compact ? 'flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-800/80 px-3' : 'flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between pb-2 border-b border-slate-900'}>
+          <div className={compact ? 'shrink-0 text-[10px] font-normal uppercase tracking-wider text-slate-400' : 'text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 select-none'}>
+            {!compact && <IconTrend />} Attendance Trend
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Member search overlay */}
+            {!lockedMemberUid && (
             <div className="relative">
               {selectedMemberUid ? (
                 <div className="flex items-center gap-2 bg-rose-950/30 border border-rose-800/60 rounded-xl pl-3 pr-2 py-1.5">
@@ -150,9 +155,10 @@ export default function StatisticsTab({ user, embedded = false }) {
                 </>
               )}
             </div>
+            )}
 
             {/* Expected rate control */}
-            <div className="flex items-center gap-2 bg-slate-950/50 border border-slate-800 rounded-xl px-3 py-1.5">
+            <div className={`flex items-center border border-slate-800 bg-slate-950/50 ${compact ? 'h-7 gap-1.5 rounded-lg px-2' : 'gap-2 rounded-xl px-3 py-1.5'}`}>
               <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-amber-500/90">Expected</span>
               <input
                 type="number"
@@ -161,7 +167,7 @@ export default function StatisticsTab({ user, embedded = false }) {
                 value={expectedRate}
                 disabled={!user?.isOfficer}
                 onChange={(e) => handleUpdateExpectedRate(e.target.value)}
-                className="w-14 bg-slate-950 border border-slate-800 text-slate-200 rounded-lg px-2 py-1 font-mono font-bold text-center text-xs outline-none focus:border-slate-700 disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className={`bg-slate-950 border border-slate-800 text-slate-200 rounded-lg text-center font-mono font-bold outline-none focus:border-slate-700 disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${compact ? 'h-5 w-10 px-1 text-[11px]' : 'w-14 px-2 py-1 text-xs'}`}
               />
               <span className="text-[11px] font-mono font-bold text-slate-500">%</span>
             </div>
@@ -173,7 +179,9 @@ export default function StatisticsTab({ user, embedded = false }) {
             {statsQuery.error.message || 'The attendance trend could not be loaded.'}
           </div>
         ) : (
-          <AttendanceTrendChart points={trendPoints} expectedRate={expectedRate} memberName={selectedMemberName} />
+          <div className={compact ? 'min-h-0 flex-1 p-3' : ''}>
+            <AttendanceTrendChart points={trendPoints} expectedRate={expectedRate} memberName={selectedMemberName} fill={compact} />
+          </div>
         )}
       </div>
     </div>

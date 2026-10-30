@@ -25,7 +25,9 @@ import { discordChannel } from '../db/channels.js';
 import { checkOfficer } from '../auth/officer.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import { aggregatePeakHours, normalizePlaySchedule } from '../games/ragnarok-origin/services/peakHours.js';
+import { randomUUID } from 'node:crypto';
 import { sanitizeOcrCorrections } from '@guildname/shared/inGameAlias';
+import { readGvgWinRate } from '../games/ragnarok-origin/services/gvgSheet.js';
 
 const router = Router();
 
@@ -1824,6 +1826,154 @@ router.post('/published/:id/save-grids', async (req, res) => {
       return res.status(status).json({ success: false, error: result.error });
     }
     return res.json({ success: true, published: result.payload });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const ANNOUNCEMENTS_PATH = 'welcome/announcements';
+const ANNOUNCEMENT_MAX = 4000;
+const ANNOUNCEMENT_TITLE_MAX = 80;
+
+function cleanAnnouncementBody(value, titleValue) {
+  const body = String(value ?? '');
+  const title = String(titleValue ?? '').trim().slice(0, ANNOUNCEMENT_TITLE_MAX);
+  if (body.length > ANNOUNCEMENT_MAX) {
+    return { error: 'Announcements are limited to 4000 characters.' };
+  }
+  if (!body.trim() && !title) return { error: 'Write a message first.' };
+  return { body, title };
+}
+
+function publicAnnouncement(id, raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const body = String(raw.body || '').slice(0, ANNOUNCEMENT_MAX);
+  const title = String(raw.title || '').trim().slice(0, ANNOUNCEMENT_TITLE_MAX);
+  if (!body.trim() && !title) return null;
+  return {
+    id,
+    title,
+    body,
+    authorName: String(raw.authorName || 'Officer'),
+    authorId: String(raw.authorId || ''),
+    createdAt: Number(raw.createdAt) || 0,
+    updatedAt: Number(raw.updatedAt) || 0,
+  };
+}
+
+async function readAnnouncements(db) {
+  const snap = await db.ref(ANNOUNCEMENTS_PATH).once('value');
+  const raw = snap.exists() ? snap.val() : {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  return Object.entries(raw)
+    .map(([id, item]) => publicAnnouncement(id, item))
+    .filter(Boolean)
+    .sort((a, b) => (b.createdAt - a.createdAt) || (b.updatedAt - a.updatedAt));
+}
+
+async function loadAnnouncementMap(db) {
+  const snap = await db.ref(ANNOUNCEMENTS_PATH).once('value');
+  const raw = snap.exists() ? snap.val() : {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return raw;
+}
+
+router.get('/win-rate', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    return res.json({ success: true, ...(await readGvgWinRate(db)) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/announcements', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    return res.json({ success: true, announcements: await readAnnouncements(db) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/announcements', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  const cleaned = cleanAnnouncementBody(req.body?.body, req.body?.title);
+  if (cleaned.error) return res.status(400).json({ success: false, error: cleaned.error });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!await requireOfficer(req, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
+    const now = Date.now();
+    const id = `ann_${randomUUID()}`;
+    const entry = {
+      title: cleaned.title,
+      body: cleaned.body,
+      authorName: user.displayName || user.username || 'Officer',
+      authorId: String(user.id || ''),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const map = await loadAnnouncementMap(db);
+    map[id] = entry;
+    await db.ref(ANNOUNCEMENTS_PATH).set(map);
+    return res.json({ success: true, announcement: publicAnnouncement(id, entry) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/announcements/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  const cleaned = cleanAnnouncementBody(req.body?.body, req.body?.title);
+  if (cleaned.error) return res.status(400).json({ success: false, error: cleaned.error });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!await requireOfficer(req, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const map = await loadAnnouncementMap(db);
+    const current = map[id];
+    if (!current) return res.status(404).json({ success: false, error: 'Announcement not found.' });
+    const entry = {
+      ...current,
+      title: cleaned.title,
+      body: cleaned.body,
+      updatedAt: Date.now(),
+    };
+    map[id] = entry;
+    await db.ref(ANNOUNCEMENTS_PATH).set(map);
+    return res.json({ success: true, announcement: publicAnnouncement(id, entry) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/announcements/:id', async (req, res) => {
+  const user = resolveUserIdentity(req);
+  if (!user) return res.status(401).json({ success: false, error: 'Session identity missing' });
+  try {
+    const db = getTenantStore();
+    const configSnap = await db.ref('settings/configuration').once('value');
+    if (!await requireOfficer(req, configSnap)) {
+      return res.status(403).json({ success: false, error: 'Officer access required' });
+    }
+    const id = decodeURIComponent(req.params.id || '');
+    const map = await loadAnnouncementMap(db);
+    if (!map[id]) return res.status(404).json({ success: false, error: 'Announcement not found.' });
+    delete map[id];
+    await db.ref(ANNOUNCEMENTS_PATH).set(Object.keys(map).length ? map : null);
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

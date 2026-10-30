@@ -6,6 +6,7 @@ import { apiFetch } from '../services/apiClient';
 import { getGame, resolvePostLoginPath } from '../games/catalog';
 import { PRODUCT_MARK_SRC, PRODUCT_ON_DARK_CLASS } from '../brand';
 
+const IconHome = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg>;
 const IconRequest = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
 const IconLive = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>;
 const IconBook = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>;
@@ -39,6 +40,7 @@ const IconController = () => (
 );
 
 const ICONS = {
+  home: IconHome,
   request: IconRequest,
   live: IconLive,
   swords: IconSwords,
@@ -266,6 +268,30 @@ export default function LeftNavBar({ user, activeGameId, mobileOpen = false, onM
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-0.5 scrollbar-thin">
+        {(game?.leading || []).map((item) => {
+          const Icon = ICONS[item.icon] || IconRequest;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.end === true || item.path === '/'}
+              onClick={onMobileClose}
+              className={({ isActive }) => navClass(isActive, showIconsOnly)}
+              title={item.label}
+            >
+              {showIconsOnly ? (
+                <span className="flex items-center justify-center" title={item.label}>
+                  <Icon />
+                </span>
+              ) : (
+                <>
+                  <span className="shrink-0"><Icon /></span>
+                  <span className="ml-3 whitespace-nowrap truncate">{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
         {(game?.modules || []).map((mod) => {
           const open = sectionOpen(mod.id);
           return (

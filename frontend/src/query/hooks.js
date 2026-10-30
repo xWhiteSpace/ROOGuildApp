@@ -19,6 +19,8 @@ export const queryKeys = {
   profile: (uid) => ['profile', uid],
   auctionStats: (uid) => ['auction-stats', uid],
   peakHours: () => ['peak-hours'],
+  winRate: () => ['gvg-win-rate'],
+  announcements: () => ['announcements'],
   commitments: (weekMonday = 'all') => ['commitments', weekMonday],
   compositionsList: () => ['compositions', 'list'],
   composition: (id) => ['compositions', 'detail', id],
@@ -657,6 +659,39 @@ export function invalidateProfile(uid) {
 
 export function invalidatePeakHours() {
   return queryClient.invalidateQueries({ queryKey: queryKeys.peakHours() });
+}
+
+export function useWinRate(options = {}) {
+  return useQuery({
+    queryKey: queryKeys.winRate(),
+    queryFn: async () => {
+      const res = await apiFetch('/api/attendance/win-rate');
+      return readSuccess(res, 'Could not load win rate.');
+    },
+    staleTime: FIVE_MIN,
+    ...options,
+  });
+}
+
+export function invalidateWinRate() {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.winRate() });
+}
+
+export function useAnnouncements(options = {}) {
+  return useQuery({
+    queryKey: queryKeys.announcements(),
+    queryFn: async () => {
+      const res = await apiFetch('/api/attendance/announcements');
+      const data = await readSuccess(res, 'Could not load announcements.');
+      return data.announcements || [];
+    },
+    staleTime: TWO_MIN,
+    ...options,
+  });
+}
+
+export function invalidateAnnouncements() {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.announcements() });
 }
 
 export function invalidateWarRoom() {

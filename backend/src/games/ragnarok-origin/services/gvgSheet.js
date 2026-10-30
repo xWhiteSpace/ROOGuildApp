@@ -119,6 +119,13 @@ function orderKey(war) {
   return `${date}|${ended}`;
 }
 
+const GVG_RESULTS = ['Win', 'Lose', '1st', '2nd', '3rd', '4th', '5th', '↓5th'];
+
+function sheetGvgResult(value) {
+  const text = String(value || '').trim();
+  return GVG_RESULTS.includes(text) ? text : '';
+}
+
 function dateMeta(session) {
   return {
     id: session.id,
@@ -126,6 +133,7 @@ function dateMeta(session) {
     eventTitle: session.eventTitle || '',
     endedAt: Number(session.endedAt) || 0,
     totalPulses: Number(session.totalPulses) || 0,
+    gvgResult: sheetGvgResult(session.gvgResult),
     backfill: session.sheet?.backfill === true,
     orderKey: orderKey(session),
   };
@@ -459,4 +467,26 @@ export async function readGvgStats(db, limit = 12) {
     };
   });
   return { rows, dates, scores };
+}
+
+export function summarizeGvgWinRate(wars) {
+  let win = 0;
+  let first = 0;
+  let other = 0;
+  let unmarked = 0;
+  for (const war of wars || []) {
+    const result = sheetGvgResult(war?.gvgResult);
+    if (!result) unmarked += 1;
+    else if (result === 'Win') win += 1;
+    else if (result === '1st') first += 1;
+    else other += 1;
+  }
+  const marked = win + first + other;
+  const percent = marked ? Math.round(((win + first) / marked) * 100) : null;
+  return { percent, win, first, other, unmarked, marked };
+}
+
+export async function readGvgWinRate(db) {
+  const wars = await loadSheetWars(db);
+  return summarizeGvgWinRate(wars);
 }

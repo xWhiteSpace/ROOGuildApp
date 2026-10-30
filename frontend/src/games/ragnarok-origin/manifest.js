@@ -9,13 +9,16 @@ export const RAGNAROK_ORIGIN = {
   pathPrefix: '',
   setupPath: '/games/ragnarok-origin/setup',
   settingsPath: '/games/ragnarok-origin/settings',
+  leading: [
+    { label: 'Welcome', path: '/', icon: 'home' },
+  ],
   modules: [
     {
       id: 'auction',
       label: 'Auction',
       helpKey: 'auction',
       items: [
-        { label: 'Request', path: '/', icon: 'request' },
+        { label: 'Request', path: '/request', icon: 'request', end: true },
         { label: 'Mimic Book', path: '/mimic-book', icon: 'book' },
         { label: 'Request History', path: '/request-history', icon: 'history' },
         { label: 'Past Auction', path: '/past-auction', icon: 'past' },
@@ -27,8 +30,6 @@ export const RAGNAROK_ORIGIN = {
       helpKey: 'raid',
       items: [
         { label: 'MasterList', path: '/attendance/masterlist', icon: 'request' },
-        { label: 'Profile', path: '/attendance/profile', icon: 'user' },
-        { label: 'Peak Hours', path: '/attendance/peak-hours', icon: 'peak' },
         { label: 'Raid Config', path: '/attendance/raidparty', icon: 'book' },
         { label: 'War Room', path: '/attendance/war-room', icon: 'swords' },
         { label: 'GVG Attendance', path: '/attendance/ocr-review', icon: 'gallery' },
