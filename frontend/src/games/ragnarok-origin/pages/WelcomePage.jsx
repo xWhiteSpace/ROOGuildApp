@@ -39,10 +39,12 @@ function gvgResultClass(value) {
 function GvgStat({ icon: Icon, label, value, valueClassName = 'text-slate-100' }) {
   const shown = value || '—';
   return (
-    <div className="flex h-full min-w-0 flex-col items-center rounded-xl border border-slate-800 bg-slate-950/40 px-2 py-2.5 text-center" title={label} aria-label={value ? `${label} ${value}` : label}>
-      <Icon size={14} className="shrink-0 text-slate-500" aria-hidden="true" />
-      <span className="mt-1 flex h-8 w-full items-center justify-center text-[10px] font-normal uppercase leading-tight tracking-wider text-slate-500">{label}</span>
-      <span className={`flex h-6 w-full items-center justify-center text-lg font-medium uppercase tabular-nums leading-none ${valueClassName}`}>{shown}</span>
+    <div className="flex h-full min-w-0 flex-col items-center rounded-xl border border-slate-800 bg-slate-950/40 px-2 pt-2 pb-2.5 text-center" title={label} aria-label={value ? `${label} ${value}` : label}>
+      <span className="flex w-full items-center justify-center gap-1.5 text-[10px] font-normal uppercase leading-tight tracking-wider text-slate-500">
+        <Icon size={14} className="shrink-0" aria-hidden="true" />
+        {label}
+      </span>
+      <span className={`mt-2 flex h-8 w-full items-center justify-center text-2xl font-medium uppercase tabular-nums leading-none ${valueClassName}`}>{shown}</span>
     </div>
   );
 }
@@ -704,7 +706,7 @@ export default function WelcomePage({ user }) {
             <div className="grid grid-cols-3 items-stretch gap-2">
               <GvgStat icon={Percent} label="Win Rate" value={win?.percent == null ? '' : `${win.percent}%`} />
               <GvgStat icon={Swords} label="Matches" value={win?.league ? String(win.league) : ''} />
-              <GvgStat icon={History} label="Previous Match" value={win?.previous || ''} valueClassName={gvgResultClass(win?.previous)} />
+              <GvgStat icon={History} label="Last Match" value={win?.previous || ''} valueClassName={gvgResultClass(win?.previous)} />
             </div>
             <Card className="min-w-0 lg:min-h-0 lg:flex-1" bodyClassName="lg:min-h-0 lg:flex-1 lg:overflow-hidden" title="Guild Events">
             <div className="flex gap-3 overflow-x-auto p-3 lg:h-full lg:overflow-y-auto">
