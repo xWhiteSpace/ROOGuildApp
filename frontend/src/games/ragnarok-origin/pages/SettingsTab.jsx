@@ -1060,6 +1060,19 @@ export default function SettingsTab({ user, onSessionUser }) {
                       </button>
                     </div>
 
+                    <label className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl px-3 h-11 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={ev.winRate === true}
+                        onChange={(e) => {
+                          const updated = { ...config.events, [editingEventKey]: { ...ev, winRate: e.target.checked } };
+                          setConfig((prev) => ({ ...prev, events: updated }));
+                        }}
+                        className="accent-indigo-500"
+                      />
+                      <span className="text-[11px] text-slate-300 font-medium">Count in win rate</span>
+                    </label>
+
                     {/* ⏱️ UNIFIED LIFECYCLE TIMELINE: EXTRA COMPACT AND STACKED FOR 1-GLANCE VISIBILITY */}
                     <div className="space-y-3">
                       <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wide"><IconSliders /> Event Cycle Setting</div>

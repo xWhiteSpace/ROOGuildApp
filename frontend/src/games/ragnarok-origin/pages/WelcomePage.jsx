@@ -703,7 +703,7 @@ export default function WelcomePage({ user }) {
           <div className="flex min-h-0 min-w-0 flex-col gap-2 lg:h-full">
             <div className="grid grid-cols-3 items-stretch gap-2">
               <GvgStat icon={Percent} label="Win Rate" value={win?.percent == null ? '' : `${win.percent}%`} />
-              <GvgStat icon={Swords} label="League Matches" value={win?.league ? String(win.league) : ''} />
+              <GvgStat icon={Swords} label="Matches" value={win?.league ? String(win.league) : ''} />
               <GvgStat icon={History} label="Previous Match" value={win?.previous || ''} valueClassName={gvgResultClass(win?.previous)} />
             </div>
             <Card className="min-w-0 lg:min-h-0 lg:flex-1" bodyClassName="lg:min-h-0 lg:flex-1 lg:overflow-hidden" title="Guild Events">

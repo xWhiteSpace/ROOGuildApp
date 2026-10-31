@@ -469,7 +469,16 @@ export async function readGvgStats(db, limit = 12) {
   return { rows, dates, scores };
 }
 
-export function summarizeGvgWinRate(wars) {
+export function winRateEventKeys(events) {
+  const keys = [];
+  for (const [key, event] of Object.entries(events || {})) {
+    if (event?.winRate === true) keys.push(String(key));
+  }
+  return keys;
+}
+
+export function summarizeGvgWinRate(wars, trackedKeys = null) {
+  const tracked = Array.isArray(trackedKeys) ? new Set(trackedKeys.map((key) => String(key))) : null;
   let win = 0;
   let lose = 0;
   let first = 0;
@@ -478,12 +487,14 @@ export function summarizeGvgWinRate(wars) {
   let previous = '';
   for (const war of wars || []) {
     const result = sheetGvgResult(war?.gvgResult);
+    if (!previous && result) previous = result;
+    const counted = !tracked || tracked.has(String(war?.eventKey || ''));
+    if (!counted) continue;
     if (!result) unmarked += 1;
     else if (result === 'Win') win += 1;
     else if (result === 'Lose') lose += 1;
     else if (result === '1st') first += 1;
     else other += 1;
-    if (!previous && result) previous = result;
   }
   const marked = win + lose + first + other;
   const league = win + lose;
@@ -493,5 +504,8 @@ export function summarizeGvgWinRate(wars) {
 
 export async function readGvgWinRate(db) {
   const wars = await loadSheetWars(db);
-  return summarizeGvgWinRate(wars);
+  const snap = await db.ref('settings/configuration/events').once('value');
+  const events = snap.exists() ? snap.val() : {};
+  const keys = winRateEventKeys(events);
+  return summarizeGvgWinRate(wars, keys.length ? keys : null);
 }
