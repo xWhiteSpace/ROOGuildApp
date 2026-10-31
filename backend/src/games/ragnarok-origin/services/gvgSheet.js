@@ -471,6 +471,7 @@ export async function readGvgStats(db, limit = 12) {
 
 export function summarizeGvgWinRate(wars) {
   let win = 0;
+  let lose = 0;
   let first = 0;
   let other = 0;
   let unmarked = 0;
@@ -479,13 +480,15 @@ export function summarizeGvgWinRate(wars) {
     const result = sheetGvgResult(war?.gvgResult);
     if (!result) unmarked += 1;
     else if (result === 'Win') win += 1;
+    else if (result === 'Lose') lose += 1;
     else if (result === '1st') first += 1;
     else other += 1;
     if (!previous && result) previous = result;
   }
-  const marked = win + first + other;
-  const percent = marked ? Math.round(((win + first) / marked) * 100) : null;
-  return { percent, win, first, other, unmarked, marked, previous };
+  const marked = win + lose + first + other;
+  const league = win + lose;
+  const percent = league ? Math.round((win / league) * 100) : null;
+  return { percent, win, lose, first, other, unmarked, marked, league, previous };
 }
 
 export async function readGvgWinRate(db) {
