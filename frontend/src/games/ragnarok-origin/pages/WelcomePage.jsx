@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Globe, Minus, Pencil, Plus, Search, Trash2, User, Users, X } from 'lucide-react';
+import { Check, Globe, History, Minus, Pencil, Percent, Plus, Search, Swords, Trash2, User, Users, X } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
 import { queryClient } from '../../../query/client';
 import {
@@ -28,6 +28,62 @@ const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const ANNOUNCEMENT_MAX = 4000;
 const ANNOUNCEMENT_TITLE_MAX = 80;
+
+function gvgResultClass(value) {
+  if (value === 'Win') return 'text-emerald-300';
+  if (value === 'Lose') return 'text-rose-300';
+  if (value) return 'text-amber-200';
+  return 'text-slate-100';
+}
+
+function GvgStat({ icon: Icon, label, value, valueClassName = 'text-slate-100' }) {
+  const shown = value || '—';
+  return (
+    <div className="flex h-full min-w-0 flex-col items-center rounded-xl border border-slate-800 bg-slate-950/40 px-2 py-2.5 text-center" title={label} aria-label={value ? `${label} ${value}` : label}>
+      <Icon size={14} className="shrink-0 text-slate-500" aria-hidden="true" />
+      <span className="mt-1 flex h-8 w-full items-center justify-center text-[10px] font-normal uppercase leading-tight tracking-wider text-slate-500">{label}</span>
+      <span className={`flex h-6 w-full items-center justify-center text-lg font-medium uppercase tabular-nums leading-none ${valueClassName}`}>{shown}</span>
+    </div>
+  );
+}
+
+function DriftingMessage({ text }) {
+  const frameRef = useRef(null);
+  const textRef = useRef(null);
+  const [drift, setDrift] = useState(0);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const body = textRef.current;
+    if (!frame || !body) return undefined;
+    const measure = () => {
+      const extra = body.scrollHeight - frame.clientHeight;
+      setDrift(extra > 2 ? extra : 0);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [text]);
+
+  const seconds = Math.max(8, (drift / 14) * 2);
+
+  return (
+    <div
+      ref={frameRef}
+      className={`group mt-1 max-h-16 overflow-x-hidden ${drift ? 'overflow-y-hidden motion-reduce:overflow-y-auto' : 'overflow-y-auto'}`}
+    >
+      <p
+        ref={textRef}
+        className="break-words text-xs leading-relaxed text-slate-300 whitespace-pre-wrap motion-reduce:animate-none group-hover:[animation-play-state:paused]"
+        style={drift ? { '--drift': `${drift}px`, animation: `welcome-drift ${seconds}s ease-in-out infinite` } : undefined}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
 
 function announcementParts(post) {
   const stored = String(post?.title || '').trim();
@@ -115,15 +171,16 @@ function pastDeadline(item, timezone) {
   return Date.now() > startMs - 24 * 60 * 60 * 1000;
 }
 
-function Card({ title, action, children, className = '' }) {
+function Card({ title, action, children, className = '', bodyClassName = '' }) {
   const fill = className.includes('h-full') || className.includes('flex-1');
+  const body = bodyClassName || (fill ? 'min-h-0 flex-1 overflow-hidden' : 'overflow-hidden');
   return (
     <section className={`flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/40 ${className}`}>
       <header className="relative z-20 flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-800/80 px-3">
         <h2 className="shrink-0 text-[10px] font-normal uppercase tracking-wider text-slate-400">{title}</h2>
         {action}
       </header>
-      <div className={fill ? 'min-h-0 flex-1 overflow-hidden' : 'overflow-hidden'}>{children}</div>
+      <div className={body}>{children}</div>
     </section>
   );
 }
@@ -218,13 +275,12 @@ function WelcomePeak() {
       >
         <User size={14} />
         See Mine
-        {mode === 'mine' && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
       </button>
     </div>
   );
 
   return (
-    <Card className="h-full" title="Peak Hours" action={toggle}>
+    <Card className="h-[12.5rem] lg:h-full" title="Peak Hours" action={toggle}>
       <div className="flex h-full min-h-0 flex-col px-3 py-2">
         <div className="mb-1 flex h-7 shrink-0 items-center gap-2">
           <p className={`min-w-0 flex-1 truncate text-[10px] font-normal ${(error || peakQuery.error) ? 'text-rose-400' : 'text-white'}`}>
@@ -377,7 +433,7 @@ function WelcomeBoard({ user }) {
   ) : null;
 
   return (
-    <Card className="h-full" title="Announcements" action={controls}>
+    <Card className="h-[12.5rem] lg:h-full" title="Announcements" action={controls}>
       <div className="flex h-full min-h-0 flex-col">
         {error && <p className="px-3 pt-2 text-[10px] text-rose-400">{error}</p>}
         {editor ? (
@@ -409,14 +465,14 @@ function WelcomeBoard({ user }) {
             </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
             {posts.length === 0 && (
               <p className="px-1 py-4 text-[11px] text-slate-500">No announcements yet.</p>
             )}
             {posts.map((item) => {
               const parts = announcementParts(item);
               return (
-                <article key={item.id} className="shrink-0 rounded-xl border border-slate-800 bg-slate-950/50 px-2.5 py-2">
+                <article key={item.id} className="min-w-0 shrink-0 rounded-xl border border-slate-800 bg-slate-950/50 px-2.5 py-2">
                   <div className="flex items-start gap-1">
                     <h3 className="min-w-0 flex-1 truncate pt-0.5 text-sm font-medium text-slate-100">{parts.title || 'Announcement'}</h3>
                     {isOfficer && (
@@ -431,7 +487,7 @@ function WelcomeBoard({ user }) {
                     )}
                   </div>
                   {parts.body && (
-                    <p className="mt-1 max-h-16 overflow-y-auto text-xs leading-relaxed text-slate-300 whitespace-pre-wrap">{parts.body}</p>
+                    <DriftingMessage text={parts.body} />
                   )}
                   <p className="mt-1.5 truncate text-right text-[10px] font-normal text-slate-500" title={item.authorName}>{item.authorName}</p>
                 </article>
@@ -565,11 +621,11 @@ export default function WelcomePage({ user }) {
   const roleLine = [job?.name, role?.name].filter(Boolean).join(' · ');
 
   return (
-    <div className="flex flex-col gap-3 font-sans md:h-[calc(100dvh-9.25rem)] md:overflow-hidden">
+    <div className="flex flex-col gap-3 font-sans lg:h-[calc(100dvh-9.25rem)] lg:overflow-hidden">
       <Band label="General" className="shrink-0">
-        <div className="grid h-[12.5rem] grid-cols-1 gap-3 lg:grid-cols-[16rem_minmax(0,1.2fr)_minmax(15rem,20rem)]">
+        <div className="grid grid-cols-1 gap-3 lg:h-[12.5rem] lg:grid-cols-[16rem_minmax(0,1.2fr)_minmax(16.5rem,22rem)]">
           <Card
-            className="h-full"
+            className="h-[12.5rem] lg:h-full"
             title="Profile"
             action={isOfficer ? (
               <div className="relative w-32">
@@ -644,13 +700,14 @@ export default function WelcomePage({ user }) {
 
       <Band label="GvG" className="min-h-0 flex-1">
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]">
-          <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
-            <div className="flex items-baseline gap-4 px-1 py-3">
-              <span className="text-[10px] font-normal uppercase tracking-wider text-slate-500">Win rate</span>
-              <span className="text-lg font-medium tabular-nums leading-none text-slate-100">{win?.percent == null ? '—' : `${win.percent}%`}</span>
+          <div className="flex min-h-0 min-w-0 flex-col gap-2 lg:h-full">
+            <div className="grid grid-cols-3 items-stretch gap-2">
+              <GvgStat icon={Percent} label="Win Rate" value={win?.percent == null ? '' : `${win.percent}%`} />
+              <GvgStat icon={Swords} label="Total Matches" value={win?.marked == null ? '' : String(win.marked)} />
+              <GvgStat icon={History} label="Previous Match" value={win?.previous || ''} valueClassName={gvgResultClass(win?.previous)} />
             </div>
-            <Card className="min-h-0 min-w-0 flex-1" title="Guild Events">
-            <div className="flex h-full gap-3 overflow-x-auto overflow-y-hidden p-3">
+            <Card className="min-w-0 lg:min-h-0 lg:flex-1" bodyClassName="lg:min-h-0 lg:flex-1 lg:overflow-hidden" title="Guild Events">
+            <div className="flex gap-3 overflow-x-auto p-3 lg:h-full lg:overflow-y-auto">
               {weekError && <p className="self-center px-1 text-xs text-rose-400">{weekError}</p>}
               {weekRows.length === 0 && (
                 <p className="self-center px-1 text-sm font-normal text-slate-500">No events this week.</p>
@@ -668,14 +725,14 @@ export default function WelcomePage({ user }) {
                     ? 'border-rose-500'
                     : 'border-slate-800';
                 return (
-                  <div key={compositeKey} className={`flex h-full w-[15rem] shrink-0 flex-col rounded-xl border bg-slate-950/40 px-3 py-3 ${edge}`}>
+                  <div key={compositeKey} className={`flex w-[15rem] shrink-0 flex-col rounded-xl border bg-slate-950/40 px-3 py-3 lg:min-h-full ${edge}`}>
                     <p className="text-xs font-normal uppercase tracking-wider text-slate-500">{dateParts.weekday}</p>
                     <div className="flex flex-1 flex-col justify-center">
                       <p className="text-4xl font-medium leading-none text-slate-100">{dateParts.day}</p>
                       <p className="mt-2 line-clamp-2 text-sm font-normal text-slate-200">{item.title}</p>
                       <p className="mt-1 font-mono text-xs font-normal text-slate-500">{item.timeStart}–{item.timeEnd}</p>
                     </div>
-                    <div className="mt-auto flex items-center gap-3 pt-3">
+                    <div className="mt-auto flex shrink-0 items-center gap-3 pt-3">
                       <span className="inline-flex items-center gap-1 text-emerald-400" title="Present">
                         <Users size={16} />
                         <span className="text-sm font-normal tabular-nums">{counts.present}</span>

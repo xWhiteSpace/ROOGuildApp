@@ -474,16 +474,18 @@ export function summarizeGvgWinRate(wars) {
   let first = 0;
   let other = 0;
   let unmarked = 0;
+  let previous = '';
   for (const war of wars || []) {
     const result = sheetGvgResult(war?.gvgResult);
     if (!result) unmarked += 1;
     else if (result === 'Win') win += 1;
     else if (result === '1st') first += 1;
     else other += 1;
+    if (!previous && result) previous = result;
   }
   const marked = win + first + other;
   const percent = marked ? Math.round(((win + first) / marked) * 100) : null;
-  return { percent, win, first, other, unmarked, marked };
+  return { percent, win, first, other, unmarked, marked, previous };
 }
 
 export async function readGvgWinRate(db) {
