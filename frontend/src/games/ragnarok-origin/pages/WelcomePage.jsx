@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Globe, History, Minus, Pencil, Percent, Plus, Search, Swords, Trash2, User, Users, X } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
@@ -196,6 +196,53 @@ function Band({ label, children, className = '' }) {
   );
 }
 
+function PeakLens({ x, y, dayKey, hour, hoursMap }) {
+  const dayIndex = Math.max(0, DAY_KEYS.indexOf(dayKey));
+  const days = [];
+  for (let index = dayIndex - 1; index <= dayIndex + 1; index += 1) {
+    if (index >= 0 && index < DAY_KEYS.length) days.push(index);
+  }
+  const hourStart = Math.max(0, hour - 2);
+  const hourEnd = Math.min(23, hour + 2);
+  const hourList = [];
+  for (let slot = hourStart; slot <= hourEnd; slot += 1) hourList.push(slot);
+  const width = 32 + hourList.length * 32;
+  let left = x - width / 2;
+  let top = y - 28 - (36 + days.length * 32);
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  if (top < 8) top = y + 28;
+
+  return (
+    <div className="pointer-events-none fixed z-[80]" style={{ left, top }} aria-hidden="true">
+      <div className="rounded-2xl border border-slate-500 bg-slate-950/95 p-2 shadow-2xl">
+        <div className="grid items-center gap-1" style={{ gridTemplateColumns: `2rem repeat(${hourList.length}, 1.75rem)` }}>
+          <div />
+          {hourList.map((slot) => (
+            <div key={slot} className={`text-center font-mono text-[11px] leading-none ${slot === hour ? 'font-bold text-white' : 'text-slate-500'}`}>
+              {String(slot).padStart(2, '0')}
+            </div>
+          ))}
+          {days.map((index) => {
+            const key = DAY_KEYS[index];
+            return (
+              <Fragment key={key}>
+                <div className={`font-mono text-[11px] leading-none ${key === dayKey ? 'font-bold text-white' : 'text-slate-500'}`}>{DAY_SHORT[index]}</div>
+                {hourList.map((slot) => {
+                  const on = (hoursMap[key] || []).includes(slot);
+                  const active = key === dayKey && slot === hour;
+                  return (
+                    <div key={slot} className={`h-7 w-7 rounded-md ${on ? 'bg-emerald-500' : 'bg-slate-900'} ${active ? 'ring-2 ring-white' : ''}`} />
+                  );
+                })}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WelcomePeak() {
   const peakQuery = usePeakHours();
   const data = peakQuery.data;
@@ -204,6 +251,9 @@ function WelcomePeak() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const paintRef = useRef(null);
+  const [lens, setLens] = useState(null);
+  const clearLensRef = useRef(() => {});
+  clearLensRef.current = () => setLens(null);
   const heatmap = Array.isArray(data?.heatmap) ? data.heatmap : [];
   const peak = data?.peak || null;
 
@@ -213,7 +263,10 @@ function WelcomePeak() {
   }, [data]);
 
   useEffect(() => {
-    const stopPaint = () => { paintRef.current = null; };
+    const stopPaint = () => {
+      paintRef.current = null;
+      clearLensRef.current();
+    };
     window.addEventListener('pointerup', stopPaint);
     window.addEventListener('pointercancel', stopPaint);
     return () => {
@@ -237,6 +290,60 @@ function WelcomePeak() {
       else current.delete(hour);
       return { ...prev, [dayKey]: [...current].sort((a, b) => a - b) };
     });
+  };
+
+  const cellFromPoint = (event) => {
+    const hit = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = hit?.closest?.('[data-peak-cell]');
+    if (!cell) return null;
+    const dayKey = cell.getAttribute('data-day');
+    const hourText = cell.getAttribute('data-hour');
+    const hour = Number(hourText);
+    if (!dayKey || hourText == null || !Number.isInteger(hour)) return null;
+    return { dayKey, hour };
+  };
+
+  const showLens = (event, dayKey, hour) => {
+    if (event.pointerType !== 'touch') return;
+    setLens({ x: event.clientX, y: event.clientY, dayKey, hour });
+  };
+
+  const startPaint = (event) => {
+    const cell = event.target?.closest?.('[data-peak-cell]');
+    if (!cell) return;
+    const dayKey = cell.getAttribute('data-day');
+    const hour = Number(cell.getAttribute('data-hour'));
+    if (!dayKey || !Number.isInteger(hour)) return;
+    event.preventDefault();
+    const nextOn = cell.getAttribute('data-on') !== 'true';
+    paintRef.current = { on: nextOn, last: `${dayKey}-${hour}` };
+    setCell(dayKey, hour, nextOn);
+    showLens(event, dayKey, hour);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* pointer already released */
+    }
+  };
+
+  const paintAt = (event) => {
+    const paint = paintRef.current;
+    if (!paint) return;
+    const cell = cellFromPoint(event);
+    if (!cell) return;
+    showLens(event, cell.dayKey, cell.hour);
+    const mark = `${cell.dayKey}-${cell.hour}`;
+    if (paint.last === mark) return;
+    paint.last = mark;
+    setCell(cell.dayKey, cell.hour, paint.on);
+  };
+
+  const stopPaint = (event) => {
+    paintRef.current = null;
+    setLens(null);
+    if (event?.currentTarget?.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const saveHours = async () => {
@@ -282,6 +389,7 @@ function WelcomePeak() {
   );
 
   return (
+    <>
     <Card className="h-[12.5rem] lg:h-full" title="Peak Hours" action={toggle}>
       <div className="flex h-full min-h-0 flex-col px-3 py-2">
         <div className="mb-1 flex h-7 shrink-0 items-center gap-2">
@@ -311,7 +419,13 @@ function WelcomePeak() {
             </div>
           ))}
         </div>
-        <div className="mx-auto mt-1 grid min-h-0 w-full max-w-[26rem] flex-1 grid-rows-7 gap-0.5">
+        <div
+          className={`mx-auto mt-1 grid min-h-0 w-full max-w-[26rem] flex-1 grid-rows-7 gap-0.5 ${mode === 'mine' ? 'touch-none' : ''}`}
+          onPointerDown={mode === 'mine' ? startPaint : undefined}
+          onPointerMove={mode === 'mine' ? paintAt : undefined}
+          onPointerUp={stopPaint}
+          onPointerCancel={stopPaint}
+        >
           {DAY_KEYS.map((key, dayIndex) => (
             <div key={key} className="grid min-h-[0.7rem] grid-cols-[2rem_repeat(24,minmax(0,1fr))] gap-x-0.5">
               <div className="self-center truncate font-mono text-[10px] leading-none text-slate-400">{DAY_SHORT[dayIndex]}</div>
@@ -322,17 +436,11 @@ function WelcomePeak() {
                     <button
                       key={`${key}-${hour}`}
                       type="button"
+                      data-peak-cell=""
+                      data-day={key}
+                      data-hour={hour}
+                      data-on={on ? 'true' : 'false'}
                       aria-label={`${DAY_SHORT[dayIndex]} ${String(hour).padStart(2, '0')}:00`}
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        const nextOn = !on;
-                        paintRef.current = { on: nextOn };
-                        setCell(key, hour, nextOn);
-                      }}
-                      onPointerEnter={() => {
-                        if (!paintRef.current) return;
-                        setCell(key, hour, paintRef.current.on);
-                      }}
                       className={`h-full min-h-0 w-full rounded-[2px] touch-none cursor-pointer ${on ? 'bg-emerald-500' : 'bg-slate-950'}`}
                     />
                   );
@@ -353,6 +461,10 @@ function WelcomePeak() {
         </div>
       </div>
     </Card>
+    {lens && mode === 'mine' && (
+      <PeakLens x={lens.x} y={lens.y} dayKey={lens.dayKey} hour={lens.hour} hoursMap={hours} />
+    )}
+    </>
   );
 }
 
