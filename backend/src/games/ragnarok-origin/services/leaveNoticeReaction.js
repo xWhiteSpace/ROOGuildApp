@@ -15,13 +15,20 @@ import { buildChainActionRow, buildRsvpAnnounceLine, sendGenRoomMessage } from '
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
 import { writeCommitment } from './scheduleService.js';
 
-const DOVE = '🕊️';
+const DOVE = '\u{1F54A}';
 const leaveLocks = new Map();
 
+function emojiToken(emoji) {
+  return String(emoji?.name || emoji?.identifier || '')
+    .replace(/\uFE0F/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export function isDoveReaction(emoji) {
-  const name = String(emoji?.name || '').trim();
-  if (!name) return false;
-  return name === DOVE || name.toLowerCase() === 'dove';
+  const token = emojiToken(emoji);
+  if (!token) return false;
+  return token === DOVE || token === 'dove' || token.includes('1f54a');
 }
 
 export function reactionTargetsLeaveNotice(channelId, cachedChannels) {
@@ -227,6 +234,7 @@ export async function handleLeaveNoticeReaction(reaction, user, deps = {}) {
     try {
       await message.fetch();
     } catch {
+      console.warn(`[leave-notice] skipped: fetch channel=${message.channelId}`);
       return { acted: false, reason: 'fetch' };
     }
   }
@@ -241,10 +249,18 @@ export async function handleLeaveNoticeReaction(reaction, user, deps = {}) {
     adminRoles: config.adminRoles,
     ownerDiscordId,
   })) {
+    console.warn(`[leave-notice] skipped: officer user=${user.id} channel=${message.channelId}`);
     return { acted: false, reason: 'officer' };
   }
 
   const author = message.author;
-  if (!author?.id || author.bot) return { acted: false, reason: 'author' };
-  return io.runWithTenant(guildId, () => markLeave(message, author, io));
+  if (!author?.id || author.bot) {
+    console.warn(`[leave-notice] skipped: author channel=${message.channelId}`);
+    return { acted: false, reason: 'author' };
+  }
+  const marked = await io.runWithTenant(guildId, () => markLeave(message, author, io));
+  if (!marked?.acted) {
+    console.warn(`[leave-notice] skipped: ${marked?.reason || 'unknown'} author=${author.id} channel=${message.channelId}`);
+  }
+  return marked;
 }

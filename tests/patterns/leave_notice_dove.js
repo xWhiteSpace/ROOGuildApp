@@ -18,6 +18,7 @@ import {
 import {
   decideLeaveWrite,
   handleLeaveNoticeReaction,
+  isDoveReaction,
   leaveFooterAfterMark,
 } from '../../backend/src/games/ragnarok-origin/services/leaveNoticeReaction.js';
 
@@ -81,6 +82,15 @@ export function leaveChannelResolvesFromCache() {
   const blank = mergeChannelFallback({}).leaveNoticeChannelId;
   clearTenantCaches(TENANT);
   return { mapped, stored, blank };
+}
+
+export function doveEmojiForms() {
+  return {
+    presented: isDoveReaction({ name: '🕊️' }),
+    bare: isDoveReaction({ name: '\u{1F54A}' }),
+    word: isDoveReaction({ name: 'dove' }),
+    other: isDoveReaction({ name: '👍' }),
+  };
 }
 
 export function footerCounts() {

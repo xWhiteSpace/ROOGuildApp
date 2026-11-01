@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   creditAndDeadlineRules,
+  doveEmojiForms,
   doveWritesOneLeave,
   footerCounts,
   handlerDoesNotLoadRosterOrConfig,
@@ -64,6 +65,12 @@ describe('GvG readiness dove marks Leave', () => {
     expect(counts.fromUnanswered).toBe('1 confirmed · 1 leave · 1 unanswered · Master List button to view names');
     expect(counts.fromConfirmed).toBe('0 confirmed · 1 leave · 2 unanswered · Master List button to view names');
     expect(counts.untouched).toBeNull();
+
+    const emoji = doveEmojiForms();
+    expect(emoji.presented).toBe(true);
+    expect(emoji.bare).toBe(true);
+    expect(emoji.word).toBe(true);
+    expect(emoji.other).toBe(false);
 
     const marked = await doveWritesOneLeave();
     expect(marked.result.acted).toBe(true);
