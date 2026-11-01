@@ -221,6 +221,64 @@ export async function loadMembersByIds(ids, tenantId) {
   return out;
 }
 
+export const LEAVE_MARK_STATUS_SQL =
+  `SELECT data->>'status' AS status
+   FROM attendance_commitments
+   WHERE tenant_id = $1 AND game_id = $2 AND event_key = $3 AND member_id = $4`;
+
+export const LEAVE_MARK_CREDIT_SQL =
+  `SELECT CASE
+     WHEN jsonb_typeof(data->'leaveCreditsRemaining') = 'number'
+     THEN (data->>'leaveCreditsRemaining')::int
+     ELSE NULL
+   END AS credits
+   FROM members
+   WHERE tenant_id = $1 AND game_id = $2 AND discord_id = $3`;
+
+export const LEAVE_MARK_CREDIT_UPDATE_SQL =
+  `UPDATE members
+   SET data = jsonb_set(data, '{leaveCreditsRemaining}', to_jsonb($4::int), true)
+   WHERE tenant_id = $1 AND game_id = $2 AND discord_id = $3`;
+
+export const READINESS_CARD_POINTER_SQL =
+  `SELECT data->>'messageId' AS message_id, data->>'channelId' AS channel_id
+   FROM json_docs
+   WHERE tenant_id = $1 AND game_id = $2 AND path = 'attendance/gvg_readiness_card'`;
+
+function integerCredit(value) {
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) return Number(value);
+  return null;
+}
+
+export async function readLeaveMarkSlice(eventKey, memberId, tenantId) {
+  const id = requireTenant(tenantId);
+  const gameId = currentGameId();
+  const [statusRes, creditRes] = await Promise.all([
+    query(LEAVE_MARK_STATUS_SQL, [id, gameId, String(eventKey), String(memberId)]),
+    query(LEAVE_MARK_CREDIT_SQL, [id, gameId, String(memberId)]),
+  ]);
+  const memberRow = creditRes.rows[0];
+  return {
+    status: statusRes.rows[0]?.status ?? null,
+    memberFound: Boolean(memberRow),
+    credits: memberRow ? integerCredit(memberRow.credits) : null,
+  };
+}
+
+export async function setLeaveCreditRemaining(memberId, credits, tenantId) {
+  const id = requireTenant(tenantId);
+  await query(LEAVE_MARK_CREDIT_UPDATE_SQL, [id, currentGameId(), String(memberId), credits]);
+}
+
+export async function readReadinessCardPointer(tenantId) {
+  const id = requireTenant(tenantId);
+  const { rows } = await query(READINESS_CARD_POINTER_SQL, [id, currentGameId()]);
+  const row = rows[0];
+  if (!row?.message_id) return null;
+  return { messageId: String(row.message_id), channelId: String(row.channel_id || '') };
+}
+
 /** True when any raid-roster member is missing an integer leaveCreditsRemaining. */
 export async function raidRosterMissingLeaveCredits(tenantId) {
   const id = requireTenant(tenantId);

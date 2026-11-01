@@ -1,5 +1,6 @@
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { handleLeaveNoticeReaction } from '../games/ragnarok-origin/services/leaveNoticeReaction.js';
 import { handleAuctionInteraction } from '../games/ragnarok-origin/services/discordInteractiveAuction.js'; // 🕹️ Route live button boards
 import { handleRequestDeckInteraction } from '../games/ragnarok-origin/services/discordRequestDeck.js';
 import { getTenant, loadTenantSettings, forEachOnboardedTenant, forEachEnabledGameTenant, mergeChannelFallback } from '../db/tenants.js';
@@ -41,9 +42,10 @@ export const discordClient = new Client({
     GatewayIntentBits.GuildMessages, 
     GatewayIntentBits.MessageContent, 
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessageReactions
   ],
-  partials: [Partials.Channel, Partials.Message],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
   // 🛑 RATE-LIMIT SHIELD: cap automatic REST retries so a single 429 can't
   // silently snowball into repeated requests that deepen a global soft-ban.
   rest: { retries: 1, timeout: 15_000, agent: resolvedProxyUrl ? undefined : discordDispatcher },
@@ -252,6 +254,12 @@ async function withGuildTenant(guildId, fn) {
           }).catch(() => {});
         }
       }
+      });
+    });
+
+    discordClient.on('messageReactionAdd', (reaction, user) => {
+      handleLeaveNoticeReaction(reaction, user, { discordClient }).catch((err) => {
+        console.error('[leave-notice] reaction skipped:', err.message);
       });
     });
 

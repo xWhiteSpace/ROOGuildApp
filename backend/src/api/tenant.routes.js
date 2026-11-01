@@ -241,6 +241,7 @@ router.post('/onboard', async (req, res) => {
     raidScreenshotChannelId: '',
     onboardingChannelId: '',
     messageChannelId: '',
+    leaveNoticeChannelId: '',
     warRooms: {},
   };
 
@@ -462,6 +463,7 @@ router.post('/game-setup', async (req, res) => {
     raidScreenshotChannelId: incoming.raidScreenshotChannelId || '',
     onboardingChannelId: incoming.onboardingChannelId || '',
     messageChannelId: incoming.messageChannelId || '',
+    leaveNoticeChannelId: incoming.leaveNoticeChannelId || '',
     warRooms: {
       DISCORD_WARROOM_ID_1: incoming.warRooms?.DISCORD_WARROOM_ID_1 || '',
       DISCORD_WARROOM_ID_2: incoming.warRooms?.DISCORD_WARROOM_ID_2 || '',

@@ -64,6 +64,7 @@ const EMPTY_DISCORD_CHANNELS = {
   raidScreenshotChannelId: '',
   onboardingChannelId: '',
   messageChannelId: '',
+  leaveNoticeChannelId: '',
   warRooms: {
     DISCORD_WARROOM_ID_1: '',
     DISCORD_WARROOM_ID_2: '',
@@ -920,6 +921,7 @@ export default function SettingsTab({ user, onSessionUser }) {
               ['raidScreenshotChannelId', 'Raid Screenshot (gallery after OCR Commit)'],
               ['onboardingChannelId', 'Onboarding hub card'],
               ['messageChannelId', 'Message board'],
+              ['leaveNoticeChannelId', 'Leave notice'],
             ].map(([key, label]) => (
               <label key={key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
                 {label}

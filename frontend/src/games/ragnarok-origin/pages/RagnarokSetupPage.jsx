@@ -24,6 +24,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
     raidScreenshotChannelId: '',
     onboardingChannelId: '',
     messageChannelId: '',
+    leaveNoticeChannelId: '',
     warRooms: { ...emptyRooms },
   });
 
@@ -41,6 +42,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
       raidScreenshotChannelId: channels.raidScreenshotChannelId || '',
       onboardingChannelId: channels.onboardingChannelId || '',
       messageChannelId: channels.messageChannelId || '',
+      leaveNoticeChannelId: channels.leaveNoticeChannelId || '',
       warRooms: { ...emptyRooms, ...(channels.warRooms || {}) },
     });
   }, [workspaceQuery.data]);
@@ -99,6 +101,7 @@ export default function RagnarokSetupPage({ onSessionUser }) {
         {field('Raid Screenshot (gallery after OCR Commit)', 'raidScreenshotChannelId', '')}
         {field('Onboarding hub card channel ID', 'onboardingChannelId', '')}
         {field('Message board channel ID', 'messageChannelId', '')}
+        {field('Leave notice channel ID', 'leaveNoticeChannelId', '')}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {Object.keys(emptyRooms).map((key, idx) => (
             <label key={key} className="block text-xs text-slate-400">
