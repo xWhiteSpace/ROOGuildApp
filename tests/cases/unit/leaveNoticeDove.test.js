@@ -84,6 +84,7 @@ describe('GvG readiness dove marks Leave', () => {
     }]);
     expect(marked.calls.credit).toEqual([{ memberId: 'member-1', credits: 2 }]);
     expect(marked.calls.announce[0]).toContain('Unavailable');
+    expect(marked.calls.salute).toEqual(['salute']);
     expect(marked.calls.edited[0].embeds[0].footer.text).toBe(
       '1 confirmed · 1 leave · 1 unanswered · Master List button to view names',
     );
@@ -92,5 +93,6 @@ describe('GvG readiness dove marks Leave', () => {
     expect(again.result.reason).toBe('already_leave');
     expect(again.calls.write).toEqual([]);
     expect(again.calls.credit).toEqual([]);
+    expect(again.calls.salute).toEqual([]);
   });
 });

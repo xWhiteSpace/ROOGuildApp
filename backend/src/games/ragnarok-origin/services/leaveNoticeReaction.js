@@ -16,6 +16,7 @@ import { getRaidCycleStatus } from '../raidTimeWindow.js';
 import { writeCommitment } from './scheduleService.js';
 
 const DOVE = '\u{1F54A}';
+const SALUTE = '\u{1FAE1}';
 const leaveLocks = new Map();
 
 function emojiToken(emoji) {
@@ -179,6 +180,11 @@ async function markLeave(message, author, io) {
     } catch (err) {
       console.error('[leave-notice] readiness count skipped:', err.message);
     }
+    try {
+      await io.reactSalute(message);
+    } catch (err) {
+      console.error('[leave-notice] salute skipped:', err.message);
+    }
     return { acted: true, reason: 'leave', compositeKey, displayName };
   });
 }
@@ -199,6 +205,10 @@ function ioFrom(deps) {
     sendGenRoomMessage,
     buildChainActionRow,
     enqueueDiscordCall,
+    reactSalute: async (message) => {
+      if (typeof message?.react !== 'function') return;
+      await enqueueDiscordCall(() => message.react(SALUTE));
+    },
     runWithTenant,
     nowMs: () => Date.now(),
     editLeaveCount,

@@ -173,6 +173,7 @@ function harness(overrides = {}) {
     credit: [],
     announce: [],
     edited: [],
+    salute: [],
   };
   const card = {
     embeds: [{
@@ -196,6 +197,7 @@ function harness(overrides = {}) {
     setLeaveCreditRemaining: async (memberId, credits) => { calls.credit.push({ memberId, credits }); },
     readReadinessCardPointer: async () => ({ messageId: 'card-1', channelId: 'war-1' }),
     sendGenRoomMessage: async (content) => { calls.announce.push(content); },
+    reactSalute: async () => { calls.salute.push('salute'); },
     buildChainActionRow: () => ({ type: 1 }),
     enqueueDiscordCall: (fn) => fn(),
     runWithTenant: (_id, fn) => fn(),
