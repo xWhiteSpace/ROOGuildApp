@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import {
+  ArrowDown,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -22,12 +24,24 @@ import {
 } from '@guildname/shared/attendanceStatus';
 import { apiFetch } from '../../../services/apiClient';
 import { queryClient } from '../../../query/client';
+import PixelFire from '../components/PixelFire';
+import { sortRankingRows } from '@guildname/shared/gvgRank';
 import { gvgSheetOptions, invalidateGvgSheet, invalidateGvgSheetWar, invalidateRaidHistory, invalidateWinRate, useGvgSheet, useSettings } from '../../../query/hooks';
 
 const SLIDES = [
   { id: 'attendance', title: 'Attendance' },
   { id: 'event', title: 'GvG history by event' },
+  { id: 'rankings', title: 'GvG history by Attendance Pts' },
 ];
+
+function podiumMetal(rank) {
+  if (rank === 1) return { row: 'podium-blue', tone: 'blue' };
+  if (rank === 2) return { row: 'podium-purple', tone: 'purple' };
+  if (rank === 3) return { row: 'podium-bronze', tone: 'classic' };
+  return null;
+}
+
+const RANK_GRID = 'grid grid-cols-[4.5rem_minmax(0,1fr)_6.5rem_8rem_6rem] items-center';
 
 function viewedAttendanceOffsets() {
   const offsets = [];
@@ -707,6 +721,7 @@ export default function AttendanceHistoryTab({ user }) {
   });
   const [pages, setPages] = useState(viewedAttendanceOffsets);
   const [search, setSearch] = useState('');
+  const [rankSort, setRankSort] = useState('total');
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [expandedId, setExpandedId] = useState('');
   const [swordDraft, setSwordDraft] = useState(null);
@@ -722,6 +737,7 @@ export default function AttendanceHistoryTab({ user }) {
     queries: pages.map((pageOffset) => gvgSheetOptions({ view: 'attendance', offset: pageOffset })),
   });
   const catalogQuery = useGvgSheet({ view: 'catalog' }, { enabled: slide.id === 'event' });
+  const rankingsQuery = useGvgSheet({ view: 'rankings' }, { enabled: slide.id === 'rankings' });
   const eventQuery = useGvgSheet(
     { view: 'event', sessionId: selectedSessionId },
     { enabled: slide.id === 'event' && Boolean(selectedSessionId) },
@@ -976,16 +992,27 @@ export default function AttendanceHistoryTab({ user }) {
     });
   }, [pageQueries, attendanceDates, attendanceScores, search, roles]);
 
+  const rankingRows = useMemo(() => {
+    const sorted = sortRankingRows(rankingsQuery.data?.rows || [], rankSort);
+    const q = search.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((row) => String(row.displayName || '').toLowerCase().includes(q));
+  }, [rankingsQuery.data, search, rankSort]);
+
   const loading = slide.id === 'attendance'
     ? Boolean(pageQueries[0]?.isLoading && !pageQueries[0]?.data)
     : slide.id === 'event'
       ? catalogQuery.isLoading && !catalogQuery.data
-      : false;
+      : slide.id === 'rankings'
+        ? Boolean(rankingsQuery.isLoading && !rankingsQuery.data)
+        : false;
   const sheetError = slide.id === 'attendance'
     ? pageQueries.find((query) => query.error)?.error
     : slide.id === 'event'
       ? (catalogQuery.error || eventQuery.error)
-      : null;
+      : slide.id === 'rankings'
+        ? rankingsQuery.error
+        : null;
 
   return (
     <div className="flex h-[calc(100vh-12rem)] min-h-0 w-full min-w-0 flex-col gap-3 font-sans">
@@ -1014,13 +1041,13 @@ export default function AttendanceHistoryTab({ user }) {
           </div>
         </div>
         <div className="flex justify-center lg:justify-end">
-          {slide.id === 'attendance' && (
+          {(slide.id === 'attendance' || slide.id === 'rankings') && (
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-2 text-slate-500" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search the sheet..."
+                placeholder={slide.id === 'rankings' ? 'Search players...' : 'Search the sheet...'}
                 className="w-56 rounded-xl border border-slate-800 bg-slate-950 py-1.5 pl-7 pr-3 text-[11px] text-slate-200 outline-none"
               />
             </div>
@@ -1146,6 +1173,59 @@ export default function AttendanceHistoryTab({ user }) {
             />
             )}
           </div>
+        </div>
+      )}
+
+      {!loading && slide.id === 'rankings' && (
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950">
+          <div className={`sticky top-0 z-20 border-b border-slate-800 bg-slate-950 text-[10px] uppercase tracking-wider text-slate-500 ${RANK_GRID}`}>
+            <div className="px-4 py-2">Rank</div>
+            <div className="px-4 py-2">Player</div>
+            <div className="px-4 py-2 text-right" title="Total wars. Each row is wars since that player joined.">GvG({Number(rankingsQuery.data?.wars) || 0})</div>
+            <div className="px-4 py-2 text-right">
+              <button type="button" onClick={() => setRankSort('total')} className={`inline-flex items-center gap-1 cursor-pointer ${rankSort === 'total' ? 'text-indigo-300' : 'hover:text-slate-300'}`} title="Sort by total points">
+                Total
+                {rankSort === 'total' ? <ArrowDown className="h-3 w-3" aria-hidden="true" /> : <ArrowUpDown className="h-3 w-3 opacity-60" aria-hidden="true" />}
+              </button>
+            </div>
+            <div className="px-4 py-2 text-right" title="Points since joined / (4 × GvG)">
+              <button type="button" onClick={() => setRankSort('rate')} className={`inline-flex items-center gap-1 cursor-pointer ${rankSort === 'rate' ? 'text-indigo-300' : 'hover:text-slate-300'}`} title="Sort by rate">
+                Rate
+                {rankSort === 'rate' ? <ArrowDown className="h-3 w-3" aria-hidden="true" /> : <ArrowUpDown className="h-3 w-3 opacity-60" aria-hidden="true" />}
+              </button>
+            </div>
+          </div>
+          {rankingRows.map((row) => {
+            const metal = podiumMetal(row.rank);
+            return (
+              <div key={row.uid} className={`relative overflow-hidden border-t border-slate-900 text-[11px] ${metal?.row || ''}`}>
+                {metal && <PixelFire tone={metal.tone} />}
+                <div className={`relative z-10 ${RANK_GRID}`}>
+                  <div className={`px-4 py-2 font-bold tabular-nums ${metal ? '' : 'text-slate-500'}`}>{row.rank}</div>
+                  <div className={`px-4 py-2 font-bold ${metal ? '' : 'text-slate-200'}`}>
+                    {row.displayName || row.uid}
+                    {row.isDummy && (
+                      <span className={`ml-2 rounded px-1.5 py-0.5 align-middle text-[8px] font-mono font-black uppercase tracking-wide ${metal ? 'border border-current/40 text-current' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                        Dummy
+                      </span>
+                    )}
+                  </div>
+                  <div className={`px-4 py-2 text-right font-normal tabular-nums ${metal ? '' : 'text-slate-400'}`}>
+                    {row.sinceJoined == null ? '—' : row.sinceJoined}
+                  </div>
+                  <div className={`px-4 py-2 text-right font-normal tabular-nums ${metal ? '' : 'text-slate-300'}`}>{Number(row.total).toFixed(2)} pts</div>
+                  <div className={`px-4 py-2 text-right font-normal tabular-nums ${metal ? '' : 'text-slate-300'}`}>
+                    {row.rate == null ? '—' : `${Number(row.rate).toFixed(2)}%`}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {!rankingRows.length && (
+            <div className="px-4 py-10 text-center text-[11px] text-slate-500">
+              {search.trim() ? 'No players match.' : 'No active players.'}
+            </div>
+          )}
         </div>
       )}
 

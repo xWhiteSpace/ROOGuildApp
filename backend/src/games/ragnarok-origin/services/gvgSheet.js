@@ -1,9 +1,10 @@
-import { buildSheetCell, cellWithSwords } from '@guildname/shared/gvgCell';
+import { MAX_RAID_SCORE, buildSheetCell, cellWithSwords } from '@guildname/shared/gvgCell';
 import { loadSessionArchive } from '../../../db/database.js';
 import { getCurrentGameId, getCurrentTenantId } from '../../../db/tenantContext.js';
-import { membershipWindows, warInWindow } from './memberHistory.js';
+import { loadMemberHistory, membershipWindows, warInWindow, windowsFrom } from './memberHistory.js';
 
 export const GVG_SHEET_PATH = 'attendance/gvg_sheet';
+export const GVG_RANKINGS_PATH = 'attendance/gvg_rankings';
 export const SHEET_PAGE = 8;
 const SHEET_INDEX_MAX = 50;
 
@@ -500,6 +501,129 @@ export function summarizeGvgWinRate(wars, trackedKeys = null) {
   const league = win + lose;
   const percent = league ? Math.round((win / league) * 100) : null;
   return { percent, win, lose, first, other, unmarked, marked, league, previous };
+}
+
+function roundScore(value) {
+  return Number(Number(value).toFixed(2));
+}
+
+function eventDay(value) {
+  const day = String(value || '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : '';
+}
+
+export function sumGvgRankingTotals(archive) {
+  const totals = {};
+  const dates = [];
+  const ledger = [];
+  let wars = 0;
+  const list = Array.isArray(archive) ? archive : Object.values(archive || {});
+  for (const war of list) {
+    if (!war || typeof war !== 'object' || Array.isArray(war)) continue;
+    if (!war.id && !war.eventDate && !war.sheet) continue;
+    wars += 1;
+    const day = eventDay(war.eventDate);
+    const scores = {};
+    const cells = war.sheet?.cells;
+    if (cells && typeof cells === 'object') {
+      for (const [uid, cell] of Object.entries(cells)) {
+        const id = String(uid || '').trim();
+        const score = Number(cell?.score);
+        if (!id || !Number.isFinite(score)) continue;
+        totals[id] = roundScore((totals[id] || 0) + score);
+        if (day) scores[id] = roundScore((scores[id] || 0) + score);
+      }
+    }
+    if (day) {
+      dates.push(day);
+      ledger.push(scores);
+    }
+  }
+  return { wars, totals, dates, ledger };
+}
+
+export function pointsSinceJoined(dates, ledger, windows, uid) {
+  if (gvgSinceJoined(dates, windows, uid) == null) return null;
+  let sum = 0;
+  for (let i = 0; i < (dates || []).length; i += 1) {
+    if (!warInWindow(dates[i], windows, uid)) continue;
+    const score = Number(ledger?.[i]?.[String(uid)]);
+    if (Number.isFinite(score)) sum += score;
+  }
+  return roundScore(sum);
+}
+
+export function attendanceRate(points, wars) {
+  const count = Number(wars);
+  const earned = Number(points);
+  if (!Number.isFinite(count) || count <= 0 || !Number.isFinite(earned)) return null;
+  return roundScore((earned / (count * MAX_RAID_SCORE)) * 100);
+}
+
+export function gvgSinceJoined(dates, windows, uid) {
+  const stays = windows?.[String(uid)] || [];
+  if (!stays.some((stay) => stay?.joined)) return null;
+  let count = 0;
+  for (const date of dates || []) {
+    if (warInWindow(date, windows, uid)) count += 1;
+  }
+  return count;
+}
+
+export function rankGvgAttendance(members, stored, windows = {}) {
+  const totals = stored?.totals && typeof stored.totals === 'object' ? stored.totals : {};
+  const dates = Array.isArray(stored?.dates) ? stored.dates : [];
+  const ledger = Array.isArray(stored?.ledger) ? stored.ledger : [];
+  const rows = [];
+  for (const [uid, member] of Object.entries(members || {})) {
+    if (!member || member.isRaidRoster !== true || member.status === 'Ghost') continue;
+    const raw = Number(totals[String(uid)]);
+    const sinceJoined = gvgSinceJoined(dates, windows, uid);
+    const earned = pointsSinceJoined(dates, ledger, windows, uid);
+    rows.push({
+      uid: String(uid),
+      displayName: String(member.displayName || ''),
+      isDummy: member.isDummy === true,
+      total: Number.isFinite(raw) ? roundScore(raw) : 0,
+      sinceJoined,
+      rate: attendanceRate(earned, sinceJoined),
+    });
+  }
+  rows.sort((a, b) => {
+    if (a.total !== b.total) return b.total - a.total;
+    return a.displayName.localeCompare(b.displayName);
+  });
+  return rows.map((row, index) => ({ rank: index + 1, ...row }));
+}
+
+export async function rebuildGvgRankings(db) {
+  const snap = await db.ref('attendance/session_archive').once('value');
+  const archive = snap.exists() ? snap.val() : {};
+  const summed = sumGvgRankingTotals(archive);
+  const doc = {
+    wars: summed.wars,
+    totals: summed.totals,
+    dates: summed.dates,
+    ledger: summed.ledger,
+    updatedAt: Date.now(),
+  };
+  await db.ref(GVG_RANKINGS_PATH).set(doc);
+  return doc;
+}
+
+export async function readGvgRankings(db) {
+  const snap = await db.ref(GVG_RANKINGS_PATH).once('value');
+  let stored = snap.exists() ? snap.val() : null;
+  if (!stored?.totals || typeof stored.totals !== 'object' || !Array.isArray(stored.dates) || !Array.isArray(stored.ledger)) {
+    stored = await rebuildGvgRankings(db);
+  }
+  const membersSnap = await db.ref('auction/members').once('value');
+  const members = membersSnap.exists() ? membersSnap.val() || {} : {};
+  const stays = await loadMemberHistory(db);
+  return {
+    wars: Number(stored.wars) || 0,
+    rows: rankGvgAttendance(members, stored, windowsFrom(members, stays)),
+  };
 }
 
 export async function readGvgWinRate(db) {

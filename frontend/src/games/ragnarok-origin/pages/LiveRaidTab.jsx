@@ -42,6 +42,7 @@ import MemberTrendHoverTip from '../components/MemberTrendHoverTip';
 import { DEFAULT_TZ, guildWallTimeToUtcMs, formatGuildTimeHhMm } from '../../../utils/guildTime';
 import { apiFetch } from '../../../services/apiClient';
 import {
+  invalidateGvgSheet,
   useCommitments,
   useCompositionsList,
   useMembers,
@@ -992,6 +993,7 @@ export default function LiveRaidTab({ user }) {
       });
       const data = await res.json();
       if (data.success) {
+        await invalidateGvgSheet();
         alert("Raid finalized and archived to history ledger.");
         setSession(null);
         setLocalGrids({});

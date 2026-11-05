@@ -17,3 +17,18 @@ body {
   50%, 64% { transform: translateY(calc(var(--drift) * -1)); }
   100% { transform: translateY(0); }
 }
+
+.podium-blue {
+  background: linear-gradient(to bottom, #7dd3fc, #0284c7 45%, #1e3a8a);
+  color: #082f49;
+}
+
+.podium-purple {
+  background: linear-gradient(to bottom, #d8b4fe, #7e22ce 45%, #4c1d95);
+  color: #2e1065;
+}
+
+.podium-bronze {
+  background: linear-gradient(to bottom, #d97706, #9a3412 46%, #7c2d12);
+  color: #431407;
+}

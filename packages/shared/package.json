@@ -7,6 +7,7 @@
     "./raidCycle": "./raidCycle.js",
     "./attendanceStatus": "./attendanceStatus.js",
     "./gvgCell": "./gvgCell.js",
+    "./gvgRank": "./gvgRank.js",
     "./inGameAlias": "./inGameAlias.js",
     "./allocatePreview": "./allocatePreview.js",
     "./mimicBookRoster": "./mimicBookRoster.js",

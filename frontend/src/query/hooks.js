@@ -207,6 +207,7 @@ export function invalidateGvgSheetWar(sessionId) {
       if (query.queryKey?.[0] !== 'gvg-sheet') return false;
       const params = query.queryKey[1] || {};
       if (params.view === 'catalog' || params.view === 'rows') return false;
+      if (params.view === 'rankings') return true;
       if (params.sessionId === id) return true;
       const data = query.state?.data;
       if (data?.scores && Object.prototype.hasOwnProperty.call(data.scores, id)) return true;

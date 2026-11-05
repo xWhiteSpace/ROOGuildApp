@@ -32,8 +32,10 @@ import {
   readGvgDetails,
   readGvgEvent,
   readGvgMember,
+  readGvgRankings,
   readGvgRows,
   readGvgStats,
+  rebuildGvgRankings,
   warSheetFromRoster,
 } from '../games/ragnarok-origin/services/gvgSheet.js';
 
@@ -704,6 +706,7 @@ async function endLiveRaidSessionInternal(s) {
     rows: appendRows(current?.rows, warSheet.rows),
   }));
   await touchSessionArchiveIndex({ id: sessionHistoryId, endedAt: now });
+  await rebuildGvgRankings(db);
   noteLiveSessionCleared();
 }
 
@@ -958,6 +961,7 @@ router.delete('/history/:sessionId', async (req, res) => {
     const db = getTenantStore();
     await db.ref(`attendance/session_archive/${sessionId}`).remove();
     await touchSessionArchiveIndex({ id: sessionId, remove: true });
+    await rebuildGvgRankings(db);
     return res.json({ success: true, message: `Session ${sessionId} deleted.` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -1074,6 +1078,9 @@ router.get('/history/sheet', async (req, res) => {
     if (view === 'stats') {
       const limit = parseInt(req.query.limit, 10) || 12;
       return res.json({ success: true, ...(await readGvgStats(db, limit)) });
+    }
+    if (view === 'rankings') {
+      return res.json({ success: true, ...(await readGvgRankings(db)) });
     }
     return res.json({ success: true, ...(await readGvgAttendance(db, offset)) });
   } catch (err) {
