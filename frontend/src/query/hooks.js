@@ -20,7 +20,7 @@ export const queryKeys = {
   auctionStats: (uid) => ['auction-stats', uid],
   peakHours: () => ['peak-hours'],
   winRate: () => ['gvg-win-rate'],
-  announcements: () => ['announcements'],
+  announcements: (source = 'general') => ['announcements', source],
   commitments: (weekMonday = 'all') => ['commitments', weekMonday],
   compositionsList: () => ['compositions', 'list'],
   composition: (id) => ['compositions', 'detail', id],
@@ -678,13 +678,20 @@ export function invalidateWinRate() {
   return queryClient.invalidateQueries({ queryKey: queryKeys.winRate() });
 }
 
-export function useAnnouncements(options = {}) {
+export function useAnnouncements(source = 'general', options = {}) {
+  const channel = source === 'auction' ? 'auction' : 'general';
   return useQuery({
-    queryKey: queryKeys.announcements(),
+    queryKey: queryKeys.announcements(channel),
     queryFn: async () => {
-      const res = await apiFetch('/api/attendance/announcements');
+      const path = channel === 'auction'
+        ? '/api/attendance/announcements?source=auction'
+        : '/api/attendance/announcements';
+      const res = await apiFetch(path);
       const data = await readSuccess(res, 'Could not load announcements.');
-      return data.announcements || [];
+      return {
+        announcements: data.announcements || [],
+        unmapped: data.unmapped === true,
+      };
     },
     staleTime: TWO_MIN,
     ...options,
@@ -692,7 +699,7 @@ export function useAnnouncements(options = {}) {
 }
 
 export function invalidateAnnouncements() {
-  return queryClient.invalidateQueries({ queryKey: queryKeys.announcements() });
+  return queryClient.invalidateQueries({ queryKey: ['announcements'] });
 }
 
 export function invalidateWarRoom() {

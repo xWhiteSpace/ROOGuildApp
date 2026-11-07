@@ -64,6 +64,8 @@ const EMPTY_DISCORD_CHANNELS = {
   raidScreenshotChannelId: '',
   onboardingChannelId: '',
   messageChannelId: '',
+  announcementChannelId: '',
+  auctionBoardChannelId: '',
   leaveNoticeChannelId: '',
   warRooms: {
     DISCORD_WARROOM_ID_1: '',
@@ -916,6 +918,8 @@ export default function SettingsTab({ user, onSessionUser }) {
               ['auctionChannelId', 'Auction announce'],
               ['aucreqChannelId', 'Auction request / claim card'],
               ['genroomId', 'General room'],
+              ['announcementChannelId', 'General announcements'],
+              ['auctionBoardChannelId', 'Auction board'],
               ['attendanceId', 'Weekly attendance thread parent (one text channel)'],
               ['warAnnounceChannelId', 'War announce (one text channel for cards)'],
               ['raidScreenshotChannelId', 'Raid Screenshot (gallery after OCR Commit)'],

@@ -14,6 +14,7 @@ import {
   applyPresentUids,
   assignUnmatched,
   linkOcrReading,
+  setOcrDictionaryMark,
   unlinkOcrReading,
   persistOcrRelease,
   finalizeOcrCommit,
@@ -257,7 +258,17 @@ router.patch('/:id', async (req, res) => {
         toUid: uid,
         text,
         remember: correction.remember !== false,
+        displacedGapId: correction.displacedGapId ? String(correction.displacedGapId) : '',
       });
+    }
+    const dictionaryMark = req.body?.dictionaryMark;
+    if (dictionaryMark && typeof dictionaryMark === 'object') {
+      const uid = String(dictionaryMark.uid || '');
+      if (!uid || !members[uid]) {
+        return res.status(400).json({ success: false, error: 'Member not on the roster.' });
+      }
+      const marked = setOcrDictionaryMark(review, uid, dictionaryMark.remember === true);
+      if (!marked) return res.status(400).json({ success: false, error: 'That member has no OCR reading to register.' });
     }
     const unlink = req.body?.unlink;
     if (unlink && typeof unlink === 'object') {
@@ -277,16 +288,17 @@ router.patch('/:id', async (req, res) => {
       fields.add('present');
       fields.add('absent');
     }
-    if ((req.body?.unmatchedId && req.body?.uid) || correction?.uid || unlink?.uid) {
+    if ((req.body?.unmatchedId && req.body?.uid) || correction?.uid || dictionaryMark?.uid || unlink?.uid) {
       ['ocrMatches', 'present', 'absent', 'unmatched', 'slotGaps', 'pendingUnmatchedId'].forEach((field) => fields.add(field));
     }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult')) fields.add('gvgResult');
     if (fields.size) await saveReviewFields(review, [...fields]);
     else await saveReview(review);
-    const linkedOnly = Boolean(correction?.uid) && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid) && !unlink?.uid;
-    const unlinkedOnly = Boolean(unlink?.uid) && !correction?.uid && !Array.isArray(req.body?.presentUids);
-    const resultOnly = Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult') && !linkedOnly && !unlinkedOnly && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
-    if (!linkedOnly && !unlinkedOnly && !resultOnly) await refreshReviewMessage(review, members, null).catch(() => {});
+    const linkedOnly = Boolean(correction?.uid) && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid) && !dictionaryMark?.uid && !unlink?.uid;
+    const markOnly = Boolean(dictionaryMark?.uid) && !correction?.uid && !unlink?.uid && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
+    const unlinkedOnly = Boolean(unlink?.uid) && !correction?.uid && !dictionaryMark?.uid && !Array.isArray(req.body?.presentUids);
+    const resultOnly = Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult') && !linkedOnly && !markOnly && !unlinkedOnly && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
+    if (!linkedOnly && !markOnly && !unlinkedOnly && !resultOnly) await refreshReviewMessage(review, members, null).catch(() => {});
     return res.json({ success: true, id: review.id, presentCount: Object.keys(review.present || {}).length });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

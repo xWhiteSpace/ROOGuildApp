@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, Bot, ChevronLeft, ChevronRight, Filter, Search, Trash2, Upload } from 'lucide-react';
+import { ArrowDown01, ArrowDownAZ, ArrowLeft, ArrowUp10, ArrowUpZA, BookmarkPlus, Bot, ChevronLeft, ChevronRight, Filter, Search, Trash2, Unlink, Upload } from 'lucide-react';
 import { foldConfusable } from '@guildname/shared/inGameAlias';
 import { apiFetch } from '../../../services/apiClient';
 import { invalidateMembers, invalidateOcrReviews, useOcrReview, useOcrReviewEvents, useOcrReviews } from '../../../query/hooks';
@@ -62,15 +62,53 @@ function slotGapsFromReview(review) {
   return (review?.unmatched || []).map((row) => ({ ...row, category: 'unmatch' }));
 }
 
+function seatPos(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function readingDiffers(previous, incoming) {
+  const previousImage = Number.isInteger(previous?.imageIndex) ? previous.imageIndex : null;
+  const incomingImage = Number.isInteger(incoming?.imageIndex) ? incoming.imageIndex : null;
+  return String(previous?.ocrText || '').trim() !== String(incoming?.ocrText || '').trim()
+    || seatPos(previous?.ocrCol) !== seatPos(incoming?.ocrCol)
+    || seatPos(previous?.ocrRow) !== seatPos(incoming?.ocrRow)
+    || previousImage !== incomingImage;
+}
+
 function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, remember }) {
   const gaps = slotGapsFromReview(review);
   const gap = unmatchedId ? gaps.find((row) => row.id === unmatchedId) : null;
   const fromRow = fromUid ? (roster || []).find((row) => row.uid === fromUid) : null;
+  const target = (roster || []).find((row) => row.uid === uid);
   const col = gap?.ocrCol ?? fromRow?.ocrCol ?? null;
   const ocrRow = gap?.ocrRow ?? fromRow?.ocrRow ?? null;
   const imageIndex = Number.isInteger(gap?.imageIndex)
     ? gap.imageIndex
     : (Number.isInteger(fromRow?.imageIndex) ? fromRow.imageIndex : null);
+  const hadSeat = Boolean(target) && (readingText(target.ocrText) || target.ocrCol || target.ocrRow);
+  const displacing = hadSeat && readingDiffers(
+    target,
+    { ocrText: text, ocrCol: col, ocrRow, imageIndex },
+  );
+  const displacedGapId = displacing ? `u${Date.now().toString(36)}` : '';
+  let slotGaps = gaps.filter((row) => row.id !== unmatchedId);
+  let unmatched = (review?.unmatched || []).filter((row) => row.id !== unmatchedId);
+  if (displacing) {
+    const returnedText = readingText(target.ocrText);
+    const returned = {
+      id: displacedGapId,
+      text: returnedText,
+      category: returnedText ? 'unmatch' : 'missing',
+      imageSource: target.imageSource || '',
+      imageIndex: Number.isInteger(target.imageIndex) ? target.imageIndex : null,
+      ocrCol: target.ocrCol ?? null,
+      ocrRow: target.ocrRow ?? null,
+    };
+    slotGaps = [...slotGaps, returned];
+    if (returnedText) unmatched = [...unmatched, returned];
+  }
   const nextRoster = (roster || []).map((row) => {
     if (fromUid && row.uid === fromUid && fromUid !== uid) {
       return {
@@ -88,6 +126,18 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
       };
     }
     if (row.uid !== uid) return row;
+    if (displacing) {
+      return {
+        ...row,
+        ocrText: text,
+        ocrState: 'match',
+        imageSource: gap?.imageSource || fromRow?.imageSource || '',
+        imageIndex,
+        ocrCol: col,
+        ocrRow,
+        ocrPosition: formatOcrPosition(col, ocrRow),
+      };
+    }
     return {
       ...row,
       present: true,
@@ -105,10 +155,11 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
   return {
     review: {
       ...review,
-      slotGaps: gaps.filter((row) => row.id !== unmatchedId),
-      unmatched: (review?.unmatched || []).filter((row) => row.id !== unmatchedId),
+      slotGaps,
+      unmatched,
     },
     roster: nextRoster,
+    displacedGapId,
   };
 }
 
@@ -706,6 +757,36 @@ export default function OcrReviewTab({ user }) {
     return persistPresent(rosterRef.current);
   };
 
+  const toggleRegister = (uid) => {
+    const currentReview = reviewRef.current || review;
+    if (!reviewId || currentReview?.status !== 'draft' || !uid) return;
+    const seat = rosterRef.current.find((row) => row.uid === uid);
+    const text = readingText(seat?.ocrText);
+    if (!seat || !text) return;
+    const remember = seat.ocrSource !== 'dictionary';
+    const previousRoster = rosterRef.current;
+    const nextRoster = previousRoster.map((row) => (
+      row.uid === uid ? { ...row, ocrSource: remember ? 'dictionary' : 'ocr' } : row
+    ));
+    rosterRef.current = nextRoster;
+    setRoster(nextRoster);
+    setError('');
+    linkQueue.current = linkQueue.current.then(async () => {
+      const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ dictionaryMark: { uid, remember } }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not update that register mark.');
+    }).catch((err) => {
+      if (rosterRef.current === nextRoster) {
+        rosterRef.current = previousRoster;
+        setRoster(previousRoster);
+      }
+      setError(err.message);
+    });
+  };
+
   const linkReading = ({ text, uid, fromUid, unmatchedId, remember }) => {
     const currentReview = reviewRef.current || review;
     if (!reviewId || currentReview?.status !== 'draft') return;
@@ -719,6 +800,7 @@ export default function OcrReviewTab({ user }) {
     const previousReview = currentReview;
     const previousRoster = rosterRef.current;
     const next = applyLinkedReading(currentReview, previousRoster, payload);
+    const correction = next.displacedGapId ? { ...payload, displacedGapId: next.displacedGapId } : payload;
     reviewRef.current = next.review;
     rosterRef.current = next.roster;
     setReview(next.review);
@@ -727,7 +809,7 @@ export default function OcrReviewTab({ user }) {
     linkQueue.current = linkQueue.current.then(async () => {
       const res = await apiFetch(`/api/ocr-reviews/${encodeURIComponent(reviewId)}`, {
         method: 'PATCH',
-        body: JSON.stringify({ correction: payload }),
+        body: JSON.stringify({ correction }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Could not save that reading.');
@@ -1517,7 +1599,7 @@ export default function OcrReviewTab({ user }) {
                           type="button"
                           disabled={!draft || busy}
                           onClick={() => setPresent(row.uid, true)}
-                          className={`w-9 h-9 rounded-lg text-xs font-black disabled:opacity-40 ${row.present ? 'bg-emerald-600 text-white' : 'border border-slate-700 text-slate-500 hover:text-slate-200'}`}
+                          className={`w-9 h-9 rounded-lg border text-xs font-black disabled:opacity-40 ${row.present ? 'border-emerald-400 text-emerald-400' : 'border-slate-700 text-slate-300 hover:text-slate-100'}`}
                         >
                           O
                         </button>
@@ -1527,7 +1609,7 @@ export default function OcrReviewTab({ user }) {
                           type="button"
                           disabled={!draft || busy}
                           onClick={() => setPresent(row.uid, false)}
-                          className={`w-9 h-9 rounded-lg text-xs font-black disabled:opacity-40 ${!row.present ? 'bg-rose-600 text-white' : 'border border-slate-700 text-slate-500 hover:text-slate-200'}`}
+                          className={`w-9 h-9 rounded-lg border text-xs font-black disabled:opacity-40 ${!row.present ? 'border-rose-400 text-rose-400' : 'border-slate-700 text-slate-300 hover:text-slate-100'}`}
                         >
                           X
                         </button>
@@ -1540,25 +1622,35 @@ export default function OcrReviewTab({ user }) {
                       </td>
                       <td className="p-3 align-top">
                         <div className="font-mono text-slate-300 truncate">{row.ocrText || '—'}</div>
-                        {correctionLabel(row.ocrText, roster, row) && (
+                        {row.ocrSource === 'dictionary' && correctionLabel(row.ocrText, roster, row) && (
                           <div className="text-[10px] text-cyan-300 truncate">{correctionLabel(row.ocrText, roster, row)}</div>
                         )}
-                        {draft && (
-                          <MemberLink
-                            text={row.ocrText}
-                            fromUid={row.uid}
-                            roster={roster}
-                            onLink={linkReading}
-                          />
-                        )}
                         {draft && (readingText(row.ocrText) || row.ocrCol || row.ocrRow) && (
-                          <button
-                            type="button"
-                            onClick={() => unlinkReading(row.uid)}
-                            className="mt-0.5 block text-[10px] text-slate-400 hover:text-slate-200"
-                          >
-                            Unlink
-                          </button>
+                          <div className="mt-1 flex items-center gap-1">
+                            {readingText(row.ocrText) && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label="Register"
+                                aria-pressed={row.ocrSource === 'dictionary'}
+                                title="Register"
+                                onClick={() => toggleRegister(row.uid)}
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border disabled:opacity-40 ${row.ocrSource === 'dictionary' ? 'border-emerald-400 text-emerald-400' : 'border-slate-700 text-slate-300 hover:text-slate-100'}`}
+                              >
+                                <BookmarkPlus size={14} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-label="Unlink"
+                              title="Unlink"
+                              onClick={() => unlinkReading(row.uid)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:text-slate-100 disabled:opacity-40"
+                            >
+                              <Unlink size={14} />
+                            </button>
+                          </div>
                         )}
                       </td>
                       <td className="p-3 overflow-hidden">

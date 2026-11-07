@@ -403,17 +403,31 @@ export function assignUnmatched(review, unmatchedId, uid) {
   return true;
 }
 
-export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, remember }) {
+function seatPos(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function readingDiffers(previous, incoming) {
+  const previousImage = Number.isInteger(previous?.imageIndex) ? previous.imageIndex : null;
+  const incomingImage = Number.isInteger(incoming?.imageIndex) ? incoming.imageIndex : null;
+  return String(previous?.ocrText || '').trim() !== String(incoming?.ocrText || '').trim()
+    || seatPos(previous?.ocrCol) !== seatPos(incoming?.ocrCol)
+    || seatPos(previous?.ocrRow) !== seatPos(incoming?.ocrRow)
+    || previousImage !== incomingImage;
+}
+
+export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, remember, displacedGapId }) {
   if (!toUid) return false;
   const unmatched = unmatchedId
     ? (review.unmatched || []).find((row) => row.id === unmatchedId)
       || (review.slotGaps || []).find((row) => row.id === unmatchedId)
     : null;
   const previous = fromUid ? (review.ocrMatches?.[fromUid] || null) : null;
-  const hit = {
+  const occupied = review.ocrMatches?.[toUid] || null;
+  const incoming = {
     ocrText: text || unmatched?.text || previous?.ocrText || '',
-    score: 1,
-    source: remember === false ? 'officer' : 'dictionary',
     imageSource: unmatched?.imageSource || previous?.imageSource || '',
     imageIndex: Number.isInteger(unmatched?.imageIndex)
       ? unmatched.imageIndex
@@ -421,6 +435,11 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, reme
     ocrCol: unmatched?.ocrCol ?? unmatched?.col ?? previous?.ocrCol ?? null,
     ocrRow: unmatched?.ocrRow ?? unmatched?.row ?? previous?.ocrRow ?? null,
   };
+  const occupiedText = String(occupied?.ocrText || '').trim();
+  const occupiedCol = occupied?.ocrCol ?? null;
+  const occupiedRow = occupied?.ocrRow ?? null;
+  const hadSeat = Boolean(occupied) && (occupiedText || occupiedCol != null || occupiedRow != null);
+  const displacing = hadSeat && readingDiffers(occupied, incoming);
   review.ocrMatches = review.ocrMatches || {};
   review.present = review.present || {};
   if (fromUid && fromUid !== toUid) {
@@ -430,13 +449,53 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, reme
     absent.push(fromUid);
     review.absent = absent;
   }
+  if (displacing) {
+    const returned = {
+      id: displacedGapId || `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+      text: occupiedText,
+      category: occupiedText ? 'unmatch' : 'missing',
+      imageSource: occupied.imageSource || '',
+      imageIndex: Number.isInteger(occupied.imageIndex) ? occupied.imageIndex : null,
+      ocrCol: occupiedCol,
+      ocrRow: occupiedRow,
+    };
+    review.slotGaps = [...(review.slotGaps || []), returned];
+    if (occupiedText) review.unmatched = [...(review.unmatched || []), returned];
+  }
+  const hit = {
+    ocrText: incoming.ocrText,
+    score: displacing && Number(occupied.score) > 0 ? occupied.score : 1,
+    source: displacing ? (occupied.source || 'ocr') : (remember === false ? 'officer' : 'dictionary'),
+    imageSource: incoming.imageSource,
+    imageIndex: incoming.imageIndex,
+    ocrCol: incoming.ocrCol,
+    ocrRow: incoming.ocrRow,
+  };
   review.ocrMatches[toUid] = hit;
-  review.present[toUid] = hit;
-  review.absent = (review.absent || []).filter((id) => id !== toUid);
+  if (displacing) {
+    if (Object.prototype.hasOwnProperty.call(review.present, toUid)) review.present[toUid] = hit;
+  } else {
+    review.present[toUid] = hit;
+    review.absent = (review.absent || []).filter((id) => id !== toUid);
+  }
   if (unmatchedId) {
     review.unmatched = (review.unmatched || []).filter((row) => row.id !== unmatchedId);
     review.slotGaps = (review.slotGaps || []).filter((gap) => gap.id !== unmatchedId);
     review.pendingUnmatchedId = null;
+  }
+  return true;
+}
+
+export function setOcrDictionaryMark(review, uid, remember) {
+  const id = String(uid || '');
+  const hit = id ? ocrMatchForUid(review, id) : null;
+  const text = String(hit?.ocrText || '').trim();
+  if (!hit || !text) return false;
+  const source = remember ? 'dictionary' : 'ocr';
+  hit.source = source;
+  const presentHit = review.present?.[id];
+  if (presentHit && presentHit !== hit && String(presentHit.ocrText || '').trim() === text) {
+    presentHit.source = source;
   }
   return true;
 }

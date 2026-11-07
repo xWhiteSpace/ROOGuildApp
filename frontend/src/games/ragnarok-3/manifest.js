@@ -15,7 +15,7 @@ export const RAGNAROK_3 = {
       label: 'Raid',
       helpKey: 'raid',
       items: [
-        { label: 'MasterList', path: '/games/ragnarok-3', icon: 'request', end: true },
+        { label: 'MasterList', path: '/games/ragnarok-3', icon: 'people', end: true },
         { label: 'Profile', path: '/games/ragnarok-3/profile', icon: 'user' },
         { label: 'Peak Hours', path: '/games/ragnarok-3/peak-hours', icon: 'peak' },
         { label: 'Raid Config', path: '/games/ragnarok-3/raid-config', icon: 'book' },

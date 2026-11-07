@@ -295,6 +295,8 @@ export function mergeChannelFallback(fromDb) {
     raidScreenshotChannelId: fromDb?.raidScreenshotChannelId || '',
     onboardingChannelId: fromDb?.onboardingChannelId || '',
     messageChannelId: fromDb?.messageChannelId || '',
+    announcementChannelId: fromDb?.announcementChannelId || '',
+    auctionBoardChannelId: fromDb?.auctionBoardChannelId || '',
     leaveNoticeChannelId: fromDb?.leaveNoticeChannelId || '',
     warRooms: { ...(fromDb?.warRooms || {}) },
   };

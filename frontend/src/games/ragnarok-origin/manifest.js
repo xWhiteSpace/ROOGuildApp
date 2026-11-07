@@ -29,7 +29,7 @@ export const RAGNAROK_ORIGIN = {
       label: 'Raid',
       helpKey: 'raid',
       items: [
-        { label: 'MasterList', path: '/attendance/masterlist', icon: 'request' },
+        { label: 'MasterList', path: '/attendance/masterlist', icon: 'people' },
         { label: 'Raid Config', path: '/attendance/raidparty', icon: 'book' },
         { label: 'War Room', path: '/attendance/war-room', icon: 'swords' },
         { label: 'GVG Attendance', path: '/attendance/ocr-review', icon: 'gallery' },

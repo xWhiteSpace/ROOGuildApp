@@ -24,6 +24,8 @@ export default function RagnarokSetupPage({ onSessionUser }) {
     raidScreenshotChannelId: '',
     onboardingChannelId: '',
     messageChannelId: '',
+    announcementChannelId: '',
+    auctionBoardChannelId: '',
     leaveNoticeChannelId: '',
     warRooms: { ...emptyRooms },
   });
@@ -42,6 +44,8 @@ export default function RagnarokSetupPage({ onSessionUser }) {
       raidScreenshotChannelId: channels.raidScreenshotChannelId || '',
       onboardingChannelId: channels.onboardingChannelId || '',
       messageChannelId: channels.messageChannelId || '',
+      announcementChannelId: channels.announcementChannelId || '',
+      auctionBoardChannelId: channels.auctionBoardChannelId || '',
       leaveNoticeChannelId: channels.leaveNoticeChannelId || '',
       warRooms: { ...emptyRooms, ...(channels.warRooms || {}) },
     });
@@ -96,6 +100,8 @@ export default function RagnarokSetupPage({ onSessionUser }) {
         {field('Auction announce channel ID', 'auctionChannelId', 'numbers only')}
         {field('Auction request / claim card channel ID', 'aucreqChannelId', '')}
         {field('General room channel ID', 'genroomId', '')}
+        {field('General announcements channel ID', 'announcementChannelId', '')}
+        {field('Auction board channel ID', 'auctionBoardChannelId', '')}
         {field('Weekly attendance thread parent (one text channel)', 'attendanceId', '')}
         {field('War-announce (one text channel for cards)', 'warAnnounceChannelId', '')}
         {field('Raid Screenshot (gallery after OCR Commit)', 'raidScreenshotChannelId', '')}

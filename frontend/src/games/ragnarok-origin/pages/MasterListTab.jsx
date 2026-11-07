@@ -71,6 +71,57 @@ const IconEdit = () => <svg className="w-3 h-3" fill="none" stroke="currentColor
 const IconChevronLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>;
 const IconChevronRight = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>;
 const IconBook = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 016.5 3H20v16H6.5A2.5 2.5 0 004 21.5V5.5zM4 19h16M12 3v16" /></svg>;
+const IconDownload = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" /></svg>;
+
+const MASTERLIST_CSV_HEADERS = [
+  'Kind',
+  'Member Name',
+  'In-game / alias',
+  'Job Class',
+  'Role Classification',
+  'Group Assignment',
+  'Snowflake ID',
+];
+
+function csvEscape(val) {
+  const text = String(val ?? '');
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function memberKind(member) {
+  const dummy = member?.isDummy === true;
+  const ghost = member?.status === 'Ghost';
+  if (dummy && ghost) return 'Dummy Ghost';
+  if (dummy) return 'Dummy';
+  if (ghost) return 'Ghost';
+  return 'Member';
+}
+
+function masterListCsvRow(uid, member, jobsCatalog, rolesCatalog) {
+  return [
+    memberKind(member),
+    member.displayName || '',
+    member.inGameName || '',
+    jobsCatalog[member.jobCode]?.name || '',
+    rolesCatalog[member.roleCode]?.name || '',
+    member.groupTag || '',
+    uid,
+  ];
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csvContent = `\uFEFF${[headers.join(','), ...rows.map((row) => row.map(csvEscape).join(','))].join('\n')}`;
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 const ROSTER_CAP = 200;
 const ROSTER_SLIDES = [
@@ -232,8 +283,11 @@ export default function MasterListTab({ user }) {
       setHistorySaved(next);
       const memberWrites = {};
       for (const change of changes) {
-        if (!String(change.id).startsWith('live:') || change.joinedAt === undefined) continue;
-        const uid = String(change.id).slice('live:'.length);
+        const id = String(change.id);
+        const live = id.startsWith('live:');
+        const left = id.startsWith('left:');
+        if ((!live && !left) || change.joinedAt === undefined) continue;
+        const uid = id.slice(live ? 'live:'.length : 'left:'.length);
         const member = { ...(stagedMembers[uid] || dbMembers[uid] || {}), joinedAt: change.joinedAt || '' };
         memberWrites[uid] = member;
         upsertMemberCaches(uid, member);
@@ -320,6 +374,7 @@ export default function MasterListTab({ user }) {
         alert('💾 SUCCESS: Master list parameters synchronized completely.');
         setMembersCaches(stagedMembers);
         setDbMembers(JSON.parse(JSON.stringify(stagedMembers)));
+        setHistorySaved(null);
       } else {
         alert(data.error || 'Failed to sync roster updates.');
       }
@@ -486,6 +541,12 @@ export default function MasterListTab({ user }) {
     return 0;
   });
 
+  const handleExportCsv = () => {
+    const rows = activeRaidRosterList.map(([uid, member]) => masterListCsvRow(uid, member, jobsCatalog, rolesCatalog));
+    const day = new Date().toISOString().slice(0, 10);
+    downloadCsv(`MasterList_RagnarokOrigin_${day}.csv`, MASTERLIST_CSV_HEADERS, rows);
+  };
+
   const identityPoolList = Object.entries(stagedMembers).filter(([_, m]) => 
     !m.isRaidRoster && !m.isDummy && (
       (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -573,15 +634,24 @@ export default function MasterListTab({ user }) {
             ))}
           </div>
         </div>
-        <div className="flex justify-center lg:justify-end">
+        <div className="flex justify-center lg:justify-end items-center gap-2">
           {activeSlide.id === 'roster' && (
-            <input
-              type="text"
-              placeholder="Search members (roster + pool)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition"
-            />
+            <>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="shrink-0 flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-slate-600 transition cursor-pointer"
+              >
+                <IconDownload /> Export CSV
+              </button>
+              <input
+                type="text"
+                placeholder="Search members (roster + pool)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition"
+              />
+            </>
           )}
         </div>
       </div>
@@ -629,11 +699,7 @@ export default function MasterListTab({ user }) {
                       onDrop={(e) => {
                         e.preventDefault();
                         const droppedUid = e.dataTransfer.getData("text/plain");
-                        const inheritedDate = stagedMembers[droppedUid]?.joinedAt || new Date().toISOString().slice(0, 10);
-                        if (droppedUid) {
-                          handleStageLocalUpdate(droppedUid, 'isRaidRoster', true);
-                          handleStageLocalUpdate(droppedUid, 'joinedAt', inheritedDate);
-                        }
+                        if (droppedUid) stageMembersOntoRoster([droppedUid]);
                       }}
                       className="border-b border-slate-900/20 bg-slate-950/5 border-dashed transition-colors hover:bg-slate-900/5 select-none"
                     >

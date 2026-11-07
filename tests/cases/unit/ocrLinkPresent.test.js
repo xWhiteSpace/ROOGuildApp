@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   blankMissingSkipsDictionary,
   linkMissingMarksPresent,
+  linkOverAbsentKeepsMark,
+  linkOverExistingReturnsPrevious,
   linkUnmatchMarksPresent,
   moveClearsPrevious,
   namedGapSkipsDictionary,
+  registerOffSkipsDictionary,
+  registerToggleKeepsSeat,
   resultWheel,
   unlinkRestoresGap,
 } from '../../patterns/ocr_link_present.js';
@@ -34,6 +38,48 @@ describe('GVG Attendance link marks present', () => {
     const named = await namedGapSkipsDictionary();
     expect(named.source).toBe('officer');
     expect(named.updates).toEqual([]);
+  });
+
+  it('toggles a reading onto the dictionary mark and back without moving the seat', async () => {
+    const toggled = registerToggleKeepsSeat();
+    expect(toggled.on).toBe(true);
+    expect(toggled.text).toBe('Ada');
+    expect(toggled.score).toBe(0.9);
+    expect(toggled.present).toBe(true);
+    expect(toggled.source).toBe('dictionary');
+    expect(toggled.presentSource).toBe('dictionary');
+    expect(toggled.off).toBe(true);
+    expect(toggled.cleared).toBe('ocr');
+    expect(toggled.clearedPresent).toBe('ocr');
+    expect(toggled.stillText).toBe('Ada');
+    expect(toggled.stillPresent).toBe(true);
+    const skipped = await registerOffSkipsDictionary();
+    expect(skipped.source).toBe('ocr');
+    expect(skipped.updates).toEqual([]);
+  });
+
+  it('returns the existing AI reading to the review board when a new link overwrites it', () => {
+    const linked = linkOverExistingReturnsPrevious();
+    expect(linked.ok).toBe(true);
+    expect(linked.adaText).toBe('Beee');
+    expect(linked.adaCol).toBe(2);
+    expect(linked.adaRow).toBe(1);
+    expect(linked.adaSource).toBe('dictionary');
+    expect(linked.adaScore).toBe(0.9);
+    expect(linked.adaPresent).toBe(true);
+    expect(linked.presentText).toBe('Beee');
+    expect(linked.absent).toEqual(['bea', 'cy']);
+    expect(linked.returned?.text).toBe('Ada');
+    expect(linked.returned?.ocrCol).toBe(1);
+    expect(linked.returned?.ocrRow).toBe(1);
+    expect(linked.returned?.category).toBe('unmatch');
+    expect(linked.gapIds).toEqual(['m1', 'back1']);
+    const absent = linkOverAbsentKeepsMark();
+    expect(absent.present).toBe(false);
+    expect(absent.absent).toEqual(['ada', 'bea', 'cy']);
+    expect(absent.text).toBe('Beee');
+    expect(absent.source).toBe('ocr');
+    expect(absent.returned).toBe('Ada');
   });
 
   it('clears the previous member when a reading moves', () => {

@@ -1,10 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Globe, History, Minus, Pencil, Percent, Plus, Search, Swords, Trash2, User, Users, X } from 'lucide-react';
+import { Check, Globe, History, Minus, Percent, Plus, Search, Swords, User, Users, X } from 'lucide-react';
 import { apiFetch } from '../../../services/apiClient';
 import { queryClient } from '../../../query/client';
 import {
-  invalidateAnnouncements,
   invalidateAttendanceMe,
   invalidateCommitments,
   invalidateMembers,
@@ -22,13 +21,11 @@ import {
   useWinRate,
 } from '../../../query/hooks';
 import StatisticsTab from './StatisticsTab';
+import AnnouncementFeed from '../components/AnnouncementFeed';
 import { buildCompositeKey, DEFAULT_TZ, getWeekMonday, guildWallTimeToUtcMs } from '../../../utils/guildTime';
 
 const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const ANNOUNCEMENT_MAX = 4000;
-const ANNOUNCEMENT_TITLE_MAX = 80;
-
 function gvgResultClass(value) {
   if (value === 'Win') return 'text-emerald-300';
   if (value === 'Lose') return 'text-rose-300';
@@ -49,50 +46,6 @@ function GvgStat({ icon: Icon, label, value, valueClassName = 'text-slate-100' }
   );
 }
 
-function DriftingMessage({ text }) {
-  const frameRef = useRef(null);
-  const textRef = useRef(null);
-  const [drift, setDrift] = useState(0);
-
-  useEffect(() => {
-    const frame = frameRef.current;
-    const body = textRef.current;
-    if (!frame || !body) return undefined;
-    const measure = () => {
-      const extra = body.scrollHeight - frame.clientHeight;
-      setDrift(extra > 2 ? extra : 0);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(frame);
-    observer.observe(body);
-    return () => observer.disconnect();
-  }, [text]);
-
-  const seconds = Math.max(8, (drift / 14) * 2);
-
-  return (
-    <div
-      ref={frameRef}
-      className={`group mt-1 max-h-16 overflow-x-hidden ${drift ? 'overflow-y-hidden motion-reduce:overflow-y-auto' : 'overflow-y-auto'}`}
-    >
-      <p
-        ref={textRef}
-        className="break-words text-xs leading-relaxed text-slate-300 whitespace-pre-wrap motion-reduce:animate-none group-hover:[animation-play-state:paused]"
-        style={drift ? { '--drift': `${drift}px`, animation: `welcome-drift ${seconds}s ease-in-out infinite` } : undefined}
-      >
-        {text}
-      </p>
-    </div>
-  );
-}
-
-function announcementParts(post) {
-  const stored = String(post?.title || '').trim();
-  if (stored) return { title: stored, body: String(post?.body || '') };
-  const lines = String(post?.body || '').split('\n');
-  return { title: (lines.shift() || '').trim(), body: lines.join('\n').trim() };
-}
 const ITEM_THEME_MAP = {
   purple: 'text-violet-300 border-violet-500/40 bg-violet-950/30',
   yellow: 'text-yellow-300 border-yellow-500/40 bg-yellow-950/20',
@@ -468,150 +421,19 @@ function WelcomePeak() {
   );
 }
 
-function WelcomeBoard({ user }) {
+function WelcomeBoard({ timezone }) {
   const boardQuery = useAnnouncements();
-  const posts = boardQuery.data || [];
-  const isOfficer = user?.isOfficer === true;
-  const [editor, setEditor] = useState(null);
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const saveDraft = async () => {
-    setSaving(true);
-    setError('');
-    try {
-      const editing = editor && editor !== 'create';
-      const path = editing
-        ? `/api/attendance/announcements/${encodeURIComponent(editor)}`
-        : '/api/attendance/announcements';
-      const res = await apiFetch(path, {
-        method: editing ? 'PUT' : 'POST',
-        body: JSON.stringify({ title: draftTitle, body: draft }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Could not save the announcement.');
-        return;
-      }
-      setEditor(null);
-      setDraftTitle('');
-      setDraft('');
-      await invalidateAnnouncements();
-    } catch (err) {
-      setError(err.message || 'Could not save the announcement.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removePost = async (item) => {
-    if (!item || saving) return;
-    if (!window.confirm('Delete this announcement?')) return;
-    setSaving(true);
-    setError('');
-    try {
-      const res = await apiFetch(`/api/attendance/announcements/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Could not delete the announcement.');
-        return;
-      }
-      if (editor === item.id) setEditor(null);
-      await invalidateAnnouncements();
-    } catch (err) {
-      setError(err.message || 'Could not delete the announcement.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const openEdit = (item) => {
-    const parts = announcementParts(item);
-    setDraftTitle(parts.title);
-    setDraft(parts.body);
-    setEditor(item.id);
-    setError('');
-  };
-
-  const controls = isOfficer && !editor ? (
-    <button
-      type="button"
-      aria-label="New announcement"
-      onClick={() => { setEditor('create'); setDraftTitle(''); setDraft(''); setError(''); }}
-      className="rounded-md p-1 text-slate-400 hover:text-white cursor-pointer"
-    >
-      <Plus size={14} />
-    </button>
-  ) : null;
 
   return (
-    <Card className="h-[12.5rem] lg:h-full" title="Announcements" action={controls}>
-      <div className="flex h-full min-h-0 flex-col">
-        {error && <p className="px-3 pt-2 text-[10px] text-rose-400">{error}</p>}
-        {editor ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-            <input
-              value={draftTitle}
-              maxLength={ANNOUNCEMENT_TITLE_MAX}
-              onChange={(event) => setDraftTitle(event.target.value.slice(0, ANNOUNCEMENT_TITLE_MAX))}
-              className="shrink-0 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-600"
-              placeholder="Title"
-            />
-            <textarea
-              value={draft}
-              maxLength={ANNOUNCEMENT_MAX}
-              onChange={(event) => setDraft(event.target.value.slice(0, ANNOUNCEMENT_MAX))}
-              className="min-h-0 flex-1 resize-none rounded-lg border border-slate-800 bg-slate-950 p-2 text-xs text-slate-200 outline-none focus:border-slate-600"
-              placeholder="Message to the guild"
-            />
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] text-slate-500">{draft.length}/{ANNOUNCEMENT_MAX}</span>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => { setEditor(null); setDraftTitle(''); setError(''); }} className="rounded-lg border border-slate-800 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer">
-                  Cancel
-                </button>
-                <button type="button" disabled={saving || (!draft.trim() && !draftTitle.trim())} onClick={saveDraft} className="rounded-lg bg-indigo-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white disabled:opacity-40 cursor-pointer">
-                  {saving ? 'Saving' : editor === 'create' ? 'Post' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto p-2">
-            {posts.length === 0 && (
-              <p className="px-1 py-4 text-[11px] text-slate-500">No announcements yet.</p>
-            )}
-            {posts.map((item) => {
-              const parts = announcementParts(item);
-              return (
-                <article key={item.id} className="min-w-0 shrink-0 rounded-xl border border-slate-800 bg-slate-950/50 px-2.5 py-2">
-                  <div className="flex items-start gap-1">
-                    <h3 className="min-w-0 flex-1 truncate pt-0.5 text-sm font-medium text-slate-100">{parts.title || 'Announcement'}</h3>
-                    {isOfficer && (
-                      <div className="flex shrink-0">
-                        <button type="button" aria-label="Edit announcement" onClick={() => openEdit(item)} className="rounded-md p-1 text-slate-400 hover:text-white cursor-pointer">
-                          <Pencil size={13} />
-                        </button>
-                        <button type="button" aria-label="Delete announcement" disabled={saving} onClick={() => removePost(item)} className="rounded-md p-1 text-slate-400 hover:text-rose-300 disabled:opacity-40 cursor-pointer">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {parts.body && (
-                    <DriftingMessage text={parts.body} />
-                  )}
-                  <p className="mt-1.5 truncate text-right text-[10px] font-normal text-slate-500" title={item.authorName}>{item.authorName}</p>
-                </article>
-              );
-            })}
-          </div>
-        )}
-        {boardQuery.error && !error && (
-          <p className="px-3 pb-2 text-[10px] text-rose-400">{boardQuery.error.message}</p>
-        )}
+    <Card className="h-[12.5rem] lg:h-full" title="General announcements">
+      <div className="flex h-full min-h-0 flex-col p-2">
+        <AnnouncementFeed
+          posts={boardQuery.data?.announcements || []}
+          unmapped={boardQuery.data?.unmapped === true}
+          pending={boardQuery.isPending}
+          error={boardQuery.error?.message || ''}
+          timezone={timezone}
+        />
       </div>
     </Card>
   );
@@ -807,7 +629,7 @@ export default function WelcomePage({ user }) {
               </div>
             </div>
           </Card>
-          <WelcomeBoard user={user} />
+          <WelcomeBoard timezone={timezone} />
           <WelcomePeak />
         </div>
       </Band>

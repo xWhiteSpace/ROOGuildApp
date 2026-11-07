@@ -1,7 +1,9 @@
 // frontend/src/pages/RequestTab.jsx
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../../services/apiClient';
-import { invalidateRequestLobby, useRequestInit, useRequestQueue } from '../../../query/hooks';
+import { invalidateRequestLobby, useAnnouncements, useRequestInit, useRequestQueue, useSettings } from '../../../query/hooks';
+import AnnouncementFeed from '../components/AnnouncementFeed';
+import { DEFAULT_TZ } from '../../../utils/guildTime';
 
 // --- 🎨 PURE VECTOR MICRO-ICONS CONSOLE ---
 const IconLock = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
@@ -23,6 +25,9 @@ export default function RequestTab({ user }) {
   const [activeListTab, setActiveListTab] = useState('');
 
   const initQuery = useRequestInit();
+  const auctionQuery = useAnnouncements('auction');
+  const settingsQuery = useSettings('timezone');
+  const timezone = settingsQuery.data?.timezone || DEFAULT_TZ;
   const data = initQuery.data;
   const items = data?.items || [];
   const liveCounts = data?.liveCounts || {};
@@ -191,6 +196,22 @@ export default function RequestTab({ user }) {
         
         {/* PANEL ROW TRACK: Sidebars occupy 4 out of 12 columns */}
         <div className="lg:col-span-4 space-y-6">
+
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3.5">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <IconActivity /> Auction announcements
+            </div>
+            <div className="flex h-52 min-h-0 flex-col">
+              <AnnouncementFeed
+                posts={auctionQuery.data?.announcements || []}
+                unmapped={auctionQuery.data?.unmapped === true}
+                pending={auctionQuery.isPending}
+                error={auctionQuery.error?.message || ''}
+                timezone={timezone}
+                unmappedMessage="An officer sets Auction board in Settings."
+              />
+            </div>
+          </div>
           
           {/* TIMELINE PHASE FLOW TREE CONTAINER */}
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 shadow-md space-y-3.5">

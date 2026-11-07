@@ -1,7 +1,7 @@
 // frontend/src/components/LeftNavBar.jsx
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Swords } from 'lucide-react';
+import { Swords, Users } from 'lucide-react';
 import { apiFetch } from '../services/apiClient';
 import { getGame, resolvePostLoginPath } from '../games/catalog';
 import { PRODUCT_MARK_SRC, PRODUCT_ON_DARK_CLASS } from '../brand';
@@ -18,6 +18,7 @@ const IconScheduler = () => <svg className="w-4 h-4" fill="none" stroke="current
 const IconUser = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>;
 const IconPeak = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-9"/></svg>;
 const IconSwords = () => <Swords className="w-4 h-4" />;
+const IconPeople = () => <Users className="w-4 h-4" />;
 const IconStats = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 3v18h18" />
@@ -44,6 +45,7 @@ const ICONS = {
   request: IconRequest,
   live: IconLive,
   swords: IconSwords,
+  people: IconPeople,
   stats: IconStats,
   book: IconBook,
   history: IconHistory,

@@ -53,18 +53,38 @@ function currentRoster(members) {
     .sort((a, b) => String(a.displayName || a.snowflake).localeCompare(String(b.displayName || b.snowflake)));
 }
 
+function leftRow(uid, member) {
+  return {
+    id: `left:${uid}`,
+    uid: String(uid),
+    displayName: String(member?.displayName || ''),
+    snowflake: String(uid),
+    joinedAt: dayOrBlank(member?.joinedAt),
+    leftAt: dayOrBlank(member?.leftAt),
+    current: false,
+  };
+}
+
+function departedMembers(members) {
+  return Object.entries(members || {})
+    .filter(([, member]) => member?.isRaidRoster !== true && dayOrBlank(member?.leftAt))
+    .map(([uid, member]) => leftRow(uid, member));
+}
+
 export function windowsFrom(members, stays) {
   const windows = {};
+  const living = new Set(Object.keys(members || {}));
   for (const [uid, member] of Object.entries(members || {})) {
     const joined = dayOrBlank(member?.joinedAt);
     if (!joined) continue;
-    windows[String(uid)] = [{ joined, left: '' }];
+    windows[String(uid)] = [{ joined, left: dayOrBlank(member?.leftAt) }];
   }
   for (const stay of stays || []) {
     const uid = String(stay?.uid || '');
+    if (!uid || living.has(uid)) continue;
     const joined = dayOrBlank(stay?.joinedAt);
     const left = dayOrBlank(stay?.leftAt);
-    if (!uid || !joined || !left) continue;
+    if (!joined || !left) continue;
     if (!windows[uid]) windows[uid] = [];
     windows[uid].push({ joined, left });
   }
@@ -110,7 +130,21 @@ export async function listMemberHistory(db) {
     known.add(uid);
   }
   const next = extra.length ? await saveMemberHistory(db, stays.concat(extra)) : stays;
-  return [...currentRoster(members), ...sortStays(next)];
+  const archived = next.filter((stay) => !members[String(stay?.uid || '')]);
+  return [...currentRoster(members), ...sortStays([...departedMembers(members), ...archived])];
+}
+
+export function rosterMembershipPatch(existing, staged, today) {
+  const wasOn = existing?.isRaidRoster === true;
+  const nowOn = staged?.isRaidRoster === true;
+  if (wasOn && !nowOn) return { leftAt: today };
+  if (!wasOn && nowOn) {
+    return {
+      leftAt: null,
+      joinedAt: dayOrBlank(existing?.joinedAt) || dayOrBlank(staged?.joinedAt) || today,
+    };
+  }
+  return {};
 }
 
 export async function membershipWindows(db) {
@@ -148,6 +182,7 @@ export async function updateMemberHistoryChanges(db, changes) {
   const stays = await loadMemberHistory(db);
   const byId = new Map(stays.map((stay) => [String(stay?.id || ''), stay]));
   const liveJoined = [];
+  const leftEdits = [];
   let historyChanged = false;
   for (const change of list) {
     const id = String(change?.id || '');
@@ -155,6 +190,14 @@ export async function updateMemberHistoryChanges(db, changes) {
     if (id.startsWith('live:')) {
       if (!Object.prototype.hasOwnProperty.call(change, 'joinedAt')) continue;
       liveJoined.push({ uid: id.slice('live:'.length), joinedAt: dayOrBlank(change.joinedAt) });
+      continue;
+    }
+    if (id.startsWith('left:')) {
+      const patch = { uid: id.slice('left:'.length) };
+      if (Object.prototype.hasOwnProperty.call(change, 'joinedAt')) patch.joinedAt = dayOrBlank(change.joinedAt);
+      if (Object.prototype.hasOwnProperty.call(change, 'leftAt')) patch.leftAt = dayOrBlank(change.leftAt);
+      if (patch.joinedAt === undefined && patch.leftAt === undefined) continue;
+      leftEdits.push(patch);
       continue;
     }
     const stay = byId.get(id);
@@ -180,6 +223,25 @@ export async function updateMemberHistoryChanges(db, changes) {
     }
     if (Object.keys(writes).length) await db.ref().update(writes);
   }
+  if (leftEdits.length) {
+    const members = await loadMembers(db);
+    const writes = {};
+    for (const row of leftEdits) {
+      const member = members[row.uid];
+      if (!member || member.isRaidRoster === true) continue;
+      const next = { ...member };
+      if (row.joinedAt !== undefined) {
+        next.joinedAt = row.joinedAt;
+        writes[`auction/members/${row.uid}/joinedAt`] = row.joinedAt || null;
+      }
+      if (row.leftAt !== undefined) {
+        next.leftAt = row.leftAt;
+        writes[`auction/members/${row.uid}/leftAt`] = row.leftAt || null;
+      }
+      updated.push(leftRow(row.uid, next));
+    }
+    if (Object.keys(writes).length) await db.ref().update(writes);
+  }
   for (const stay of byId.values()) {
     if (list.some((change) => String(change?.id || '') === String(stay?.id || '') && !String(stay?.id || '').startsWith('live:'))) {
       updated.push(stay);
@@ -198,6 +260,19 @@ export async function updateStayDates(db, stayId, body) {
     const joinedAt = dayOrBlank(body?.joinedAt);
     await db.ref(`auction/members/${uid}/joinedAt`).set(joinedAt || null);
     return liveRow(uid, { ...member, joinedAt });
+  }
+  if (id.startsWith('left:')) {
+    const uid = id.slice('left:'.length);
+    const snap = await db.ref(`auction/members/${uid}`).once('value');
+    const member = snap.exists() ? snap.val() : null;
+    if (!member || member.isRaidRoster === true) return null;
+    const joinedAt = dayOrBlank(body?.joinedAt);
+    const leftAt = dayOrBlank(body?.leftAt);
+    await db.ref(`auction/members/${uid}`).update({
+      joinedAt: joinedAt || null,
+      leftAt: leftAt || null,
+    });
+    return leftRow(uid, { ...member, joinedAt, leftAt });
   }
   const stays = await loadMemberHistory(db);
   let found = null;

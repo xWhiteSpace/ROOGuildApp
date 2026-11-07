@@ -29,9 +29,9 @@ import { sortRankingRows } from '@guildname/shared/gvgRank';
 import { gvgSheetOptions, invalidateGvgSheet, invalidateGvgSheetWar, invalidateRaidHistory, invalidateWinRate, useGvgSheet, useSettings } from '../../../query/hooks';
 
 const SLIDES = [
-  { id: 'attendance', title: 'Attendance' },
-  { id: 'event', title: 'GvG history by event' },
   { id: 'rankings', title: 'GvG history by Attendance Pts' },
+  { id: 'attendance', title: 'GvG history by date' },
+  { id: 'event', title: 'GvG history by event' },
 ];
 
 function podiumMetal(rank) {

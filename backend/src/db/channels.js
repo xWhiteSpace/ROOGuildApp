@@ -11,6 +11,8 @@ const ENV_TO_FIELD = {
   DISCORD_RAID_SCREENSHOT_CHANNEL_ID: 'raidScreenshotChannelId',
   DISCORD_ONBOARDING_CHANNEL_ID: 'onboardingChannelId',
   DISCORD_MESSAGE_CHANNEL_ID: 'messageChannelId',
+  DISCORD_ANNOUNCEMENT_CHANNEL_ID: 'announcementChannelId',
+  DISCORD_AUCTION_BOARD_CHANNEL_ID: 'auctionBoardChannelId',
   DISCORD_LEAVE_NOTICE_CHANNEL_ID: 'leaveNoticeChannelId',
 };
 
