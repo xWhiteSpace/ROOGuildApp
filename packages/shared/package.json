@@ -11,6 +11,7 @@
     "./inGameAlias": "./inGameAlias.js",
     "./allocatePreview": "./allocatePreview.js",
     "./mimicBookRoster": "./mimicBookRoster.js",
+    "./auctionBookLayout": "./auctionBookLayout.js",
     "./discordCardCopy": "./discordCardCopy.js"
   },
   "private": true

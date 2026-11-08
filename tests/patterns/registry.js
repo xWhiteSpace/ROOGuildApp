@@ -332,6 +332,7 @@ export const patterns = {
   "r3_path_catalog": "unused",
   "r3_no_schedule_contributor": "unused",
   "mimic_book_roster": "unused",
+  "auction_book_layout": "unused",
   "leave_notice_dove": "unused",
 };
 
