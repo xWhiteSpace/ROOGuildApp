@@ -16,6 +16,7 @@ import requestRoutes from './api/request.routes.js';
 import liveRaidRoutes from './api/liveRaid.routes.js';
 import warRoomRoutes from './api/warRoom.routes.js';
 import ocrReviewRoutes from './api/ocrReview.routes.js';
+import gvgStatsRoutes from './api/gvgStats.routes.js';
 
 import { processAndPostDiscordSnapshot } from './games/ragnarok-origin/services/discordSnapshot.js';
 import { getGateStatusDetails } from './games/ragnarok-origin/timeWindow.js';
@@ -103,6 +104,7 @@ export function createApp() {
   app.use('/api/live-raid', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), liveRaidRoutes);
   app.use('/api/war-room', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), warRoomRoutes);
   app.use('/api/ocr-reviews', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), ocrReviewRoutes);
+  app.use('/api/gvg-stats', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_ORIGIN_ID), gvgStatsRoutes);
   app.use('/api/adventurer-guild', requireTenant, requireActiveSubscription, requireGame(ADVENTURER_GUILD_ID), adventurerGuildRoutes);
   app.use('/api/ragnarok-3', requireTenant, requireActiveSubscription, requireGame(RAGNAROK_3_ID), ragnarok3Routes);
 

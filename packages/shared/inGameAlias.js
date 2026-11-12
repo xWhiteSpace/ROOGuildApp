@@ -256,6 +256,7 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
       row: rec.row ?? null,
       imageSource: rec.imageSource || '',
       imageIndex: Number.isInteger(rec.imageIndex) ? rec.imageIndex : null,
+      status: rec.status || '',
     };
     const key = correctionFold(rec.text);
     const claimed = key ? (owners.get(key) || []) : [];
@@ -302,6 +303,7 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
         row: hit.row ?? null,
         imageSource: hit.imageSource || '',
         imageIndex: hit.imageIndex,
+        status: hit.status || '',
       });
       continue;
     }
@@ -315,6 +317,7 @@ export function matchOcrTokensToRoster(ocrTexts, members) {
       row: hit.row ?? null,
       imageSource: hit.imageSource || '',
       imageIndex: hit.imageIndex,
+      status: hit.status || '',
     });
   }
 

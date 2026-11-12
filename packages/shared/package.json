@@ -12,7 +12,8 @@
     "./allocatePreview": "./allocatePreview.js",
     "./mimicBookRoster": "./mimicBookRoster.js",
     "./auctionBookLayout": "./auctionBookLayout.js",
-    "./discordCardCopy": "./discordCardCopy.js"
+    "./discordCardCopy": "./discordCardCopy.js",
+    "./gvgStatSheet": "./gvgStatSheet.js"
   },
   "private": true
 }

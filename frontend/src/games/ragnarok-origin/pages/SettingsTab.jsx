@@ -6,6 +6,7 @@ import { invalidateSettings, useCompositionsList, useDiscordRoles, useSettingsAd
 import { productTitle } from '../../../brand';
 import { defaultRaidSubtree, findOverlappingRaidCyclePair, phaseAnnouncementEnabled } from '@guildname/shared/raidCycle';
 import { CARD_COPY_MAX, resolveDiscordCardCopy } from '@guildname/shared/discordCardCopy';
+import { parseStatKeywordList } from '@guildname/shared/gvgStatSheet';
 
 const COMMON_TIMEZONES = [
   { value: 'Asia/Manila', label: 'Manila (GMT+8)' },
@@ -25,6 +26,43 @@ const DAYS_OF_WEEK_MAP = [
   { value: 5, label: 'Friday' },
   { value: 6, label: 'Saturday' }
 ];
+
+const OCR_STYLE_OPTIONS = [
+  { id: 'raid', label: 'Raid party (40)' },
+  { id: 'party', label: 'Party (5)' },
+  { id: 'guild', label: 'Guild list' },
+];
+
+function OcrStyleWireframe({ kind }) {
+  if (kind === 'party') {
+    return (
+      <div className="h-16 rounded-md border border-slate-600 bg-slate-900 p-1.5 flex gap-1">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="flex-1 rounded-sm border border-sky-400/80 bg-sky-400/10" />
+        ))}
+      </div>
+    );
+  }
+  if (kind === 'guild') {
+    return (
+      <div className="h-16 rounded-md border border-slate-600 bg-slate-900 p-1.5 flex flex-col justify-between">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="flex items-center gap-1">
+            <div className="h-2 w-2 rounded-[2px] border border-sky-400/80 bg-sky-400/20" />
+            <div className="h-1.5 flex-1 rounded-sm bg-rose-400/70" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="h-16 rounded-md border border-slate-600 bg-slate-900 p-1.5 grid grid-cols-8 grid-rows-5 gap-0.5">
+      {Array.from({ length: 40 }, (_, i) => (
+        <div key={i} className="rounded-[1px] border border-sky-400/70 bg-sky-400/10" />
+      ))}
+    </div>
+  );
+}
 
 const THEME_PRESETS = [
   { key: 'purple', label: 'Purple Rarity', dot: 'bg-violet-500 ring-violet-500/20' },
@@ -214,6 +252,7 @@ export default function SettingsTab({ user, onSessionUser }) {
     },
     liveRaidMaxConfigs: 5,
     liveRaidMaxWarRooms: 2,
+    gvgOcrStyle: 'raid',
     partyOcrAutoDraft: false,
     defaultLeaveCredits: 3,
     warRooms: { ...EMPTY_WAR_ROOMS }
@@ -261,6 +300,7 @@ export default function SettingsTab({ user, onSessionUser }) {
       roles: nextConfig.roles || {},
       liveRaidMaxConfigs: nextConfig.liveRaidMaxConfigs ?? 5,
       liveRaidMaxWarRooms: nextConfig.liveRaidMaxWarRooms ?? 2,
+      gvgOcrStyle: nextConfig.gvgOcrStyle === 'party' || nextConfig.gvgOcrStyle === 'guild' ? nextConfig.gvgOcrStyle : 'raid',
       defaultLeaveCredits: nextConfig.defaultLeaveCredits ?? 3,
       warRooms: nextConfig.warRooms && Object.keys(nextConfig.warRooms).length
         ? nextConfig.warRooms
@@ -1584,6 +1624,35 @@ export default function SettingsTab({ user, onSessionUser }) {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">GvG OCR style</span>
+            <p className="text-[10px] text-slate-500">The attendance scanner reads this screen. Raid party stays the default.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="GvG OCR style">
+              {OCR_STYLE_OPTIONS.map((option) => {
+                const selected = (config.gvgOcrStyle || 'raid') === option.id;
+                return (
+                  <label
+                    key={option.id}
+                    className={`rounded-xl border p-2.5 cursor-pointer ${selected ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-800 bg-slate-950'}`}
+                  >
+                    <OcrStyleWireframe kind={option.id} />
+                    <span className="mt-2 flex items-center gap-2 text-[11px] text-slate-200">
+                      <input
+                        type="radio"
+                        name="gvgOcrStyle"
+                        value={option.id}
+                        checked={selected}
+                        onChange={() => setConfig((prev) => ({ ...prev, gvgOcrStyle: option.id }))}
+                        className="accent-indigo-500"
+                      />
+                      {option.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="border-t border-slate-800/60 my-6" />
 
           {/* Voice War Rooms Registry */}
@@ -1855,6 +1924,40 @@ export default function SettingsTab({ user, onSessionUser }) {
             ) : (
               <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl text-xs text-slate-500 font-mono italic">No custom classes active.</div>
             )}
+          </div>
+          <div className="border-t border-slate-800/60 pt-6 mt-6 space-y-4">
+            <div className="border-b border-slate-800/60 pb-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconShield /> GVG Stat Keywords</div>
+              <p className="text-[10px] text-slate-500 mt-0.5">One name per line, in the order they appear under the header. The first line is the anchor: HP and SP for General, ASPD and MSPD for Quasi. The reader finds that row, then names the rows below it in this order. Column 1 is the left side and Column 2 is the right side.</p>
+            </div>
+            <div className="grid gap-6 max-w-4xl">
+              {[
+                ['General Stats', 'gvgGeneralStatsCol1', 'gvgGeneralStatsCol2'],
+                ['Quasi Stats', 'gvgQuasiStatsCol1', 'gvgQuasiStatsCol2'],
+              ].map(([title, col1, col2]) => (
+                <div key={title} className="space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-300">{title}</div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {[
+                      [col1, 'Column 1'],
+                      [col2, 'Column 2'],
+                    ].map(([key, columnTitle]) => (
+                      <label key={key} className="block text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                        {columnTitle}
+                        <span className="ml-2 normal-case tracking-normal text-slate-600">{parseStatKeywordList(config[key]).length} names</span>
+                        <textarea
+                          value={config[key] || ''}
+                          rows={12}
+                          onChange={(e) => setConfig((prev) => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={'HP\nPATK\nMATK'}
+                          className="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono normal-case tracking-normal leading-relaxed outline-none focus:border-slate-700"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         {/* DYNAMIC GAME ROLE TAXONOMY REGISTRY SECTION */}
           <div className="border-t border-slate-800/60 pt-6 mt-6 space-y-4">

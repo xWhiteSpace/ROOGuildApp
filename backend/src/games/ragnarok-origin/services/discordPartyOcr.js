@@ -15,7 +15,7 @@ import { getCachedConfig } from '../../../db/tenantContext.js';
 import { isTenantOfficer, roleTokensFromMember } from '../../../auth/officer.js';
 import { parseCompositeKey } from '../../../utils/guildTime.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
-import { annotateShotBuffer, enqueueOcrJob, ocrPartyImages } from './partyOcr.js';
+import { annotateShotBuffer, enqueueOcrJob, normalizeGvgOcrStyle, ocrPartyImages } from './partyOcr.js';
 import { claimOcrCorrection, releaseOcrCorrection } from '@guildname/shared/inGameAlias';
 import { downloadStagedOcrShots, purgeReviewStaging, stageOcrShots } from './ocrShotStaging.js';
 import {
@@ -235,11 +235,19 @@ export function reviewFixUrl(reviewId) {
   return `${frontendUrl}/attendance/ocr-review/${encodeURIComponent(reviewId)}`;
 }
 
+function guildRowColor(hit, overlays) {
+  if (hit?.status === 'online' || hit?.status === 'offline') return hit.status;
+  return rowColorStatus({ overlays }, hit?.imageIndex, hit?.col, hit?.row);
+}
+
 export function buildDraftReview({ members, event, ocrResult, createdBy, createdByName, source = {} }) {
   const roster = raidRosterUids(members);
+  const guildScan = normalizeGvgOcrStyle(source.ocrStyle) === 'guild';
   const ocrMatches = {};
   const present = {};
+  const guildAbsent = new Set();
   for (const hit of ocrResult?.matched || []) {
+    const status = guildRowColor(hit, ocrResult?.overlays);
     const row = {
       ocrText: hit.ocrText,
       score: hit.score,
@@ -248,9 +256,27 @@ export function buildDraftReview({ members, event, ocrResult, createdBy, created
       imageIndex: Number.isInteger(hit.imageIndex) ? hit.imageIndex : null,
       ocrCol: hit.col ?? null,
       ocrRow: hit.row ?? null,
+      status,
     };
     ocrMatches[hit.uid] = row;
-    present[hit.uid] = row;
+    if (!guildScan) {
+      present[hit.uid] = row;
+      continue;
+    }
+    if (status === 'offline' && !present[hit.uid]) {
+      guildAbsent.add(String(hit.uid));
+      continue;
+    }
+    if (status === 'online') {
+      present[hit.uid] = row;
+      guildAbsent.delete(String(hit.uid));
+    }
+  }
+  if (guildScan) {
+    for (const uid of roster) {
+      if (guildAbsent.has(String(uid))) continue;
+      present[uid] = present[uid] || { ocrText: '', score: 0, source: 'guild' };
+    }
   }
   const parsed = parseCompositeKey(event.key);
   const slotGaps = (ocrResult?.slotGaps || []).map((gap, idx) => ({
@@ -261,6 +287,7 @@ export function buildDraftReview({ members, event, ocrResult, createdBy, created
     imageIndex: Number.isInteger(gap.imageIndex) ? gap.imageIndex : null,
     ocrCol: gap.col ?? null,
     ocrRow: gap.row ?? null,
+    status: gap.status || '',
   }));
   return {
     id: newReviewId(),
@@ -334,7 +361,9 @@ export async function createReviewFromBuffers({ buffers, fileNames = [], event, 
     }
     return { buffer: item, name: (fileNames || [])[i] || `screenshot-${i + 1}.png` };
   });
-  const result = await enqueueOcrJob(() => ocrPartyImages(inputs, members));
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const ocrStyle = normalizeGvgOcrStyle(configSnap.exists() ? configSnap.val()?.gvgOcrStyle : '');
+  const result = await enqueueOcrJob(() => ocrPartyImages(inputs, members, ocrStyle));
   const review = buildDraftReview({
     members,
     event,
@@ -343,6 +372,7 @@ export async function createReviewFromBuffers({ buffers, fileNames = [], event, 
     createdByName,
     source: {
       ...source,
+      ocrStyle,
       fileNames: inputs.map((row) => row.name),
     },
   });
@@ -395,12 +425,40 @@ export function assignUnmatched(review, unmatchedId, uid) {
   review.ocrMatches = review.ocrMatches || {};
   review.ocrMatches[uid] = hit;
   review.present = review.present || {};
-  review.present[uid] = hit;
-  review.absent = (review.absent || []).filter((id) => id !== uid);
+  const status = unmatched?.status || rowColorStatus(review, hit.imageIndex, hit.ocrCol, hit.ocrRow);
+  hit.status = status;
+  if (guildScan(review) && status === 'offline') {
+    delete review.present[uid];
+    const absent = (review.absent || []).filter((id) => id !== uid);
+    absent.push(uid);
+    review.absent = absent;
+  } else if (!guildScan(review) || status === 'online') {
+    review.present[uid] = hit;
+    review.absent = (review.absent || []).filter((id) => id !== uid);
+  }
   review.unmatched = (review.unmatched || []).filter((u) => u.id !== unmatchedId);
   review.slotGaps = (review.slotGaps || []).filter((gap) => gap.id !== unmatchedId);
   review.pendingUnmatchedId = null;
   return true;
+}
+
+function guildScan(review) {
+  return normalizeGvgOcrStyle(review?.source?.ocrStyle) === 'guild';
+}
+
+function rowColorStatus(review, imageIndex, col, ocrRow) {
+  for (const overlay of review?.overlays || []) {
+    if (Number.isInteger(imageIndex) && overlay.imageIndex !== imageIndex) continue;
+    const cell = (overlay.cells || []).find((item) => item.col === col && item.row === ocrRow);
+    if (cell?.status === 'online' || cell?.status === 'offline') return cell.status;
+  }
+  return '';
+}
+
+function linkedRowStatus(review, unmatched, previous, incoming) {
+  if (unmatched?.status === 'online' || unmatched?.status === 'offline') return unmatched.status;
+  if (previous?.status === 'online' || previous?.status === 'offline') return previous.status;
+  return rowColorStatus(review, incoming.imageIndex, incoming.ocrCol, incoming.ocrRow);
 }
 
 function seatPos(value) {
@@ -444,10 +502,15 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, reme
   review.present = review.present || {};
   if (fromUid && fromUid !== toUid) {
     delete review.ocrMatches[fromUid];
-    delete review.present[fromUid];
-    const absent = (review.absent || []).filter((id) => id !== fromUid);
-    absent.push(fromUid);
-    review.absent = absent;
+    if (guildScan(review)) {
+      review.present[fromUid] = { ocrText: '', score: 0, source: 'guild' };
+      review.absent = (review.absent || []).filter((id) => id !== fromUid);
+    } else {
+      delete review.present[fromUid];
+      const absent = (review.absent || []).filter((id) => id !== fromUid);
+      absent.push(fromUid);
+      review.absent = absent;
+    }
   }
   if (displacing) {
     const returned = {
@@ -458,6 +521,7 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, reme
       imageIndex: Number.isInteger(occupied.imageIndex) ? occupied.imageIndex : null,
       ocrCol: occupiedCol,
       ocrRow: occupiedRow,
+      status: occupied.status || '',
     };
     review.slotGaps = [...(review.slotGaps || []), returned];
     if (occupiedText) review.unmatched = [...(review.unmatched || []), returned];
@@ -470,9 +534,20 @@ export function linkOcrReading(review, { unmatchedId, fromUid, toUid, text, reme
     imageIndex: incoming.imageIndex,
     ocrCol: incoming.ocrCol,
     ocrRow: incoming.ocrRow,
+    status: linkedRowStatus(review, unmatched, previous, incoming),
   };
   review.ocrMatches[toUid] = hit;
-  if (displacing) {
+  if (guildScan(review)) {
+    if (hit.status === 'offline') {
+      delete review.present[toUid];
+      const absent = (review.absent || []).filter((id) => id !== toUid);
+      absent.push(toUid);
+      review.absent = absent;
+    } else if (hit.status === 'online') {
+      review.present[toUid] = hit;
+      review.absent = (review.absent || []).filter((id) => id !== toUid);
+    }
+  } else if (displacing) {
     if (Object.prototype.hasOwnProperty.call(review.present, toUid)) review.present[toUid] = hit;
   } else {
     review.present[toUid] = hit;
@@ -508,7 +583,10 @@ export function unlinkOcrReading(review, uid) {
   const ocrRow = hit?.ocrRow ?? null;
   if (!hit || (!text && col == null && ocrRow == null)) return null;
   delete review.ocrMatches[id];
-  if (review.present?.[id]) {
+  if (guildScan(review)) {
+    review.present[id] = { ocrText: '', score: 0, source: 'guild' };
+    review.absent = (review.absent || []).filter((item) => item !== id);
+  } else if (review.present?.[id]) {
     review.present[id] = { ocrText: '', score: 0, source: 'officer' };
   }
   const gap = {
@@ -519,6 +597,7 @@ export function unlinkOcrReading(review, uid) {
     imageIndex: Number.isInteger(hit.imageIndex) ? hit.imageIndex : null,
     ocrCol: col,
     ocrRow,
+    status: hit.status || '',
   };
   review.slotGaps = [...(review.slotGaps || []), gap];
   if (text) review.unmatched = [...(review.unmatched || []), gap];

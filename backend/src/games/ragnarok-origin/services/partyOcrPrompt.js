@@ -10,6 +10,7 @@ import { getCachedConfig, getCurrentTenantId } from '../../../db/tenantContext.j
 import { buildCompositeKey, parseCompositeKey } from '../../../utils/guildTime.js';
 import { enqueueDiscordCall, isDiscordCircuitOpen } from '../../../utils/discordRateLimit.js';
 import { getRaidCycleStatus } from '../raidTimeWindow.js';
+import { normalizeGvgOcrStyle, ocrShotLimit } from './partyOcr.js';
 
 export const PROMPT_PATH = 'attendance/ocr_auto_prompt';
 export const CREATE_DRAFT_ID = 'ocr:create-draft';
@@ -37,10 +38,16 @@ export function draftShotName(warDate, index) {
   return `${mmdd}-${String(index).padStart(2, '0')}`;
 }
 
-export function promptSentence(warDate) {
+export function promptSentence(warDate, style) {
+  const picked = normalizeGvgOcrStyle(style);
+  const screen = picked === 'party'
+    ? 'Party screenshots (5 members each)'
+    : picked === 'guild'
+      ? 'Guild list screenshots'
+      : 'Team Party screenshots';
   return [
     `GVG Event ${warDate}`,
-    '1. Party leaders post Team Party screenshots in this thread.',
+    `1. Party leaders post ${screen} in this thread.`,
     '2. Press Create draft only after the pictures are here.',
   ].join('\n');
 }
@@ -193,7 +200,7 @@ export async function maybeOpenPartyOcrThread() {
       if (!channel?.threads?.create) throw new Error('Raid Screenshot channel cannot open a thread.');
       thread = await createPublicThread(channel, threadNameFromWarDate(warDate));
       const sent = await enqueueDiscordCall(() => thread.send({
-        content: promptSentence(warDate),
+        content: promptSentence(warDate, config.gvgOcrStyle),
         components: [createDraftRow()],
       }));
       await db.ref(`${PROMPT_PATH}/${eventKey}`).set({
@@ -279,10 +286,14 @@ export async function runCreateDraftFromThread(interaction) {
     await enqueueDiscordCall(() => thread.setArchived(false)).catch(() => {});
   }
 
+  const configSnap = await db.ref('settings/configuration').once('value');
+  const ocrStyle = normalizeGvgOcrStyle(configSnap.exists() ? configSnap.val()?.gvgOcrStyle : '');
+  const shotLimit = ocrShotLimit(ocrStyle);
   const selected = selectThreadShots(await listThreadMessages(thread), {
     botId: discordClient.user?.id || '',
     promptMessageId: pointer.messageId,
     warDate: pointer.eventDate,
+    limit: shotLimit,
   });
   if (selected.count === 0) {
     await follow(interaction, 'No screenshots in this thread yet.', true);
@@ -291,7 +302,7 @@ export async function runCreateDraftFromThread(interaction) {
   if (selected.overLimit) {
     await follow(
       interaction,
-      `This thread has ${selected.count} screenshots. The draft holds ${MAX_PROMPT_SHOTS}. Remove extras and press Create draft again.`,
+      `This thread has ${selected.count} screenshots. The draft holds ${shotLimit}. Remove extras and press Create draft again.`,
       true,
     );
     return;

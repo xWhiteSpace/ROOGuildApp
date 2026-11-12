@@ -28,10 +28,11 @@ import {
 } from '../games/ragnarok-origin/services/discordPartyOcr.js';
 import { resolveReviewShotUrls } from '../games/ragnarok-origin/services/ocrShotStaging.js';
 import { gvgResultValue } from '../games/ragnarok-origin/services/inGameStatus.js';
+import { normalizeGvgOcrStyle, ocrShotLimit } from '../games/ragnarok-origin/services/partyOcr.js';
 
 const router = Router();
 const MAX_SHOT_BYTES = 8 * 1024 * 1024;
-const MAX_SHOTS = 8;
+const MAX_SHOTS = 24;
 
 const shotUpload = multer({
   storage: multer.memoryStorage(),
@@ -45,7 +46,7 @@ function handleShotUpload(req, res, next) {
       return res.status(400).json({ success: false, error: 'Each screenshot must be 8 MB or smaller.' });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ success: false, error: 'Upload at most 8 screenshots.' });
+      return res.status(400).json({ success: false, error: 'Upload at most 24 screenshots.' });
     }
     return res.status(400).json({ success: false, error: err.message || 'Upload failed.' });
   });
@@ -59,12 +60,13 @@ async function requireOfficerUser(req, res) {
   }
   const db = getTenantStore();
   const configSnap = await db.ref('settings/configuration').once('value');
-  const { ok } = await checkOfficer(req, configSnap.exists() ? configSnap.val() : {});
+  const config = configSnap.exists() ? configSnap.val() : {};
+  const { ok } = await checkOfficer(req, config);
   if (!ok) {
     res.status(403).json({ success: false, error: 'Officer access required' });
     return null;
   }
-  return { user, db };
+  return { user, db, config };
 }
 
 function slimMember(uid, member) {
@@ -92,6 +94,7 @@ function rosterRows(review, members) {
       ocrCol: hit?.ocrCol ?? null,
       ocrRow: hit?.ocrRow ?? null,
       ocrPosition: hit?.ocrCol && hit?.ocrRow ? `C${hit.ocrCol} R${hit.ocrRow}` : '',
+      status: hit?.status || '',
     };
   });
 }
@@ -146,8 +149,14 @@ router.post('/scan', handleShotUpload, async (req, res) => {
     const ctx = await requireOfficerUser(req, res);
     if (!ctx) return;
     const files = req.files || [];
+    const ocrStyle = normalizeGvgOcrStyle(ctx.config?.gvgOcrStyle);
+    const shotLimit = ocrShotLimit(ocrStyle);
+    const shotLabel = ocrStyle === 'party' ? 'Party' : ocrStyle === 'guild' ? 'Guild list' : 'Team Party';
     if (!files.length) {
-      return res.status(400).json({ success: false, error: 'Choose a Team Party screenshot first.' });
+      return res.status(400).json({ success: false, error: `Choose a ${shotLabel} screenshot first.` });
+    }
+    if (files.length > shotLimit) {
+      return res.status(400).json({ success: false, error: `Upload at most ${shotLimit} screenshots.` });
     }
     const bad = files.find((file) => !String(file.mimetype || '').startsWith('image/'));
     if (bad) {
@@ -209,6 +218,7 @@ router.get('/:id', async (req, res) => {
       success: true,
       review: {
         ...summarizeReview(review, members),
+        source: { ocrStyle: normalizeGvgOcrStyle(review.source?.ocrStyle) },
         unmatched: Array.isArray(review.unmatched) ? review.unmatched : [],
         slotGaps: reviewSlotGaps(review),
         overlays: Array.isArray(review.overlays) ? review.overlays : [],
@@ -299,7 +309,17 @@ router.patch('/:id', async (req, res) => {
     const unlinkedOnly = Boolean(unlink?.uid) && !correction?.uid && !dictionaryMark?.uid && !Array.isArray(req.body?.presentUids);
     const resultOnly = Object.prototype.hasOwnProperty.call(req.body || {}, 'gvgResult') && !linkedOnly && !markOnly && !unlinkedOnly && !Array.isArray(req.body?.presentUids) && !(req.body?.unmatchedId && req.body?.uid);
     if (!linkedOnly && !markOnly && !unlinkedOnly && !resultOnly) await refreshReviewMessage(review, members, null).catch(() => {});
-    return res.json({ success: true, id: review.id, presentCount: Object.keys(review.present || {}).length });
+    const linkedUid = correction?.uid ? String(correction.uid) : '';
+    return res.json({
+      success: true,
+      id: review.id,
+      presentCount: Object.keys(review.present || {}).length,
+      linked: linkedUid ? {
+        uid: linkedUid,
+        present: Boolean(review.present?.[linkedUid]),
+        status: review.ocrMatches?.[linkedUid]?.status || '',
+      } : null,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

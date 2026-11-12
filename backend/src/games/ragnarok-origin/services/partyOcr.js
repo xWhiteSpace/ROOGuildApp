@@ -276,6 +276,7 @@ async function recognizeText(worker, image, psm) {
     tessedit_char_whitelist: NAME_CHAR_WHITELIST,
     preserve_interword_spaces: '0',
     user_defined_dpi: '300',
+    tessedit_do_invert: '0',
   });
   const { data } = await worker.recognize(image);
   return String(data?.text || '').trim();
@@ -565,7 +566,7 @@ function lettersAreLight(gray, width, height) {
   return lighter > darker;
 }
 
-function letterRows(gray, width, height) {
+function letterRows(gray, width, height, preferLower) {
   const bar = barLevel(gray, width, height);
   const cut = Math.round(bar * 0.65);
   const minInk = Math.max(3, Math.round(width * 0.04));
@@ -598,7 +599,9 @@ function letterRows(gray, width, height) {
     }
   }
   if (!runs.length) return null;
-  const best = runs.reduce((a, b) => (b.ink > a.ink ? b : a));
+  let best = runs.reduce((a, b) => (b.ink > a.ink ? b : a));
+  const lower = runs[runs.length - 1];
+  if (preferLower && lower !== best && best.ink / best.rows > (lower.ink / lower.rows) * 1.2) best = lower;
   if (best.y1 - best.y0 >= height - 2) return null;
   if (runs.length < 2 && best.rows >= height * 0.7) return null;
   return best;
@@ -622,7 +625,7 @@ function liftGrayBar(gray, width, height) {
   return true;
 }
 
-async function nameLinePng(rgb, rect) {
+async function nameLinePng(rgb, rect, preferLower, keepPlate) {
   if (!rect) return null;
   const left = Math.max(0, Math.min(rect.left, rgb.width - 8));
   const top = Math.max(0, Math.min(rect.top, rgb.height - 8));
@@ -643,7 +646,7 @@ async function nameLinePng(rgb, rect) {
     for (let i = 0; i < gray.length; i += 1) gray[i] = 255 - gray[i];
   }
   const lifted = liftGrayBar(gray, extract.width, extract.height);
-  const band = letterRows(gray, extract.width, extract.height);
+  const band = keepPlate ? null : letterRows(gray, extract.width, extract.height, preferLower);
   let source = gray;
   let width = extract.width;
   let height = extract.height;
@@ -663,14 +666,15 @@ async function nameLinePng(rgb, rect) {
   let pipeline = sharp(source, { raw: { width, height, channels: 1 } });
   if (!lifted) pipeline = pipeline.normalize();
   return pipeline
-    .resize(kernel ? { height: heightOut, kernel } : { height: heightOut })
+    .resize({ height: heightOut, kernel: kernel || 'lanczos3' })
     .extend({ ...pad, background: { r: 255, g: 255, b: 255 } })
     .png({ density: 300 })
     .toBuffer();
 }
 
-async function readPlate(worker, rgb, rect) {
-  const strip = await nameLinePng(rgb, rect);
+async function readPlate(worker, rgb, rect, style) {
+  const picked = style === true ? 'party' : normalizeGvgOcrStyle(style);
+  const strip = await nameLinePng(rgb, rect, picked === 'party', picked === 'guild');
   if (!strip) return '';
   let got = tokenizeOcrText(await recognizeText(worker, strip, PSM.SINGLE_LINE));
   if (!got.length) {
@@ -686,17 +690,505 @@ function tidyCellName(text) {
 function keepCellReading(token) {
   const text = tidyCellName(token);
   if (!text) return '';
-  if (/^(away|afk|lv\d+|party\d+)$/i.test(text)) return '';
+  if (/^(away|afk|lv\d+|party\d+|emperiumhall|outercity|automatch|guildmember)$/i.test(text)) return '';
   if (CHROME_LINE.test(text) || CHROME_PHRASE.test(text)) return '';
   return text;
 }
 
-export async function ocrImageBuffer(buffer) {
+const PARTY_SLOT_X0 = 0.03275;
+const PARTY_SLOT_X1 = 0.96374;
+const PARTY_SLOT_Y0 = 0.22745;
+const PARTY_SLOT_Y1 = 0.82745;
+const PARTY_NAME_TOP = 0.784;
+const PARTY_NAME_BOTTOM = 0.876;
+const GUILD_SHOT_LIMIT = 24;
+const RAID_SHOT_LIMIT = 8;
+
+export function normalizeGvgOcrStyle(value) {
+  const style = String(value || '').trim().toLowerCase();
+  if (style === 'party' || style === 'guild') return style;
+  return 'raid';
+}
+
+export function ocrShotLimit(style) {
+  return normalizeGvgOcrStyle(style) === 'guild' ? GUILD_SHOT_LIMIT : RAID_SHOT_LIMIT;
+}
+
+function emptyLayout(width, height) {
+  return { width, height, window: null, cells: [] };
+}
+
+function rowFractions(data, width, height, accept) {
+  const counts = new Array(height).fill(0);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      if (accept(r, g, b)) counts[y] += 2;
+    }
+  }
+  return counts.map((count) => count / width);
+}
+
+function edgeSpan(data, width, height, y, accept) {
+  const row = Math.max(0, Math.min(height - 1, y));
+  let left = -1;
+  let right = -1;
+  for (let x = 0; x < width; x += 1) {
+    const [r, g, b] = pixelAt(data, width, x, row);
+    if (!accept(r, g, b)) continue;
+    if (left < 0) left = x;
+    right = x;
+  }
+  return { left, right };
+}
+
+function partyPanelPixel(r, g, b) {
+  return isWindowWhite(r, g, b) || isWindowHeader(r, g, b);
+}
+
+export function detectPartyWindow(data, width, height) {
+  const header = rowFractions(data, width, height, isWindowHeader);
+  const white = rowFractions(data, width, height, isWindowWhite);
+  let top = -1;
+  for (let y = 0; y < height; y += 1) {
+    if (header[y] > 0.45) {
+      top = y;
+      break;
+    }
+  }
+  let bot = -1;
+  for (let y = height - 1; y >= 0; y -= 1) {
+    if (white[y] > 0.55) {
+      bot = y;
+      break;
+    }
+  }
+  if (top < 0 || bot - top < 40) return null;
+  const { left, right } = edgeSpan(data, width, height, bot - 4, partyPanelPixel);
+  if (left < 0 || right - left < width * 0.4) return null;
+  return { left, top, right, bot };
+}
+
+function medianChannel(values) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] || 0;
+}
+
+function inkInRect(data, width, height, rect) {
+  if (!rect) return 0;
+  const x0 = Math.max(0, rect.left);
+  const y0 = Math.max(0, rect.top);
+  const x1 = Math.min(width - 1, rect.left + rect.width - 1);
+  const y1 = Math.min(height - 1, rect.top + rect.height - 1);
+  const samples = [];
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) samples.push(pixelAt(data, width, x, y));
+  }
+  if (!samples.length) return 0;
+  const bg = [0, 1, 2].map((channel) => medianChannel(samples.map((pixel) => pixel[channel])));
+  let ink = 0;
+  for (const [r, g, b] of samples) {
+    const dark = (r + g + b) / 3 < 150;
+    const colored = Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]) > 120;
+    if (dark || colored) ink += 1;
+  }
+  return ink;
+}
+
+function partyNamePlate(slot) {
+  const inset = Math.max(2, Math.round(slot.width * 0.06));
+  const top = slot.top + Math.round(slot.height * PARTY_NAME_TOP);
+  const bottom = slot.top + Math.round(slot.height * PARTY_NAME_BOTTOM);
+  return {
+    left: slot.left + inset,
+    top,
+    width: Math.max(8, slot.width - inset * 2),
+    height: Math.max(4, bottom - top),
+  };
+}
+
+export function layoutPartySlots(data, width, height) {
+  const win = detectPartyWindow(data, width, height);
+  if (!win) return emptyLayout(width, height);
+  const ww = win.right - win.left;
+  const wh = win.bot - win.top;
+  const x0 = win.left + ww * PARTY_SLOT_X0;
+  const x1 = win.left + ww * PARTY_SLOT_X1;
+  const y0 = win.top + wh * PARTY_SLOT_Y0;
+  const y1 = win.top + wh * PARTY_SLOT_Y1;
+  const cellW = (x1 - x0) / 5;
+  const cellH = y1 - y0;
+  const cells = [];
+  for (let col = 0; col < 5; col += 1) {
+    const slot = {
+      left: Math.round(x0 + col * cellW),
+      top: Math.round(y0),
+      width: Math.max(8, Math.round(cellW) - 2),
+      height: Math.max(8, Math.round(cellH)),
+    };
+    const plate = partyNamePlate(slot);
+    const empty = inkInRect(data, width, height, plate) < Math.max(12, Math.round(plate.width * 0.08));
+    cells.push({
+      col: col + 1,
+      row: 1,
+      empty,
+      text: '',
+      slot,
+      plate: empty ? null : plate,
+    });
+  }
+  return {
+    width,
+    height,
+    window: {
+      left: win.left,
+      top: win.top,
+      width: ww,
+      height: wh,
+    },
+    cells,
+  };
+}
+
+function isGuildHeader(r, g, b) {
+  return b > 190 && b > r + 30 && g > r + 10 && r < 190;
+}
+
+function isGuildBar(r, g, b) {
+  if (isGuildHeader(r, g, b)) return true;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return min > 200 && max - min < 45;
+}
+
+function isGuildPanel(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (min > 210 && max - min < 45) return true;
+  return b > 175 && b > r + 25 && g + 5 > r && r < 210;
+}
+
+function isGuildSep(r, g, b) {
+  const lum = (r + g + b) / 3;
+  return lum < 230 && lum > 175 && b + 8 >= r;
+}
+
+function guildColumnInside(data, width, x, y0, y1) {
+  if (x < 0 || x >= width) return false;
+  let hit = 0;
+  let seen = 0;
+  for (let y = y0; y <= y1; y += 2) {
+    const [r, g, b] = pixelAt(data, width, x, y);
+    seen += 1;
+    if (isGuildPanel(r, g, b)) hit += 1;
+  }
+  return seen > 0 && hit / seen > 0.85;
+}
+
+function guildRowInside(data, width, y, x0, x1) {
+  if (y < 0) return false;
+  let hit = 0;
+  let seen = 0;
+  for (let x = x0; x <= x1; x += 2) {
+    const [r, g, b] = pixelAt(data, width, x, y);
+    seen += 1;
+    if (isGuildPanel(r, g, b) || isGuildBar(r, g, b)) hit += 1;
+  }
+  return seen > 0 && hit / seen > 0.7;
+}
+
+function guildHeaderSpan(data, width, y) {
+  let left = -1;
+  for (let x = 0; x < width; x += 1) {
+    const [r, g, b] = pixelAt(data, width, x, y);
+    if (!isGuildHeader(r, g, b)) continue;
+    left = x;
+    break;
+  }
+  if (left < 0) return null;
+  let right = left;
+  let miss = 0;
+  for (let x = left; x < width; x += 1) {
+    const [r, g, b] = pixelAt(data, width, x, y);
+    if (isGuildBar(r, g, b)) {
+      right = x;
+      miss = 0;
+    } else if (miss > 18) break;
+    else miss += 1;
+  }
+  return { left, right };
+}
+
+export function detectGuildWindow(data, width, height) {
+  let header = null;
+  for (let y = 0; y < height; y += 1) {
+    const span = guildHeaderSpan(data, width, y);
+    if (!span || span.right - span.left < width * 0.45) continue;
+    header = { top: y, left: span.left, right: span.right };
+    break;
+  }
+  if (!header) return null;
+  let bot = header.top;
+  for (let y = header.top; y < height; y += 1) {
+    let hit = 0;
+    let seen = 0;
+    for (let x = header.left; x <= header.right; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      seen += 1;
+      if (isGuildPanel(r, g, b)) hit += 1;
+    }
+    if (seen && hit / seen > 0.55) bot = y;
+    else if (y > bot + 4) break;
+  }
+  if (bot - header.top < 40) return null;
+  const y0 = header.top + 24;
+  const y1 = Math.max(y0, bot - 16);
+  let left = header.left;
+  for (let x = header.left; x >= Math.max(0, header.left - 30); x -= 1) {
+    if (!guildColumnInside(data, width, x, y0, y1)) break;
+    left = x;
+  }
+  let right = header.right;
+  for (let x = header.right; x <= Math.min(width - 1, header.right + 30); x += 1) {
+    if (!guildColumnInside(data, width, x, y0, y1)) break;
+    right = x;
+  }
+  let top = header.top;
+  for (let y = header.top - 1; y >= Math.max(0, header.top - 6); y -= 1) {
+    if (!guildRowInside(data, width, y, left, right)) break;
+    top = y;
+  }
+  return { left, top, right, bot };
+}
+
+function portraitOnRow(win, ww, rowTop, rowHeight) {
+  const side = Math.max(8, Math.round(rowHeight * 0.86));
+  return {
+    left: win.left + Math.round(ww * 0.025),
+    top: rowTop + Math.round((rowHeight - side) / 2),
+    width: side,
+    height: side,
+  };
+}
+
+function rowFillStatus(data, width, cell) {
+  const band = cell.slot || {
+    left: cell.portrait.left + cell.portrait.width,
+    top: cell.portrait.top,
+    width: cell.portrait.width * 4,
+    height: cell.portrait.height,
+  };
+  const x0 = band.left + Math.round(band.width * (cell.slot ? 0.22 : 0.08));
+  const x1 = band.left + Math.round(band.width * 0.92);
+  const y0 = band.top + 6;
+  const y1 = band.top + band.height - 6;
+  const lums = [];
+  for (let y = y0; y < y1; y += 2) {
+    for (let x = x0; x < x1; x += 3) {
+      if (x < 0 || x >= width || y < 0) continue;
+      const [r, g, b] = pixelAt(data, width, x, y);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      if (min < 190 || max - min > 30) continue;
+      lums.push((r + g + b) / 3);
+    }
+  }
+  if (lums.length < 40) return '';
+  lums.sort((a, b) => a - b);
+  return lums[Math.floor(lums.length / 2)] >= 243 ? 'online' : 'offline';
+}
+
+function plateFromPortrait(ww, portrait) {
+  return {
+    left: portrait.left + portrait.width + Math.round(portrait.width * 0.55),
+    top: portrait.top + Math.round(portrait.height * 0.28),
+    width: Math.round(ww * 0.16),
+    height: Math.max(8, Math.round(portrait.height * 0.42)),
+  };
+}
+
+function portraitInk(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return !(min > 200 && max - min < 40);
+}
+
+function portraitOrphans(data, width, win, ww, pitch, listTop, rowCells) {
+  if (!pitch) return [];
+  const side = Math.max(8, Math.round(pitch * 0.82));
+  const x0 = win.left + Math.round(ww * 0.03);
+  const x1 = Math.min(win.right, x0 + side);
+  const runs = [];
+  let start = -1;
+  let gap = 0;
+  const y1 = win.bot - 8;
+  for (let y = listTop; y <= y1; y += 1) {
+    let hit = 0;
+    let seen = 0;
+    for (let x = x0; x <= x1; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      seen += 1;
+      if (portraitInk(r, g, b)) hit += 1;
+    }
+    const on = seen > 0 && hit / seen > 0.35;
+    if (on) {
+      if (start < 0) start = y;
+      gap = 0;
+    } else if (start >= 0 && gap < 12 && y < y1) gap += 1;
+    else if (start >= 0) {
+      runs.push([start, y - gap - 1]);
+      start = -1;
+      gap = 0;
+    }
+  }
+  if (start >= 0) runs.push([start, y1 - gap]);
+  const covered = (y) => rowCells.some((cell) => y >= cell.slot.top && y < cell.slot.top + cell.slot.height);
+  return runs.flatMap(([top, bottom]) => {
+    const runHeight = bottom - top + 1;
+    const mid = (top + bottom) / 2;
+    if (runHeight < side * 0.7 || covered(mid)) return [];
+    const portrait = {
+      left: win.left + Math.round(ww * 0.025),
+      top: Math.max(listTop, Math.round(mid - side / 2)),
+      width: side,
+      height: side,
+    };
+    if (portrait.top + portrait.height > win.bot - 4) return [];
+    return [{
+      col: 1,
+      empty: false,
+      text: '',
+      slot: null,
+      plate: plateFromPortrait(ww, portrait),
+      portrait,
+    }];
+  });
+}
+
+function guildListTop(data, width, win) {
+  const ww = win.right - win.left;
+  const x0 = win.left + Math.round(ww * 0.12);
+  const x1 = win.left + Math.round(ww * 0.88);
+  const yLimit = win.top + Math.round((win.bot - win.top) * 0.45);
+  const bottoms = [];
+  let start = -1;
+  for (let y = win.top; y <= yLimit; y += 1) {
+    let hit = 0;
+    let seen = 0;
+    for (let x = x0; x <= x1; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      seen += 1;
+      if (b > 180 && b > r + 30 && g > r && r < 200) hit += 1;
+    }
+    const on = seen > 0 && hit / seen > 0.55;
+    if (on && start < 0) start = y;
+    if (!on && start >= 0) {
+      if (y - start >= 8) bottoms.push(y);
+      start = -1;
+    }
+  }
+  return bottoms.length ? bottoms[bottoms.length - 1] : win.top;
+}
+
+export function layoutGuildRows(data, width, height) {
+  const win = detectGuildWindow(data, width, height);
+  if (!win) return emptyLayout(width, height);
+  const ww = win.right - win.left;
+  const wh = win.bot - win.top;
+  const x0 = win.left + Math.round(ww * 0.05);
+  const x1 = win.right - Math.round(ww * 0.05);
+  const flags = [];
+  for (let y = win.top; y <= win.bot; y += 1) {
+    let hit = 0;
+    let seen = 0;
+    for (let x = x0; x <= x1; x += 2) {
+      const [r, g, b] = pixelAt(data, width, x, y);
+      seen += 1;
+      if (isGuildSep(r, g, b)) hit += 1;
+    }
+    flags.push(seen > 0 && hit / seen > 0.55);
+  }
+  const seps = [];
+  let start = -1;
+  for (let i = 0; i <= flags.length; i += 1) {
+    const on = i < flags.length && flags[i];
+    if (on && start < 0) start = i;
+    if (!on && start >= 0) {
+      if (i - start >= 3) seps.push([win.top + start, win.top + i - 1]);
+      start = -1;
+    }
+  }
+  const steps = [];
+  for (let i = 1; i < seps.length; i += 1) steps.push(seps[i][0] - seps[i - 1][0]);
+  const ordered = steps.slice().sort((a, b) => a - b);
+  const pitch = ordered.length ? ordered[Math.floor(ordered.length / 2)] : 0;
+  const whole = (heightPx) => pitch > 0 && heightPx >= pitch * 0.86 && heightPx <= pitch * 1.1;
+  const listTop = guildListTop(data, width, win);
+  const gaps = [];
+  for (let i = 0; i < seps.length - 1; i += 1) {
+    const top = seps[i][1] + 1;
+    const bottom = seps[i + 1][0] - 1;
+    const rowHeight = bottom - top + 1;
+    if (top + 4 < listTop) continue;
+    if (whole(rowHeight)) gaps.push({ top, bottom, height: rowHeight });
+  }
+  if (seps.length && whole(seps[0][0] - listTop)) {
+    gaps.unshift({ top: listTop, bottom: seps[0][0] - 1, height: seps[0][0] - listTop });
+  }
+  const rowCells = gaps.map((gap) => {
+    const slot = {
+      left: win.left + Math.round(ww * 0.02),
+      top: gap.top,
+      width: Math.round(ww * 0.94),
+      height: gap.height,
+    };
+    const portrait = portraitOnRow(win, ww, gap.top, gap.height);
+    return {
+      col: 1,
+      empty: false,
+      text: '',
+      slot,
+      plate: plateFromPortrait(ww, portrait),
+      portrait,
+    };
+  });
+  const orphans = portraitOrphans(data, width, win, ww, pitch, listTop, rowCells);
+  const cells = [...rowCells, ...orphans]
+    .filter((cell) => (cell.slot?.top ?? cell.portrait?.top ?? 0) + 4 >= listTop)
+    .sort((a, b) => (a.portrait?.top || a.slot?.top || 0) - (b.portrait?.top || b.slot?.top || 0))
+    .map((cell, index) => ({
+      ...cell,
+      row: index + 1,
+      status: rowFillStatus(data, width, cell),
+    }));
+  return {
+    width,
+    height,
+    window: { left: win.left, top: win.top, width: ww, height: wh },
+    cells,
+  };
+}
+
+export function layoutForStyle(data, width, height, style) {
+  const picked = normalizeGvgOcrStyle(style);
+  if (picked === 'party') return layoutPartySlots(data, width, height);
+  if (picked === 'guild') return layoutGuildRows(data, width, height);
+  return layoutTeamSlots(data, width, height);
+}
+
+export async function ocrImageBuffer(buffer, style) {
   const rgb = await loadRgb(buffer);
-  const laid = layoutTeamSlots(rgb.data, rgb.width, rgb.height);
+  const laid = layoutForStyle(rgb.data, rgb.width, rgb.height, style);
   const worker = await createWorker('eng', 1, {
     cachePath: TESSDATA_PATH,
     logger: () => {},
+  }, {
+    load_system_dawg: '0',
+    load_freq_dawg: '0',
+    load_unambig_dawg: '0',
+    load_punc_dawg: '0',
+    load_number_dawg: '0',
+    load_bigram_dawg: '0',
   });
   try {
     const cellRecords = [];
@@ -707,13 +1199,13 @@ export async function ocrImageBuffer(buffer) {
         gaps.push({ category: 'empty', text: '', ...loc });
         continue;
       }
-      const reading = keepCellReading(await readPlate(worker, rgb, cell.plate || cell.slot));
+      const reading = keepCellReading(await readPlate(worker, rgb, cell.plate || cell.slot, style));
       cell.text = reading;
       if (!reading) {
         gaps.push({ category: 'missing', text: '', ...loc });
         continue;
       }
-      cellRecords.push({ text: reading, ...loc });
+      cellRecords.push({ text: reading, status: cell.status || '', ...loc });
     }
     const records = uniqueTokenRecords(cellRecords);
     const occupied = laid.cells.filter((cell) => !cell.empty).length;
@@ -735,8 +1227,9 @@ function slotKey(row) {
   return `${row.imageIndex ?? ''}:${row.col ?? row.ocrCol ?? ''}:${row.row ?? row.ocrRow ?? ''}`;
 }
 
-export async function ocrPartyImages(buffers, members) {
+export async function ocrPartyImages(buffers, members, style) {
   const inputs = asOcrInputs(buffers);
+  const picked = normalizeGvgOcrStyle(style);
   const allRecords = [];
   const allCells = [];
   const slotGaps = [];
@@ -745,7 +1238,7 @@ export async function ocrPartyImages(buffers, members) {
   for (let i = 0; i < inputs.length; i += 1) {
     const { buffer, name } = inputs[i];
     const image = { imageSource: name, imageIndex: i };
-    const result = await ocrImageBuffer(buffer);
+    const result = await ocrImageBuffer(buffer, picked);
     occupied += result.occupied || 0;
     for (const rec of result.records || []) allRecords.push({ ...rec, ...image });
     for (const rec of result.cellRecords || []) allCells.push({ ...rec, ...image });
@@ -764,6 +1257,7 @@ export async function ocrPartyImages(buffers, members) {
     slotGaps.push({
       category: 'unmatch',
       text: rec.text,
+      status: rec.status || '',
       col: rec.col ?? null,
       row: rec.row ?? null,
       imageSource: rec.imageSource || '',
@@ -776,6 +1270,7 @@ export async function ocrPartyImages(buffers, members) {
     slotGaps.push({
       category: 'unmatch',
       text: row.text,
+      status: row.status || '',
       col: row.col ?? null,
       row: row.row ?? null,
       imageSource: row.imageSource || '',
@@ -829,8 +1324,11 @@ export function detectionOverlaySvg(overlay) {
   }
   for (const cell of overlay?.cells || []) {
     const slot = cell.slot;
-    if (!slot) continue;
-    parts.push(`<rect x="${slot.left}" y="${slot.top}" width="${slot.width}" height="${slot.height}" fill="none" stroke="#145ae0" stroke-width="2"/>`);
+    if (slot) parts.push(`<rect x="${slot.left}" y="${slot.top}" width="${slot.width}" height="${slot.height}" fill="none" stroke="#145ae0" stroke-width="2"/>`);
+    if (cell.portrait) {
+      const portrait = cell.portrait;
+      parts.push(`<rect x="${portrait.left}" y="${portrait.top}" width="${portrait.width}" height="${portrait.height}" fill="none" stroke="#7c3aed" stroke-width="2"/>`);
+    }
     if (!cell.plate) continue;
     const plate = cell.plate;
     parts.push(`<rect x="${plate.left}" y="${plate.top}" width="${plate.width}" height="${plate.height}" fill="none" stroke="#d23c14" stroke-width="2"/>`);

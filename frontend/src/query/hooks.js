@@ -27,6 +27,14 @@ export const queryKeys = {
   ocrReviews: () => ['ocr-reviews'],
   ocrEvents: () => ['ocr-events'],
   ocrReview: (id) => ['ocr-review', id],
+  gvgStatProgression: (uid, filters = {}) => [
+    'gvg-stat-progression',
+    uid,
+    filters.jobCode || '',
+    filters.roleCode || '',
+    filters.capturedAt || '',
+    filters.from || '',
+  ],
   specialEvents: () => ['special-events'],
   attendanceMe: () => ['attendance-me'],
   weekInstances: (weekMonday) => ['week-instances', weekMonday],
@@ -458,6 +466,30 @@ export function useOcrReview(id, options = {}) {
   });
 }
 
+export function useGvgStatProgression(uid, filters = {}, options = {}) {
+  const jobCode = filters.jobCode || '';
+  const roleCode = filters.roleCode || '';
+  const capturedAt = filters.capturedAt || '';
+  const from = filters.from || '';
+  const params = new URLSearchParams();
+  if (jobCode) params.set('jobCode', jobCode);
+  if (roleCode) params.set('roleCode', roleCode);
+  if (capturedAt) params.set('capturedAt', capturedAt);
+  if (from) params.set('from', from);
+  const query = params.toString();
+  return useQuery({
+    queryKey: queryKeys.gvgStatProgression(uid, { jobCode, roleCode, capturedAt, from }),
+    queryFn: async () => {
+      const path = `/api/gvg-stats/progression/${encodeURIComponent(uid)}${query ? `?${query}` : ''}`;
+      const res = await apiFetch(path);
+      return readSuccess(res, 'Failed to load GVG stats');
+    },
+    enabled: Boolean(uid),
+    staleTime: TWO_MIN,
+    ...options,
+  });
+}
+
 export function useSpecialEvents(options = {}) {
   return useQuery({
     queryKey: queryKeys.specialEvents(),
@@ -607,6 +639,12 @@ export function invalidateCommitments() {
 
 export function invalidateCompositions() {
   return queryClient.invalidateQueries({ queryKey: ['compositions'] });
+}
+
+export function invalidateGvgStatProgression(uid) {
+  return queryClient.invalidateQueries({
+    queryKey: uid ? ['gvg-stat-progression', uid] : ['gvg-stat-progression'],
+  });
 }
 
 export function invalidateOcrReviews() {

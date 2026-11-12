@@ -16,7 +16,26 @@ import {
   writeOcrUiSession,
 } from '../ocrReviewSession';
 
-const MAX_SHOTS = 8;
+function normalizeOcrStyle(value) {
+  if (value === 'party' || value === 'guild') return value;
+  return 'raid';
+}
+
+function shotLimitFor(style) {
+  return style === 'guild' ? 24 : 8;
+}
+
+function shotLabelFor(style) {
+  if (style === 'party') return 'Party';
+  if (style === 'guild') return 'Guild list';
+  return 'Team Party';
+}
+
+function uploadHintFor(style) {
+  if (style === 'party') return 'Upload one screenshot per party (5 members). Mark O/X, then Commit swords.';
+  if (style === 'guild') return 'Upload every Guild list screenshot for the raid. Mark O/X, then Commit swords.';
+  return 'Upload every Team Party screenshot for the raid, mark O/X, then Commit swords.';
+}
 const BLANK_IMAGE = '';
 const GVG_RANKS = ['1st', '2nd', '3rd', '4th', '5th', '↓5th'];
 const GVG_FACES = ['win', 'lose', 'rank'];
@@ -77,6 +96,25 @@ function readingDiffers(previous, incoming) {
     || previousImage !== incomingImage;
 }
 
+function guildReview(review) {
+  return review?.source?.ocrStyle === 'guild';
+}
+
+function rowColorStatus(review, imageIndex, col, ocrRow) {
+  for (const overlay of review?.overlays || []) {
+    if (Number.isInteger(imageIndex) && overlay.imageIndex !== imageIndex) continue;
+    const cell = (overlay.cells || []).find((item) => item.col === col && item.row === ocrRow);
+    if (cell?.status === 'online' || cell?.status === 'offline') return cell.status;
+  }
+  return '';
+}
+
+function linkedStatus(review, gap, fromRow, imageIndex, col, ocrRow) {
+  if (gap?.status === 'online' || gap?.status === 'offline') return gap.status;
+  if (fromRow?.status === 'online' || fromRow?.status === 'offline') return fromRow.status;
+  return rowColorStatus(review, imageIndex, col, ocrRow);
+}
+
 function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, remember }) {
   const gaps = slotGapsFromReview(review);
   const gap = unmatchedId ? gaps.find((row) => row.id === unmatchedId) : null;
@@ -87,6 +125,8 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
   const imageIndex = Number.isInteger(gap?.imageIndex)
     ? gap.imageIndex
     : (Number.isInteger(fromRow?.imageIndex) ? fromRow.imageIndex : null);
+  const guild = guildReview(review);
+  const status = linkedStatus(review, gap, fromRow, imageIndex, col, ocrRow);
   const hadSeat = Boolean(target) && (readingText(target.ocrText) || target.ocrCol || target.ocrRow);
   const displacing = hadSeat && readingDiffers(
     target,
@@ -105,6 +145,7 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
       imageIndex: Number.isInteger(target.imageIndex) ? target.imageIndex : null,
       ocrCol: target.ocrCol ?? null,
       ocrRow: target.ocrRow ?? null,
+      status: target.status || '',
     };
     slotGaps = [...slotGaps, returned];
     if (returnedText) unmatched = [...unmatched, returned];
@@ -113,7 +154,8 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
     if (fromUid && row.uid === fromUid && fromUid !== uid) {
       return {
         ...row,
-        present: false,
+        present: guild,
+        status: '',
         ocrText: '',
         ocrSource: 'officer',
         ocrState: 'unmatch',
@@ -126,9 +168,18 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
       };
     }
     if (row.uid !== uid) return row;
+    const markPresent = !guild
+      ? true
+      : status === 'online'
+        ? true
+        : status === 'offline'
+          ? false
+          : row.present;
     if (displacing) {
       return {
         ...row,
+        present: guild ? markPresent : row.present,
+        status,
         ocrText: text,
         ocrState: 'match',
         imageSource: gap?.imageSource || fromRow?.imageSource || '',
@@ -140,7 +191,8 @@ function applyLinkedReading(review, roster, { text, uid, fromUid, unmatchedId, r
     }
     return {
       ...row,
-      present: true,
+      present: markPresent,
+      status,
       ocrText: text,
       ocrSource: remember === false ? 'officer' : 'dictionary',
       ocrState: 'match',
@@ -177,12 +229,16 @@ function applyUnlinkedReading(review, roster, { uid }) {
     imageIndex: Number.isInteger(seat.imageIndex) ? seat.imageIndex : null,
     ocrCol: col,
     ocrRow,
+    status: seat.status || '',
   };
+  const guild = guildReview(review);
   const nextRoster = (roster || []).map((row) => {
     if (row.uid !== uid) return row;
     const key = text ? foldConfusable(text) : '';
     return {
       ...row,
+      present: guild ? true : row.present,
+      status: '',
       ocrText: '',
       ocrSource: '',
       ocrState: 'unmatch',
@@ -344,7 +400,7 @@ function DetectionOverlay({ overlay, roster, gaps, imageIndex, litGap, showBoxes
         )}
         {(overlay.cells || []).map((cell) => {
           const lit = slotLit(cell, litGap);
-          if (!cell.slot || (!showBoxes && !lit)) return null;
+          if ((!cell.slot && !cell.portrait) || (!showBoxes && !lit)) return null;
           return (
           <g key={`${cell.col}-${cell.row}`}>
             {cell.slot && (
@@ -357,6 +413,9 @@ function DetectionOverlay({ overlay, roster, gaps, imageIndex, litGap, showBoxes
                 stroke={lit ? '#e0f2fe' : '#145ae0'}
                 strokeWidth={lit ? 4 : 2}
               />
+            )}
+            {showBoxes && cell.portrait && (
+              <rect x={cell.portrait.left} y={cell.portrait.top} width={cell.portrait.width} height={cell.portrait.height} fill="none" stroke="#7c3aed" strokeWidth="2" />
             )}
             {showBoxes && cell.plate && (
               <rect x={cell.plate.left} y={cell.plate.top} width={cell.plate.width} height={cell.plate.height} fill="none" stroke="#d23c14" strokeWidth="2" />
@@ -388,10 +447,11 @@ function DetectionOverlay({ overlay, roster, gaps, imageIndex, litGap, showBoxes
         );
       })}
       {showBoxes && fit && (overlay.cells || []).map((cell) => {
-        const mark = cell.slot ? AI_MARK[aiMarkKind(cell, roster, gaps, imageIndex)] : null;
+        const anchor = cell.slot || cell.plate || cell.portrait;
+        const mark = anchor ? AI_MARK[aiMarkKind(cell, roster, gaps, imageIndex)] : null;
         if (!mark) return null;
-        const left = fit.left + (cell.slot.left + cell.slot.width) * fit.fit;
-        const top = fit.top + cell.slot.top * fit.fit;
+        const left = fit.left + (anchor.left + anchor.width) * fit.fit;
+        const top = fit.top + anchor.top * fit.fit;
         return (
           <div
             key={`ai-${cell.col}-${cell.row}`}
@@ -540,6 +600,9 @@ export default function OcrReviewTab({ user }) {
   const linkQueue = useRef(Promise.resolve());
   const keptShots = useRef({ id: '', urls: [] });
   const [scanning, setScanning] = useState(false);
+  const [ocrStyle, setOcrStyle] = useState('raid');
+  const maxShots = shotLimitFor(ocrStyle);
+  const shotLabel = shotLabelFor(ocrStyle);
   const [deletingId, setDeletingId] = useState('');
   const [selectedFiles, setSelectedFiles] = useState(pendingUpload.files || []);
   const [localPreviews, setLocalPreviews] = useState(
@@ -563,6 +626,20 @@ export default function OcrReviewTab({ user }) {
   useEffect(() => {
     rosterRef.current = roster;
   }, [roster]);
+
+  useEffect(() => {
+    if (!isOfficer) return undefined;
+    let cancelled = false;
+    apiFetch('/api/requests/settings/get?fields=gvgOcrStyle')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setOcrStyle(normalizeOcrStyle(data?.config?.gvgOcrStyle));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOfficer]);
 
   useEffect(() => {
     setGvgFace(gvgFaceFor(review?.gvgResult));
@@ -813,6 +890,15 @@ export default function OcrReviewTab({ user }) {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Could not save that reading.');
+      if (data.linked?.uid && rosterRef.current === next.roster) {
+        const saved = rosterRef.current.map((row) => (
+          row.uid === data.linked.uid
+            ? { ...row, present: data.linked.present, status: data.linked.status || '' }
+            : row
+        ));
+        rosterRef.current = saved;
+        setRoster(saved);
+      }
     }).catch((err) => {
       if (reviewRef.current === next.review) {
         reviewRef.current = previousReview;
@@ -986,11 +1072,11 @@ export default function OcrReviewTab({ user }) {
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(file);
-      if (merged.length >= MAX_SHOTS) break;
+      if (merged.length >= maxShots) break;
     }
     setSelectedFiles(merged);
-    if ([...selectedFiles, ...incoming].length > MAX_SHOTS) {
-      setError(`Using the first ${MAX_SHOTS} screenshots.`);
+    if ([...selectedFiles, ...incoming].length > maxShots) {
+      setError(`Using the first ${maxShots} screenshots.`);
     } else {
       setError('');
     }
@@ -1006,7 +1092,7 @@ export default function OcrReviewTab({ user }) {
     event.preventDefault();
     const files = selectedFiles.length ? selectedFiles : [...(fileRef.current?.files || [])];
     if (!files.length) {
-      setError('Choose Team Party screenshots first.');
+      setError(`Choose ${shotLabel} screenshots first.`);
       return;
     }
     if (!eventKey) {
@@ -1015,7 +1101,7 @@ export default function OcrReviewTab({ user }) {
     }
     setScanning(true);
     setError('');
-    const picked = files.slice(0, MAX_SHOTS);
+    const picked = files.slice(0, maxShots);
     const previews = picked.map((file) => URL.createObjectURL(file));
     try {
       const body = new FormData();
@@ -1056,7 +1142,7 @@ export default function OcrReviewTab({ user }) {
       <div className="space-y-6 animate-fadeIn">
         <div>
           <h1 className="text-lg font-black text-slate-100 uppercase tracking-wide">GVG Attendance</h1>
-          <p className="text-xs text-slate-400 mt-1">Upload every Team Party screenshot for the raid, mark O/X, then Commit swords.</p>
+          <p className="text-xs text-slate-400 mt-1">{uploadHintFor(ocrStyle)}</p>
         </div>
         {error && <div className="text-xs text-rose-400">{error}</div>}
         {location.state?.commitNotice && (
@@ -1108,7 +1194,7 @@ export default function OcrReviewTab({ user }) {
             </div>
           )}
           <p className="text-[10px] text-slate-500">
-            {selectedFiles.length ? `${selectedFiles.length} of ${MAX_SHOTS} selected.` : `Select several at once, or add more after. Up to ${MAX_SHOTS} images.`}
+            {selectedFiles.length ? `${selectedFiles.length} of ${maxShots} selected.` : `Select several at once, or add more after. Up to ${maxShots} images.`}
             {' '}Images are scanned in memory and not stored. After Commit they may post to Raid Screenshot.
           </p>
         </form>
@@ -1228,7 +1314,7 @@ export default function OcrReviewTab({ user }) {
               <div className="relative flex-1 min-h-0 bg-slate-950">
                 <img
                   src={shots[safeShotIndex]}
-                  alt={`Team Party screenshot ${safeShotIndex + 1}`}
+                  alt={`${shotLabel} screenshot ${safeShotIndex + 1}`}
                   className="w-full h-full object-contain"
                 />
                 {(showDetection || litGap) && (
