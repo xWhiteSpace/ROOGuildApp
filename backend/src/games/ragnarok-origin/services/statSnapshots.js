@@ -41,6 +41,11 @@ export function createDraft({ memberUid, capturedAt, shareCode, readings, warnin
   };
 }
 
+export async function clearStatStore(db) {
+  await db.ref(SNAPSHOTS).remove();
+  await db.ref(DRAFTS).remove();
+}
+
 export async function confirmStatDraft(db, draft, member) {
   if (!draft || draft.status === 'confirmed') {
     return { ok: false, error: 'This sheet was already confirmed.' };

@@ -389,7 +389,7 @@ export function prepareReadings(readings) {
   const clean = [];
   for (const row of readings || []) {
     const label = tidyLabel(row?.label);
-    if (!label || isChromeLabel(label)) continue;
+    if (!label || isChromeLabel(label) || row?.section === 'attributes') continue;
     const column = COLUMNS.includes(row.column) ? row.column : 'left';
     const section = SECTIONS.includes(row.section) ? row.section : 'general';
     const parsed = parseStatValue(row.raw != null && row.raw !== '' ? row.raw : row.value);
@@ -579,4 +579,71 @@ export function formatDelta(delta, unit) {
   const sign = delta > 0 ? '+' : '';
   const text = `${sign}${delta}`;
   return unit === 'percent' ? `${text}%` : text;
+}
+
+const CSV_LEAD = ['Name', 'Discord id', 'Taken on', 'Confirmed at', 'Job', 'Role'];
+
+function csvStatHeader(stats, column, label) {
+  const shared = stats.filter((row) => foldStatKey(row[2]) === foldStatKey(label)).length > 1;
+  return shared ? `${label} ${column}` : label;
+}
+
+function csvStatCell(reading) {
+  if (!reading || reading.value == null || Number.isNaN(Number(reading.value))) return '';
+  const text = String(reading.value);
+  return reading.unit === 'percent' ? `${text}%` : text;
+}
+
+export function gvgStatsCsv(snapshots, { members = {}, jobs = {}, roles = {}, lists = {} } = {}) {
+  const confirmed = (snapshots || []).filter((row) => row && row.status === 'confirmed');
+  const stats = [
+    ...parseStatKeywordList(lists.generalLeft).map((label) => ['general', 'left', label]),
+    ...parseStatKeywordList(lists.generalRight).map((label) => ['general', 'right', label]),
+    ...parseStatKeywordList(lists.quasiLeft).map((label) => ['quasi', 'left', label]),
+    ...parseStatKeywordList(lists.quasiRight).map((label) => ['quasi', 'right', label]),
+  ];
+  const headers = [
+    ...CSV_LEAD,
+    ...stats.map(([, column, label]) => csvStatHeader(stats, column, label)),
+  ];
+  const rows = confirmed
+    .map((sheet) => {
+      const uid = String(sheet.memberUid || '');
+      const member = members[uid] || {};
+      const name = member.displayName || member.inGameName || uid;
+      const cells = [
+        name,
+        uid,
+        sheet.capturedAt || '',
+        sheet.confirmedAt || '',
+        jobs?.[sheet.jobCode]?.name || sheet.jobCode || '',
+        roles?.[sheet.roleCode]?.name || sheet.roleCode || '',
+      ];
+      for (const [section, column, label] of stats) {
+        const reading = (sheet.readings || []).find((row) => (
+          row.section === section
+          && row.column === column
+          && labelsMatch(row.label, label)
+        ));
+        cells.push(csvStatCell(reading));
+      }
+      return {
+        name,
+        capturedAt: String(sheet.capturedAt || ''),
+        confirmedAt: String(sheet.confirmedAt || ''),
+        id: String(sheet.id || ''),
+        cells,
+      };
+    })
+    .sort((a, b) => {
+      const day = a.capturedAt.localeCompare(b.capturedAt);
+      if (day) return day;
+      const who = a.name.localeCompare(b.name);
+      if (who) return who;
+      const when = a.confirmedAt.localeCompare(b.confirmedAt);
+      if (when) return when;
+      return a.id.localeCompare(b.id);
+    })
+    .map((row) => row.cells);
+  return { headers, rows };
 }

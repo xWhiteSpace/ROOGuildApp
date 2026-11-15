@@ -2,11 +2,13 @@ import { Router } from 'express';
 import multer from 'multer';
 import { getTenantStore } from '../db/database.js';
 import { resolveUserIdentity } from '../auth/identity.js';
+import { checkOfficer } from '../auth/officer.js';
 import { SHOT_KINDS, SHOT_LABELS, applyStatKeywords, cohortAsOf, mergeShotReadings, progressionFor, unifyReadings } from '@guildname/shared/gvgStatSheet';
 import { readStatShots } from '../games/ragnarok-origin/services/statSheetOcr.js';
 import {
   confirmStatDraft,
   createDraft,
+  clearStatStore,
   listStatSnapshots,
   loadStatDraft,
   saveStatDraft,
@@ -154,6 +156,21 @@ router.patch('/drafts/:id', async (req, res) => {
     next.createdAt = draft.createdAt;
     await saveStatDraft(db, next);
     return res.json({ success: true, draft: next });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/clear', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  if (String(req.body?.confirm || '').trim().toLowerCase() !== 'clear') {
+    return res.status(400).json({ success: false, error: 'Type Clear to delete the saved sheets.' });
+  }
+  try {
+    const { ok } = await checkOfficer(req);
+    if (!ok) return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    await clearStatStore(getTenantStore());
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

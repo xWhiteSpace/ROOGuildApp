@@ -1,19 +1,39 @@
 import { keepPreviousData } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Image, ScanLine, Search, User, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Image, ScanLine, Search, Trash2, User, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   cohortStatAverage,
   formatDelta,
   formatStatValue,
+  gvgStatsCsv,
   labelsMatch,
   parseStatKeywordList,
   SHOT_KINDS,
   SHOT_LABELS,
 } from '@guildname/shared/gvgStatSheet';
 import { apiFetch } from '../../../services/apiClient';
-import { invalidateGvgStatProgression, useGvgStatProgression, useMembers, useSettings } from '../../../query/hooks';
+import { invalidateGvgStatProgression, invalidateGvgStatSnapshots, useGvgStatProgression, useGvgStatSnapshots, useMembers, useSettings } from '../../../query/hooks';
 import { getGuildTodayDateStr } from '../../../utils/guildTime';
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function downloadCsv(filename, headers, rows) {
+  const csvContent = `\uFEFF${[headers.map(csvEscape).join(','), ...rows.map((row) => row.map(csvEscape).join(','))].join('\n')}`;
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 const SHOT_HINTS = {
   general: 'Details tab, General Stats open. This shot includes STR through LUK.',
@@ -299,7 +319,8 @@ function StatColumns({ left, right, section, deltas, selected, preview, onSelect
   );
 }
 
-export default function GvgStatsTab() {
+export default function GvgStatsTab({ user }) {
+  const isOfficer = user?.isOfficer === true;
   const membersQuery = useMembers('list');
   const settingsQuery = useSettings();
   const jobs = settingsQuery.data?.jobs || {};
@@ -314,6 +335,9 @@ export default function GvgStatsTab() {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearText, setClearText] = useState('');
+  const [clearing, setClearing] = useState(false);
   const [pickedDay, setPickedDay] = useState('');
   const [filters, setFilters] = useState({ jobCode: '', roleCode: '', pinned: false });
   const [compare, setCompare] = useState({ jobCode: '', roleCode: '', from: '', to: '', pinned: false });
@@ -500,6 +524,7 @@ export default function GvgStatsTab() {
       setFiles({});
       setFormKey((key) => key + 1);
       await invalidateGvgStatProgression(savedUid);
+      await invalidateGvgStatSnapshots();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -507,13 +532,78 @@ export default function GvgStatsTab() {
     }
   };
 
+  const exportSheets = () => {
+    downloadCsv(`GvgStats_${getGuildTodayDateStr()}.csv`, savedSheets.headers, savedSheets.rows);
+  };
+
+  const clearSheets = async () => {
+    if (clearText.trim().toLowerCase() !== 'clear') return;
+    setClearing(true);
+    setError('');
+    try {
+      const res = await apiFetch('/api/gvg-stats/clear', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: 'Clear' }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not clear the saved sheets.');
+      setClearOpen(false);
+      setClearText('');
+      setDraft(null);
+      setMemberUid('');
+      setQuery('');
+      setSearchNote('');
+      setPickedDay('');
+      setFilters({ jobCode: '', roleCode: '', pinned: false });
+      setCompare({ jobCode: '', roleCode: '', from: '', to: '', pinned: false });
+      setSelectedStat(null);
+      await invalidateGvgStatProgression();
+      await invalidateGvgStatSnapshots();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const snapshotsQuery = useGvgStatSnapshots();
+  const savedSheets = useMemo(() => {
+    const config = settingsQuery.data || {};
+    return gvgStatsCsv(snapshotsQuery.data || [], {
+      members,
+      jobs,
+      roles,
+      lists: {
+        generalLeft: config.gvgGeneralStatsCol1 || config.gvgGeneralStats,
+        generalRight: config.gvgGeneralStatsCol2 || config.gvgGeneralStats,
+        quasiLeft: config.gvgQuasiStatsCol1 || config.gvgQuasiStats,
+        quasiRight: config.gvgQuasiStatsCol2 || config.gvgQuasiStats,
+      },
+    });
+  }, [snapshotsQuery.data, members, jobs, roles, settingsQuery.data]);
+
   const series = progressionQuery.data?.series || [];
   const cohort = cohortQuery.data?.cohort || [];
   const reviewed = classFor(draft?.memberUid, draft?.jobCode, draft?.roleCode);
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-black uppercase tracking-wide text-slate-100">GVG Stats</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-black uppercase tracking-wide text-slate-100">GVG Stats</h1>
+        {isOfficer ? (
+          <button
+            type="button"
+            onClick={() => {
+              setClearText('');
+              setClearOpen(true);
+            }}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-950 px-3 text-[11px] font-bold uppercase tracking-wider text-rose-300 hover:border-rose-400"
+          >
+            <Trash2 size={14} />
+            Clear
+          </button>
+        ) : null}
+      </div>
       <div className="relative z-20 grid grid-cols-2 items-stretch gap-4">
       <form onSubmit={runSearch} className={`${cardClass} relative z-20 h-full min-w-0 !overflow-visible`}>
         <header className={cardHeader}>
@@ -646,6 +736,45 @@ export default function GvgStatsTab() {
       </div>
 
       {error ? <p className="text-xs text-rose-400">{error}</p> : null}
+
+      {clearOpen ? (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div role="dialog" aria-modal="true" aria-labelledby="gvg-clear-title" className="w-full max-w-md space-y-4 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <h2 id="gvg-clear-title" className="text-sm font-bold uppercase tracking-wider text-rose-500">Clear saved sheets</h2>
+            <p className="font-sans text-xs leading-relaxed text-slate-400">This deletes every confirmed GvG sheet and every draft. Members, jobs, roles, and Game Settings stay. This cannot be undone.</p>
+            <div className="space-y-1 font-mono text-xs">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Type keyword <strong className="text-white">CLEAR</strong> to execute:</label>
+              <input
+                type="text"
+                value={clearText}
+                onChange={(event) => setClearText(event.target.value)}
+                placeholder="CLEAR"
+                disabled={clearing}
+                autoComplete="off"
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-center font-mono font-bold tracking-widest text-amber-500 uppercase outline-none disabled:opacity-50"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-1 font-mono text-xs">
+              <button
+                type="button"
+                disabled={clearing}
+                onClick={() => { setClearOpen(false); setClearText(''); }}
+                className="cursor-pointer rounded-xl border border-slate-800 bg-slate-950 px-4 py-2 text-slate-400 transition hover:text-white disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={clearSheets}
+                disabled={clearing || clearText.trim().toLowerCase() !== 'clear'}
+                className="cursor-pointer rounded-xl bg-rose-600 px-5 py-2 font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-rose-500 disabled:opacity-10"
+              >
+                {clearing ? 'Clearing' : 'Clear sheets'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {draft ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
@@ -784,6 +913,49 @@ export default function GvgStatsTab() {
           </div>
         </section>
       )}
+      <section className={cardClass}>
+        <header className={cardHeader}>
+          <h2 className={cardTitle}>Saved sheets</h2>
+          <button type="button" onClick={exportSheets} disabled={snapshotsQuery.isLoading} className={primaryButton}>
+            <Download size={14} />
+            Export
+          </button>
+        </header>
+        {snapshotsQuery.isLoading ? (
+          <div className={cardBody}>
+            <p className="text-xs text-slate-400">Loading saved sheets.</p>
+          </div>
+        ) : snapshotsQuery.isError ? (
+          <div className={cardBody}>
+            <p className="text-xs text-rose-400">{snapshotsQuery.error?.message || 'Could not load saved sheets.'}</p>
+          </div>
+        ) : savedSheets.rows.length ? (
+          <div className="max-h-[32rem] overflow-auto">
+            <table className="w-max min-w-full border-collapse text-xs">
+              <thead>
+                <tr>
+                  {savedSheets.headers.map((header, index) => (
+                    <th key={`${header}-${index}`} className="sticky top-0 whitespace-nowrap border-b border-slate-800 bg-slate-950 px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-slate-400">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {savedSheets.rows.map((row, rowIndex) => (
+                  <tr key={`${row[1]}-${row[2]}-${row[3]}-${rowIndex}`} className="border-b border-slate-800/80">
+                    {row.map((cell, cellIndex) => (
+                      <td key={cellIndex} className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-200">{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className={cardBody}>
+            <p className="text-xs text-slate-400">There are no saved sheets.</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

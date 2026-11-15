@@ -2,8 +2,6 @@ import sharp from 'sharp';
 import { createWorker, PSM } from 'tesseract.js';
 import {
   SHOT_KINDS,
-  attributeFromClusterTexts,
-  attributeFromLine,
   mergeShotReadings,
   pairsFromClusterTexts,
   pairsFromLine,
@@ -83,20 +81,6 @@ async function readListRow(worker, rgb, row, section) {
   return pairsFromLine(line.text, section, line.confidence);
 }
 
-async function readAttributeRow(worker, rgb, row) {
-  const texts = [];
-  for (const cluster of row.clusters || []) {
-    const read = await readText(worker, rgb, cluster);
-    texts.push(read.text);
-  }
-  const line = await readText(worker, rgb, row.rect);
-  const fromLine = attributeFromLine(line.text);
-  if (fromLine.length) return fromLine;
-  const joined = attributeFromLine(texts.filter(Boolean).join(' '));
-  if (joined.length) return joined;
-  return attributeFromClusterTexts(texts);
-}
-
 function pickShareCode(text) {
   const tokens = String(text || '').toUpperCase().match(/[A-Z0-9]{6,16}/g) || [];
   return tokens.sort((a, b) => b.length - a.length)[0] || '';
@@ -114,10 +98,7 @@ async function readShot(worker, buffer, kind) {
     readings.push(...await readListRow(worker, rgb, row, section));
   }
   let shareCode = '';
-  if (kind === 'general') {
-    for (const row of layout.attributeRows) {
-      readings.push(...await readAttributeRow(worker, rgb, row));
-    }
+  if (kind === 'general' && layout.shareCodeRect) {
     shareCode = pickShareCode((await readText(worker, rgb, layout.shareCodeRect)).text);
   }
   return {

@@ -35,6 +35,7 @@ export const queryKeys = {
     filters.capturedAt || '',
     filters.from || '',
   ],
+  gvgStatSnapshots: () => ['gvg-stat-snapshots'],
   specialEvents: () => ['special-events'],
   attendanceMe: () => ['attendance-me'],
   weekInstances: (weekMonday) => ['week-instances', weekMonday],
@@ -490,6 +491,19 @@ export function useGvgStatProgression(uid, filters = {}, options = {}) {
   });
 }
 
+export function useGvgStatSnapshots(options = {}) {
+  return useQuery({
+    queryKey: queryKeys.gvgStatSnapshots(),
+    queryFn: async () => {
+      const res = await apiFetch('/api/gvg-stats/snapshots');
+      const data = await readSuccess(res, 'Failed to load saved sheets');
+      return data.snapshots || [];
+    },
+    staleTime: TWO_MIN,
+    ...options,
+  });
+}
+
 export function useSpecialEvents(options = {}) {
   return useQuery({
     queryKey: queryKeys.specialEvents(),
@@ -645,6 +659,10 @@ export function invalidateGvgStatProgression(uid) {
   return queryClient.invalidateQueries({
     queryKey: uid ? ['gvg-stat-progression', uid] : ['gvg-stat-progression'],
   });
+}
+
+export function invalidateGvgStatSnapshots() {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.gvgStatSnapshots() });
 }
 
 export function invalidateOcrReviews() {

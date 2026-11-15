@@ -6,11 +6,13 @@ import {
   buildSnapshot,
   matchStatKeyword,
   parseStatKeywordList,
+  prepareReadings,
   mergeShotReadings,
   pairsFromClusterTexts,
   pairsFromLine,
   cohortStatAverage,
   columnLabels,
+  gvgStatsCsv,
   peerLatest,
   progressionFor,
   statPackForRole,
@@ -93,6 +95,15 @@ describe('GVG stat sheet readings', () => {
     const misread = attributeFromLine('WIT 99 156 12');
     expect(misread[0]).toMatchObject({ label: 'WIT', column: 'stats', value: 99 });
     expect(misread[1].value).toBe(156);
+  });
+
+  it('drops attribute rows before a sheet is saved', () => {
+    const saved = prepareReadings([
+      { label: 'HP', column: 'left', section: 'general', raw: '1000', value: 1000 },
+      { label: 'AGI', column: 'stats', section: 'attributes', raw: '40', value: 40 },
+      { label: 'AB', column: 'bonus', section: 'attributes', raw: '3', value: 3 },
+    ]);
+    expect(saved.map((row) => row.label)).toEqual(['HP']);
   });
 
   it('flags two different numbers for the same label instead of averaging them', () => {
@@ -334,5 +345,80 @@ describe('GVG stat sheet layout', () => {
     }
     const layout = layoutStatSheet(rgb);
     expect(layout.listRows).toHaveLength(3);
+  });
+});
+
+describe('GVG stats CSV', () => {
+  const lists = {
+    generalLeft: 'HP\nPATK',
+    generalRight: 'SP',
+    quasiLeft: 'Variable CT',
+    quasiRight: 'Variable CT',
+  };
+
+  it('keeps both Variable CT columns, leaves a missing stat blank, and ignores names that are not in the settings lists', () => {
+    const { headers, rows } = gvgStatsCsv([
+      {
+        status: 'confirmed',
+        id: 'later',
+        memberUid: 'ada',
+        capturedAt: '2026-11-01',
+        confirmedAt: '2026-11-01T02:00:00.000Z',
+        jobCode: 'job_001',
+        roleCode: 'role_002',
+        readings: [
+          { section: 'general', column: 'left', label: 'HP', value: 1100, unit: 'number' },
+        ],
+      },
+      {
+        status: 'draft',
+        id: 'draft',
+        memberUid: 'ada',
+        capturedAt: '2026-11-01',
+        readings: [
+          { section: 'general', column: 'left', label: 'HP', value: 1, unit: 'number' },
+        ],
+      },
+      {
+        status: 'confirmed',
+        id: 'first',
+        memberUid: 'ada',
+        capturedAt: '2026-11-01',
+        confirmedAt: '2026-11-01T01:00:00.000Z',
+        jobCode: 'job_001',
+        roleCode: 'role_002',
+        shareCode: 'AB12',
+        readings: [
+          { section: 'quasi', column: 'left', label: 'Variable CT', value: 10, unit: 'percent' },
+          { section: 'quasi', column: 'right', label: 'Variable CT', value: 20, unit: 'percent' },
+          { section: 'general', column: 'left', label: 'HP', value: 1000, unit: 'number' },
+          { section: 'general', column: 'left', label: 'Junk Stat', value: 7, unit: 'number' },
+          { section: 'attributes', column: 'bonus', label: 'STR', value: 12, unit: 'number' },
+        ],
+      },
+    ], {
+      members: { ada: { displayName: 'Ada' } },
+      jobs: { job_001: { name: 'Priest' } },
+      roles: { role_002: { name: 'Support' } },
+      lists,
+    });
+
+    expect(headers).toEqual([
+      'Name',
+      'Discord id',
+      'Taken on',
+      'Confirmed at',
+      'Job',
+      'Role',
+      'HP',
+      'PATK',
+      'SP',
+      'Variable CT left',
+      'Variable CT right',
+    ]);
+    expect(rows).toEqual([
+      ['Ada', 'ada', '2026-11-01', '2026-11-01T01:00:00.000Z', 'Priest', 'Support', '1000', '', '', '10%', '20%'],
+      ['Ada', 'ada', '2026-11-01', '2026-11-01T02:00:00.000Z', 'Priest', 'Support', '1100', '', '', '', ''],
+    ]);
   });
 });
