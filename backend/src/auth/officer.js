@@ -176,6 +176,11 @@ export function publicSettingsView(config = {}) {
     liveRaidMaxWarRooms: config.liveRaidMaxWarRooms,
     warRooms,
     isForceLocked: Boolean(config.isForceLocked),
+    gvgGeneralStatsCol1: config.gvgGeneralStatsCol1 || '',
+    gvgGeneralStatsCol2: config.gvgGeneralStatsCol2 || '',
+    gvgQuasiStatsCol1: config.gvgQuasiStatsCol1 || '',
+    gvgQuasiStatsCol2: config.gvgQuasiStatsCol2 || '',
+    gvgSpecialStats: config.gvgSpecialStats || '',
   };
 }
 

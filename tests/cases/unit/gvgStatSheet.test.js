@@ -16,6 +16,7 @@ import {
   peerLatest,
   progressionFor,
   statPackForRole,
+  SPECIAL_STAT_NAMES,
 } from '../../../packages/shared/gvgStatSheet.js';
 import { layoutStatSheet } from '../../../backend/src/games/ragnarok-origin/services/statSheetLayout.js';
 
@@ -141,6 +142,7 @@ describe('GVG stat sheet readings', () => {
       roleCode: 'role_002',
     });
     expect(built.snapshot.period).toBeUndefined();
+    expect(built.snapshot.extras).toMatchObject({ basePdef: 0, weaponAtk: 0 });
     const reviewed = buildSnapshot({
       draft: { ...draft, jobCode: 'job_reviewed', roleCode: 'role_reviewed' },
       member: { jobCode: 'job_001', roleCode: 'role_002' },
@@ -313,6 +315,10 @@ describe('GVG stat sheet layout', () => {
     expect(layout.panel).toBeTruthy();
     expect(layout.listRows.length).toBeGreaterThanOrEqual(2);
     expect(layout.attributeRows.length).toBeGreaterThanOrEqual(1);
+    const listOnly = layoutStatSheet(rgb, { listOnly: true });
+    expect(listOnly.listRows).toHaveLength(layout.listRows.length);
+    expect(listOnly.attributeRows).toEqual([]);
+    expect(listOnly.shareCodeRect).toBeNull();
     expect(layout.listRows.every((row) => row.top > 50)).toBe(true);
     expect(layout.listRows.every((row) => row.height > 8)).toBe(true);
   });
@@ -357,7 +363,8 @@ describe('GVG stats CSV', () => {
   };
 
   it('keeps both Variable CT columns, leaves a missing stat blank, and ignores names that are not in the settings lists', () => {
-    const { headers, rows } = gvgStatsCsv([
+    const blankExtras = ['', '', '', '', '', '', '', '', ''];
+    const { headers, rows, ids } = gvgStatsCsv([
       {
         status: 'confirmed',
         id: 'later',
@@ -415,10 +422,98 @@ describe('GVG stats CSV', () => {
       'SP',
       'Variable CT left',
       'Variable CT right',
+      'Base PDEF',
+      'Base MDEF',
+      'Flat Equipment PDEF',
+      'Flat Equipment MDEF',
+      'Element reduction %',
+      'Reduction vs Demi-Human %',
+      'Weapon ATK',
+      'Element damage %',
+      'DMG vs Demi-Human %',
     ]);
     expect(rows).toEqual([
-      ['Ada', 'ada', '2026-11-01', '2026-11-01T01:00:00.000Z', 'Priest', 'Support', '1000', '', '', '10%', '20%'],
-      ['Ada', 'ada', '2026-11-01', '2026-11-01T02:00:00.000Z', 'Priest', 'Support', '1100', '', '', '', ''],
+      ['Ada', 'ada', '2026-11-01', '2026-11-01T01:00:00.000Z', 'Priest', 'Support', '1000', '', '', '10%', '20%', ...blankExtras],
+      ['Ada', 'ada', '2026-11-01', '2026-11-01T02:00:00.000Z', 'Priest', 'Support', '1100', '', '', '', '', ...blankExtras],
     ]);
+    expect(ids).toEqual(['first', 'later']);
+  });
+
+  it('adds Special columns and leaves a missing special stat blank', () => {
+    const { headers, rows } = gvgStatsCsv([
+      {
+        status: 'confirmed',
+        id: 'sheet',
+        memberUid: 'ada',
+        capturedAt: '2026-11-02',
+        confirmedAt: '2026-11-02T00:00:00.000Z',
+        jobCode: 'job_001',
+        roleCode: 'role_002',
+        readings: [
+          { section: 'special', column: 'left', label: 'Max HP', value: 141.5, unit: 'percent' },
+          { section: 'special', column: 'left', label: 'DMG vs Brute', value: 14, unit: 'percent' },
+        ],
+      },
+    ], {
+      members: { ada: { displayName: 'Ada' } },
+      jobs: { job_001: { name: 'Priest' } },
+      roles: { role_002: { name: 'Support' } },
+      lists: { special: 'Max HP\nEquipment PDEF' },
+    });
+    const maxHp = headers.indexOf('Max HP');
+    expect(headers.slice(maxHp, maxHp + 2)).toEqual(['Max HP', 'Equipment PDEF']);
+    expect(rows[0].slice(maxHp, maxHp + 2)).toEqual(['141.5%', '']);
+  });
+});
+
+describe('GVG special stats', () => {
+  it('reads long special names in one column, including a percent sign on the label', () => {
+    const readings = pairsFromLine('DMG Reduction vs Small Enemies 9.95% Global CD% -10.00%', 'special');
+    expect(readings.map((row) => [row.label, row.column, row.value, row.unit])).toEqual([
+      ['DMG Reduction vs Small Enemies', 'left', 9.95, 'percent'],
+      ['Global CD%', 'left', -10, 'percent'],
+    ]);
+  });
+
+  it('names the special column from Max HP and drops rows below Large', () => {
+    const readings = pairsFromClusterTexts([
+      'Max HP', '141.50%',
+      'Max SP', '12.80%',
+      'Equipment PATK', '109.32%',
+      'Equipment MATK', '33.42%',
+      'Equipment PDEF', '44.79%',
+      'Equipment MDEF', '17.79%',
+      'Global CD%', '-10.00%',
+      'DMG vs Small Enemies', '9.41%',
+      'DMG Reduction vs Small Enemies', '9.95%',
+      'DMG vs Medium Enemies', '20.61%',
+      'DMG Reduction vs Medium Enemies', '60.85%',
+      'DMG vs Large Enemies', '18.81%',
+      'DMG Reduction vs Large Enemies', '18.35%',
+      'DMG vs Brute', '14.08%',
+    ], 'special');
+    const named = applyStatKeywords(readings, { special: SPECIAL_STAT_NAMES.join('\n') });
+    expect(named.map((row) => row.label)).toEqual(SPECIAL_STAT_NAMES);
+    expect(named.every((row) => row.section === 'special' && row.column === 'left')).toBe(true);
+    expect(named.find((row) => row.label === 'Equipment PDEF').value).toBe(44.79);
+    expect(named.find((row) => row.label === 'Global CD%').value).toBe(-10);
+    expect(named.some((row) => row.label === 'DMG vs Brute')).toBe(false);
+  });
+
+  it('keeps Max SP when the Max HP row is missing', () => {
+    const readings = pairsFromClusterTexts([
+      'Max SP', '12.80%',
+      'Equipment PATK', '109.32%',
+    ], 'special');
+    const named = applyStatKeywords(readings, { special: SPECIAL_STAT_NAMES.join('\n') });
+    expect(named.find((row) => row.value === 12.8).label).toBe('Max SP');
+    expect(named.find((row) => row.value === 109.32).label).toBe('Equipment PATK');
+  });
+
+  it('keeps a special shot in the special section', () => {
+    const merged = mergeShotReadings([
+      { kind: 'special', readings: pairsFromLine('Max HP 141.50%', 'special') },
+    ]);
+    expect(merged[0]).toMatchObject({ section: 'special', column: 'left', label: 'Max HP', value: 141.5 });
   });
 });

@@ -1928,7 +1928,7 @@ export default function SettingsTab({ user, onSessionUser }) {
           <div className="border-t border-slate-800/60 pt-6 mt-6 space-y-4">
             <div className="border-b border-slate-800/60 pb-3.5">
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300 uppercase tracking-wider"><IconShield /> GVG Stat Keywords</div>
-              <p className="text-[10px] text-slate-500 mt-0.5">One name per line, in the order they appear under the header. The first line is the anchor: HP and SP for General, ASPD and MSPD for Quasi. The reader finds that row, then names the rows below it in this order. Column 1 is the left side and Column 2 is the right side.</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">One name per line, in the order they appear under the header. The first line is the anchor: HP and SP for General, ASPD and MSPD for Quasi, Max HP for Special. The reader finds that row, then names the rows below it in this order. Column 1 is the left side and Column 2 is the right side. Special is one column. Rows after the last Special name are ignored.</p>
             </div>
             <div className="grid gap-6 max-w-4xl">
               {[
@@ -1957,6 +1957,20 @@ export default function SettingsTab({ user, onSessionUser }) {
                   </div>
                 </div>
               ))}
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Special Stats</div>
+                <label className="block max-w-md text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                  Column
+                  <span className="ml-2 normal-case tracking-normal text-slate-600">{parseStatKeywordList(config.gvgSpecialStats).length} names</span>
+                  <textarea
+                    value={config.gvgSpecialStats || ''}
+                    rows={14}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, gvgSpecialStats: e.target.value }))}
+                    placeholder={'Max HP\nMax SP\nEquipment PATK'}
+                    className="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono normal-case tracking-normal leading-relaxed outline-none focus:border-slate-700"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         {/* DYNAMIC GAME ROLE TAXONOMY REGISTRY SECTION */}

@@ -41,6 +41,16 @@ export function createDraft({ memberUid, capturedAt, shareCode, readings, warnin
   };
 }
 
+export async function deleteStatSnapshot(db, id) {
+  const key = String(id || '').trim();
+  if (!key) return false;
+  const ref = db.ref(`${SNAPSHOTS}/${key}`);
+  const snap = await ref.once('value');
+  if (!snap.exists()) return false;
+  await ref.remove();
+  return true;
+}
+
 export async function clearStatStore(db) {
   await db.ref(SNAPSHOTS).remove();
   await db.ref(DRAFTS).remove();

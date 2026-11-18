@@ -3,12 +3,13 @@ import multer from 'multer';
 import { getTenantStore } from '../db/database.js';
 import { resolveUserIdentity } from '../auth/identity.js';
 import { checkOfficer } from '../auth/officer.js';
-import { SHOT_KINDS, SHOT_LABELS, applyStatKeywords, cohortAsOf, mergeShotReadings, progressionFor, unifyReadings } from '@guildname/shared/gvgStatSheet';
+import { SHOT_KINDS, SHOT_LABELS, SPECIAL_STAT_NAMES, applyStatKeywords, cohortAsOf, mergeShotReadings, progressionFor, unifyReadings } from '@guildname/shared/gvgStatSheet';
 import { readStatShots } from '../games/ragnarok-origin/services/statSheetOcr.js';
 import {
   confirmStatDraft,
   createDraft,
   clearStatStore,
+  deleteStatSnapshot,
   listStatSnapshots,
   loadStatDraft,
   saveStatDraft,
@@ -29,7 +30,7 @@ function handleShotUpload(req, res, next) {
       return res.status(400).json({ success: false, error: 'Each screenshot must be 8 MB or smaller.' });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ success: false, error: 'Upload at most 4 screenshots.' });
+      return res.status(400).json({ success: false, error: `Upload at most ${MAX_SHOTS} screenshots.` });
     }
     return res.status(400).json({ success: false, error: err.message || 'Upload failed.' });
   });
@@ -118,6 +119,7 @@ router.post('/drafts', handleShotUpload, async (req, res) => {
         col1: config.gvgQuasiStatsCol1 || config.gvgQuasiStats,
         col2: config.gvgQuasiStatsCol2 || config.gvgQuasiStats,
       },
+      special: config.gvgSpecialStats || SPECIAL_STAT_NAMES.join('\n'),
     };
     const shots = (read.shots || [{ kind: 'general', readings: read.readings }]).map((shot) => ({
       ...shot,
@@ -161,6 +163,19 @@ router.patch('/drafts/:id', async (req, res) => {
   }
 });
 
+router.delete('/snapshots/:id', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const { ok } = await checkOfficer(req);
+    if (!ok) return res.status(403).json({ success: false, error: 'Access Denied: Action restricted to Officers.' });
+    const removed = await deleteStatSnapshot(getTenantStore(), req.params.id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Sheet not found.' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/clear', async (req, res) => {
   if (!requireUser(req, res)) return;
   if (String(req.body?.confirm || '').trim().toLowerCase() !== 'clear') {
@@ -190,6 +205,7 @@ router.post('/drafts/:id/confirm', async (req, res) => {
       jobCode: req.body.jobCode != null ? String(req.body.jobCode).trim() : existing.jobCode,
       roleCode: req.body.roleCode != null ? String(req.body.roleCode).trim() : existing.roleCode,
       readings: req.body.readings,
+      extras: req.body.extras != null ? req.body.extras : existing.extras,
     } : existing;
     const memberSnap = await db.ref(`auction/members/${draft.memberUid}`).once('value');
     const member = memberSnap.exists() ? memberSnap.val() : null;

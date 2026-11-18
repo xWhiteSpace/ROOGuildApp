@@ -1,5 +1,5 @@
 // frontend/src/pages/MasterListTab.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../services/apiClient';
 import { invalidateMembers, invalidateSettings, setMembersCaches, upsertMemberCaches, useMembers, useSettings } from '../query.js';
@@ -13,8 +13,6 @@ const IconX = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColo
 const IconSave = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2v-9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>;
 const IconPlus = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
 const IconEdit = () => <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
-const IconChevronLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>;
-const IconChevronRight = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>;
 
 const ROSTER_CAP = 200;
 const ROSTER_SLIDES = [
@@ -129,8 +127,13 @@ export default function MasterListTab({ user }) {
     || (membersQuery.isLoading && !membersQuery.data)
     || (settingsQuery.isLoading && !settingsQuery.data);
 
+  const tabListRef = useRef(null);
   const goPrevSlide = () => setSlideIndex((i) => (i - 1 + ROSTER_SLIDES.length) % ROSTER_SLIDES.length);
   const goNextSlide = () => setSlideIndex((i) => (i + 1) % ROSTER_SLIDES.length);
+
+  useEffect(() => {
+    tabListRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [slideIndex]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -385,11 +388,6 @@ export default function MasterListTab({ user }) {
   const isDirty = JSON.stringify(dbMembers) !== JSON.stringify(stagedMembers);
   const stagingRowsCount = Math.min(ROSTER_CAP, Math.max(100, activeRaidRosterList.length + 5));
   const activeSlide = ROSTER_SLIDES[slideIndex];
-  const rosterTitle = `True Guild Roster (${activeRaidRosterList.length} Active / Cap ${ROSTER_CAP})`;
-  const carouselTitle = activeSlide.id === 'roster' ? rosterTitle : activeSlide.title;
-  // Size the slot from the widest label so the chevrons stay put when the view changes.
-  const rosterTitleSizer = `True Guild Roster (${Math.max(activeRaidRosterList.length, ROSTER_CAP)} Active / Cap ${ROSTER_CAP})`;
-  const slideLabels = ROSTER_SLIDES.map((slide) => (slide.id === 'roster' ? rosterTitleSizer : slide.title));
 
   if (loading) {
     return <div className="p-6 text-xs font-mono uppercase text-slate-500 animate-pulse">Syncing Split-State Datasets...</div>;
@@ -397,57 +395,28 @@ export default function MasterListTab({ user }) {
 
   return (
     <div className="max-w-[98vw] mx-auto p-1 font-sans animate-fadeIn pb-24 space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-3 select-none">
-        <div className="hidden lg:block" />
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex w-max max-w-full items-center justify-center gap-3">
+      <div className="space-y-3 select-none">
+        <nav ref={tabListRef} role="tablist" aria-label="Masterlist views" className="flex gap-1 overflow-x-auto border-b border-slate-800 scrollbar-thin">
+          {ROSTER_SLIDES.map((slide, idx) => (
             <button
+              key={slide.id}
               type="button"
-              onClick={goPrevSlide}
-              className="shrink-0 p-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white hover:border-slate-600 transition cursor-pointer"
-              aria-label="Previous view"
+              role="tab"
+              aria-selected={idx === slideIndex}
+              onClick={() => setSlideIndex(idx)}
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[11px] font-bold uppercase tracking-wider cursor-pointer ${
+                idx === slideIndex ? 'border-indigo-400 text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
             >
-              <IconChevronLeft />
+              {slide.title}
             </button>
-            <div className="grid min-w-0 place-items-center overflow-hidden">
-              {slideLabels.map((label) => (
-                <span
-                  key={label}
-                  aria-hidden="true"
-                  className="col-start-1 row-start-1 invisible whitespace-nowrap px-2 text-xs font-bold uppercase tracking-wider"
-                >
-                  {label}
-                </span>
-              ))}
-              <h2 className="col-start-1 row-start-1 max-w-full truncate px-2 text-center text-xs font-bold uppercase tracking-wider text-slate-300">
-                {carouselTitle}
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={goNextSlide}
-              className="shrink-0 p-1.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 hover:text-white hover:border-slate-600 transition cursor-pointer"
-              aria-label="Next view"
-            >
-              <IconChevronRight />
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {ROSTER_SLIDES.map((slide, idx) => (
-              <button
-                key={slide.id}
-                type="button"
-                onClick={() => setSlideIndex(idx)}
-                className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                  idx === slideIndex ? 'w-5 bg-indigo-500' : 'w-1.5 bg-slate-700 hover:bg-slate-500'
-                }`}
-                aria-label={slide.title}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="flex justify-center lg:justify-end">
-          {activeSlide.id === 'roster' && (
+          ))}
+        </nav>
+        {activeSlide.id === 'roster' && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+              {activeRaidRosterList.length} Active / Cap {ROSTER_CAP}
+            </p>
             <input
               type="text"
               placeholder="Search members (roster + pool)..."
@@ -455,8 +424,8 @@ export default function MasterListTab({ user }) {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full sm:w-64 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1 text-[11px] text-slate-200 outline-none focus:border-slate-700 font-sans transition"
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {activeSlide.id === 'roster' ? (

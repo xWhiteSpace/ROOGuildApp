@@ -3,7 +3,6 @@ import { useQueries } from '@tanstack/react-query';
 import {
   ArrowDown,
   ArrowUpDown,
-  ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
@@ -731,6 +730,7 @@ export default function AttendanceHistoryTab({ user }) {
   const scrollOlder = useRef(false);
   const acknowledgedResults = useRef({});
 
+  const tabListRef = useRef(null);
   const slide = SLIDES[slideIndex];
   const attendanceOpen = pages.length > 0;
   const pageQueries = useQueries({
@@ -856,6 +856,10 @@ export default function AttendanceHistoryTab({ user }) {
   const slideIndexRef = useRef(slideIndex);
   goSlideRef.current = goSlide;
   slideIndexRef.current = slideIndex;
+
+  useEffect(() => {
+    tabListRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [slideIndex]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -1016,32 +1020,25 @@ export default function AttendanceHistoryTab({ user }) {
 
   return (
     <div className="flex h-[calc(100vh-12rem)] min-h-0 w-full min-w-0 flex-col gap-3 font-sans">
-      <div className="grid shrink-0 grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
-        <div className="hidden lg:block" />
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => goSlide(slideIndex - 1)} className="rounded-xl border border-slate-800 bg-slate-950 p-1.5 text-slate-400 hover:text-white cursor-pointer" aria-label="Previous view">
-              <ChevronLeft size={16} />
+      <div className="shrink-0 space-y-3">
+        <nav ref={tabListRef} role="tablist" aria-label="GVG History views" className="flex gap-1 overflow-x-auto border-b border-slate-800 scrollbar-thin">
+          {SLIDES.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={index === slideIndex}
+              onClick={() => { if (leaveEdits()) { setExpandedId(''); setSlideIndex(index); } }}
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[11px] font-bold uppercase tracking-wider cursor-pointer ${
+                index === slideIndex ? 'border-indigo-400 text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {item.title}
             </button>
-            <h1 className="text-xs font-bold uppercase tracking-wider text-slate-200">{slide.title}</h1>
-            <button type="button" onClick={() => goSlide(slideIndex + 1)} className="rounded-xl border border-slate-800 bg-slate-950 p-1.5 text-slate-400 hover:text-white cursor-pointer" aria-label="Next view">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-          <div className="flex gap-1.5">
-            {SLIDES.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-label={item.title}
-                onClick={() => { if (leaveEdits()) { setExpandedId(''); setSlideIndex(index); } }}
-                className={`h-1.5 rounded-full cursor-pointer ${index === slideIndex ? 'w-5 bg-indigo-500' : 'w-1.5 bg-slate-700'}`}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="flex justify-center lg:justify-end">
-          {(slide.id === 'attendance' || slide.id === 'rankings') && (
+          ))}
+        </nav>
+        {(slide.id === 'attendance' || slide.id === 'rankings') && (
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-2 text-slate-500" />
               <input
@@ -1051,9 +1048,7 @@ export default function AttendanceHistoryTab({ user }) {
                 className="w-56 rounded-xl border border-slate-800 bg-slate-950 py-1.5 pl-7 pr-3 text-[11px] text-slate-200 outline-none"
               />
             </div>
-          )}
-          {slide.id === 'attendance' && attendanceOpen && (
-            <div className="ml-3">
+            {slide.id === 'attendance' && attendanceOpen && (
               <DatePager
                 loaded={attendanceDates.length}
                 total={attendanceTotal}
@@ -1068,9 +1063,9 @@ export default function AttendanceHistoryTab({ user }) {
                   setPages((prev) => (prev.includes(next) ? prev : [...prev, next]));
                 }}
               />
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && <div className="py-16 text-center text-[11px] font-mono uppercase tracking-widest text-slate-500">Loading the sheet...</div>}

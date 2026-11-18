@@ -1,17 +1,22 @@
 import { keepPreviousData } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Image, ScanLine, Search, Trash2, User, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Download, Eraser, Plus, RotateCcw, ScanLine, Search, Trash2, X } from 'lucide-react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   cohortStatAverage,
   formatDelta,
   formatStatValue,
+  emptyExtras,
   gvgStatsCsv,
   labelsMatch,
+  SHEET_EXTRA_FIELDS,
   parseStatKeywordList,
   SHOT_KINDS,
   SHOT_LABELS,
+  SPECIAL_STAT_NAMES,
 } from '@guildname/shared/gvgStatSheet';
+import GvgSimulation from './GvgSimulation';
+import MemberField from './MemberField';
 import { apiFetch } from '../../../services/apiClient';
 import { invalidateGvgStatProgression, invalidateGvgStatSnapshots, useGvgStatProgression, useGvgStatSnapshots, useMembers, useSettings } from '../../../query/hooks';
 import { getGuildTodayDateStr } from '../../../utils/guildTime';
@@ -38,6 +43,7 @@ function downloadCsv(filename, headers, rows) {
 const SHOT_HINTS = {
   general: 'Details tab, General Stats open. This shot includes STR through LUK.',
   quasi: 'Details tab, Quasi-Stats open.',
+  special: 'Details tab, Special open. Max HP is the first row.',
 };
 
 const COLUMN_LABEL = {
@@ -57,6 +63,49 @@ const primaryButton = 'inline-flex h-8 shrink-0 items-center justify-center gap-
 const quietButton = 'inline-flex h-8 shrink-0 items-center gap-1 rounded-xl border border-slate-800 bg-slate-950 px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-200 hover:border-slate-600 disabled:opacity-40';
 const generalTone = 'border border-emerald-400/80 bg-emerald-950 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.45)] [text-shadow:0_0_8px_rgba(52,211,153,0.85)]';
 const quasiTone = 'border border-blue-400/80 bg-blue-950 text-blue-300 shadow-[0_0_14px_rgba(59,130,246,0.5)] [text-shadow:0_0_8px_rgba(96,165,250,0.85)]';
+const specialTone = 'border border-pink-400/80 bg-pink-950 text-pink-300 shadow-[0_0_14px_rgba(244,114,182,0.45)] [text-shadow:0_0_8px_rgba(244,114,182,0.85)]';
+
+function sectionTone(section) {
+  if (section === 'quasi') return quasiTone;
+  if (section === 'special') return specialTone;
+  return generalTone;
+}
+
+function sectionPanel(section) {
+  if (section === 'quasi') return 'bg-blue-950/25';
+  if (section === 'special') return 'bg-pink-950/25';
+  return 'bg-emerald-950/25';
+}
+
+function sectionLine(section) {
+  if (section === 'quasi') return 'divide-blue-500/25 border-blue-500/30';
+  if (section === 'special') return 'divide-pink-500/25 border-pink-500/30';
+  return 'divide-emerald-500/25 border-emerald-500/30';
+}
+
+function shotLabelClass(kind) {
+  if (kind === 'quasi') return 'text-blue-300 [text-shadow:0_0_8px_rgba(96,165,250,0.75)]';
+  if (kind === 'special') return 'text-pink-300 [text-shadow:0_0_8px_rgba(244,114,182,0.75)]';
+  return 'text-emerald-300 [text-shadow:0_0_8px_rgba(52,211,153,0.75)]';
+}
+
+function specialSource(config) {
+  return config?.gvgSpecialStats || SPECIAL_STAT_NAMES.join('\n');
+}
+
+function ReviewShotPane({ kind, url, onClose, width }) {
+  return (
+    <div style={width ? { width } : undefined} className="sticky top-0 flex h-[calc(80vh-11rem)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-slate-800 px-3">
+        <span className={`truncate text-[10px] font-bold uppercase tracking-wider ${shotLabelClass(kind)}`}>{SHOT_LABELS[kind]}</span>
+        <button type="button" onClick={onClose} aria-label="Hide screenshot" className="text-slate-400 hover:text-white">
+          <X size={14} />
+        </button>
+      </div>
+      <img src={url} alt={SHOT_LABELS[kind]} className="min-h-0 w-full flex-1 object-contain object-top" />
+    </div>
+  );
+}
 
 function reviewNote(row) {
   const parts = [];
@@ -121,7 +170,7 @@ function formatAnalysisGap(delta, unit) {
   return unit === 'percent' ? `${text}%` : text;
 }
 
-function CompareBars({ memberName, memberValue, average, count, unit, peerLabel, statLabel }) {
+function CompareBars({ memberName, memberValue, average, count, unit, peerLabel, statLabel, compact }) {
   const who = memberName || 'This member';
   const peers = peerLabel || 'Same job and role';
   const stat = statLabel || 'this stat';
@@ -148,7 +197,7 @@ function CompareBars({ memberName, memberValue, average, count, unit, peerLabel,
   }
   return (
     <div className="space-y-2">
-      <div className="h-56 w-full">
+      <div className={compact ? 'h-32 w-full' : 'h-56 w-full'}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 8 }}>
             <CartesianGrid stroke="#334155" vertical={false} />
@@ -181,36 +230,119 @@ function CompareBars({ memberName, memberValue, average, count, unit, peerLabel,
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <AnalysisNote note={note} noteClass={noteClass} />
+      {compact ? <p className={noteClass}>{note}</p> : <AnalysisNote note={note} noteClass={noteClass} />}
     </div>
   );
 }
 
-function ShotPicker({ kind, file, inputKey, onFile }) {
+function ShotPicker({ kind, file, previewUrl, inputKey, onFile, disabled }) {
+  const zoneRef = useRef(null);
   const inputRef = useRef(null);
+  const skipOpen = useRef(false);
+  const [over, setOver] = useState(false);
+  const [rejected, setRejected] = useState(false);
+  const take = (list) => {
+    const next = list?.[0];
+    if (!next) return;
+    if (next.type && !next.type.startsWith('image/')) {
+      setRejected(true);
+      return;
+    }
+    setRejected(false);
+    onFile(next);
+  };
+  const clearShot = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    skipOpen.current = true;
+    setRejected(false);
+    onFile(null);
+    setTimeout(() => {
+      skipOpen.current = false;
+    }, 0);
+  };
+  useEffect(() => {
+    const node = zoneRef.current;
+    if (!node) return undefined;
+    const allow = (event) => {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    };
+    node.addEventListener('dragenter', allow);
+    node.addEventListener('dragover', allow);
+    return () => {
+      node.removeEventListener('dragenter', allow);
+      node.removeEventListener('dragover', allow);
+    };
+  }, []);
   return (
-    <>
-      <button
-        type="button"
-        title={SHOT_HINTS[kind]}
-        onClick={() => inputRef.current?.click()}
-        className={`${controlClass} inline-flex w-full items-center gap-1.5 text-left ${
-          file ? 'border-slate-500 text-slate-50' : 'text-slate-300 hover:border-slate-600'
-        }`}
-      >
-        <Image size={14} className="shrink-0 text-slate-400" />
-        <span className="truncate">{file ? file.name : 'Select file'}</span>
-      </button>
+    <div
+      ref={zoneRef}
+      title={SHOT_HINTS[kind]}
+      onDragEnter={() => {
+        if (!disabled) setOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOver(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        if (!disabled) take(event.dataTransfer.files);
+      }}
+      className={`relative h-28 overflow-hidden rounded-xl border bg-slate-950 outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-slate-400 ${
+        over ? 'border-solid border-indigo-400 bg-indigo-950/40' : file ? 'border-solid border-slate-500' : 'border-dashed border-slate-600'
+      } ${disabled ? 'opacity-40' : ''}`}
+    >
+      <div className="pointer-events-none flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-slate-300">
+        {file && previewUrl ? (
+          <img src={previewUrl} alt="" className="h-full w-full object-contain p-2" />
+        ) : (
+          <>
+            <Plus size={18} className="text-slate-300" aria-hidden="true" />
+            <span className="text-[11px] font-medium text-slate-300">Drop</span>
+          </>
+        )}
+      </div>
       <input
         key={`${kind}-${inputKey}`}
         ref={inputRef}
         type="file"
         accept="image/*"
         aria-label={`${SHOT_LABELS[kind]} screenshot`}
-        className="hidden"
-        onChange={(event) => onFile(event.target.files?.[0] || null)}
+        disabled={disabled}
+        onClick={(event) => {
+          if (!skipOpen.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          skipOpen.current = false;
+        }}
+        onChange={(event) => {
+          const picked = event.target.files?.[0];
+          event.target.value = '';
+          if (picked) take([picked]);
+        }}
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
       />
-    </>
+      {file ? (
+        <button
+          type="button"
+          aria-label={`Remove ${SHOT_LABELS[kind]} screenshot`}
+          disabled={disabled}
+          data-clear-shot=""
+          onMouseDown={clearShot}
+          onClick={clearShot}
+          className="absolute right-1.5 top-1.5 z-20 inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 bg-slate-950/90 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed"
+        >
+          <X size={12} aria-hidden="true" />
+        </button>
+      ) : null}
+      {rejected || file ? (
+        <p className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 truncate px-1.5 py-0.5 text-center text-[10px] ${rejected ? 'bg-rose-950/90 text-rose-200' : 'bg-slate-950/85 text-slate-300'}`}>
+          {rejected ? 'Images only' : file.name}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -231,18 +363,52 @@ function StatButton({ cell, section, column, deltas, selected, preview, onSelect
   return (
     <button
       type="button"
-      onMouseEnter={() => onPreview({ section, column, label: cell.label })}
+      onMouseEnter={(event) => onPreview({ section, column, label: cell.label }, event.currentTarget)}
       onClick={() => onSelect({ section, column, label: cell.label })}
       className={`flex min-h-9 w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400/40 ${
         hot ? 'bg-indigo-600/25' : pinned ? 'bg-indigo-950/50' : ''
       }`}
     >
       <span className="truncate text-sm text-slate-300">{cell.label}</span>
-      <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-50">
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-white">
         {reading ? formatStatValue(reading) : ''}
         {change ? <span className={`ml-1 ${delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{change}</span> : null}
       </span>
     </button>
+  );
+}
+
+function HoverCompare({ anchor, label, children }) {
+  const [place, setPlace] = useState(null);
+  useLayoutEffect(() => {
+    if (!anchor) return undefined;
+    const update = () => {
+      const rect = anchor.getBoundingClientRect();
+      const width = 320;
+      const height = 220;
+      let left = rect.right + 10;
+      if (left + width > window.innerWidth - 8) left = Math.max(8, rect.left - width - 10);
+      let top = rect.top;
+      if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - height - 8);
+      setPlace({ top, left, width });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [anchor]);
+  if (!place) return null;
+  return (
+    <div
+      className="pointer-events-none fixed z-50 rounded-xl border border-slate-700 bg-slate-950 p-3 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+      style={{ top: place.top, left: place.left, width: place.width }}
+    >
+      <p className="mb-1 truncate text-center text-xs font-semibold text-slate-50">{label}</p>
+      {children}
+    </div>
   );
 }
 
@@ -283,7 +449,7 @@ function ReviewCell({ cell, readings, onChange }) {
         value={cell.reading ? cell.reading.raw : ''}
         disabled={index < 0}
         onChange={(event) => onChange(index, { raw: event.target.value })}
-        className={`w-16 shrink-0 bg-transparent text-right text-xs font-semibold tabular-nums outline-none ${note ? 'text-amber-300' : 'text-slate-50'}`}
+        className="w-16 shrink-0 bg-transparent text-right text-xs font-semibold tabular-nums text-white outline-none"
       />
     </div>
   );
@@ -291,9 +457,8 @@ function ReviewCell({ cell, readings, onChange }) {
 
 function ReviewColumns({ left, right, readings, onChange, section }) {
   const count = Math.max(left.length, right.length);
-  const quasi = section === 'quasi';
   return (
-    <div className={`divide-y overflow-hidden rounded-lg border ${quasi ? 'divide-blue-500/25 border-blue-500/30' : 'divide-emerald-500/25 border-emerald-500/30'}`}>
+    <div className={`divide-y overflow-hidden rounded-lg border ${sectionLine(section)}`}>
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="grid grid-cols-2">
           <ReviewCell cell={left[index]} readings={readings} onChange={onChange} />
@@ -304,16 +469,45 @@ function ReviewColumns({ left, right, readings, onChange, section }) {
   );
 }
 
+function ReviewStack({ cells, readings, onChange, section }) {
+  return (
+    <div className={`divide-y overflow-hidden rounded-lg border ${sectionLine(section)}`}>
+      {cells.map((cell) => (
+        <ReviewCell key={cell.label} cell={cell} readings={readings} onChange={onChange} />
+      ))}
+    </div>
+  );
+}
+
 function StatColumns({ left, right, section, deltas, selected, preview, onSelect, onPreview }) {
   const count = Math.max(left.length, right.length);
-  const quasi = section === 'quasi';
   return (
-    <div className={`divide-y overflow-hidden rounded-lg border ${quasi ? 'divide-blue-500/25 border-blue-500/30' : 'divide-emerald-500/25 border-emerald-500/30'}`}>
+    <div className={`divide-y overflow-hidden rounded-lg border ${sectionLine(section)}`}>
       {Array.from({ length: count }, (_, index) => (
         <div key={`${section}-${index}`} className="grid grid-cols-2">
           <StatButton cell={left[index]} section={section} column="left" deltas={deltas} selected={selected} preview={preview} onSelect={onSelect} onPreview={onPreview} />
           <StatButton cell={right[index]} section={section} column="right" deltas={deltas} selected={selected} preview={preview} onSelect={onSelect} onPreview={onPreview} />
         </div>
+      ))}
+    </div>
+  );
+}
+
+function StatStack({ cells, section, deltas, selected, preview, onSelect, onPreview }) {
+  return (
+    <div className={`divide-y overflow-hidden rounded-lg border ${sectionLine(section)}`}>
+      {cells.map((cell) => (
+        <StatButton
+          key={`${section}-${cell.label}`}
+          cell={cell}
+          section={section}
+          column="left"
+          deltas={deltas}
+          selected={selected}
+          preview={preview}
+          onSelect={onSelect}
+          onPreview={onPreview}
+        />
       ))}
     </div>
   );
@@ -331,6 +525,11 @@ export default function GvgStatsTab({ user }) {
   const [uploadUid, setUploadUid] = useState('');
   const [capturedAt, setCapturedAt] = useState(() => getGuildTodayDateStr());
   const [files, setFiles] = useState({});
+  const [shotUrls, setShotUrls] = useState({});
+  const [reviewShot, setReviewShot] = useState('');
+  const [columnWidth, setColumnWidth] = useState(0);
+  const [shotPaneWidth, setShotPaneWidth] = useState(0);
+  const reviewScrollRef = useRef(null);
   const [formKey, setFormKey] = useState(0);
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState('');
@@ -338,10 +537,49 @@ export default function GvgStatsTab({ user }) {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearText, setClearText] = useState('');
   const [clearing, setClearing] = useState(false);
+  const [pageTab, setPageTab] = useState('overview');
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removing, setRemoving] = useState(false);
   const [pickedDay, setPickedDay] = useState('');
   const [filters, setFilters] = useState({ jobCode: '', roleCode: '', pinned: false });
   const [compare, setCompare] = useState({ jobCode: '', roleCode: '', from: '', to: '', pinned: false });
   const [selectedStat, setSelectedStat] = useState(null);
+
+  useEffect(() => {
+    const urls = {};
+    for (const kind of SHOT_KINDS) {
+      if (files[kind] instanceof Blob) urls[kind] = URL.createObjectURL(files[kind]);
+    }
+    setShotUrls(urls);
+    return () => {
+      Object.values(urls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [files]);
+
+  useLayoutEffect(() => {
+    if (!draft || reviewShot) return;
+    const scroller = reviewScrollRef.current;
+    const panel = scroller?.querySelector('[data-review-section="general"]');
+    if (!scroller || !panel) return;
+    const width = panel.getBoundingClientRect().width;
+    setColumnWidth(width);
+    setShotPaneWidth(Math.max(0, scroller.clientWidth - width - 24));
+  }, [draft, reviewShot]);
+
+  useLayoutEffect(() => {
+    const scroller = reviewScrollRef.current;
+    if (!scroller) return;
+    if (!reviewShot) {
+      scroller.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    const panel = scroller.querySelector(`[data-review-section="${reviewShot}"]`);
+    if (!panel) return;
+    const width = panel.getBoundingClientRect().width;
+    setShotPaneWidth(Math.max(0, scroller.clientWidth - width - 24));
+    const delta = panel.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+    scroller.scrollTo({ left: Math.max(0, scroller.scrollLeft + delta), behavior: 'smooth' });
+  }, [reviewShot]);
 
   const members = membersQuery.data || {};
   const classFor = (uid, jobCode, roleCode) => {
@@ -359,9 +597,9 @@ export default function GvgStatsTab({ user }) {
     from: compare.from,
   }, { placeholderData: keepPreviousData });
 
-  const openMember = (row) => {
+  const openMember = (row, options = {}) => {
     setMemberUid(row.uid);
-    if (members[row.uid]?.isRaidRoster === true) setUploadUid(row.uid);
+    if (!options.keepUpload && members[row.uid]?.isRaidRoster === true) setUploadUid(row.uid);
     setQuery(row.displayName);
     setSearchNote('');
     setDraft(null);
@@ -371,32 +609,11 @@ export default function GvgStatsTab({ user }) {
     setSelectedStat(null);
   };
 
-  const nameSuggestions = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return [];
-    const selectedName = String(members[memberUid]?.displayName || members[memberUid]?.inGameName || '').toLowerCase();
-    if (selectedName && selectedName === needle) return [];
-    return Object.entries(members)
-      .map(([uid, member]) => ({
-        uid,
-        displayName: member?.displayName || member?.inGameName || uid,
-        inGameName: member?.inGameName || '',
-        jobCode: member?.jobCode || '',
-        roleCode: member?.roleCode || '',
-      }))
-      .filter((row) => {
-        if (filters.jobCode && row.jobCode !== filters.jobCode) return false;
-        if (filters.roleCode && row.roleCode !== filters.roleCode) return false;
-        return `${row.displayName} ${row.inGameName}`.toLowerCase().includes(needle);
-      })
-      .sort((a, b) => a.displayName.localeCompare(b.displayName))
-      .slice(0, 8);
-  }, [members, memberUid, query, filters.jobCode, filters.roleCode]);
-
   const runSearch = (event) => {
     event.preventDefault();
     const needle = query.trim().toLowerCase();
     const found = Object.entries(members)
+      .filter(([, member]) => member?.isRaidRoster === true)
       .map(([uid, member]) => ({
         uid,
         displayName: member?.displayName || member?.inGameName || uid,
@@ -418,19 +635,33 @@ export default function GvgStatsTab({ user }) {
     setSearchNote(found.length ? '' : 'No member matches.');
   };
 
-  const roster = useMemo(() => (
+  const directory = useMemo(() => (
     Object.entries(members)
-      .filter(([, member]) => member?.isRaidRoster === true)
       .map(([uid, member]) => ({
         uid,
         displayName: member?.displayName || member?.inGameName || uid,
+        inGameName: member?.inGameName || '',
+        jobCode: member?.jobCode || '',
+        roleCode: member?.roleCode || '',
+        raid: member?.isRaidRoster === true,
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName))
   ), [members]);
-
-  const readSheet = async (event) => {
-    event.preventDefault();
-    if (!uploadUid) {
+  const roster = useMemo(() => directory.filter((row) => row.raid), [directory]);
+  const searchPeople = useMemo(() => roster.filter((row) => {
+    if (filters.jobCode && row.jobCode !== filters.jobCode) return false;
+    if (filters.roleCode && row.roleCode !== filters.roleCode) return false;
+    return true;
+  }), [roster, filters.jobCode, filters.roleCode]);
+  const selfMember = useMemo(() => {
+    const uid = String(user?.id || '');
+    return directory.find((row) => String(row.uid) === uid) || null;
+  }, [directory, user?.id]);
+  const uploadMine = selfMember && roster.some((row) => String(row.uid) === String(selfMember.uid)) ? selfMember : null;
+  const readSheet = async (event, memberUid = uploadUid) => {
+    if (event?.preventDefault) event.preventDefault();
+    const uid = memberUid || uploadUid;
+    if (!uid) {
       setError('Choose a name under Upload Stats.');
       return;
     }
@@ -443,20 +674,21 @@ export default function GvgStatsTab({ user }) {
     setError('');
     try {
       const body = new FormData();
-      body.append('memberUid', uploadUid);
+      body.append('memberUid', uid);
       body.append('capturedAt', capturedAt);
       body.append('kinds', JSON.stringify(picked));
       picked.forEach((kind) => body.append('files', files[kind]));
       const res = await apiFetch('/api/gvg-stats/drafts', { method: 'POST', body });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Could not read the sheet.');
-      const member = members[uploadUid] || {};
-      setDraft({
+      const member = members[uid] || {};
+      setDraft((current) => ({
         ...data.draft,
-        memberUid: uploadUid,
-        jobCode: member.jobCode || '',
-        roleCode: member.roleCode || '',
-      });
+        memberUid: current?.memberUid || uid,
+        jobCode: current?.jobCode || member.jobCode || '',
+        roleCode: current?.roleCode || member.roleCode || '',
+        extras: current?.extras || emptyExtras(),
+      }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -507,6 +739,7 @@ export default function GvgStatsTab({ user }) {
           capturedAt,
           shareCode: draft.shareCode || '',
           readings: draft.readings,
+          extras: draft.extras || emptyExtras(),
         }),
       });
       const data = await res.json();
@@ -530,6 +763,35 @@ export default function GvgStatsTab({ user }) {
     } finally {
       setBusy('');
     }
+  };
+
+  const removeSheet = async () => {
+    if (!removeTarget?.id) return;
+    setRemoving(true);
+    setError('');
+    try {
+      const res = await apiFetch(`/api/gvg-stats/snapshots/${encodeURIComponent(removeTarget.id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Could not remove the sheet.');
+      setRemoveTarget(null);
+      await invalidateGvgStatProgression();
+      await invalidateGvgStatSnapshots();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const updateExtra = (key, value) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return { ...current, extras: { ...emptyExtras(), ...current.extras, [key]: value } };
+    });
+  };
+
+  const clearExtras = () => {
+    setDraft((current) => (current ? { ...current, extras: emptyExtras() } : current));
   };
 
   const exportSheets = () => {
@@ -578,6 +840,7 @@ export default function GvgStatsTab({ user }) {
         generalRight: config.gvgGeneralStatsCol2 || config.gvgGeneralStats,
         quasiLeft: config.gvgQuasiStatsCol1 || config.gvgQuasiStats,
         quasiRight: config.gvgQuasiStatsCol2 || config.gvgQuasiStats,
+        special: specialSource(config),
       },
     });
   }, [snapshotsQuery.data, members, jobs, roles, settingsQuery.data]);
@@ -590,22 +853,23 @@ export default function GvgStatsTab({ user }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-black uppercase tracking-wide text-slate-100">GVG Stats</h1>
-        {isOfficer ? (
-          <button
-            type="button"
-            onClick={() => {
-              setClearText('');
-              setClearOpen(true);
-            }}
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-950 px-3 text-[11px] font-bold uppercase tracking-wider text-rose-300 hover:border-rose-400"
-          >
-            <Trash2 size={14} />
-            Clear
-          </button>
-        ) : null}
       </div>
-      <div className="relative z-20 grid grid-cols-2 items-stretch gap-4">
-      <form onSubmit={runSearch} className={`${cardClass} relative z-20 h-full min-w-0 !overflow-visible`}>
+      <nav className="flex gap-1 border-b border-slate-800">
+        {[['overview', 'Stat overview & Upload'], ['simulation', 'Simulation'], ['database', 'Database']].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPageTab(id)}
+            className={`border-b-2 px-3 py-2 text-[11px] font-bold uppercase tracking-wider ${pageTab === id ? 'border-indigo-400 text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {pageTab === 'overview' ? (
+      <div className="relative z-20 grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+      <div className="grid h-full min-w-0 grid-rows-2 gap-4">
+      <form onSubmit={runSearch} className={`${cardClass} relative z-20 h-full min-h-0 !overflow-visible`}>
         <header className={cardHeader}>
           <h2 className={cardTitle}>Search</h2>
         </header>
@@ -613,32 +877,25 @@ export default function GvgStatsTab({ user }) {
         <div className="grid grid-cols-3 gap-4">
           <label className="min-w-0">
             <span className={labelClass}>Name</span>
-            <span className="relative block">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setSearchNote('');
-                }}
-                placeholder="Search a member"
-                className={`${controlClass} w-full pl-8`}
-              />
-              {nameSuggestions.length ? (
-                <div className="absolute left-0 z-30 mt-1 max-h-56 w-56 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 shadow-xl">
-                  {nameSuggestions.map((row) => (
-                    <button
-                      key={row.uid}
-                      type="button"
-                      onClick={() => openMember(row)}
-                      className="block w-full truncate px-3 py-2 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900 hover:text-white"
-                    >
-                      {row.displayName}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </span>
+            <MemberField
+              people={searchPeople}
+              value={memberUid}
+              text={query}
+              onText={(next) => {
+                setQuery(next);
+                setSearchNote('');
+              }}
+              onPick={(uid) => {
+                const row = roster.find((item) => String(item.uid) === String(uid));
+                if (row) openMember(row);
+              }}
+              onMine={() => {
+                if (uploadMine) openMember(uploadMine, { keepUpload: true });
+              }}
+              mine={uploadMine}
+              allowMine
+              placeholder="Search a member"
+            />
           </label>
           <label className="min-w-0">
             <span className={labelClass}>Job</span>
@@ -676,28 +933,25 @@ export default function GvgStatsTab({ user }) {
         </div>
         </div>
       </form>
+      <CompareSettings jobs={jobs} roles={roles} compare={compare} onCompare={setCompare} />
+      </div>
       <form onSubmit={readSheet} className={`${cardClass} h-full min-w-0`}>
         <header className={cardHeader}>
           <h2 className={cardTitle}>Upload Stats</h2>
         </header>
         <div className={`${cardBody} flex min-h-0 flex-1 flex-col`}>
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="min-w-0">
             <span className={labelClass}>Name</span>
-            <span className="relative block">
-              <User size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <select
-                value={uploadUid}
-                onChange={(event) => setUploadUid(event.target.value)}
-                className={`${controlClass} w-full appearance-none pl-8 pr-8`}
-              >
-                <option value="">Choose a member</option>
-                {roster.map((row) => (
-                  <option key={row.uid} value={row.uid}>{row.displayName}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-            </span>
+            <MemberField
+              people={roster}
+              value={uploadUid}
+              onPick={setUploadUid}
+              mine={uploadMine}
+              allowMine
+              emptyLabel="Choose a member"
+              placeholder="Choose a member"
+            />
           </label>
           <label className="min-w-0">
             <span className={labelClass}>Taken on</span>
@@ -711,18 +965,23 @@ export default function GvgStatsTab({ user }) {
               className={`${controlClass} w-full`}
             />
           </label>
-          <span aria-hidden="true" />
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {SHOT_KINDS.map((kind) => (
             <label key={kind} className="min-w-0">
-              <span className={`mb-1.5 block text-[11px] font-medium ${kind === 'quasi' ? 'text-blue-300 [text-shadow:0_0_8px_rgba(96,165,250,0.75)]' : 'text-emerald-300 [text-shadow:0_0_8px_rgba(52,211,153,0.75)]'}`}>{SHOT_LABELS[kind]}</span>
+              <span title={SHOT_LABELS[kind]} className={`mb-1.5 block min-h-8 text-[11px] font-medium leading-4 ${shotLabelClass(kind)}`}>{SHOT_LABELS[kind]}</span>
               <ShotPicker
                 kind={kind}
                 file={files[kind]}
+                previewUrl={shotUrls[kind]}
                 inputKey={formKey}
+                disabled={busy === 'read'}
                 onFile={(file) => setFiles((current) => ({ ...current, [kind]: file }))}
               />
             </label>
           ))}
+        </div>
+        <div className="mt-auto flex justify-end pt-4">
           <button type="submit" disabled={busy === 'read'} className={primaryButton}>
             <ScanLine size={14} />
             <span className="grid">
@@ -734,6 +993,7 @@ export default function GvgStatsTab({ user }) {
         </div>
       </form>
       </div>
+      ) : null}
 
       {error ? <p className="text-xs text-rose-400">{error}</p> : null}
 
@@ -777,9 +1037,9 @@ export default function GvgStatsTab({ user }) {
       ) : null}
 
       {draft ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
-          <button type="button" aria-label="Close review" className="fixed inset-0 z-0 cursor-default" onClick={() => busy !== 'confirm' && setDraft(null)} />
-          <div role="dialog" aria-modal="true" aria-labelledby="gvg-review-title" className="relative z-10 flex max-h-[80vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+        <div className="fixed inset-y-0 right-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md left-[var(--valhalla-sidebar-width,16rem)]">
+          <button type="button" aria-label="Close review" className="absolute inset-0 z-0 cursor-default" onClick={() => { if (!busy) { setReviewShot(''); setDraft(null); } }} />
+          <div role="dialog" aria-modal="true" aria-labelledby="gvg-review-title" className="relative z-10 flex h-[80vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
             <header className={cardHeader}>
               <h2 id="gvg-review-title" className={`${cardTitle} min-w-0 truncate`}>Review{draft.shareCode ? ` · ${draft.shareCode}` : ''}</h2>
               <p className="ml-auto flex shrink-0 items-center gap-2 text-[10px] font-medium text-slate-400">
@@ -788,35 +1048,52 @@ export default function GvgStatsTab({ user }) {
                 <span className="text-amber-400">70–84%</span>
                 <span className="text-rose-400">&lt;70%</span>
               </p>
-              <button type="button" onClick={() => setDraft(null)} disabled={busy === 'confirm'} aria-label="Close" className="text-slate-400 hover:text-white disabled:opacity-40">
+              <button type="button" onClick={() => { setReviewShot(''); setDraft(null); }} disabled={Boolean(busy)} aria-label="Close" className="text-slate-400 hover:text-white disabled:opacity-40">
                 <X size={16} />
               </button>
             </header>
-            <div className="overflow-auto p-4">
+            <div role="tablist" aria-label="Screenshots" className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-800/80 px-4 py-2">
+              {SHOT_KINDS.map((kind) => (shotUrls[kind] ? (
+                <button
+                  key={kind}
+                  type="button"
+                  role="tab"
+                  aria-selected={reviewShot === kind}
+                  onClick={() => setReviewShot((current) => (current === kind ? '' : kind))}
+                  className={`flex shrink-0 items-center gap-2 rounded-lg border px-1.5 py-1 ${reviewShot === kind ? 'border-slate-400 bg-slate-800' : 'border-slate-800 bg-slate-950 hover:border-slate-600'}`}
+                >
+                  <img src={shotUrls[kind]} alt="" className="h-10 w-16 rounded object-cover object-top" />
+                  <span className={`pr-1 text-[10px] font-bold uppercase tracking-wider ${shotLabelClass(kind)}`}>{SHOT_LABELS[kind]}</span>
+                </button>
+              ) : null))}
+              <button
+                type="button"
+                onClick={() => readSheet(null, draft.memberUid)}
+                disabled={Boolean(busy) || !SHOT_KINDS.some((kind) => files[kind])}
+                className={`${quietButton} ml-auto`}
+              >
+                <RotateCcw size={14} />
+                {busy === 'read' ? 'Reading' : 'Retry'}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
             <div className="rounded-xl bg-slate-950/40 p-4">
               <div className="grid grid-cols-3 gap-4">
                 <label className="min-w-0">
                   <span className={labelClass}>Name</span>
-                  <span className="relative block">
-                    <User size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <select
-                      value={draft.memberUid || ''}
-                      onChange={(event) => updateCharacter({ memberUid: event.target.value })}
-                      disabled={busy === 'confirm'}
-                      className={`${controlClass} w-full appearance-none pl-8 pr-8`}
-                    >
-                      {(roster.some((row) => row.uid === draft.memberUid) ? roster : [
-                        ...roster,
-                        {
-                          uid: draft.memberUid,
-                          displayName: members[draft.memberUid]?.displayName || members[draft.memberUid]?.inGameName || draft.memberUid,
-                        },
-                      ]).map((row) => (
-                        <option key={row.uid} value={row.uid}>{row.displayName}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  </span>
+                  <MemberField
+                    people={roster.some((row) => row.uid === draft.memberUid) ? roster : [
+                      ...roster,
+                      {
+                        uid: draft.memberUid,
+                        displayName: members[draft.memberUid]?.displayName || members[draft.memberUid]?.inGameName || draft.memberUid,
+                      },
+                    ]}
+                    value={draft.memberUid || ''}
+                    onPick={(uid) => updateCharacter({ memberUid: uid })}
+                    placeholder="Choose a member"
+                    disabled={busy === 'confirm'}
+                  />
                 </label>
                 <label className="min-w-0">
                   <span className={labelClass}>Job</span>
@@ -855,10 +1132,12 @@ export default function GvgStatsTab({ user }) {
                 ))}
               </ul>
             ) : null}
-            <div className="mt-6 grid grid-cols-2 gap-6">
+            <div ref={reviewScrollRef} className={`mt-6 scroll-smooth ${reviewShot ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+            <div className={reviewShot ? 'flex w-max gap-6' : 'grid grid-cols-1 gap-6 xl:grid-cols-3'}>
               {[['general', 'General Stats', 'gvgGeneralStatsCol1', 'gvgGeneralStatsCol2'], ['quasi', 'Quasi-Stats', 'gvgQuasiStatsCol1', 'gvgQuasiStatsCol2']].map(([section, title, leftKey, rightKey]) => (
-                <div key={section} className={`min-w-0 space-y-2 rounded-xl p-4 ${section === 'quasi' ? 'bg-blue-950/25' : 'bg-emerald-950/25'}`}>
-                  <div className={`rounded-md px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider ${section === 'quasi' ? quasiTone : generalTone}`}>{title}</div>
+                <Fragment key={section}>
+                <div data-review-section={section} style={reviewShot && columnWidth ? { width: columnWidth } : undefined} className={`${reviewShot ? 'shrink-0' : 'min-w-0'} space-y-2 rounded-xl p-5 ${sectionPanel(section)}`}>
+                  <div className={`rounded-md px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider ${sectionTone(section)}`}>{title}</div>
                   <ReviewColumns
                     section={section}
                     left={keywordColumn(draft.readings, section, 'left', settingsQuery.data?.[leftKey] || settingsQuery.data?.[section === 'quasi' ? 'gvgQuasiStats' : 'gvgGeneralStats'])}
@@ -867,13 +1146,60 @@ export default function GvgStatsTab({ user }) {
                     onChange={updateReading}
                   />
                 </div>
+                {reviewShot === section && shotUrls[section] ? (
+                  <ReviewShotPane kind={section} url={shotUrls[section]} width={shotPaneWidth} onClose={() => setReviewShot('')} />
+                ) : null}
+                </Fragment>
               ))}
+              <div data-review-section="special" style={reviewShot && columnWidth ? { width: columnWidth } : undefined} className={`${reviewShot ? 'shrink-0' : 'min-w-0'} space-y-2 rounded-xl p-5 ${sectionPanel('special')}`}>
+                <div className={`rounded-md px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider ${sectionTone('special')}`}>Special Stats</div>
+                <ReviewStack
+                  section="special"
+                  cells={keywordColumn(draft.readings, 'special', 'left', specialSource(settingsQuery.data))}
+                  readings={draft.readings}
+                  onChange={updateReading}
+                />
+              </div>
+              {reviewShot === 'special' && shotUrls.special ? (
+                <ReviewShotPane kind="special" url={shotUrls.special} width={shotPaneWidth} onClose={() => setReviewShot('')} />
+              ) : null}
             </div>
-            <div className="mt-3 flex justify-end">
+            </div>
+            <div className="mt-6 rounded-xl bg-slate-950/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-200">Other Stats</h3>
+                <button
+                  type="button"
+                  onClick={clearExtras}
+                  disabled={Boolean(busy)}
+                  aria-label="Clear other stats"
+                  className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:bg-slate-800 hover:text-slate-100 disabled:opacity-40"
+                >
+                  <Eraser size={14} />
+                  Clear
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                {SHEET_EXTRA_FIELDS.map((field) => (
+                  <label key={field.key} className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-400" title={field.label}>{field.label}</span>
+                    <input
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={String((draft.extras || emptyExtras())[field.key] ?? '')}
+                      disabled={Boolean(busy)}
+                      onChange={(event) => updateExtra(field.key, event.target.value)}
+                      className="box-border h-7 w-[5.25rem] shrink-0 rounded-lg border border-slate-800 bg-slate-950 px-2 text-right text-xs tabular-nums text-slate-100 outline-none scheme-dark focus:border-slate-600"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={confirmSheet}
-                disabled={busy === 'confirm'}
+                disabled={Boolean(busy)}
                 className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-emerald-500 disabled:opacity-40"
               >
                 <Check size={14} />
@@ -885,8 +1211,8 @@ export default function GvgStatsTab({ user }) {
         </div>
       ) : null}
 
-      {memberUid ? (
-        <ProgressionView
+      {pageTab === 'overview' ? (
+      <ProgressionView
           series={series}
           cohort={cohort}
           loading={progressionQuery.isLoading}
@@ -901,33 +1227,43 @@ export default function GvgStatsTab({ user }) {
           onCompare={setCompare}
           selectedStat={selectedStat}
           onSelectStat={setSelectedStat}
-          memberName={members[memberUid]?.displayName || members[memberUid]?.inGameName || ''}
+          memberName={memberUid ? (members[memberUid]?.displayName || members[memberUid]?.inGameName || '') : ''}
         />
-      ) : (
-        <section className={cardClass}>
-          <header className={cardHeader}>
-            <h2 className={cardTitle}>Stats Overview</h2>
-          </header>
-          <div className={cardBody}>
-            <p className="text-xs text-slate-400">Search a member to open a sheet.</p>
-          </div>
-        </section>
-      )}
+      ) : null}
+      <div className={pageTab === 'simulation' ? undefined : 'hidden'}>
+        <GvgSimulation roster={roster} snapshots={snapshotsQuery.data || []} selfUid={user?.id || ''} />
+      </div>
+      {pageTab === 'database' ? (
       <section className={cardClass}>
         <header className={cardHeader}>
-          <h2 className={cardTitle}>Saved sheets</h2>
-          <button type="button" onClick={exportSheets} disabled={snapshotsQuery.isLoading} className={primaryButton}>
-            <Download size={14} />
-            Export
-          </button>
+          <h2 className={cardTitle}>Stats Database</h2>
+          <div className="flex items-center gap-2">
+            {isOfficer ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setClearText('');
+                  setClearOpen(true);
+                }}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-950 px-3 text-[11px] font-bold uppercase tracking-wider text-rose-300 hover:border-rose-400"
+              >
+                <Trash2 size={14} />
+                Clear
+              </button>
+            ) : null}
+            <button type="button" onClick={exportSheets} disabled={snapshotsQuery.isLoading} className={primaryButton}>
+              <Download size={14} />
+              Export
+            </button>
+          </div>
         </header>
         {snapshotsQuery.isLoading ? (
           <div className={cardBody}>
-            <p className="text-xs text-slate-400">Loading saved sheets.</p>
+            <p className="text-xs text-slate-400">Loading the stats database.</p>
           </div>
         ) : snapshotsQuery.isError ? (
           <div className={cardBody}>
-            <p className="text-xs text-rose-400">{snapshotsQuery.error?.message || 'Could not load saved sheets.'}</p>
+            <p className="text-xs text-rose-400">{snapshotsQuery.error?.message || 'Could not load the stats database.'}</p>
           </div>
         ) : savedSheets.rows.length ? (
           <div className="max-h-[32rem] overflow-auto">
@@ -937,14 +1273,27 @@ export default function GvgStatsTab({ user }) {
                   {savedSheets.headers.map((header, index) => (
                     <th key={`${header}-${index}`} className="sticky top-0 whitespace-nowrap border-b border-slate-800 bg-slate-950 px-3 py-2 text-left text-[10px] font-normal uppercase tracking-wider text-slate-400">{header}</th>
                   ))}
+                  {isOfficer ? <th className="sticky top-0 right-0 border-b border-slate-800 bg-slate-950 px-3 py-2" /> : null}
                 </tr>
               </thead>
               <tbody>
                 {savedSheets.rows.map((row, rowIndex) => (
-                  <tr key={`${row[1]}-${row[2]}-${row[3]}-${rowIndex}`} className="border-b border-slate-800/80">
+                  <tr key={`${savedSheets.ids?.[rowIndex] || rowIndex}`} className="border-b border-slate-800/80">
                     {row.map((cell, cellIndex) => (
                       <td key={cellIndex} className="whitespace-nowrap px-3 py-2 tabular-nums text-slate-200">{cell}</td>
                     ))}
+                    {isOfficer ? (
+                      <td className="sticky right-0 bg-slate-950 px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          aria-label={`Remove ${row[0]} ${row[2]}`}
+                          onClick={() => setRemoveTarget({ id: savedSheets.ids?.[rowIndex] || '', name: row[0], date: row[2] })}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-rose-300 hover:bg-rose-950"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -952,10 +1301,37 @@ export default function GvgStatsTab({ user }) {
           </div>
         ) : (
           <div className={cardBody}>
-            <p className="text-xs text-slate-400">There are no saved sheets.</p>
+            <p className="text-xs text-slate-400">The stats database is empty.</p>
           </div>
         )}
       </section>
+      ) : null}
+      {removeTarget ? (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div role="dialog" aria-modal="true" aria-labelledby="gvg-remove-title" className="w-full max-w-md space-y-4 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <h2 id="gvg-remove-title" className="text-sm font-bold uppercase tracking-wider text-rose-500">Remove sheet</h2>
+            <p className="font-sans text-xs leading-relaxed text-slate-400">Remove {removeTarget.name || 'this member'} taken on {removeTarget.date || 'this day'}. This does not delete the member.</p>
+            <div className="flex justify-end gap-3 pt-1 font-mono text-xs">
+              <button
+                type="button"
+                disabled={removing}
+                onClick={() => setRemoveTarget(null)}
+                className="cursor-pointer rounded-xl border border-slate-800 bg-slate-950 px-4 py-2 text-slate-400 transition hover:text-white disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={removeSheet}
+                disabled={removing || !removeTarget.id}
+                className="cursor-pointer rounded-xl bg-rose-600 px-5 py-2 font-bold uppercase tracking-wider text-white shadow-lg transition hover:bg-rose-500 disabled:opacity-40"
+              >
+                {removing ? 'Removing' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1000,14 +1376,17 @@ function ProgressionView({
   }, [series]);
   const viewed = days.find((row) => row.capturedAt === pickedDay) || days[days.length - 1] || null;
   const dayIndex = viewed ? days.findIndex((row) => row.capturedAt === viewed.capturedAt) : -1;
-  const [compareDraft, setCompareDraft] = useState(compare);
-  const [compareDirty, setCompareDirty] = useState(false);
   const [hoveredStat, setHoveredStat] = useState(null);
+  const [hoverAnchor, setHoverAnchor] = useState(null);
+  const previewStat = (stat, anchor) => {
+    setHoveredStat(stat);
+    setHoverAnchor(anchor || null);
+  };
+  const clearPreview = () => {
+    setHoveredStat(null);
+    setHoverAnchor(null);
+  };
   const activeStat = hoveredStat || selectedStat;
-
-  useEffect(() => {
-    if (!compareDirty) setCompareDraft(compare);
-  }, [compare, compareDirty]);
 
   useEffect(() => {
     if (!viewed) return;
@@ -1047,12 +1426,15 @@ function ProgressionView({
       left: keywordColumn(viewed?.readings, 'quasi', 'left', config.gvgQuasiStatsCol1 || config.gvgQuasiStats),
       right: keywordColumn(viewed?.readings, 'quasi', 'right', config.gvgQuasiStatsCol2 || config.gvgQuasiStats),
     },
+    special: {
+      left: keywordColumn(viewed?.readings, 'special', 'left', specialSource(config)),
+    },
   }), [viewed, config]);
 
   useEffect(() => {
     const filled = columns.general.left.find((cell) => cell.reading && cell.reading.value != null);
-    const current = selectedStat && ['general', 'quasi'].some((section) => (
-      ['left', 'right'].some((column) => columns[section][column].some((cell) => (
+    const current = selectedStat && ['general', 'quasi', 'special'].some((section) => (
+      ['left', 'right'].some((column) => (columns[section][column] || []).some((cell) => (
         cell.reading
         && selectedStat.section === section
         && selectedStat.column === column
@@ -1079,36 +1461,28 @@ function ProgressionView({
     column: activeStat.column,
     label: activeStat.label,
   }) : { average: null, count: 0, unit: '' };
-  const sheetJobName = catalogName(jobs, viewed?.jobCode) || viewed?.jobCode || '';
-  const sheetRoleName = catalogName(roles, viewed?.roleCode) || viewed?.roleCode || '';
-  const comparePending = compareDraft.jobCode !== compare.jobCode
-    || compareDraft.roleCode !== compare.roleCode
-    || compareDraft.from !== compare.from
-    || compareDraft.to !== compare.to;
-  const differentCohort = Boolean(
-    viewed
-    && compare.jobCode
-    && compare.roleCode
-    && (viewed.jobCode !== compare.jobCode || viewed.roleCode !== compare.roleCode),
-  );
-
-  if (!days.length && !loading) {
+  if (!viewed) {
+    if (loading) return null;
+    const emptyCopy = memberName
+      ? 'No confirmed sheet for this member yet.'
+      : 'Search a member to open a sheet.';
     return (
-      <section className={cardClass}>
-        <header className={cardHeader}>
-          <h2 className={cardTitle}>Stats Overview</h2>
-        </header>
-        <div className={cardBody}>
-          <p className="text-xs text-slate-400">No confirmed sheet for this member yet.</p>
-        </div>
-      </section>
+      <div className="space-y-5">
+        <section className={cardClass}>
+          <header className={cardHeader}>
+            <h2 className={cardTitle}>Stats Overview</h2>
+          </header>
+          <div className={cardBody}>
+            <p className="text-xs text-slate-400">{emptyCopy}</p>
+          </div>
+        </section>
+      </div>
     );
   }
-  if (!viewed) return null;
 
   return (
-    <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(18rem,0.75fr)]">
-      <div className={cardClass}>
+    <div className="space-y-5">
+      <section className={cardClass}>
         <header className={cardHeader}>
           <h2 className={cardTitle}>Stats Overview</h2>
           <div className="flex items-center gap-2">
@@ -1136,8 +1510,8 @@ function ProgressionView({
           </div>
         </header>
         <div className={cardBody}>
-        <div className="grid grid-cols-2 gap-6" onMouseLeave={() => setHoveredStat(null)}>
-          <div className="min-w-0 space-y-3 rounded-xl bg-emerald-950/25 p-4">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-3" onMouseLeave={clearPreview}>
+          <div className="min-w-0 space-y-3 rounded-xl bg-emerald-950/25 p-5">
             <div className={`rounded-lg px-3 py-2 text-center text-sm font-semibold uppercase tracking-wider ${generalTone}`}>General Stats</div>
             <StatColumns
               left={columns.general.left}
@@ -1147,10 +1521,10 @@ function ProgressionView({
               selected={selectedStat}
               preview={hoveredStat}
               onSelect={onSelectStat}
-              onPreview={setHoveredStat}
+              onPreview={previewStat}
             />
           </div>
-          <div className="min-w-0 space-y-3 rounded-xl bg-blue-950/25 p-4">
+          <div className="min-w-0 space-y-3 rounded-xl bg-blue-950/25 p-5">
             <div className={`rounded-lg px-3 py-2 text-center text-sm font-semibold uppercase tracking-wider ${quasiTone}`}>Quasi-Stats</div>
             <StatColumns
               left={columns.quasi.left}
@@ -1160,26 +1534,67 @@ function ProgressionView({
               selected={selectedStat}
               preview={hoveredStat}
               onSelect={onSelectStat}
-              onPreview={setHoveredStat}
+              onPreview={previewStat}
+            />
+          </div>
+          <div className="min-w-0 space-y-3 rounded-xl bg-pink-950/25 p-5">
+            <div className={`rounded-lg px-3 py-2 text-center text-sm font-semibold uppercase tracking-wider ${specialTone}`}>Special Stats</div>
+            <StatStack
+              cells={columns.special.left}
+              section="special"
+              deltas={viewed.deltas}
+              selected={selectedStat}
+              preview={hoveredStat}
+              onSelect={onSelectStat}
+              onPreview={previewStat}
             />
           </div>
         </div>
         </div>
-      </div>
-      <div className={cardClass}>
-        <header className={cardHeader}>
-          <h2 className={cardTitle}>Comparison Graph</h2>
-        </header>
-        <div className={cardBody}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!comparePending) return;
-            onCompare({ ...compareDraft, pinned: true });
-            setCompareDirty(false);
-          }}
-        >
-        <div className="grid grid-cols-2 gap-3">
+        {hoveredStat && hoverAnchor ? (
+          <HoverCompare anchor={hoverAnchor} label={hoveredStat.label}>
+            <CompareBars
+              compact
+              memberName={memberName}
+              memberValue={selectedReading?.value}
+              average={comparison.average}
+              count={comparison.count}
+              unit={selectedReading?.unit || comparison.unit}
+              peerLabel={[catalogName(jobs, compare.jobCode) || compare.jobCode, catalogName(roles, compare.roleCode) || compare.roleCode].filter(Boolean).join(' · ')}
+              statLabel={hoveredStat.label}
+            />
+          </HoverCompare>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function CompareSettings({ jobs, roles, compare, onCompare }) {
+  const [compareDraft, setCompareDraft] = useState(compare);
+  const [compareDirty, setCompareDirty] = useState(false);
+  useEffect(() => {
+    if (!compareDirty) setCompareDraft(compare);
+  }, [compare, compareDirty]);
+  const comparePending = compareDraft.jobCode !== compare.jobCode
+    || compareDraft.roleCode !== compare.roleCode
+    || compareDraft.from !== compare.from
+    || compareDraft.to !== compare.to;
+  return (
+    <section className={`${cardClass} h-full min-h-0`}>
+      <header className={cardHeader}>
+        <h2 className={cardTitle}>Comparison Graph</h2>
+      </header>
+      <form
+        className="flex min-h-0 flex-1 flex-col p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!comparePending) return;
+          onCompare({ ...compareDraft, pinned: true });
+          setCompareDirty(false);
+        }}
+      >
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           <label className="min-w-0">
             <span className={labelClass}>Job</span>
             <select
@@ -1239,31 +1654,12 @@ function ProgressionView({
             />
           </label>
         </div>
-          <div className="mt-4 flex justify-end">
-            <button type="submit" disabled={!comparePending} className={primaryButton}>
-              Apply
-            </button>
-          </div>
-        </form>
-        <div className="-mx-5 mt-4 border-t border-slate-800/80">
-          <div className="space-y-3 px-5 pt-4">
-          <p className="pl-14 pr-2 text-center text-sm font-semibold text-slate-50">{activeStat?.label || 'Pick a stat'}</p>
-          {differentCohort ? (
-            <p className="text-xs text-amber-300">This sheet is {sheetJobName} · {sheetRoleName}.</p>
-          ) : null}
-          <CompareBars
-            memberName={memberName}
-            memberValue={selectedReading?.value}
-            average={comparison.average}
-            count={comparison.count}
-            unit={selectedReading?.unit || comparison.unit}
-            peerLabel={[catalogName(jobs, compare.jobCode) || compare.jobCode, catalogName(roles, compare.roleCode) || compare.roleCode].filter(Boolean).join(' · ')}
-            statLabel={activeStat?.label || ''}
-          />
-          </div>
+        <div className="mt-auto flex justify-end pt-3">
+          <button type="submit" disabled={!comparePending} className={primaryButton}>
+            Apply
+          </button>
         </div>
-        </div>
-      </div>
+      </form>
     </section>
   );
 }

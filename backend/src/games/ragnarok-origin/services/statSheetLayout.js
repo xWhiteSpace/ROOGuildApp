@@ -200,21 +200,28 @@ function clustersInRow(data, width, row, region, loose) {
     }
   }
   groups.push(current);
-  return groups.map((group) => ({
-    left: region.left + group.start,
-    top: Math.max(0, row.start - 1),
-    width: Math.max(4, group.end - group.start),
-    height: Math.max(6, row.end - row.start + 2),
-  }));
+  const bleed = 6;
+  return groups.map((group) => {
+    const left = Math.max(region.left, region.left + group.start - bleed);
+    const right = Math.min(region.right, region.left + group.end + bleed);
+    return {
+      left,
+      top: row.start,
+      width: Math.max(4, right - left),
+      height: Math.max(6, row.end - row.start),
+    };
+  });
 }
 
 function padBands(bands, region) {
-  const room = Math.max(3, Math.round((region.bottom - region.top) * 0.012));
+  const room = Math.max(8, Math.round((region.bottom - region.top) * 0.02));
   return bands.map((band, index) => {
     const prevEnd = index === 0 ? region.top : bands[index - 1].end;
     const nextStart = index === bands.length - 1 ? region.bottom : bands[index + 1].start;
-    const padTop = Math.min(room, Math.floor(Math.max(0, band.start - prevEnd) / 2));
-    const padBottom = Math.min(room, Math.floor(Math.max(0, nextStart - band.end) / 2));
+    const above = Math.max(0, band.start - prevEnd);
+    const below = Math.max(0, nextStart - band.end);
+    const padTop = Math.min(room, Math.floor(Math.max(0, above - 2) / 2));
+    const padBottom = Math.min(room, Math.floor(Math.max(0, below - 2) / 2));
     return { start: band.start - padTop, end: band.end + padBottom };
   });
 }
@@ -233,7 +240,7 @@ function bandsToRows(data, width, bands, region, loose = false) {
   })).filter((row) => row.clusters.length);
 }
 
-export function layoutStatSheet(rgb) {
+export function layoutStatSheet(rgb, options = {}) {
   const { data, width, height } = rgb;
   const panel = findPalePanel(data, width, height);
   if (!panel) return { panel: null, listRows: [], attributeRows: [], shareCodeRect: null };
@@ -256,6 +263,8 @@ export function layoutStatSheet(rgb) {
     top: bodyTop,
     bottom: bodyBottom,
   };
+  const listRows = bandsToRows(data, width, rowBands(data, width, listRegion), listRegion);
+  if (options.listOnly) return { panel, listRows, attributeRows: [], shareCodeRect: null };
   const attrRegion = {
     left: Math.min(contentRight - 20, split + 4),
     right: contentRight - 4,
@@ -270,7 +279,7 @@ export function layoutStatSheet(rgb) {
   };
   return {
     panel,
-    listRows: bandsToRows(data, width, rowBands(data, width, listRegion), listRegion),
+    listRows,
     attributeRows: bandsToRows(data, width, rowBands(data, width, attrRegion, true), attrRegion, true),
     shareCodeRect,
   };

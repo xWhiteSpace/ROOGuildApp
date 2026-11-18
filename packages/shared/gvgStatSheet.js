@@ -1,9 +1,26 @@
-export const SHOT_KINDS = ['general', 'quasi'];
+export const SHOT_KINDS = ['general', 'quasi', 'special'];
 
 export const SHOT_LABELS = {
   general: 'General Stats',
   quasi: 'Quasi-Stats',
+  special: 'Special Stats',
 };
+
+export const SPECIAL_STAT_NAMES = [
+  'Max HP',
+  'Max SP',
+  'Equipment PATK',
+  'Equipment MATK',
+  'Equipment PDEF',
+  'Equipment MDEF',
+  'Global CD%',
+  'DMG vs Small Enemies',
+  'DMG Reduction vs Small Enemies',
+  'DMG vs Medium Enemies',
+  'DMG Reduction vs Medium Enemies',
+  'DMG vs Large Enemies',
+  'DMG Reduction vs Large Enemies',
+];
 
 const COLUMNS = ['left', 'right', 'stats', 'bonus'];
 const SECTIONS = ['general', 'quasi', 'special', 'attributes'];
@@ -148,10 +165,16 @@ function keywordRename(row, source) {
   return withStatLabel(row, matchStatKeyword(row.label, source));
 }
 
+function anchorsSequence(label, first) {
+  const folded = foldStatKey(label);
+  const key = foldStatKey(first);
+  return Boolean(folded && key && (folded === key || folded.startsWith(key)));
+}
+
 function applyColumnSequence(rows, source) {
   const list = parseStatKeywordList(source);
   if (!list.length) return rows;
-  const anchorAt = rows.findIndex((row) => matchStatKeyword(row.label, [list[0]]) === list[0]);
+  const anchorAt = rows.findIndex((row) => anchorsSequence(row.label, list[0]));
   if (anchorAt < 0) return rows.map((row) => keywordRename(row, source));
   return rows.map((row, index) => {
     if (index < anchorAt) return keywordRename(row, source);
@@ -161,11 +184,22 @@ function applyColumnSequence(rows, source) {
   });
 }
 
+function listsForSection(section, lists) {
+  if (section === 'quasi') return lists.quasi;
+  if (section === 'special') return lists.special;
+  return lists.general;
+}
+
+function knownSection(row) {
+  if (row?.section === 'quasi' || row?.section === 'general' || row?.section === 'special') return row.section;
+  return '';
+}
+
 export function applyStatKeywords(readings, lists = {}) {
   const next = (readings || []).slice();
   const groups = new Map();
   next.forEach((row, index) => {
-    const section = row?.section === 'quasi' ? 'quasi' : row?.section === 'general' ? 'general' : '';
+    const section = knownSection(row);
     const column = row?.column === 'right' ? 'right' : row?.column === 'left' ? 'left' : '';
     if (!section || !column) return;
     const key = `${section}|${column}`;
@@ -174,13 +208,14 @@ export function applyStatKeywords(readings, lists = {}) {
   });
   for (const [key, indexes] of groups) {
     const [section, column] = key.split('|');
-    const sectionLists = section === 'quasi' ? lists.quasi : lists.general;
-    const sequenced = applyColumnSequence(indexes.map((index) => next[index]), columnList(sectionLists, column));
+    const sequenced = applyColumnSequence(indexes.map((index) => next[index]), columnList(listsForSection(section, lists), column));
     indexes.forEach((index, place) => {
       next[index] = sequenced[place];
     });
   }
-  return next;
+  const allowed = parseStatKeywordList(lists.special);
+  if (!allowed.length) return next;
+  return next.filter((row) => row?.section !== 'special' || allowed.some((label) => labelsMatch(label, row.label)));
 }
 
 export function unifyReadings(readings) {
@@ -229,7 +264,8 @@ export function readingKey(reading) {
 }
 
 function sectionForKind(kind) {
-  return kind === 'quasi' ? 'quasi' : 'general';
+  if (kind === 'quasi' || kind === 'special') return kind;
+  return 'general';
 }
 
 function lowestConfidence(values) {
@@ -251,11 +287,17 @@ function clusterConfidence(item) {
   return lowestConfidence([item.confidence]);
 }
 
+function advanceColumn(section, column) {
+  if (section === 'special') return 'left';
+  return column === 'left' ? 'right' : 'left';
+}
+
 function emitPair(readings, section, column, label, parsed, confidence) {
-  if (!label || isChromeLabel(label)) return column === 'left' ? 'right' : 'left';
+  const placed = section === 'special' ? 'left' : column;
+  if (!label || isChromeLabel(label)) return advanceColumn(section, placed);
   const row = {
     label,
-    column,
+    column: placed,
     section,
     raw: parsed.raw,
     value: parsed.value,
@@ -265,7 +307,7 @@ function emitPair(readings, section, column, label, parsed, confidence) {
   const score = lowestConfidence([confidence]);
   if (score != null) row.confidence = score;
   readings.push(row);
-  return column === 'left' ? 'right' : 'left';
+  return advanceColumn(section, placed);
 }
 
 export function pairsFromClusterTexts(texts, section) {
@@ -307,9 +349,15 @@ export function pairsFromClusterTexts(texts, section) {
   return readings.map((row) => ({ ...row, key: readingKey(row) }));
 }
 
+function statLinePattern(section) {
+  const extra = section === 'special' ? 4 : 3;
+  const token = section === 'special' ? '[A-Za-z][A-Za-z.]*%?' : '[A-Za-z][A-Za-z.]*';
+  return new RegExp(`(${token}(?: ${token}){0,${extra}})\\s+(-?\\d+(?:\\.\\d+)?%?)`, 'g');
+}
+
 export function pairsFromLine(line, section, confidence) {
   const text = tidyLabel(line);
-  const re = /([A-Za-z][A-Za-z.]*(?: [A-Za-z][A-Za-z.]*){0,3})\s+(-?\d+(?:\.\d+)?%?)/g;
+  const re = statLinePattern(section);
   const texts = [];
   let match = re.exec(text);
   while (match) {
@@ -479,6 +527,7 @@ export function buildSnapshot({ draft, member, id, confirmedAt }) {
       roleCode,
       shareCode: tidyLabel(draft.shareCode),
       readings,
+      extras: normalizeExtras(draft.extras),
       draftId: draft.id || '',
     },
   };
@@ -583,6 +632,47 @@ export function formatDelta(delta, unit) {
 
 const CSV_LEAD = ['Name', 'Discord id', 'Taken on', 'Confirmed at', 'Job', 'Role'];
 
+export const SHEET_EXTRA_FIELDS = [
+  { key: 'basePdef', label: 'Base PDEF', kind: 'number' },
+  { key: 'baseMdef', label: 'Base MDEF', kind: 'number' },
+  { key: 'equipmentPdef', label: 'Flat Equipment PDEF', kind: 'number' },
+  { key: 'equipmentMdef', label: 'Flat Equipment MDEF', kind: 'number' },
+  { key: 'elementReduction', label: 'Element reduction %', kind: 'number' },
+  { key: 'reductionDemi', label: 'Reduction vs Demi-Human %', kind: 'number' },
+  { key: 'weaponAtk', label: 'Weapon ATK', kind: 'number' },
+  { key: 'elementDmg', label: 'Element damage %', kind: 'number' },
+  { key: 'dmgDemi', label: 'DMG vs Demi-Human %', kind: 'number' },
+];
+
+export function emptyExtras() {
+  return {
+    basePdef: 0,
+    baseMdef: 0,
+    equipmentPdef: 0,
+    equipmentMdef: 0,
+    elementReduction: 0,
+    reductionDemi: 0,
+    weaponAtk: 0,
+    elementDmg: 0,
+    dmgDemi: 0,
+  };
+}
+
+export function normalizeExtras(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const next = emptyExtras();
+  for (const field of SHEET_EXTRA_FIELDS) {
+    const number = Number(source[field.key]);
+    next[field.key] = Number.isFinite(number) ? number : 0;
+  }
+  return next;
+}
+
+function extraCell(extras, field) {
+  if (!extras || typeof extras !== 'object') return '';
+  return String(normalizeExtras(extras)[field.key]);
+}
+
 function csvStatHeader(stats, column, label) {
   const shared = stats.filter((row) => foldStatKey(row[2]) === foldStatKey(label)).length > 1;
   return shared ? `${label} ${column}` : label;
@@ -601,12 +691,14 @@ export function gvgStatsCsv(snapshots, { members = {}, jobs = {}, roles = {}, li
     ...parseStatKeywordList(lists.generalRight).map((label) => ['general', 'right', label]),
     ...parseStatKeywordList(lists.quasiLeft).map((label) => ['quasi', 'left', label]),
     ...parseStatKeywordList(lists.quasiRight).map((label) => ['quasi', 'right', label]),
+    ...parseStatKeywordList(lists.special).map((label) => ['special', 'left', label]),
   ];
   const headers = [
     ...CSV_LEAD,
     ...stats.map(([, column, label]) => csvStatHeader(stats, column, label)),
+    ...SHEET_EXTRA_FIELDS.map((field) => field.label),
   ];
-  const rows = confirmed
+  const entries = confirmed
     .map((sheet) => {
       const uid = String(sheet.memberUid || '');
       const member = members[uid] || {};
@@ -627,6 +719,7 @@ export function gvgStatsCsv(snapshots, { members = {}, jobs = {}, roles = {}, li
         ));
         cells.push(csvStatCell(reading));
       }
+      for (const field of SHEET_EXTRA_FIELDS) cells.push(extraCell(sheet.extras, field));
       return {
         name,
         capturedAt: String(sheet.capturedAt || ''),
@@ -643,7 +736,10 @@ export function gvgStatsCsv(snapshots, { members = {}, jobs = {}, roles = {}, li
       const when = a.confirmedAt.localeCompare(b.confirmedAt);
       if (when) return when;
       return a.id.localeCompare(b.id);
-    })
-    .map((row) => row.cells);
-  return { headers, rows };
+    });
+  return {
+    headers,
+    rows: entries.map((row) => row.cells),
+    ids: entries.map((row) => row.id),
+  };
 }

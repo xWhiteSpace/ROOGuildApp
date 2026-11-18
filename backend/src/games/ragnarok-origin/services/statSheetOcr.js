@@ -67,7 +67,8 @@ async function readText(worker, rgb, rect) {
 }
 
 function sectionFor(kind) {
-  return kind === 'quasi' ? 'quasi' : 'general';
+  if (kind === 'quasi' || kind === 'special') return kind;
+  return 'general';
 }
 
 async function readListRow(worker, rgb, row, section) {
@@ -88,7 +89,7 @@ function pickShareCode(text) {
 
 async function readShot(worker, buffer, kind) {
   const rgb = await loadRgb(buffer);
-  const layout = layoutStatSheet(rgb);
+  const layout = layoutStatSheet(rgb, { listOnly: kind === 'special' });
   if (!layout.panel) {
     return { kind, readings: [], shareCode: '', warning: 'Could not find the Character panel.' };
   }
@@ -113,7 +114,7 @@ export async function readStatShots(files) {
   const shots = Array.isArray(files) ? files : [];
   if (!shots.length) throw new Error('Upload at least one Character screenshot.');
   for (const shot of shots) {
-    if (!SHOT_KINDS.includes(shot.kind)) throw new Error('Each shot needs a section: General or Quasi.');
+    if (!SHOT_KINDS.includes(shot.kind)) throw new Error('Each shot needs a section: General, Quasi, or Special.');
   }
   return enqueue(async () => {
     const worker = await createWorker('eng', 1, {

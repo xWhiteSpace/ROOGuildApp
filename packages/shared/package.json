@@ -13,7 +13,8 @@
     "./mimicBookRoster": "./mimicBookRoster.js",
     "./auctionBookLayout": "./auctionBookLayout.js",
     "./discordCardCopy": "./discordCardCopy.js",
-    "./gvgStatSheet": "./gvgStatSheet.js"
+    "./gvgStatSheet": "./gvgStatSheet.js",
+    "./pvpEstimate": "./pvpEstimate.js"
   },
   "private": true
 }

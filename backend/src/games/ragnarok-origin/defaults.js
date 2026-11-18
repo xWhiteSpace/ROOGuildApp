@@ -1,5 +1,6 @@
 /** Ragnarok Origin game settings stored on tenant_settings.configuration. */
 import { DEFAULT_DISCORD_CARD_COPY } from '@guildname/shared/discordCardCopy';
+import { SPECIAL_STAT_NAMES } from '@guildname/shared/gvgStatSheet';
 
 export { CARD_COPY_MAX, DEFAULT_DISCORD_CARD_COPY, resolveDiscordCardCopy } from '@guildname/shared/discordCardCopy';
 
@@ -51,6 +52,7 @@ export const RAGNAROK_ORIGIN_DEFAULTS = {
     'PvE DMG Bonus',
     'PvP DMG Bonus',
   ].join('\n'),
+  gvgSpecialStats: SPECIAL_STAT_NAMES.join('\n'),
   discordCardCopy: DEFAULT_DISCORD_CARD_COPY,
 };
 
